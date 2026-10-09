@@ -1,0 +1,42 @@
+    <div class="row mb-3">
+      <label for="login-name" class="col-sm-3 col-form-label">{#label_username}</label>
+      <div class="col-sm-9">
+        <input name="name" value="{name}" type="text" class="form-control" id="login-name" autocomplete="username">
+      </div>
+    </div>
+    <div class="row mb-3">
+      <label for="login-password" class="col-sm-3 col-form-label">{#label_password}</label>
+      <div class="col-sm-9">
+        <input name="pass" type="password" class="form-control" id="login-password" autocomplete="current-password">
+      </div>
+    </div>
+
+    <div class="row mb-3 pt-3">
+      <label for="login-lang" class="col-sm-3 col-form-label col-form-label-sm text-muted">{#label_backend_language}</label>
+      <div class="col-sm-9">
+        <select name="backend_code" class="form-select form-select-sm border-0 bg-light text-secondary c9-login-pref" id="login-lang" data-pref="backend_code">
+    {lang_options}
+        </select>
+      </div>
+    </div>
+    <div class="row mb-3">
+      <label for="login-locale" class="col-sm-3 col-form-label col-form-label-sm text-muted">{#label_locale}</label>
+      <div class="col-sm-9">
+        <select name="locale" class="form-select form-select-sm border-0 bg-light text-secondary c9-login-pref" id="login-locale" data-pref="locale">
+    {locale_options}
+        </select>
+      </div>
+    </div>
+    <div class="row mb-1">
+      <label for="login-timezone" class="col-sm-3 col-form-label col-form-label-sm text-muted">{#label_timezone}</label>
+      <div class="col-sm-9">
+        <select name="timezone" class="form-select form-select-sm border-0 bg-light text-secondary c9-login-pref" id="login-timezone" data-pref="timezone">
+    {timezone_options}
+        </select>
+      </div>
+    </div>
+
+  </div><!-- .modal-body -->
+  <div class="modal-footer text-end">
+    <input type="hidden" name="function" value="step1">
+    <button type="submit" class="btn btn-primary">{#button_submit}</button>

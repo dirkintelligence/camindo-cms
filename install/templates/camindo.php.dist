@@ -1,0 +1,83 @@
+<?php
+// camindo CMS - Konfiguration dieser Installation
+//
+// Geschrieben vom Installer (php Core/cron/camindo.php install). Alles, was hier
+// nicht steht, kommt aus den Vorgaben in Core/src/Config.php - dort sind alle
+// Schlüssel dokumentiert. Keine $_SERVER-Variablen verwenden (die Datei wird auch
+// von Cron-Scripten und der Kommandozeile gelesen).
+//
+// Diese Datei enthält Zugangsdaten: Rechte 0600, nie ins Git.
+
+// Schutz vor direktem Aufruf
+if (!defined('CAMINDO_STARTED')) {
+    die('Direct access denied!');
+}
+
+// Fehlerbehandlung (PHP-Fehler landen in var/log/{Datum}_php_errors.log)
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
+ini_set('display_errors', {display_errors});
+
+$_cfg = [
+    'system' => [
+        'locale'              => {locale},
+        'timezone'            => {timezone},
+        'development_version' => {development_version},
+    ],
+    'email' => [
+        // Absender für Systemmails (Zwei-Faktor-Code, CMS:EMAIL) und Antwortadresse
+        'noreply' => '',
+        'reply'   => '',
+        // SMTP-Postfach; leer = PHP mail()
+        'smtp' => [
+            'host' => '',
+            'user' => '',
+            'pass' => '',             // oder Umgebungsvariable CAMINDO_SMTP_PASS (geht vor)
+            'enc'  => 'starttls',     // 'starttls' oder 'smtps'
+            'port' => 587,
+        ],
+    ],
+    'admin' => [
+        // Zwei-Faktor-Anmeldung per E-Mail-Code - setzt email.noreply voraus
+        '2_factor' => false,
+        // Sitzungs-Cookie nur über HTTPS senden. false NUR für einen lokalen Test
+        // ohne SSL (http://) - mit true kommt dort keine Anmeldung zustande.
+        // Sobald die Seite über https:// läuft: true.
+        'cookie_secure' => {cookie_secure},
+        // Feste Backend-Domain, z. B. 'cms-k7x2.example.com' - leer: Backend unter
+        // jeder Domain ({domain}/backend/). Gesetzt: nur dort; Vorschau und
+        // Frontend-Editing laufen über die Domain der Website.
+        'backend_domain' => {backend_domain},
+    ],
+    'user' => [
+        // Dasselbe für die Besucher-Anmeldung im Frontend (CMS:USER_*)
+        'cookie_secure' => {cookie_secure},
+    ],
+    'security' => [
+        // HSTS: Browser nur noch per HTTPS zulassen (Sekunden, 0 = aus). Erst
+        // einschalten, wenn die Domain dauerhaft über https:// läuft - zum Test
+        // 300, danach 31536000 (ein Jahr).
+        'hsts_max_age' => 0,
+        // ImageMagick: SVG/PDF freigeben, z. B. ['svg'] oder ['svg', 'pdf'].
+        // PDF läuft über Ghostscript - nur wenn gebraucht.
+        'magick_allow' => [],
+        // Läuft die Website hinter einem Proxy oder Load-Balancer, gehört er
+        // hierher (z. B. ['10.0.0.5'] oder ['10.0.0.0/8']) - sonst sehen Drosselung
+        // und Sperren alle Besucher als einen.
+        'trusted_proxies' => [],
+    ],
+    'paths' => [
+        // Absolute Pfade zu Programmen; leer lassen, was es nicht gibt
+        'php'       => {path_php},
+        'mysqldump' => {path_mysqldump},
+        'magick'    => {path_magick},
+        'ffmpeg'    => {path_ffmpeg},
+        'ffprobe'   => {path_ffprobe},
+    ],
+    'db' => [
+        'host' => {db_host},
+        'port' => {db_port},
+        'name' => {db_name},
+        'user' => {db_user},
+        'pass' => {db_pass},      // oder Umgebungsvariable CAMINDO_DB_PASS (geht vor)
+    ],
+];

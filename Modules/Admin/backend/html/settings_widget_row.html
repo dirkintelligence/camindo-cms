@@ -1,0 +1,7 @@
+<tr>
+    <td>{label}</td>
+    <td class="text-nowrap">{position}</td>
+    <td class="text-end">
+        <button type="button" class="btn btn-light" onclick="var f=$(this).closest('form');f.find('input[name=widget_remove]').val('{i}');f.find('input[name=widget_action]').val('remove');f.find('input[name=function]').val('update');f.submit();" aria-label="{#admin.button_widget_remove}"><span class="icon" aria-hidden="true">delete</span></button>
+    </td>
+</tr>

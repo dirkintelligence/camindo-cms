@@ -1,0 +1,30 @@
+<div class="mb-4">{info}</div>
+<p>{#record.note_import_docx}</p>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_import_docx_options}</legend>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="data[docx][punct]" value="1" id="c9-import-punct"{checked_punct}>
+  <label class="form-check-label" for="c9-import-punct">{#record.label_import_punct}</label>
+</div>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="data[docx][space]" value="1" id="c9-import-space"{checked_space}>
+  <label class="form-check-label" for="c9-import-space">{#record.label_import_space}</label>
+</div>
+</fieldset>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_import_rtl}</legend>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="data[docx][rtl]" value="unicode" id="c9-import-rtl-unicode"{checked_rtl_unicode}>
+  <label class="form-check-label" for="c9-import-rtl-unicode">{#record.label_import_rtl_unicode}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="data[docx][rtl]" value="html" id="c9-import-rtl-html"{checked_rtl_html}>
+  <label class="form-check-label" for="c9-import-rtl-html">{#record.label_import_rtl_html}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="data[docx][rtl]" value="none" id="c9-import-rtl-none"{checked_rtl_none}>
+  <label class="form-check-label" for="c9-import-rtl-none">{#record.label_import_rtl_none}</label>
+</div>
+<div class="form-text">{#record.note_import_rtl}</div>
+</fieldset>
+{options}

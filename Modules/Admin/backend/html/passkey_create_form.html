@@ -1,0 +1,17 @@
+<form action="Admin/totp.php" method="post">
+<p>{#admin.text_passkey_create}</p>
+<p><span class="icon" aria-hidden="true">passkey</span> <strong>{label}</strong></p>
+<div class="alert alert-danger d-none" data-c9-passkey-error
+     data-cancelled="{#admin.error_passkey_cancelled}" data-failed="{#admin.error_passkey_failed}"
+     data-unsupported="{#admin.error_passkey_unsupported}"></div>
+<input type="hidden" name="function" value="passkey_add">
+<input type="hidden" name="token" value="{token}">
+<input type="hidden" name="client_data" value="">
+<input type="hidden" name="attestation" value="">
+<input type="hidden" name="transports" value="">
+<div class="mt-4 d-flex gap-2 flex-wrap">
+    <button type="button" id="passkey-create" class="btn btn-primary" data-options="{options}"
+        onclick="cApp.ui.passkeyRegister(this)"><span class="icon" aria-hidden="true">passkey</span> {#admin.button_passkey_create}</button>
+    <button type="button" onclick="cApp.layers.replace('Admin/totp.php')" class="btn btn-light">{#button_cancel}</button>
+</div>
+</form>

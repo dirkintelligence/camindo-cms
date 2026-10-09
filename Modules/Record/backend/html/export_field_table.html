@@ -1,0 +1,16 @@
+<div data-check-all onchange="cApp.ui.checkAllSync(this);">
+<div class="form-check mb-1">
+<label class="form-check-label"><input class="form-check-input" type="checkbox" data-check-all-box{all_checked} onclick="cApp.ui.checkAll(this);"> {#record.label_export_all}</label>
+</div>
+<div class="table-responsive">
+<table class="table table-sm align-middle c9-export-fields">
+<thead class="text-nowrap"><tr>
+<th style="width:1px"></th>
+<th>{#record.column_export_name}</th>
+<th>{#record.column_export_label}</th>
+<th>{#record.column_export_type}</th>
+</tr></thead>
+{table_rows}
+</table>
+</div>
+</div>

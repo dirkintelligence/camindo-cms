@@ -1,0 +1,13 @@
+<div class="c9-file-filename" data-id="{id}" data-field="{field_id}" data-lang="{lang}">
+    <div class="c9-file-filename-view">
+        <span>{filename}</span>
+        <button type="button" class="btn btn-sm btn-light ms-2 py-0" onclick="cApp.ui.fileRename(this)" title="{#button_edit}"><span class="icon" aria-hidden="true">edit</span></button>
+    </div>
+    <div class="c9-file-filename-edit input-group input-group-sm d-none" style="max-width:480px">
+        <input type="text" class="form-control" value="{basename}" maxlength="200" aria-label="{#record.file_filename}"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();cApp.ui.fileRenameSave(this)}else if(event.key==='Escape'){cApp.ui.fileRenameCancel(this)}">
+        <span class="input-group-text">.{extension}</span>
+        <button type="button" class="btn btn-primary" onclick="cApp.ui.fileRenameSave(this)">{#button_save}</button>
+        <button type="button" class="btn btn-light" onclick="cApp.ui.fileRenameCancel(this)">{#button_cancel}</button>
+    </div>
+</div>

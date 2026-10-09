@@ -1,0 +1,73 @@
+<div class="mb-4">{info}</div>
+<div class="row mt-2">
+    <div class="c9-col-1">{instance_options_label}</div>
+    <div class="c9-col-2 pt-1 pb-1 c9-grey-50">
+        <select class="form-select" id="c9-import-instance" name="instance_id">{instance_options}</select>
+    </div>
+</div>
+<div class="row mt-2 mb-4">
+    <div class="c9-col-1">{folder_options_label}</div>
+    <div class="c9-col-2 pt-1 pb-1 c9-grey-50">
+        <select class="form-select" id="c9-import-folder" name="folder_id">{folder_options}</select>
+    </div>
+</div>
+<script>
+(function(){
+    // Zielebene: nur die Ordner der gewählten Instanz (0 = aus der Datei: alle).
+    // Die Liste wird neu aufgebaut - ausgeblendete <option> kennt nicht jeder Browser
+    const $form = $('article .c9-layer:last form').last();
+    const $instance = $form.find('select[name="instance_id"]');
+    const $folder = $form.find('select[name="folder_id"]');
+    const $all = $folder.children('option').clone();
+    function filterFolders() {
+        const instanceId = String($instance.val() || '0');
+        const selected = String($folder.val() || '0');
+        const $options = $all.filter(function () {
+            const folderInstance = String($(this).data('instance'));
+            return instanceId === '0' || folderInstance === '0' || folderInstance === instanceId;
+        }).clone();
+        $folder.empty().append($options);
+        // ein Ordner einer anderen Instanz fällt weg: Wurzel
+        $folder.val($options.filter('[value="' + selected + '"]').length ? selected : '0');
+    }
+    $instance.on('change', filterFolders);
+    filterFolders();
+})();
+</script>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_batch_scope}</legend>
+<div class="form-text mb-2">{#record.note_import_scope}</div>
+<div class="table-responsive c9-import-scope">
+<table class="table table-sm align-middle">
+<thead class="text-nowrap"><tr>
+<th>{#area.field_area_label}</th>
+<th>{#area.field_area_type}</th>
+<th style="min-width:80px">{#area.field_area_name}</th>
+<th>{#record.column_import_target}</th>
+<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_structure} <span class="icon" aria-hidden="true"more_vert</span></a><ul class="dropdown-menu" data-column="structure">{column_items}</ul></div></th>
+<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_records} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="records">{column_items}</ul></div></th>
+<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_templates} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="templates">{column_items}</ul></div></th>
+</tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</div>
+<script>
+(function(){
+    // Pulldown in der Spaltenüberschrift: ganze Spalte auf einen Modus setzen
+    // (nur Selects, die den Modus anbieten - neue Bereiche kennen nur INSERT/IGNORE)
+    const $scope = $('article .c9-layer:last .c9-import-scope').last();
+    $scope.on('click', '.dropdown-menu[data-column] a', function (e) {
+        e.preventDefault();
+        const column = $(this).closest('.dropdown-menu').data('column');
+        const mode = $(this).data('mode');
+        $scope.find('select[name$="[' + column + ']"]').each(function () {
+            if ($(this).find('option[value="' + mode + '"]').length) $(this).val(mode);
+        });
+    });
+})();
+</script>
+</fieldset>
+{converters}
+{options}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="{lang}" dir="{dir}">
+<head>
+<meta charset="utf-8">
+<title>{subject}</title>
+<style type="text/css">
+* { font-family:sans-serif; }
+table { border-collapse:collapse; margin-bottom:1em; }
+th, td { padding:4px 12px 4px 0; text-align:start; vertical-align:top; border-bottom:1px solid #ddd; }
+</style>
+</head>
+<body>
+<p><strong>{subject}</strong></p>
+<p>{intro}</p>
+<p><strong>{heading_sender}</strong></p>
+<table>
+<tr><th>{label_sender}</th><th>{label_count}</th></tr>
+{sender_rows}
+</table>
+<p><strong>{heading_new}</strong></p>
+<table>
+<tr><th>{label_date}</th><th>{label_sender}</th><th>{label_subject}</th></tr>
+{new_rows}
+</table>
+<p>{footer}</p>
+<p><small>{unsubscribe}</small></p>
+</body>
+</html>

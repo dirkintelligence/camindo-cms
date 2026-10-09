@@ -1,0 +1,69 @@
+<p>{#record.note_export_global}</p>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_export_areas}</legend>
+<div class="form-text mb-2">{#record.note_export_areas}</div>
+<div class="table-responsive c9-export-tree">
+<table class="table table-sm align-middle">
+<thead class="text-nowrap"><tr>
+<th style="width:1px"></th>
+<th>{#area.field_area_label}</th>
+<th>{#area.field_area_type}</th>
+<th>{#area.field_area_instance_id}</th>
+</tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</div>
+</fieldset>
+<script>
+(function(){
+    // Ein Ordner wählt seine enthaltenen Elemente mit; ist er samt Inhalt schon
+    // gewählt, wird alles abgewählt. Elemente lassen sich einzeln abwählen.
+    const $tree = $('article .c9-layer:last .c9-export-tree').last();
+    const children = function (id) {
+        const result = [];
+        $tree.find('input[data-parent="' + id + '"]').each(function () {
+            result.push(this);
+            result.push.apply(result, children(this.value));
+        });
+        return result;
+    };
+    $tree.on('click', 'input.c9-export-folder', function () {
+        const $inputs = $(children(this.value));
+        const allChecked = $inputs.length > 0 && $inputs.filter(':checked').length === $inputs.length;
+        if (this.checked) {
+            $inputs.prop('checked', true);
+        }
+        else if (allChecked) {
+            $inputs.prop('checked', false);
+        }
+    });
+})();
+</script>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_batch_options}</legend>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="structure" value="1" id="c9-export-structure"{checked_structure}>
+  <label class="form-check-label" for="c9-export-structure">{#record.label_export_structure}</label>
+</div>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="content" value="1" id="c9-export-content"{checked_content}>
+  <label class="form-check-label" for="c9-export-content">{#record.label_export_content}</label>
+</div>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="files" value="1" id="c9-export-files"{checked_files}>
+  <label class="form-check-label" for="c9-export-files">{#record.label_export_files}</label>
+</div>
+<div class="form-check form-switch">
+  <input class="form-check-input" type="checkbox" name="portable" value="1" id="c9-export-portable"{checked_portable}>
+  <label class="form-check-label" for="c9-export-portable">{#record.label_export_portable}</label>
+  <div class="form-text">{#record.note_export_portable}</div>
+</div>
+<div class="form-check form-switch mt-2">
+  <input class="form-check-input" type="checkbox" name="background" value="1" id="c9-export-background"{checked_background}>
+  <label class="form-check-label" for="c9-export-background">{#record.label_batch_background}</label>
+  <div class="form-text">{#record.note_export_background}</div>
+</div>
+<div class="form-text mt-2">{#record.note_export_retention} {hours} {#record.label_hours}</div>
+</fieldset>

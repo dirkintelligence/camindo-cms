@@ -1,0 +1,13 @@
+<div class="card mb-3"><div class="card-body">
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <strong>{#privacy.label_block} {number}</strong>
+    <button type="button" class="btn btn-light btn-sm" onclick="var f=$(this).closest('form');f.find('input[name=block_remove]').val('{i}');f.find('input[name=block_action]').val('remove');f.find('input[name=function]').val('update');f.submit();" aria-label="{#privacy.button_block_remove}" title="{#privacy.button_block_remove}"><span class="icon" aria-hidden="true">delete</span></button>
+</div>
+{blocks_{i}_sources}
+{blocks_{i}_delay}
+{blocks_{i}_unit}
+{blocks_{i}_action}
+{blocks_{i}_category}
+<div class="c9-privacy-fields{fields_class}">{blocks_{i}_fields}</div>
+<div class="c9-privacy-trigger{trigger_class}">{blocks_{i}_trigger}</div>
+</div></div>

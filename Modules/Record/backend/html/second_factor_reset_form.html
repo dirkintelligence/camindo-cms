@@ -1,0 +1,10 @@
+<p class="form-text">{#record.second_factor_reset_note}</p>
+<form action="Record/record_second_factor.php" method="post">
+    <input type="hidden" name="id" value="{id}">
+    <input type="hidden" name="area_id" value="{area_id}">
+    <input type="hidden" name="function" value="reset">
+    <div class="mt-3 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-warning"><span class="icon" aria-hidden="true">lock_reset</span> {#record.button_second_factor_reset}</button>
+        <button type="button" onclick="cApp.layers.close()" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</form>

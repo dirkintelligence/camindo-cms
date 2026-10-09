@@ -1,0 +1,15 @@
+<div class="c9-lookup-field"
+    data-src-field="{src_field}"
+    data-name="{name}"
+    data-ids="{data_ids}"
+    data-search-url="{search_url}"
+    data-update-url="{update_url}"
+    data-max="{max}"
+>
+<div class="input-group{class}">
+    <input type="text" class="form-control bg-body c9-grey-50" value="" aria-labelledby="{id}" onkeydown="cApp.ui.sLookupTab()">
+    <button type="button" class="btn btn-sm btn-secondary" title="{#button_search}" onclick="cApp.ui.slookupSearch()"><span class="icon" aria-hidden="true">search</span></button>
+    <button type="button" class="btn btn-sm btn-secondary" title="{#button_empty}" onclick="cApp.ui.slookupEmpty()"><span class="icon" aria-hidden="true">delete</span></button>
+</div>
+<div class="lookup-preview" id="preview-{id}">{preview}</div>
+</div>

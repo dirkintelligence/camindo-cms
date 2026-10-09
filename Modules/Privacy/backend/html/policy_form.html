@@ -1,0 +1,6 @@
+{data_label}
+{data_instance_id}
+<h3 class="mt-4">{#privacy.headline_blocks}</h3>
+<p class="small text-body-secondary">{#privacy.note_blocks}</p>
+{blocks}
+<button type="button" class="btn btn-secondary" onclick="var f=$(this).closest('form');f.find('input[name=block_action]').val('add');f.find('input[name=function]').val('update');f.submit();"><span class="icon" aria-hidden="true">add</span> {#privacy.button_block_add}</button>

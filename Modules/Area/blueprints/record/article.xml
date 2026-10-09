@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bauplan "Artikel": Titel, Datum, Teaser, Text und Bild.
+  Exportformat (RecordExport::XML_FORMAT 2), ein Bereich ohne Datensätze - siehe
+  AreaBackend::create(). Label und Notiz: Text oder Snippet-Verweis (#key bzw. #modul.key),
+  auch bei den Feldern (RecordImport::importBlueprint() löst sie beim Anlegen auf).
+-->
+<camindo-export format="2">
+  <areas>
+    <area area_id="1" type="record" name="articles" icon="article" sort_order="DESC" default_field_id="1" sort_field_id="2">
+      <label>#label_area_articles</label>
+      <note>#label_area_articles_note</note>
+      <details>{"tabs":0}</details>
+      <fields>
+        <field field_id="1" type="chars" name="title" display_type="text" position="0" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" default_field="1" multilingual="1">
+          <label>#label_title</label>
+        </field>
+        <field field_id="2" type="datetime" name="date" display_type="text" position="1" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" multilingual="0">
+          <label>#label_date</label>
+        </field>
+        <field field_id="3" type="text" name="teaser" display_type="textarea" height="3" position="2" flags="[]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="1">
+          <label>#label_teaser</label>
+        </field>
+        <field field_id="4" type="text" name="text" display_type="textarea" height="12" position="3" flags="[]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="1">
+          <label>#label_text</label>
+        </field>
+        <field field_id="5" type="file" name="image" display_type="upload" position="4" flags="[]" visibility_input="1" visibility_search="0" visibility_list="1" multilingual="0">
+          <label>#label_image</label>
+          <details>{"media_types":["image"]}</details>
+        </field>
+      </fields>
+    </area>
+  </areas>
+</camindo-export>

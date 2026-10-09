@@ -1,0 +1,27 @@
+{
+    "name": "camindo/cms",
+    "description": "camindo CMS - multi-site, multilingual content management in PHP. Installed into Core/ of a camindo/project by camindo/composer-plugin",
+    "type": "camindo-core",
+    "keywords": ["cms", "content management", "multilingual", "multisite", "headless"],
+    "license": "AGPL-3.0-or-later",
+    "homepage": "https://github.com/dirkintelligence/camindo-cms",
+    "support": {
+        "issues": "https://github.com/dirkintelligence/camindo-cms/issues",
+        "source": "https://github.com/dirkintelligence/camindo-cms",
+        "docs": "https://github.com/dirkintelligence/camindo-cms/tree/main/docs",
+        "security": "https://github.com/dirkintelligence/camindo-cms/security/policy"
+    },
+    "require": {
+        "php": ">=8.1",
+        "ext-mysqli": "*",
+        "ext-intl": "*",
+        "ext-json": "*",
+        "ext-gd": "*",
+        "ext-mbstring": "*",
+        "erusev/parsedown": "^1.7",
+        "phpmailer/phpmailer": "^7.0"
+    },
+    "autoload": {
+        "psr-4": { "Camindo\\Core\\": "src/" }
+    }
+}

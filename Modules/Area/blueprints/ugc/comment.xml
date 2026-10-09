@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bauplan "Kommentare": Name und Kommentartext.
+  Exportformat (RecordExport::XML_FORMAT 2), ein Bereich ohne Datensätze - siehe
+  AreaBackend::create().
+-->
+<camindo-export format="2">
+  <areas>
+    <area area_id="1" type="ugc" name="comments" icon="chat_bubble" sort_order="DESC" default_field_id="1">
+      <label>#label_area_comments</label>
+      <note>#label_area_comments_note</note>
+      <details>{"tabs":0}</details>
+      <fields>
+        <field field_id="1" type="chars" name="name" display_type="text" position="0" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" default_field="1" multilingual="0">
+          <label>#label_name</label>
+        </field>
+        <field field_id="2" type="text" name="comment" display_type="textarea" height="6" position="1" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="0">
+          <label>#label_comment</label>
+        </field>
+      </fields>
+    </area>
+  </areas>
+</camindo-export>

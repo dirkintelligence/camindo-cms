@@ -1,0 +1,24 @@
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_import_mode}</legend>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="mode" value="insert" id="c9-import-mode-insert"{checked_insert}>
+  <label class="form-check-label" for="c9-import-mode-insert"><strong>INSERT</strong> &middot; {#record.label_import_mode_insert}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="mode" value="update_or_insert" id="c9-import-mode-update_or_insert"{checked_update_or_insert}>
+  <label class="form-check-label" for="c9-import-mode-update_or_insert"><strong>UPDATE_OR_INSERT</strong> &middot; {#record.label_import_mode_update_or_insert}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="mode" value="update" id="c9-import-mode-update"{checked_update}>
+  <label class="form-check-label" for="c9-import-mode-update"><strong>UPDATE</strong> &middot; {#record.label_import_mode_update}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="mode" value="replace_or_insert" id="c9-import-mode-replace_or_insert"{checked_replace_or_insert}>
+  <label class="form-check-label" for="c9-import-mode-replace_or_insert"><strong>REPLACE_OR_INSERT</strong> &middot; {#record.label_import_mode_replace_or_insert}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="mode" value="replace" id="c9-import-mode-replace"{checked_replace}>
+  <label class="form-check-label" for="c9-import-mode-replace"><strong>REPLACE</strong> &middot; {#record.label_import_mode_replace}</label>
+</div>
+<div class="form-text">{#record.note_import_mode}</div>
+</fieldset>

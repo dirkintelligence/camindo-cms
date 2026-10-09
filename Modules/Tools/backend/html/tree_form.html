@@ -1,0 +1,24 @@
+<h4 class="mt-4">{#tools.headline_tree}</h4>
+<p class="c9-grey-50">{#tools.note_tree}</p>
+{report}
+<form action="Tools/tool_tree_normalize.php" method="post">
+<!-- Die Aktion steht im versteckten Feld, nicht am Knopf: serializeFiles() baut
+     FormData ohne Submitter, ein <button name="function"> ginge nie mit. -->
+<input type="hidden" name="function" value="check">
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><label for="c9-tree-area">{#tools.label_tree_area}</label></div>
+    <div class="c9-col-2">
+        <select class="form-select" id="c9-tree-area" name="area_id"{disabled}>
+            {options}
+        </select>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-outline-secondary" onclick="this.form.elements['function'].value='check';"{disabled}><span class="icon" aria-hidden="true">search</span> {#tools.button_tree_check}</button>
+        <button type="submit" class="btn btn-primary" onclick="this.form.elements['function'].value='run';"{disabled}><span class="icon" aria-hidden="true">build</span> {#tools.button_tree_run}</button>
+    </div>
+</div>
+</form>
+<br>

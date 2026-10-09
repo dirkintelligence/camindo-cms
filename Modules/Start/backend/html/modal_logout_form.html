@@ -1,0 +1,18 @@
+    <div class="row mb-3">
+      <div class="col-sm-12">{#start.text_logout_confirm}</div>
+    </div>
+    <div class="row mb-3">
+      <div class="col-sm-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="all_devices" value="1" id="logout-all-devices">
+          <label class="form-check-label" for="logout-all-devices">{#start.label_logout_all_devices}</label>
+        </div>
+        <div class="form-text">{#start.text_logout_all_devices}</div>
+      </div>
+    </div>
+
+  </div><!-- .modal-body -->
+  <div class="modal-footer text-end">
+    <input type="hidden" name="function" value="confirm">
+    <button type="button" class="btn btn-light" data-bs-dismiss="modal">{#start.button_logout_cancel}</button>
+    <button type="submit" class="btn btn-primary">{#start.button_logout_confirm}</button>

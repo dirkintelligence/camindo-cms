@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bauplan "Mitglieder": Name, E-Mail (Anmeldename) und Passwort.
+  Exportformat (RecordExport::XML_FORMAT 2), ein Bereich ohne Datensätze - siehe
+  AreaBackend::create(). login_name_field_id / login_password_field_id verweisen
+  auf die field_id in dieser Datei.
+-->
+<camindo-export format="2">
+  <areas>
+    <area area_id="1" type="profile" name="members" icon="face" sort_order="ASC" default_field_id="1" sort_field_id="1" login_name_field_id="2" login_password_field_id="3">
+      <label>#label_area_members</label>
+      <note>#label_area_members_note</note>
+      <details>{"tabs":0}</details>
+      <fields>
+        <field field_id="1" type="chars" name="name" display_type="text" position="0" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" default_field="1" multilingual="0">
+          <label>#label_name</label>
+        </field>
+        <field field_id="2" type="chars" name="email" display_type="email" position="1" flags="[&quot;not_empty&quot;,&quot;unique_in_area&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" multilingual="0">
+          <label>#label_email</label>
+        </field>
+        <field field_id="3" type="password" name="password" display_type="password" position="2" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="0" visibility_list="0" multilingual="0">
+          <label>#label_password</label>
+        </field>
+      </fields>
+    </area>
+  </areas>
+</camindo-export>

@@ -1,0 +1,13 @@
+<div class="row g-2 align-items-end">
+    <div class="col-12 col-sm">
+        <label class="form-label" for="c9-widget-add-module">{#admin.label_widget_add_module}</label>
+        <select class="form-select" id="c9-widget-add-module" name="widget_add_module">{module_options}</select>
+    </div>
+    <div class="col-12 col-sm">
+        <label class="form-label" for="c9-widget-add-position">{#admin.label_widget_add_position}</label>
+        <select class="form-select" id="c9-widget-add-position" name="widget_add_position">{position_options}</select>
+    </div>
+    <div class="col-12 col-sm-auto">
+        <button type="button" class="btn btn-secondary text-nowrap" onclick="var f=$(this).closest('form');f.find('input[name=widget_action]').val('add');f.find('input[name=function]').val('update');f.submit();"><span class="icon" aria-hidden="true">add</span> {#admin.button_widget_add}</button>
+    </div>
+</div>

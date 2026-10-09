@@ -1,0 +1,20 @@
+<h4 class="mt-4">{#tools.headline_tmp}</h4>
+<p class="c9-grey-50">{#tools.note_tmp}</p>
+{report}
+<form action="Tools/tool_tmp_delete.php" method="post">
+<input type="hidden" name="function" value="run">
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><label for="c9-tmp-hours">{#tools.label_tmp_hours}</label></div>
+    <div class="c9-col-2">
+        <input type="number" class="form-control" id="c9-tmp-hours" name="hours" min="0" step="1" value="{hours}" style="max-width: 8em">
+        <div class="form-text">{#tools.note_tmp_hours}</div>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-danger" onclick="return confirm(this.dataset.confirm);" data-confirm="{#tools.confirm_tmp}"><span class="icon" aria-hidden="true">delete_sweep</span> {#tools.button_tmp_run}</button>
+    </div>
+</div>
+</form>
+<br>

@@ -1,0 +1,19 @@
+<h4 class="mt-4">{#tools.headline_trash_user}</h4>
+<p class="c9-grey-50">{#tools.note_trash_user}</p>
+{report}
+<form action="Tools/tool_trash_user.php" method="post">
+<input type="hidden" name="function" value="run">
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><div>{#tools.label_trash_user_id}</div></div>
+    <div class="c9-col-2" style="max-width: 40em">
+        {picker}
+        <div class="form-text">{#tools.note_trash_user_id}</div>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-danger" onclick="return confirm(this.dataset.confirm);" data-confirm="{#tools.confirm_trash_user}"><span class="icon" aria-hidden="true">delete_forever</span> {#tools.button_trash_user_run}</button>
+    </div>
+</div>
+</form>

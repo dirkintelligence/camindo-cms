@@ -1,0 +1,6 @@
+<form action="{action}" method="post" class="m-0">
+<input type="hidden" name="function" value="restore">
+<input type="hidden" name="table" value="{table}">
+<input type="hidden" name="id" value="{id}">
+<button type="submit" class="btn btn-sm btn-secondary text-nowrap" onclick="return confirm(this.dataset.confirm);" data-confirm="{confirm}"><span class="icon" aria-hidden="true">restore_from_trash</span> {#trash.button_restore}</button>
+</form>

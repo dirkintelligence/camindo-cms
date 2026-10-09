@@ -1,0 +1,16 @@
+<fieldset class="border rounded p-3 mt-4">
+<legend class="fs-6 fw-bold w-auto px-2 mb-0">{#record.label_batch_options}</legend>
+<p class="mb-2"><strong>{#record.label_import_total}</strong> {total}</p>
+{rows}
+<div class="form-check form-switch mt-3">
+  <input class="form-check-input" type="checkbox" name="force" value="1" id="c9-import-force"{checked_force}>
+  <label class="form-check-label" for="c9-import-force">{#record.label_import_force}</label>
+  <div class="form-text">{#record.note_import_force}</div>
+</div>
+{background}
+<div class="form-check form-switch mt-2">
+  <input class="form-check-input" type="checkbox" name="extended" value="1" id="c9-import-extended"{checked_extended}>
+  <label class="form-check-label" for="c9-import-extended">{#record.label_import_extended}</label>
+  <div class="form-text">{#record.note_import_extended}</div>
+</div>
+</fieldset>

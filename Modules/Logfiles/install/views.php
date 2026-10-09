@@ -1,0 +1,11 @@
+<?php
+// Ansichten des Moduls, die ein Werkzeug öffnen darf (Core\BackendViews, z. B. der
+// Assistent des Moduls Ai mit ui__open): Script => Beschreibung (englisch, für das
+// Sprachmodell) und erlaubte Parameter ('int', 'string' oder Liste erlaubter Werte).
+// Nur Scripte, die beim Öffnen nichts ändern - keine Aktionen, keine ajax-Scripte.
+return [
+    'index.php' => [
+        'description' => 'Log files in var/log: search entries by file name, date, category (e.g. security, php errors, database errors, mail) and text.',
+        'params'      => ['name' => 'string', 'date' => 'string', 'category' => 'string', 'search' => 'string'],
+    ],
+];

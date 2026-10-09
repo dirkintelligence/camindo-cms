@@ -1,0 +1,9 @@
+<p class="lead">{label}</p>
+<div class="alert alert-danger">
+    {text}
+    <form method="post" action="Record/record_edit.php?id={id}" class="mt-3">
+    <input type="hidden" name="unlock" value="1">
+    <button type="submit" class="btn btn-danger"><span class="icon" aria-hidden="true">lock_open</span> {#record.button_unlock}</button>
+    <button type="button" onclick="cApp.layers.close()" class="btn btn-light">{#button_cancel}</button>
+    </form>
+</div>

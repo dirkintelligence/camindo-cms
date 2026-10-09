@@ -1,0 +1,15 @@
+<form action="Snippets/snippet_edit.php" method="post">
+<input type="hidden" name="function" value="delete_confirm">
+<input type="hidden" name="instance_id" value="{instance_id}">
+<input type="hidden" name="key" value="{key}">
+<div class="alert alert-danger">{confirm}</div>
+{key_field}
+{language_blocks}
+<div class="row mt-5">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-danger"><span class="icon" aria-hidden="true">delete</span> {#button_delete_confirm}</button>
+        <button type="button" onclick="cApp.layers.close()" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</div>
+</form>

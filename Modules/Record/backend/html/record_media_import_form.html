@@ -1,0 +1,27 @@
+<p>{summary}</p>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_media_import_types}</legend>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+<thead class="text-nowrap"><tr><th></th><th>{#record.column_media_import_type}</th><th>{#record.column_media_import_count}</th><th>{#record.column_media_import_files}</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</div>
+{ignored}
+</fieldset>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_media_import_fields}</legend>
+<div class="row mt-2">
+    <div class="c9-col-1"><label for="c9-media-import-file-field" class="form-label">{#record.label_media_import_file_field} <span class="text-danger">*</span></label></div>
+    <div class="c9-col-2"><select class="form-select" id="c9-media-import-file-field" name="file_field" onchange="this.form.elements['function'].value = 'analyze'; this.form.requestSubmit();">{file_options}</select>
+    <div class="form-text">{#record.note_media_import_file_field}</div></div>
+</div>
+<div class="row mt-2">
+    <div class="c9-col-1"><label for="c9-media-import-name-field" class="form-label">{#record.label_media_import_name_field}</label></div>
+    <div class="c9-col-2"><select class="form-select" id="c9-media-import-name-field" name="name_field">{name_options}</select>
+    <div class="form-text">{#record.note_media_import_name_field}</div></div>
+</div>
+</fieldset>
+<p class="text-muted small">{#record.note_media_import_insert}</p>

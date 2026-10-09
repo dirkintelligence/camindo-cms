@@ -1,0 +1,75 @@
+
+    <h1>{#area.headline_area_create}</h1>
+    <h4 class="mt-3 mb-1">{#area.area_type_question}</h2>
+    
+    <div class="row">
+        <div class="col-md-6 col-xl-4">
+
+             <section class="mt-4">
+                <h3 class="mb-3">{#area.headline_area_type_record}</h3>
+
+                <a href="javascript:{link_prefix}&data[type]=record&data[icon]=draft{link_suffix}" class="btn btn-card">
+                    <strong>{#area.label_area_type_record}</strong>
+                    <div class="card-note mt-1">{#area.note_area_type_record}</div>
+                </a>
+
+                {blueprints_record}
+            </section>
+
+        </div>
+        <div class="col-md-6 col-xl-4">
+
+             <section class="mt-4">
+                <h3 class="mb-3">{#area.headline_area_type_profile}</h3>
+                <div class="col">
+                    <a href="javascript:{link_prefix}&data[type]=profile&data[icon]=face{link_suffix}" class="btn btn-card">
+                        <strong>{#area.label_area_type_profile}</strong>
+                        <div class="card-note mt-1">{#area.note_area_type_profile}</div>
+                    </a>
+
+                    {blueprints_profile}
+                </div>
+            </section>
+
+        </div>
+        <div class="col-md-6 col-xl-4">
+
+             <section class="mt-4">
+                <h3 class="mb-3">{#area.headline_area_type_ugc}</h3>
+                <div class="col">
+                    <a href="javascript:{link_prefix}&data[type]=ugc&data[icon]=chat_bubble{link_suffix}" class="btn btn-card">
+                        <strong>{#area.label_area_type_ugc}</strong>
+                        <div class="card-note mt-1">{#area.note_area_type_ugc}</div>
+                    </a>
+
+                    {blueprints_ugc}
+                </div>
+            </section>
+
+        </div>
+        <div class="col-md-6 col-xl-4">
+
+             <section class="mt-4">
+                <h3 class="mb-3">{#area.headline_area_type_template}</h3>
+                <div class="col">
+                    <a href="javascript:{link_prefix}&data[type]=template&data[icon]=extension{link_suffix}" class="btn btn-card">
+                        <strong>{#area.label_area_type_template}</strong>
+                        <div class="card-note mt-1">{#area.note_area_type_template}</div>
+                    </a>
+                </div>
+            </section>
+
+        </div>
+        <div class="col-md-6 col-xl-4">
+
+            <section class="mt-4">
+                <h3 class="mb-3">{#area.headline_area_type_folder}</h3>
+                <div class="col">
+                    <a href="javascript:{link_prefix}&data[type]=folder&data[icon]=folder{link_suffix}" class="btn btn-card">
+                        <strong>{#area.label_area_type_folder}</strong>
+                        <div class="card-note mt-1">{#area.note_area_type_folder}</div>
+                    </a>
+                </div>
+            </section>
+        </div>
+    </div>

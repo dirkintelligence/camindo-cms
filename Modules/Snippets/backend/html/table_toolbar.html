@@ -1,0 +1,14 @@
+<div class="d-flex gap-2 flex-wrap align-items-start mb-3">
+<form action="Snippets/set_table.php" method="post" class="m-0 w-auto">
+<input type="hidden" name="function" value="languages">
+<input type="hidden" name="instance_id" value="{instance_id}">
+<div class="dropdown">
+    <button type="button" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"><span class="icon" aria-hidden="true">translate</span> {#snippets.button_languages} <span class="badge text-bg-secondary">{shown_count}/{language_count}</span></button>
+    <div class="dropdown-menu p-3" style="min-width:16rem">
+{language_options}
+        <button type="submit" class="btn btn-sm btn-primary mt-2"><span class="icon" aria-hidden="true">check</span> {#snippets.button_apply}</button>
+    </div>
+</div>
+</form>
+<button type="button" class="btn btn-secondary" onclick="cApp.layers.add('{add_path}')"><span class="icon" aria-hidden="true">add</span> {#snippets.button_add_row}</button>
+</div>

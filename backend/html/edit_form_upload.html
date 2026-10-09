@@ -1,0 +1,11 @@
+<div class="c9-upload-field"
+    data-src-id="{src_id}"
+    data-src-field="{src_field}"
+    data-lang="{lang}"
+>
+<div class="input-group{class}">
+    <input type="file" class="form-control{class}" id="{id}" name="{name}" {attr}>
+    <button type="button" class="btn btn-sm btn-secondary" title="{#button_select_server_file}" onclick="cApp.layers.add('Record/server_file.php?src_field={src_field}&lang={lang}&src_id={src_id}')"><span class="icon" aria-hidden="true">folder_open</span></button>
+</div>
+<div class="file-preview" id="preview-{id}">{preview}</div>
+</div>

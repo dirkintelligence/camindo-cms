@@ -1,0 +1,19 @@
+{scope}
+<p>{#record.note_export_docx}</p>
+{data_docx_from}
+{data_docx_to}
+<fieldset class="mb-4 mt-4">
+<legend class="fs-6 fw-bold">{#record.label_export_docx_files}</legend>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="data[docx][split]" value="0" id="c9-export-docx-single"{single_checked}>
+  <label class="form-check-label" for="c9-export-docx-single">{#record.label_export_docx_single}</label>
+</div>
+<div class="form-check">
+  <input class="form-check-input" type="radio" name="data[docx][split]" value="1" id="c9-export-docx-split"{split_checked}>
+  <label class="form-check-label" for="c9-export-docx-split">{#record.label_export_docx_split}</label>
+</div>
+</fieldset>
+<fieldset class="mb-4 mt-4">
+<legend class="fs-6 fw-bold">{#record.label_export_fields}</legend>
+{fields}
+</fieldset>

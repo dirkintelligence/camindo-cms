@@ -1,0 +1,11 @@
+<form action="Docs/index.php" method="post" class="c9-docs-head d-flex flex-wrap align-items-center gap-2 mb-3">
+    <input type="search" name="q" value="{query}" class="form-control" style="max-width:22rem" placeholder="{#docs.search_placeholder}" aria-label="{#docs.search_placeholder}">
+    <select name="book" id="c9-docs-book" class="form-select" style="max-width:18rem" onchange="{onchange_book}" aria-label="{#docs.book_select}">
+<option value="">{#docs.all_books}</option>
+{book_options}
+    </select>
+    <input type="hidden" name="lang" value="{lang}">
+    <button type="submit" class="btn btn-primary"><span class="icon" aria-hidden="true">search</span> {#button_search}</button>
+    <a href="#" class="ms-2" onclick="{onclick_index} return false;">{#docs.index}</a>
+    {print_link}
+</form>
