@@ -1,13 +1,13 @@
 <?php
 //Bootstrap File
 
-if (version_compare(PHP_VERSION, '8.1.0', '<')) {
-    die('Error: PHP 8.1 or later is required.');
+if (version_compare(PHP_VERSION, '8.3.0', '<')) {
+    die('Error: PHP 8.3 or later is required.');
 }
 
 // SemVer, identisch mit dem Git-Tag des Releases (docs/developers/14-installation-und-update.md, 2.1).
 // Weicht der Versionsstempel var/config/core.php davon ab, steht `upgrade` aus.
-define('CAMINDO_VERSION', '9.0.0');
+define('CAMINDO_VERSION', '9.0.1');
 
 // Composer Autoloader
 require_once dirname(__DIR__) . '/vendor/autoload.php';

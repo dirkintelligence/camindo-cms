@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in camindo CMS does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Reports in English or German are welcome.
+        **Security issues** do not belong here – please report them privately (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: camindo version
+      description: Output of `php Core/cron/camindo.php status` (first line).
+      placeholder: "camindo 9.0.0 - database: 9.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Back end
+        - Website / templates (frontend)
+        - Frontend editing
+        - Installation / update (Composer, camindo.php)
+        - Command line / scheduler
+        - PHP API
+        - Media processing (images, video, audio)
+        - Manuals / documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Module, extension or processor (if known)
+      placeholder: e.g. Record, Privacy, MarkdownVisual, Magick
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: PHP version, database (MySQL/MariaDB and version), web server, operating system, browser (for back-end issues).
+      placeholder: |
+        PHP 8.3.12, MySQL 8.0.39, Apache 2.4, Debian 12, Firefox 131
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log entries
+      description: Relevant lines from `var/log/` or the PHP error log. Please remove personal data, passwords and keys.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find this problem.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

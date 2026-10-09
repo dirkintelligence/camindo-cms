@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest an improvement or a new feature.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports in English or German are welcome. Please describe the problem you want to solve
+        first – the best solution may look different from the first idea.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem do you want to solve?
+      placeholder: As an editor I have to … every time I …
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / workarounds you considered
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who benefits?
+      multiple: true
+      options:
+        - Editors
+        - Administrators
+        - Template programmers
+        - Developers (modules, extensions, API)
+        - Website visitors

@@ -118,8 +118,8 @@ class Installer {
     public function checkRequirements(bool $symlinkAssets = false): array
     {
         $checks = [];
-        $checks[] = ['ok' => version_compare(PHP_VERSION, '8.1.0', '>='), 'fatal' => true,
-            'text' => 'PHP >= 8.1 (' . PHP_VERSION . ')'];
+        $checks[] = ['ok' => version_compare(PHP_VERSION, '8.3.0', '>='), 'fatal' => true,
+            'text' => 'PHP >= 8.3 (' . PHP_VERSION . ')'];
         foreach (self::REQUIRED_EXTENSIONS as $ext) {
             $checks[] = ['ok' => extension_loaded($ext), 'fatal' => true, 'text' => "PHP extension $ext"];
         }

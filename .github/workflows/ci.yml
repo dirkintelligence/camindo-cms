@@ -1,0 +1,96 @@
+# Prüft jeden Push und Pull Request:
+#   lint     - Syntax aller PHP-Dateien auf jeder unterstützten PHP-Version, composer validate
+#   install  - Neuinstallation aus dem Skelett gegen eine leere MySQL, upgrade, Selbsttests,
+#              composer audit (Skript: .github/ci/install-test.sh, läuft auch lokal)
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: composer validate
+        run: composer validate --strict
+
+      - name: php -l
+        run: |
+          failed=0
+          while IFS= read -r -d '' file; do
+            if ! out=$(php -l "$file" 2>&1); then
+              echo "$out"
+              failed=1
+            fi
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          exit $failed
+
+  install:
+    name: Install (PHP ${{ matrix.php }}, MySQL 8.0)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root-ci
+          MYSQL_DATABASE: camindo
+          MYSQL_USER: camindo
+          MYSQL_PASSWORD: camindo-ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot-ci"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, intl, gd, mbstring, json
+          coverage: none
+          tools: composer:v2
+
+      - name: Install, upgrade, self-tests, audit
+        env:
+          CORE_DIR: ${{ github.workspace }}
+          PROJECT_DIR: ${{ runner.temp }}/project
+          CAMINDO_DB_HOST: 127.0.0.1
+          CAMINDO_DB_PORT: '3306'
+          CAMINDO_DB_NAME: camindo
+          CAMINDO_DB_USER: camindo
+          CAMINDO_DB_PASS: camindo-ci
+          # nur für den Wegwerf-Admin dieser Testinstallation
+          CAMINDO_ADMIN_PASS: Ci-Test-Passwort-2026!x
+        run: bash .github/ci/install-test.sh
+
+      - name: Logs
+        if: failure()
+        run: cat "${{ runner.temp }}"/project/var/log/*.log 2>/dev/null || true
