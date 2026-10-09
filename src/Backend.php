@@ -1,86 +1,85 @@
 <?php
 /**
- * Bausteine der Backend-Oberfläche. Instanzname im Code: $backend.
+ * Building blocks of the backend UI. Instance name in the code: $backend.
  *
- * Jede Backend-Seite entsteht durch Aufrufe an diese Klasse: Kopf- und Fußzeile, Tabs,
- * Buttons, Tabellen, Info-Blöcke, Formularfelder, Blätterleisten. Sie erzeugt HTML,
- * enthält aber selbst keins - alles Sichtbare kommt aus den .html-Vorlagen unter
- * Core/backend/html bzw. Core/Modules/{Modul}/backend/html.
+ * Every backend page is built by calls to this class: header and footer, tabs,
+ * buttons, tables, info blocks, form fields, pagination bars. It generates HTML,
+ * but contains none itself - everything visible comes from the .html templates under
+ * Core/backend/html resp. Core/Modules/{module}/backend/html.
  *
- * SIE IST ZUSTANDSBEHAFTET
+ * IT IS STATEFUL
  * --------------------
- * Formular, Tabs, Buttons und Info-Blöcke werden schrittweise aufgebaut und erst am Ende
- * abgerufen. Typischer Ablauf einer Eingabemaske:
+ * Form, tabs, buttons and info blocks are built up step by step and only retrieved at the end.
+ * Typical flow of an input mask:
  *
- *     $backend->formInit('admin.admin_edit_form');   // Vorlage mit {data_*}-Platzhaltern
+ *     $backend->formInit('admin.admin_edit_form');   // template with {data_*} placeholders
  *     $backend->formHidden('function', 'save');
  *     $backend->formField($admin, ['name' => 'name', 'value' => $data['name'], 'id' => $id]);
  *     echo $backend->form('edit_form_buttons');
  *
- * formField() ersetzt dabei den Platzhalter {data_{name}} im gemerkten Formular. Weil
- * die Instanz ein Shared Service ist (ein Objekt pro Request), gehört vor jeden neuen
- * Block der passende Reset: formInit(), tabBarReset(), buttonBarReset(), infoReset().
+ * formField() replaces the placeholder {data_{name}} in the remembered form. Because
+ * the instance is a shared service (one object per request), each new
+ * block must be preceded by the matching reset: formInit(), tabBarReset(), buttonBarReset(), infoReset().
  *
- * ZWEI VORLAGEN-ARTEN
+ * TWO KINDS OF TEMPLATES
  * --------------------
- *     template($tpl, $replace)   HTML-Vorlage aus dem Cache. {einfach} wird per strtr
- *                                ersetzt, {#name} automatisch durch das gleichnamige
- *                                Sprach-Snippet.
- *     Cms::snippet($index)       reiner Text, mehrsprachig.
+ *     template($tpl, $replace)   HTML template from the cache. {plain} is replaced via strtr,
+ *                                {#name} automatically by the language snippet of the same name.
+ *     Cms::snippet($index)       plain text, multilingual.
  *
- * Beides kommt AUSSCHLIESSLICH aus var/cache/. Nach jeder Änderung an einer .html- oder
- * lang/-Datei muss der Cache neu gebaut werden (Modul Tools), sonst wird weiter die alte
- * Fassung ausgeliefert.
+ * Both come EXCLUSIVELY from var/cache/. After every change to an .html or
+ * lang/ file the cache must be rebuilt (module Tools), otherwise the old
+ * version continues to be delivered.
  *
- * ZWEI WHITELISTS ALS ENTWICKLUNGSHILFE
+ * TWO WHITELISTS AS A DEVELOPMENT AID
  * --------------------
- *     $displayTypes      welcher display_type zu welchem Feldtyp passt
- *     $validationFlags   welche Validierungs-Flags je Feldtyp angeboten werden
+ *     $displayTypes      which display_type fits which field type
+ *     $validationFlags   which validation flags are offered per field type
  *
- * formField() prüft dagegen. Passt etwas nicht, erscheint an Stelle des Feldes eine
- * Fehlermeldung im Formular - kein Exception-Wurf. Schema-Fehler werden dadurch beim
- * Entwickeln sofort sichtbar, ohne die ganze Seite zu zerlegen.
+ * formField() checks against these. If something does not fit, an error message
+ * appears in the form in place of the field - no exception is thrown. Schema errors thus become
+ * visible immediately during development, without breaking the whole page.
  *
  * ROUTING
  * --------------------
- * backendPath() ist der Einstieg für alle Ajax-Aufrufe: Es übersetzt "{Modul}/{script}"
- * in "{Modul}/backend/{script}", bereinigt den Pfad und prüft Session, CSRF-Token
- * (Session::verifyCsrfRequest(), nur bei POST) und Modulrecht. Aufgerufen wird es aus
+ * backendPath() is the entry point for all Ajax calls: it translates "{module}/{script}"
+ * into "{module}/backend/{script}", sanitizes the path and checks session, CSRF token
+ * (Session::verifyCsrfRequest(), only for POST) and module rights. It is called from
  * Core/public_master/backend/module.php.
  *
  * TEASER
  * --------------------
- * teaser($type, $id) rendert eine kompakte Referenz auf einen anderen Datensatz
- * (Icon + Beschriftung + Link auf dessen Info-Seite). Welche Beschriftung, welches Icon
- * und welches Script dafür gelten, steht in $teaserDefaults.
+ * teaser($type, $id) renders a compact reference to another record
+ * (icon + label + link to its info page). Which label, which icon
+ * and which script apply is defined in $teaserDefaults.
  *
- * @see Camindo\Core\Cms                  Snippets, Abfragen, Formatierung
- * @see Camindo\Core\Dataset              Schema und Persistenz
- * @see docs/developers/03-backend-entwicklung.md     Aufbau einer Backend-Seite
+ * @see Camindo\Core\Cms                  snippets, queries, formatting
+ * @see Camindo\Core\Dataset              schema and persistence
+ * @see developer docs, chapter 05 (Backend development)     structure of a backend page
  */
 namespace Camindo\Core;
 
 /**
- * @property-read Pagination $pagination  Nachgeladen, siehe $lazyServices
- * @property-read AuditLog   $auditLog    Nachgeladen (Reiter "Änderungen")
- * @property-read AuditDiff  $auditDiff   Nachgeladen (Reiter "Änderungen")
+ * @property-read Pagination $pagination  Lazily loaded, see $lazyServices
+ * @property-read AuditLog   $auditLog    Lazily loaded (tab "Changes")
+ * @property-read AuditDiff  $auditDiff   Lazily loaded (tab "Changes")
  */
 class Backend {
 
-    // Nachladbare Dienste - gefüllt im Konstruktor, siehe dort.
+    // Lazily loadable services - filled in the constructor, see there.
     // --------------------
     use LazyServicesTrait;
     /**
-     * Erlaubte display_type-Werte je Feldtyp.
-     * formField() weist alles zurück, was hier nicht steht - siehe Klassenkommentar.
-     * 'meta' ist ein Pseudo-Typ für Meta-Felder ohne eigene Typangabe.
+     * Allowed display_type values per field type.
+     * formField() rejects everything not listed here - see class comment.
+     * 'meta' is a pseudo type for meta fields without their own type specification.
      *
-     * 'sortable' ist die sortierbare Variante von 'checkbox': jede Option steht in
-     * einer eigenen .c9-smartrows-row und lässt sich mit den Pfeil-Buttons
-     * verschieben. Die Reihenfolge der angehakten Optionen ist der gespeicherte Wert.
+     * 'sortable' is the sortable variant of 'checkbox': every option stands in
+     * its own .c9-smartrows-row and can be moved with the arrow buttons.
+     * The order of the checked options is the stored value.
      *
-     * 'reltable' (Inhalt liegt in einer eigenen Relation-Tabelle, siehe
-     * Cms::$dataSuffix) wird hier wie 'json' geführt.
+     * 'reltable' (content lies in its own relation table, see
+     * Cms::$dataSuffix) is handled here like 'json'.
      */
     public array $displayTypes = [
         'chars'      => ['text', 'textarea', 'email', 'tel', 'select', 'radio'],
@@ -109,18 +108,18 @@ class Backend {
         'meta'       => ['select', 'radio'], // pseudo type
     ];
     /**
-     * Texteingabetypen (Text, Numersich, Datum/Zeit), die Auswahl statt Eingabe erlauben
-     * Achtung vorher auf !in_array($type, $this->cms->relationTypes) prüfen
+     * Text input types (text, numeric, date/time) that allow selection instead of input
+     * Caution: check !in_array($type, $this->cms->relationTypes) beforehand
      */
     public array $optionDisplayTypes = ['select', 'radio', 'checkbox', 'multiselect', 'sortable'];
     /**
-     * Validierungs-Flags, die je Feldtyp im Backend zur Auswahl stehen.
-     * Rein für die Oberfläche (Feld-Eingabemaske im Modul Area); die eigentliche
-     * Prüfung macht Dataset::validateFieldValue(), das mehr Flags kennt - u. a.
-     * 'trim', 'strip_tags' und 'name', die nicht auswählbar, sondern fest im
-     * Schema hinterlegt sind.
-     * Verweis- (relation*, pointer*, link) und Dateifelder bieten 'unique' /
-     * 'unique_in_area' nicht an: Dataset::uniqueVirtualOk() prüft sie dort nicht.
+     * Validation flags offered per field type in the backend for selection.
+     * Purely for the UI (field input mask in the Area module); the actual
+     * check is done by Dataset::validateFieldValue(), which knows more flags - e.g.
+     * 'trim', 'strip_tags' and 'name', which are not selectable but are stored
+     * fixed in the schema.
+     * Reference (relation*, pointer*, link) and file fields do not offer 'unique' /
+     * 'unique_in_area': Dataset::uniqueVirtualOk() does not check them there.
      */
     public array $validationFlags = [
         'chars'      => ['not_empty', 'unique_in_area', 'unique'],
@@ -147,13 +146,13 @@ class Backend {
         'link'       => ['not_empty'],
         'file'       => ['not_empty'],
     ];
-    /** Cache der HTML-Vorlagen, je Prefix einmal aus var/cache/html/ geladen */
+    /** Cache of the HTML templates, loaded once per prefix from var/cache/html/ */
     private array $htmlTemplates = [];
 
     /**
-     * Bauplan für teaser(): je Datensatz-Art die Spalte für die Beschriftung, die
-     * HTML-Vorlage für das Icon und das Backend-Script der Info-Seite.
-     * Der auskommentierte Block unten zeigt das Namensmuster für weitere Arten.
+     * Blueprint for teaser(): per record kind the column for the label, the
+     * HTML template for the icon and the backend script of the info page.
+     * The commented-out block below shows the naming pattern for further kinds.
      */
     private array $teaserDefaults = [
         'admin' => [
@@ -184,24 +183,24 @@ class Backend {
         ],
         */
     ];
-    // Zwischenspeicher der im Aufbau befindlichen Seitenelemente.
-    // Jeweils mit tabBarReset() / buttonBarReset() / infoReset() / formInit() leeren,
-    // bevor ein neuer Block beginnt - die Instanz lebt den ganzen Request.
+    // Buffer of the page elements under construction.
+    // Empty each with tabBarReset() / buttonBarReset() / infoReset() / formInit()
+    // before a new block begins - the instance lives for the whole request.
     private array $tabs = [];
     private array $buttons = [];
     private string $prevLink = '';
     private string $nextLink = '';
     private array $infoBlocks = [];
-    private array $infoStack = [];  // beiseitegelegte Info-Sammlungen, siehe infoPush()
+    private array $infoStack = [];  // info collections set aside, see infoPush()
     private string $form = '';
-    private array $formStack = []; // beiseitegelegte Formulare, siehe formPush()
+    private array $formStack = []; // forms set aside, see formPush()
 
     public string $emptyPlaceholder = '';
 
     /**
-     * Datensätze, deren ursprünglichen Dateinamen die Info-Seite zum Bearbeiten
-     * anbietet (Stift hinter "Original filename", RecordBackendInfo::fileRename()).
-     * Setzt RecordBackendInfo bei Schreibrecht auf den Datensatz.
+     * Records whose original file name the info page offers to edit (pencil after
+     * "Original filename", RecordBackendInfo::fileRename()).
+     * RecordBackendInfo sets it for the record if write permission exists.
      * @var array<int, true>
      */
     public array $fileRenameIds = [];
@@ -210,8 +209,8 @@ class Backend {
     private array $areaCache = [];
 
     /**
-     * Formate, die ein Browser direkt anzeigen kann. Alles andere bekommt in der
-     * Backend-Vorschau ein Platzhalterbild aus media/default/ (siehe defaultImg()).
+     * Formats a browser can display directly. Anything else gets a placeholder image
+     * from media/default/ in the backend preview (see defaultImg()).
      */
     public $webImageFormats = [
         'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
@@ -227,14 +226,14 @@ class Backend {
         protected ContainerInterface $container
     )
     {
-        // Nachladbare Dienste
+        // Lazily loadable services
         // --------------------
-        // Blätterleisten braucht nur, wer eine Liste ausgibt - paginationTop() und
-        // paginationBottom(). Info- und Formularseiten laden Pagination gar nicht.
+        // Only whoever outputs a list needs pagination bars - paginationTop() and
+        // paginationBottom(). Info and form pages do not load Pagination at all.
         //
-        // (Die Zuweisung steht hier und nicht als Startwert am Property, weil PHP
-        // das Überschreiben einer Trait-Eigenschaft mit abweichendem Startwert
-        // innerhalb derselben Klasse nicht erlaubt.)
+        // (The assignment is here and not as a start value on the property, because PHP
+        // does not allow overriding a trait property with a different start value
+        // within the same class.)
         //
         // @see Camindo\Core\LazyServicesTrait
         $this->lazyServices = [
@@ -247,25 +246,25 @@ class Backend {
     }
 
     /**
-     * Backend-Seite laden - Pfadangabe: "Modulname/Scriptname"
-     * -> aufgelöst in {Modulverzeichnis}/backend/Scriptname
+     * Load a backend page - path: "module name/script name"
+     * -> resolved to {module directory}/backend/script name
      *
-     * Das Modulverzeichnis kommt aus der Laufzeitliste (Cms::$modules, 'path'):
-     * Core/Modules/{Name} oder Modules/{Name}. Ein Modul, das dort fehlt (nicht
-     * installiert, inaktiv, Update wartet), ist im Backend nicht erreichbar.
+     * The module directory comes from the runtime list (Cms::$modules, 'path'):
+     * Core/Modules/{Name} or Modules/{Name}. A module missing there (not
+     * installed, inactive, update pending) is not reachable in the backend.
      *
-     * @param string $file  _path aus der Apache RewriteRule
-     * @return string       aboluter Pfad auf das einzubindene Backend-Script
+     * @param string $file  _path from the Apache RewriteRule
+     * @return string       absolute path to the backend script to include
      */
     public function backendPath(string $path, string $kind = 'modules'):string
     {
         $path = $this->sanitizePath($path);
 
-        // Schiebe "backend" nach Komponentenname ein:
+        // Insert "backend" after the component name:
         $parts = explode('/', $path);
         array_splice($parts, 1, 0, 'backend');
 
-        // absoluter Pfad zum Script über die Laufzeitliste (nur aktive Komponenten)
+        // absolute path to the script via the runtime list (only active components)
         $moduleDir = in_array($kind, ['modules', 'extensions'], true) ? $this->cms->componentPath($kind, $parts[0]) : null;
         if ($moduleDir === null) {
             die($this->template('alert_danger', [
@@ -278,34 +277,34 @@ class Backend {
             die($this->template('alert_danger', ['{text}' => 'File not found: ' . $this->escape($path)]));
         };
 
-        // Session prüfen - einzige Ausnahme ist der Login selbst. Die Caches baut
-        // der Installer bzw. `camindo.php upgrade|cache`, den ersten Admin der
-        // Installer; einen Weg ohne Anmeldung braucht das Backend nicht mehr.
+        // Check the session - the only exception is the login itself. The caches are built
+        // by the installer resp. `camindo.php upgrade|cache`, the first admin by the
+        // installer; the backend no longer needs a way without login.
         $exempt = str_starts_with($path, 'Start/login.php');
         $hasSession = (bool)$this->session->load();
-        // Herkunft: ein verändernder Request muss - sofern der Browser es sagt - von
-        // dieser Seite kommen (17-csrf.md §2.6). Gilt auch für die Anmeldung selbst.
+        // Origin: a modifying request must - if the browser says so - come from
+        // this page (developer docs, chapter 14 (Security: web)). Also applies to the login itself.
         if (!$this->originAllowed()) {
             die('##accessdenied##');
         }
         if (!$exempt && !$hasSession) {
             die('##accessdenied##');
         }
-        // CSRF: jeder verändernde Request (alles außer GET/HEAD) muss das Token der
-        // Session mitbringen - 17-csrf.md §2.4. Dieselbe Antwort wie bei fehlender
-        // Session: das Javascript legt den Anmeldedialog darüber, und ein Angreifer
-        // erfährt nicht, woran es lag.
-        // Ausnahme: das Anmeldeformular eines zweiten Fensters, das noch ohne Session
-        // (also ohne Token) geladen wurde, während sich der Benutzer anderswo schon
-        // angemeldet hat - StartBackend::login() meldet dann nur die bestehende
-        // Session zurück und schließt den Dialog, ändert also nichts.
+        // CSRF: every modifying request (everything except GET/HEAD) must bring the token of the
+        // session - developer docs, chapter 14 (Security: web). The same response as with a missing
+        // session: the JavaScript shows the login dialog over it, and an attacker
+        // does not learn what the cause was.
+        // Exception: the login form of a second window, which was loaded without a session
+        // (and thus without a token) while the user had already logged in elsewhere -
+        // StartBackend::login() then only returns the existing session
+        // and closes the dialog, so it changes nothing.
         if (!($exempt && $hasSession) && !$this->session->verifyCsrfRequest()) {
             die('##accessdenied##');
         }
-        // Modulzugriff der Benutzergruppe (Access::script(): Modul erlaubt und ggf.
-        // Zusatzrecht des Scripts, oder ein 'shared'-Script im Lookup-Aufruf).
-        // Die Meldung erscheint im Layer.
-        // Extensions haben keine Modulrechte (13 §3.6): Session + aktiv genügt.
+        // Module access of the user group (Access::script(): module allowed and, if applicable,
+        // additional right of the script, or a 'shared' script in the lookup call).
+        // The message appears in the layer.
+        // Extensions have no module rights (developer docs, chapter 08 (Components and extensions)): session + active is enough.
         if ($kind === 'modules' && $hasSession && !$this->access()->script($parts[0], $parts[2] ?? '')) {
             $this->access()->denied();
         }
@@ -314,17 +313,17 @@ class Backend {
     }
 
     /**
-     * Herkunftsprüfung verändernder Requests (17-csrf.md §2.6) - dritte Schicht
-     * neben CSRF-Token und POST-Bindung.
+     * Origin check of modifying requests (developer docs, chapter 14 (Security: web)) - third layer
+     * alongside the CSRF token and POST binding.
      *
-     * Moderne Browser schicken bei POST den Header Origin, sonst meist einen Referer.
-     * Stammt er von einem anderen Host als dem des Backends (HTTP_HOST, hinter einem
-     * Proxy auch X-Forwarded-Host) und steht er nicht in admin.allowed_origins, wird
-     * abgelehnt. "Origin: null" (Sandbox, file://, bestimmte Weiterleitungen) ebenso.
-     * Fehlen beide Header - Datenschutz-Erweiterungen, Referrer-Policy no-referrer -,
-     * bleibt es beim Token: ablehnen hieße, solche Browser auszusperren.
+     * Modern browsers send the header Origin with POST, otherwise usually a Referer.
+     * If it comes from a different host than the backend (HTTP_HOST, behind a
+     * proxy also X-Forwarded-Host) and is not in admin.allowed_origins, it is
+     * rejected. "Origin: null" (sandbox, file://, certain redirects) likewise.
+     * If both headers are missing - privacy extensions, Referrer-Policy no-referrer -,
+     * the token remains the check: rejecting would lock out such browsers.
      *
-     * GET und HEAD prüft sie nicht; die haben keine Seiteneffekte (requirePost()).
+     * GET and HEAD are not checked; they have no side effects (requirePost()).
      */
     public function originAllowed(): bool
     {
@@ -361,15 +360,15 @@ class Backend {
     }
 
     /**
-     * Verändernde Aktion: der Request MUSS ein POST sein (17-csrf.md §2.7).
+     * Modifying action: the request MUST be a POST (developer docs, chapter 14 (Security: web)).
      *
-     * Zweite Hälfte des CSRF-Schutzes. Das Token (Session::verifyCsrfRequest())
-     * wird nur bei POST verlangt - und könnte deshalb nichts ausrichten, solange
-     * dieselbe Aktion auch per GET läuft: `SameSite=Lax` schickt das Cookie bei
-     * Top-Level-GET-Navigation mit. Erst die Methodenbindung schließt die Lücke.
+     * Second half of the CSRF protection. The token (Session::verifyCsrfRequest())
+     * is only required for POST - and could therefore accomplish nothing as long as
+     * the same action also runs via GET: `SameSite=Lax` sends the cookie along with
+     * top-level GET navigation. Only the method binding closes the gap.
      *
-     * Der Aufrufer bricht bei false ab - mit Access::denied() (kleine Ajax-Endpunkte)
-     * oder Access::deniedHtml() plus container_footer (ganze Seiten).
+     * The caller aborts on false - with Access::denied() (small Ajax endpoints)
+     * or Access::deniedHtml() plus container_footer (full pages).
      */
     public function requirePost(): bool
     {
@@ -381,11 +380,11 @@ class Backend {
     }
 
     /**
-     * Extension eines Feldes, wenn es eine hat und sie aktiv ist:
-     * ['name' => 'calendar' (Kleinschreibung wie data-c9-ext und ext/-Verzeichnis),
-     *  'options' => …]. Virtuelle Felder: details.extension / details.extension_options
-     * (field.details ist in der Spaltendefinition noch der JSON-String); Meta-Felder
-     * aus dem PHP-Schema: 'extension' => 'Calendar', 'extension_options' => [].
+     * Extension of a field, if it has one and it is active:
+     * ['name' => 'calendar' (lowercase like data-c9-ext and the ext/ directory),
+     *  'options' => …]. Virtual fields: details.extension / details.extension_options
+     * (field.details is still the JSON string in the column definition); meta fields
+     * from the PHP schema: 'extension' => 'Calendar', 'extension_options' => [].
      */
     public function fieldExtension(array $colDef): ?array
     {
@@ -397,8 +396,8 @@ class Backend {
             $options = (array)($details['extension_options'] ?? []);
         }
         if ($name === '' || !isset($this->cms->extensions[$name])) return null;
-        // settings.php 'options_provider': Klasse, deren clientOptions() die Optionen
-        // für den Browser ergänzt (Extension Password: wirksame Regeln + Texte)
+        // settings.php 'options_provider': class whose clientOptions() adds the options
+        // for the browser (extension Password: effective rules + texts)
         $provider = (string)($this->cms->extensions[$name]['options_provider'] ?? '');
         if ($provider !== '' && method_exists($provider, 'clientOptions')) {
             $options = $this->container->get($provider)->clientOptions($options);
@@ -407,11 +406,11 @@ class Backend {
     }
 
     /**
-     * Ablage projekteigener Dateien einer Extension: var/extensions/{name}/ mit
-     * {name} kleingeschrieben wie das ext/-Verzeichnis und data-c9-ext (13 §3.8).
-     * Stylesheets für Editoren liegen dort; die Extension liefert sie über einen
-     * eigenen Endpunkt (backendExtensions/{Name}/css.php) aus, weil var/ nicht im
-     * Docroot liegt.
+     * Storage of project-specific files of an extension: var/extensions/{name}/ with
+     * {name} in lowercase like the ext/ directory and data-c9-ext (developer docs, chapter 08 (Components and extensions)).
+     * Stylesheets for editors live there; the extension delivers them via its own
+     * endpoint (backendExtensions/{Name}/css.php), because var/ is not in the
+     * docroot.
      */
     public function extensionVarDir(string $extension): string
     {
@@ -420,10 +419,10 @@ class Backend {
     }
 
     /**
-     * Dateien in var/extensions/{name}/ mit einer Endung, sortiert - z. B. die
-     * wählbaren Stylesheets in backend/form.php einer Extension.
+     * Files in var/extensions/{name}/ with one extension, sorted - e.g. the
+     * selectable stylesheets in backend/form.php of an extension.
      *
-     * @return string[]  Dateinamen ohne Pfad
+     * @return string[]  file names without path
      */
     public function extensionVarFiles(string $extension, string $ext = 'css'): array
     {
@@ -439,8 +438,8 @@ class Backend {
     }
 
     /**
-     * Aktive Extensions, die zu Feldtyp und Display-Typ passen (settings.php
-     * display_types / field_types) - für die Auswahl in der Feld-Eingabemaske.
+     * Active extensions that match the field type and display type (settings.php
+     * display_types / field_types) - for the selection in the field input mask.
      *
      * @return array  Name => ['label' => …, 'display_types' => [...]]
      */
@@ -461,9 +460,9 @@ class Backend {
     }
 
     /**
-     * Backend-Sprachen: Kürzel, für die es Snippets gibt (Cms::backendLanguages()).
-     * Grundlage der Auswahllisten in Language::backend_code, in den persönlichen
-     * Einstellungen (AdminBackend::settings()) und im Anmeldeformular.
+     * Backend languages: codes for which snippets exist (Cms::backendLanguages()).
+     * Basis of the selection lists in Language::backend_code, in the personal
+     * settings (AdminBackend::settings()) and in the login form.
      *
      * @return string[]  z. B. ['de', 'en']
      */
@@ -473,8 +472,8 @@ class Backend {
     }
 
     /**
-     * Auswahlliste der Backend-Sprachen: Kürzel => Bezeichnung.
-     * Die Bezeichnung kommt aus dem Snippet backend_language_{code}, sonst das Kürzel.
+     * Selection list of the backend languages: code => label.
+     * The label comes from the snippet backend_language_{code}, otherwise the code.
      *
      * @return array  code => label
      */
@@ -489,9 +488,9 @@ class Backend {
     }
 
     /**
-     * Auswahlliste der Locales (Datums-, Zeit- und Zahlenformate): ICU-Bezeichner
-     * => "Deutsch (Österreich) - de_AT", benannt in der Backend-Sprache und danach
-     * sortiert. Nur Locales mit Region (Cms::localeIdentifiers()).
+     * Selection list of the locales (date, time and number formats): ICU identifier
+     * => "German (Austria) - de_AT", named in the backend language and then
+     * sorted. Only locales with a region (Cms::localeIdentifiers()).
      *
      * @return array  locale => label
      */
@@ -509,8 +508,8 @@ class Backend {
     }
 
     /**
-     * Auswahlliste der Zeitzonen: PHP-Bezeichner => "Bezeichner (UTC+02:00)".
-     * Der Versatz ist der aktuelle (Sommer-/Winterzeit) - nur zur Orientierung.
+     * Selection list of the time zones: PHP identifier => "identifier (UTC+02:00)".
+     * The offset is the current one (summer/winter time) - for orientation only.
      *
      * @return array  timezone => label
      */
@@ -529,33 +528,33 @@ class Backend {
     }
 
     /**
-     * Cookie des Frontend-Editings setzen (Cms::FED_COOKIE, siehe Cms::fedActive()).
+     * Set the cookie of the frontend editing (Cms::FED_COOKIE, see Cms::fedActive()).
      *
-     *     0  Cookie löschen
-     *     1  Session-Cookie - bis der Browser geschlossen wird (höchstens 12 h);
-     *        Start/logout.php löscht es beim Abmelden
-     *     2  ein Jahr - überdauert Abmeldung und Browser-Ende
+     *     0  delete cookie
+     *     1  session cookie - until the browser is closed (at most 12 h);
+     *        Start/logout.php deletes it on logout
+     *     2  one year - survives logout and the end of the browser
      *
-     * Der Wert ist signiert (FrontendHandover::fedCookieValue()). Unter der Domain
-     * einer Website setzt ihn bei fester Backend-Domain die Vorschau.
+     * The value is signed (FrontendHandover::fedCookieValue()). Under the domain
+     * of a website the preview sets it when the backend domain is fixed.
      *
-     * Gesetzt aus der Ajax-Antwort heraus (AdminBackend::settings(), Anmeldung): der
-     * Set-Cookie-Header wirkt dort wie bei jeder anderen Antwort derselben Domain.
+     * Set from the Ajax response (AdminBackend::settings(), login): the
+     * Set-Cookie header works there like with any other response of the same domain.
      *
      * @param int $mode  0 | 1 | 2
      */
     public function setFedCookie(int $mode): void
     {
-        // signierter Wert, siehe FrontendHandover
+        // signed value, see FrontendHandover
         $this->container->get(FrontendHandover::class)
             ->setFedCookie((int)$this->session->get('admin_id'), $mode);
     }
 
     /**
-     * Ist der angemeldete Admin Superuser (Gruppe 1)?
+     * Is the logged-in admin a superuser (group 1)?
      *
-     * Aus den geladenen Gruppenrechten (Access, Session::applyAccess()); sind keine
-     * geladen (CLI mit Session::setCliAdmin()), aus der Gruppe in den Session-Details.
+     * From the loaded group rights (Access, Session::applyAccess()); if none are
+     * loaded (CLI with Session::setCliAdmin()), from the group in the session details.
      */
     public function isSuperuser(): bool
     {
@@ -566,7 +565,7 @@ class Backend {
     }
 
     /**
-     * Rechte der angemeldeten Gruppe - Kurzform für die Module.
+     * Rights of the logged-in group - short form for the modules.
      */
     public function access(): Access
     {
@@ -574,13 +573,13 @@ class Backend {
     }
 
     /**
-     * SQL-Zusatz für Bereichslisten der Module (Auswahllisten, Bäume), der die
-     * Bereiche auf die der Benutzergruppe beschränkt: " AND `area_id` IN (...)",
-     * leer für Superuser. Die Ids stammen aus der Gruppendatei, nicht aus Eingaben.
+     * SQL addition for area lists of the modules (selection lists, trees), which restricts the
+     * areas to those of the user group: " AND `area_id` IN (...)",
+     * empty for superusers. The ids come from the group file, not from input.
      *
-     * @param bool   $writable  true: nur Bereiche mit Schreibrecht (Zielbereiche
-     *                          beim Verschieben/Importieren), sonst Leserecht
-     * @param string $column    Spaltenausdruck, z. B. "`a`.`area_id`"
+     * @param bool   $writable  true: only areas with write permission (target areas
+     *                          when moving/importing), otherwise read permission
+     * @param string $column    column expression, e.g. "`a`.`area_id`"
      */
     public function areaAccessSql(bool $writable = false, string $column = '`area_id`'): string
     {
@@ -591,10 +590,10 @@ class Backend {
     }
 
     /**
-     * Persönliche Einstellungen des angemeldeten Admins (`admin`.`settings`), wie sie
-     * Session::create() in die Session-Details übernommen hat.
+     * Personal settings of the logged-in admin (`admin`.`settings`), as
+     * Session::create() has taken them into the session details.
      *
-     * @return array  backend_code, timezone, language_id, fed - fehlende Schlüssel = leer
+     * @return array  backend_code, timezone, language_id, fed - missing keys = empty
      */
     public function adminSettings(): array
     {
@@ -606,7 +605,7 @@ class Backend {
     // Backend page elements
 
     /**
-     * Breadcrumb Navi umbenennen
+     * Rename the breadcrumb navigation
      */
     public function setNaviLabel(string $label):void
     {
@@ -624,7 +623,7 @@ class Backend {
     }
 
     /**
-     * Tab Sammlung leeren
+     * Empty the tab collection
      */
     public function tabBarReset(): void
     {
@@ -632,10 +631,10 @@ class Backend {
     }
 
     /**
-     * Tab zur Sammlung hinzufügen
-     * @param string $label     Text oder #Snippet-ID
-     * @param string $onclick   Script für onclick Handler
-     * @param bool   $active    true: Tab ist der aktive Tab
+     * Add a tab to the collection
+     * @param string $label     text or #snippet id
+     * @param string $onclick   script for the onclick handler
+     * @param bool   $active    true: tab is the active tab
      */
     public function tabAdd(string $label, string $onclick, bool $active = false): void
     {
@@ -646,25 +645,25 @@ class Backend {
         ]);
     }
 
-    // Reiter "Änderungen" (Audit-Log) der Info-Seiten
+    // Tab "Changes" (audit log) of the info pages
     // ====================
-    // Jede Info-Seite eines Datasets mit Audit-Log (Bereich, Feld, Template, Status,
-    // Instanz, Sprache, Konverter, Aufgabe, Komponente, Gruppe, Admin) hängt ihn an
-    // ihre Reiterleiste: auditTabAdd() mit der eigenen Adresse, auditTabActive()
-    // entscheidet, ob statt des Inhalts auditHistory() erscheint. Sehen darf ihn,
-    // wer die Info-Seite sieht; IP-Adressen und "Alle im Audit-Log" nur Superuser
-    // (wie der Reiter der Datensätze, RecordBackendInfo).
+    // Every info page of a dataset with an audit log (area, field, template, status,
+    // instance, language, converter, task, component, group, admin) attaches it to
+    // its tab bar: auditTabAdd() with its own address, auditTabActive()
+    // decides whether auditHistory() appears instead of the content. Whoever sees the
+    // info page may see it; IP addresses and "All in the audit log" only superusers
+    // (like the tab of the records, RecordBackendInfo).
 
-    /** Ist der Reiter "Änderungen" gewählt? (Request tab=audit) */
+    /** Is the tab "Changes" selected? (request tab=audit) */
     public function auditTabActive(): bool
     {
         return (string)($_REQUEST['tab'] ?? '') === 'audit' && $this->auditLog->enabled();
     }
 
     /**
-     * Reiter "Änderungen" an die Sammlung hängen - nur bei eingeschaltetem Audit-Log.
+     * Attach the tab "Changes" to the collection - only when the audit log is switched on.
      *
-     * @param string $url  Info-Seite ohne tab-Parameter, z. B. "Status/status_info.php?id=3"
+     * @param string $url  info page without tab parameter, e.g. "Status/status_info.php?id=3"
      */
     public function auditTabAdd(string $url): void
     {
@@ -674,12 +673,12 @@ class Backend {
     }
 
     /**
-     * Reiterleiste "Info | Änderungen" für Info-Seiten ohne eigene Reiter. Ist
-     * "Änderungen" gewählt, gibt sie den Verlauf samt Seitenende (container_footer)
-     * aus und liefert true - der Aufrufer ist dann fertig.
+     * Tab bar "Info | Changes" for info pages without their own tabs. If
+     * "Changes" is selected, it outputs the history including the page end (container_footer)
+     * and returns true - the caller is then done.
      *
-     * @param string $url         Info-Seite ohne tab-Parameter
-     * @param string $objectType  Tabelle des Datasets
+     * @param string $url         info page without tab parameter
+     * @param string $objectType  table of the dataset
      */
     public function infoAuditTabs(string $url, string $objectType, int $objectId): bool
     {
@@ -696,8 +695,8 @@ class Backend {
     }
 
     /**
-     * Inhalt des Reiters: die letzten Einträge eines Objekts mit Vorher/Nachher
-     * (AuditDiff::entry()), neueste zuerst.
+     * Content of the tab: the most recent entries of an object with before/after
+     * (AuditDiff::entry()), newest first.
      *
      * @param string $objectType  Tabelle des Datasets (`audit_log`.`object_type`)
      */
@@ -723,7 +722,7 @@ class Backend {
     }
 
     /**
-     * Tabs der Sammlung rendern
+     * Render the tabs of the collection
      */
     public function tabBar(): string
     {
@@ -732,7 +731,7 @@ class Backend {
     }
 
     /**
-     * Button-Sammlung leeren
+     * Empty the button collection
      */
     public function buttonBarReset():void
     {
@@ -740,10 +739,10 @@ class Backend {
     }
 
     /**
-     * Button zur Sammlung hinzufügen
-     * @param string $tpl       Template-ID
-     * @param string $onclick   Script für onclick Handler ersetzt {onclick}
-     * @param string $label     ersetzt {label}
+     * Add a button to the collection
+     * @param string $tpl       template id
+     * @param string $onclick   script for the onclick handler, replaces {onclick}
+     * @param string $label     replaces {label}
      */
     public function buttonAdd(string $tpl, string $onclick, string $label = '', bool $alignRight = false):void
     {
@@ -752,15 +751,15 @@ class Backend {
             '{label}' => $label
         ];
         if ($alignRight) {
-            // bootstap only
+            // bootstrap only
             $replace['class="btn'] = 'class="ms-auto btn';
         }
         $this->buttons[] = $this->template($tpl, $replace);
     }
 
     /**
-     * Platzhalter in den bereits gesammelten Buttons ersetzen - für Vorlagen mit
-     * eigenen Platzhaltern (z. B. das Menü der Datensatzliste mit {area_id}).
+     * Replace placeholders in the buttons already collected - for templates with
+     * their own placeholders (e.g. the menu of the record list with {area_id}).
      */
     public function buttonBarReplace(string $from, string $to): void
     {
@@ -771,27 +770,27 @@ class Backend {
     }
 
     /**
-     * Vorschau-Button - je Sprache der Instanz einer.
+     * Preview button - one per language of the instance.
      *
-     * Die Vorschau läuft nicht über das Frontend, sondern über
-     * public/backend/preview.php (Page::resolvePreview()): nur mit Admin-Session,
-     * unter der Domain des Backends, und auch für Datensätze, die noch nicht oder
-     * nicht mehr veröffentlicht sind. Der Frontend-Pfad wandert als Parameter
-     * `request` mit, die Instanz als `instance` - das Frontend ermittelt sie aus
-     * der Domain, die Vorschau kann das nicht.
+     * The preview does not run via the frontend, but via
+     * public/backend/preview.php (Page::resolvePreview()): only with admin session,
+     * under the domain of the backend, and also for records that are not yet or
+     * no longer published. The frontend path travels along as the parameter
+     * `request`, the instance as `instance` - the frontend determines it from
+     * the domain, the preview cannot do that.
      *
-     * Führt die Instanz nur eine Sprache, ist es der gewöhnliche Button. Bei
-     * mehreren Sprachen wird daraus eine Pulldownliste "Vorschau" mit einem Eintrag
-     * je Sprache (Parameter `lang`, siehe Page::resolveLanguage() - ohne Kürzel
-     * entschiede Accept-Language).
+     * If the instance runs only one language, it is the ordinary button. With
+     * several languages it becomes a drop-down list "Preview" with one entry
+     * per language (parameter `lang`, see Page::resolveLanguage() - without a code
+     * Accept-Language would decide).
      *
-     * Ist der Pfad je Sprache verschieden (Übersicht eines Bereichs: der übersetzte
-     * Slug-Präfix, buttonAddAreaPreview()), kommt er als Liste language_id => Pfad;
-     * Sprachen ohne Eintrag fehlen dann in der Pulldownliste.
+     * If the path differs per language (overview of an area: the translated
+     * slug prefix, buttonAddAreaPreview()), it comes as a list language_id => path;
+     * languages without an entry are then missing from the drop-down list.
      *
-     * @param string|array $path  Frontend-Pfad ohne führenden Slash, z. B. "42" oder
-     *                            "0,start" - oder language_id => Pfad
-     * @param int    $instanceId  Instanz des Datensatzes bzw. Templates
+     * @param string|array $path  frontend path without leading slash, e.g. "42" or
+     *                            "0,start" - or language_id => path
+     * @param int    $instanceId  instance of the record resp. template
      */
     public function buttonAddPreview(string|array $path, int $instanceId): void
     {
@@ -803,7 +802,7 @@ class Backend {
         }
         if (count($languages) < 2) {
             $single = is_array($path) ? (string)reset($path) : $path;
-            // (Attributwert: das & zwischen den Parametern gehört maskiert)
+            // (attribute value: the & between the parameters must be escaped)
             $this->buttonAdd('button_preview', htmlspecialchars($base . rawurlencode($single)));
             return;
         }
@@ -824,10 +823,10 @@ class Backend {
     }
 
     /**
-     * Vorschau der Übersicht eines Bereichs (Präfix-Adresse /{lang}/{präfix}, Page::
-     * resolveRequest()) - nur wenn der Bereich ein Übersichts-Template und einen
-     * Slug-Präfix hat. Der Präfix ist je Sprache übersetzt, die Pulldownliste führt
-     * deshalb je Sprache ihre eigene Adresse.
+     * Preview of the overview of an area (prefix address /{lang}/{prefix}, Page::
+     * resolveRequest()) - only if the area has an overview template and a
+     * slug prefix. The prefix is translated per language, so the drop-down list
+     * therefore has its own address per language.
      */
     public function buttonAddAreaPreview(int $areaId): void
     {
@@ -844,7 +843,7 @@ class Backend {
     }
 
     /**
-     * Buttons der Sammlung rendern
+     * Render the buttons of the collection
      * @param string $tpl     optional: template
      */
     public function buttonBar(string $tpl = ''): string
@@ -854,9 +853,9 @@ class Backend {
     }
 
     /**
-     * Pagination Top - short version (no page links)
+     * Pagination top - short version (no page links)
      */
-    
+
     public function paginationTopShort(string $snippetId = ''): string
     {
         if (empty($snippetId)) $snippetId = 'listed_records';
@@ -870,8 +869,8 @@ class Backend {
     }
 
     /**
-     * Pagination Top
-     * @param string $snippetId  Snippet-Id für Anzahl Datensätze, optional
+     * Pagination top
+     * @param string $snippetId  snippet id for the number of records, optional
      */
     public function paginationTop(string $snippetId = ''): string
     {
@@ -879,7 +878,7 @@ class Backend {
             return $this->paginationTopShort($snippetId);
         }
         else {
-            // Darstellung mit Skip-Buttons
+            // Display with skip buttons
             // Clean up skip: points to first entry of the page
             $skip = (int)(abs((int)$_REQUEST['skip']) / $this->cms->list_rows) * $this->cms->list_rows;
 
@@ -920,7 +919,7 @@ class Backend {
     }
 
     /**
-     * Pagination Bottom
+     * Pagination bottom
      */
     public function paginationBottom(): string
     {
@@ -952,18 +951,18 @@ class Backend {
     }
 
     /**
-     * Spaltenkopf rendern, mit Klick-Handler für Sortierung nach dieser Spalte
-     * 
-     * @param $colDef           Spaltendefinition aus dem $schema
-     * @param array $f          Ergebnis-Array aus $dataset->select()
-     * @param string $colName   Spaltenname (Eingabefeldname)
+     * Render the column header, with a click handler for sorting by this column
+     *
+     * @param $colDef           column definition from the $schema
+     * @param array $f          result array from $dataset->select()
+     * @param string $colName   column name (input field name)
      */
     public function tableHeadColumn(array $colDef, array $f, string $colName): string
     {
         $colLabel = $this->cms->textOrSnippet($colDef['label'] ?? $colName);
         $type = $colDef['type'] ?? 'text';
         if ($type === 'relation' || $type == 'pointer' || $type === 'link') {
-            // Keine Sortierung bei n:m Relations (und 1:n-Verknüpfungen)
+            // No sorting for n:m relations (and 1:n links)
             return $colLabel;
         }
 
@@ -981,18 +980,18 @@ class Backend {
         $sortIcon = '';
         $newOrder = 'ASC';
         if ($sort[0] == $sortName || $sort[1] == $sortName) {
-            // nach dieser Spalte wird sortiert
+            // sorting is by this column
             $sortIcon = 'sort_icon_' . strtolower($order[0]);
             if ($sort[0] == $sortName) {
-                // sogar als erstes
+                // even as the first
                 $sortIcon .= '_primary';
             }
 
-            // Neue Sortierung bei Klick auf Spaltenname ist keine Mehrfachsortierung
+            // A new sort on clicking the column name is not a multi-column sort
             if ($order[0] == 'ASC') $newOrder = 'DESC';
         }
         else {
-            // ansonsten neutrales Icon
+            // otherwise a neutral icon
             $sortIcon = 'sort_icon_select';
         }
         $tplSortIcon = $this->template($sortIcon);
@@ -1000,21 +999,21 @@ class Backend {
             $this->cms->sys_reduce_uri(['sort', 'order', 'cache', 'skip', 'limit']),
             strlen('/backend/Modules')
         );
-        // Die URL stammt aus dem Request - ein ' darin (Browser kodieren es im
-        // Query-String nicht) beendete sonst den JS-String
+        // The URL comes from the request - a ' in it (browsers do not encode it in the
+        // query string) would otherwise end the JS string
         $script = 'cApp.layers.replace(' . $this->jsString("{$linkWithoutSort}sort={$sortName}&order={$newOrder}") . ')';
         return '<a' . $this->on('click', $script) . ">{$tplSortIcon}{$colLabel}</a>";
     }
 
     /**
-     * Zelle "Original filename" der Info-Seite: der Name, bei Schreibrecht
-     * ($fileRenameIds) mit Stift zum Bearbeiten - die Endung bleibt fest
+     * Cell "Original filename" of the info page: the name, with write permission
+     * ($fileRenameIds) with a pencil for editing - the extension stays fixed
      * (cApp.ui.fileRename(), RecordBackendInfo::fileRename()).
      *
-     * @param array    $value           Datei-Metadaten (filename, extension)
-     * @param int      $id              Datensatz-Id
-     * @param int      $fieldId         field_id des Datei-Feldes
-     * @param int|null $fileLanguageId  Sprache der Datei (null: einsprachiges Feld)
+     * @param array    $value           file metadata (filename, extension)
+     * @param int      $id              record id
+     * @param int      $fieldId         field_id of the file field
+     * @param int|null $fileLanguageId  language of the file (null: single-language field)
      */
     public function fileNameCell(array $value, int $id, int $fieldId, ?int $fileLanguageId): string
     {
@@ -1037,7 +1036,7 @@ class Backend {
     }
 
     /**
-     * Info-Tabelle initialisieren
+     * Initialize the info table
      */
     public function infoReset(): void
     {
@@ -1045,11 +1044,11 @@ class Backend {
     }
 
     /**
-     * Die gesammelten Info-Zeilen beiseitelegen und mit einer leeren Sammlung
-     * weitermachen - für eine Info-Tabelle innerhalb einer Zeile (die fest
-     * verknüpften Inhalte eines 'link'-Feldes, RecordBackendInfo::_infoLinkBlocks()).
-     * infoPop() liefert die seither gesammelten Zeilen als Tabelle und stellt die
-     * äußere Sammlung wieder her. Gegenstück zu formPush()/formPop().
+     * Set the collected info rows aside and continue with an empty collection -
+     * for an info table within a row (the firmly linked contents of a 'link' field,
+     * RecordBackendInfo::_infoLinkBlocks()).
+     * infoPop() returns the rows collected since then as a table and restores the
+     * outer collection. Counterpart of formPush()/formPop().
      */
     public function infoPush(): void
     {
@@ -1058,8 +1057,8 @@ class Backend {
     }
 
     /**
-     * Gegenstück zu infoPush(): die inneren Zeilen als Tabelle ($tpl wie
-     * infoTable()) und zurück zur äußeren Sammlung.
+     * Counterpart to infoPush(): the inner rows as a table ($tpl as
+     * infoTable()) and back to the outer collection.
      */
     public function infoPop(string $tpl = 'info_table_part'): string
     {
@@ -1069,17 +1068,17 @@ class Backend {
     }
 
     /**
-     * Schreibrichtung eines Feldwerts für das dir-Attribut (Cms::textDirection()).
+     * Writing direction of a field value for the dir attribute (Cms::textDirection()).
      *
-     * Texte (Feldtypen text, chars, encrypted als einzeiliges Feld oder Textarea, auch
-     * mit Editor-Extension) folgen der Sprache ihres Inhalts: in einem mehrsprachigen
-     * Feld die Sprache der jeweiligen Eingabe - "ar_SA" rechts nach links, "de_DE" links
-     * nach rechts, gleich in welcher Sprache das Backend läuft. Technische Werte (E-Mail,
-     * Telefon, Passwort, Namen a-z) stehen immer links nach rechts.
+     * Texts (field types text, chars, encrypted as a single-line field or textarea, also
+     * with editor extension) follow the language of their content: in a multilingual
+     * field the language of the respective input - "ar_SA" right to left, "de_DE" left
+     * to right, regardless of the language the backend runs in. Technical values (email,
+     * phone, password, names a-z) are always left to right.
      *
-     * @param string $lang  Sprache des Inhalts; '' = keine Angabe
-     * @return string       'ltr' | 'rtl' | '' (nichts setzen - das Feld erbt die
-     *                      Richtung des Backends)
+     * @param string $lang  language of the content; '' = no specification
+     * @return string       'ltr' | 'rtl' | '' (set nothing - the field inherits
+     *                      the direction of the backend)
      */
     public function fieldDirection(array $colDef, string $lang = '', string $displayType = ''): string
     {
@@ -1096,15 +1095,15 @@ class Backend {
     }
 
     /**
-     * Block für Info-Tabelle erstellen
-     * 
-     * @param Dataset $dataset                   Dataset-Kindklasse
-     * @param string $name                       Eingabefeld-Name
-     * @param string|int|float|bool|null $value  Feldinhalt
+     * Create a block for the info table
+     *
+     * @param Dataset $dataset                   dataset subclass
+     * @param string $name                       input field name
+     * @param string|int|float|bool|null $value  field content
      * @param array $flags = []                  'ifnotempty', 'monospace', 'primary', 'html', 'expandable', ''fullsize'
-     * @param ?array &$schemaVirtual             Schema mit virtuellen Feldern
-     * @param int $id                            Datensatz-Id für die Ermittlung von Relations
-     * @param string $langSuffix                 Sprachkürzel hinter der Beschriftung (mehrsprachiges Feld)
+     * @param ?array &$schemaVirtual             schema with virtual fields
+     * @param int $id                            record id for determining relations
+     * @param string $langSuffix                 language code after the label (multilingual field)
      */
     public function infoAdd(Dataset $dataset, string $name, string|int|float|bool|array|null $value, array $flags = [], ?array &$schemaVirtual = null, $id = null, string $langSuffix = ''):void
     {
@@ -1114,11 +1113,11 @@ class Backend {
         $colDef = $schema[$name] ?? [];
         $label = $this->cms->textOrSnippet($colDef['label'] ?? $name);
 
-        // Schloss: der Wert wird verschlüsselt gespeichert (wie formField())
+        // Lock: the value is stored encrypted (as formField())
         if (($colDef['type'] ?? '') === 'encrypted') {
             $label .= $this->template('encrypted_field_indicator');
         }
-        // Sprachkürzel hinter der Beschriftung eines mehrsprachigen Feldes
+        // Language code after the label of a multilingual field
         if ($langSuffix !== '') {
             $label .= $this->template('label_lang_suffix', ['{lang}' => htmlspecialchars($langSuffix)]);
         }
@@ -1136,7 +1135,7 @@ class Backend {
             }
             $value = $this->backendValue($value, $colDef, $format, $id);
             if (in_array('primary', $flags, true)) $value = '<strong>' . $value . '</strong>';
-            // Text eines mehrsprachigen Feldes in der Richtung seiner Sprache
+            // Text of a multilingual field in the direction of its language
             $dir = $langSuffix !== '' ? $this->fieldDirection($colDef, $langSuffix) : '';
             if ($dir !== '' && $dir !== $this->cms->textDirection()) $value = '<div dir="' . $dir . '">' . $value . '</div>';
 
@@ -1153,8 +1152,8 @@ class Backend {
             }
         }
         elseif ((string)$value === '') {
-            // Fertiges HTML ohne Inhalt (z. B. 'link'-Feld ohne verknüpften Inhalt):
-            // wie backendValue() den Platzhalter zeigen statt eines leeren Blocks
+            // Finished HTML without content (e.g. 'link' field without linked content):
+            // show the placeholder as backendValue() does, instead of an empty block
             $value = $this->emptyPlaceholder;
         }
         $classes = [];
@@ -1170,7 +1169,7 @@ class Backend {
     }
 
     /**
-     * Info-Row mit statischem Inhalt (unabhängig von virtuellem Feld)
+     * Info row with static content (independent of a virtual field)
      */
     public function infoStatic(string $col1, string $col2, array $flags = []): void
     {
@@ -1181,13 +1180,13 @@ class Backend {
         $this->infoBlocks[] = $this->template('info_row', [
             '{col1}' => $this->cms->textOrSnippet($col1),
             '{col2}' => $col2,
-            // führendes Leerzeichen: {class} hängt im Template direkt an "pb-1"
+            // leading space: {class} is appended directly to "pb-1" in the template
             '{class}' => $class ? ' ' . implode(' ', $class) : ''
         ]);
     }
 
     /**
-     * Info-Tabelle rendern
+     * Render the info table
      */
     public function infoTable($tpl = 'info_table'): string
     {
@@ -1197,9 +1196,9 @@ class Backend {
     }
 
     /**
-     * Neues Formular vorbereiten
-     * 
-     * @param string $tpl  : Template für das Formular mit Platzhaltern z. B. {data_...}
+     * Prepare a new form
+     *
+     * @param string $tpl  : template for the form with placeholders, e.g. {data_...}
      */
     public function formInit(string $tpl, $replace = []): void
     {
@@ -1207,10 +1206,10 @@ class Backend {
     }
 
     /**
-     * Hiddenfeld zum Formular hinzufügen
-     * 
-     * @param string $name   Feldname
-     * @param string|int $value  Feldwert - wird html-Kodiert
+     * Add a hidden field to the form
+     *
+     * @param string $name   field name
+     * @param string|int $value  field value - is HTML-encoded
      */
     public function formHidden(string $name, string|int $value): void
     {
@@ -1218,11 +1217,11 @@ class Backend {
     }
 
     /**
-     * Statischen Content anstatt Formularfeld anzeigen
-     * 
-     * @param Dataset $dataset  Dataset-Kind-Klasse
-     * @param string $name      Feldname; Unterfelder wie 'settings.widgets' werden -
-     *                          wie in formField() - zum Platzhalter
+     * Show static content instead of a form field
+     *
+     * @param Dataset $dataset  dataset subclass
+     * @param string $name      field name; sub-fields such as 'settings.widgets' become -
+     *                          as in formField() - the placeholder
      *                          {data_settings_widgets}
      * @param string $html      HTML
      */
@@ -1243,11 +1242,11 @@ class Backend {
     }
 
     /**
-     * Formular liefern
-     * 
-     * @param string $tpl               Template für die Submit-Buttons
-     * @param array $replace            Ersetzungen im Template
-     * @param bool $removePlaceholders  Alle übrig gebliebenen Placeholder entfernen
+     * Return the form
+     *
+     * @param string $tpl               template for the submit buttons
+     * @param array $replace            replacements in the template
+     * @param bool $removePlaceholders  remove all remaining placeholders
      */
     public function form(string $tpl = '', array $replace = [], bool $removePlaceholders = false): string
     {
@@ -1265,9 +1264,9 @@ class Backend {
     // 
 
     /**
-     * Alle Benutzergruppen als group_id => Label in der Backend-Sprache: die
-     * Superuser-Gruppe zuerst, die übrigen nach Label sortiert (Auswahllisten im
-     * Admin-Formular, in der Suche, Reiter "Zugriff").
+     * All user groups as group_id => label in the backend language: the
+     * superuser group first, the others sorted by label (selection lists in the
+     * admin form, in the search, tab "Access").
      */
     public function getGroups(): array
     {
@@ -1282,24 +1281,24 @@ class Backend {
         return $groups + [InstanceCache::SUPERUSER_GROUP_ID => $this->cms->snippet('group_label_superuser')];
     }
 
-    /** Backend::attributePlaceholders(): Vorlage => Platzhalter in Attributwerten */
+    /** Backend::attributePlaceholders(): template => placeholders in attribute values */
     private array $attributePlaceholderCache = [];
 
-    /** Backend::markHandlers(): Vorlage => HTML mit markierten Event-Handlern */
+    /** Backend::markHandlers(): template => HTML with marked event handlers */
     private array $markedTemplateCache = [];
 
     /**
-     * Lädt ein HTML-Template und ersetzt Platzhalter im Format {#label} durch Sprach-Einträge.
-     * Einfache Platzhalter im Format {label} sind für Text-Ersetzungn reserviert (siehe Parameter replace)
+     * Loads an HTML template and replaces placeholders in the format {#label} with language entries.
+     * Simple placeholders in the format {label} are reserved for text replacements (see parameter replace)
      *
-     * @param string $tpl       Template-Name im Format module-name.tpl-name ohne .html-Extension
-     * @param array $replace    Text-Ersetzungen $key => $val
+     * @param string $tpl       template name in the format module-name.tpl-name without .html extension
+     * @param array $replace    text replacements $key => $val
      * @return string|array
      */
     public function template(string $tpl, array $replace = []): string|array
     {
         $tpl = strtolower($tpl);
-        // Fehlermeldung bei .html-Suffix
+        // Error message for .html suffix
         if (str_ends_with($tpl, '.html')) {
             return "Error template() call with .html suffix.";
         }
@@ -1327,16 +1326,16 @@ class Backend {
         }
         
         $html = $this->htmlTemplates[$prefix][$suffix] ?? "Error: HTML template $tpl not found.";
-        // Event-Handler der Vorlage für die Script-Policy markieren (19-csp.md)
+        // Mark the event handlers of the template for the script policy (developer docs, chapter 14 (Security: web))
         $html = $this->markedTemplateCache[$tpl] ??= $this->markHandlers($html);
 
         // Ersetzungen
         if (count($replace) > 0) {
-            // Platzhalter in einem Attributwert ("…{x}…"): ein " im eingesetzten Wert
-            // beendete das Attribut ('" onmouseover="…' - Attribut-Injektion ohne "<",
-            // die kein HTML-Filter sieht). In einem Attribut ist ein rohes " immer
-            // falsch, &quot; immer richtig - und ein bereits maskierter Wert enthält
-            // kein " mehr, wird also nicht doppelt maskiert (16-sicherheit.md §6).
+            // Placeholder in an attribute value ("…{x}…"): a " in the inserted value
+            // ended the attribute ('" onmouseover="…' - attribute injection without "<",
+            // which no HTML filter sees). In an attribute a raw " is always
+            // wrong, &quot; always right - and an already escaped value contains
+            // no " any more, so it is not escaped twice (developer docs, chapter 14 (Security: web)).
             foreach ($this->attributePlaceholders($tpl, $html) as $placeholder) {
                 if (isset($replace[$placeholder]) && is_string($replace[$placeholder])
                     && str_contains($replace[$placeholder], '"')) {
@@ -1346,7 +1345,7 @@ class Backend {
             $html = strtr($html, $replace);
         }
 
-        // Ersetze mit {#label} markierten Textstellen durch Sprach-Eintrag
+        // Replace text passages marked with {#label} by the language entry
         $html = preg_replace_callback('/\{#([a-z][a-z0-9_.]+)\}/', function($matches) {
             return $this->cms->snippet($matches[1]);
         }, $html);
@@ -1355,23 +1354,23 @@ class Backend {
     }
 
     /**
-     * Event-Handler einer Vorlage markieren (developer_docs/19-csp.md): aus
-     * onclick="…" wird data-c9h-{nonce}-click="…", aus href="javascript:…"
-     * href="#" data-c9h-{nonce}-js="…", ein <script> bekommt die Nonce. Der Code bleibt
-     * unverändert im Attribut stehen, auch mit seinen Platzhaltern - die ersetzt
-     * template() bzw. der Aufrufer wie bisher.
+     * Mark the event handlers of a template (developer docs, chapter 14 (Security: web)): from
+     * onclick="…" becomes data-c9h-{nonce}-click="…", from href="javascript:…"
+     * href="#" data-c9h-{nonce}-js="…", a <script> gets the nonce. The code stays
+     * unchanged in the attribute, also with its placeholders - template() or the
+     * caller replaces those as before.
      *
-     * Die Script-Policy des Backends verbietet Handler-Attribute. backend-handlers.js
-     * macht aus den markierten Attributen Listener, über ein Script mit der Nonce der
-     * Seite. Das Kennzeichen ist die Nonce im Attributnamen: sie steht nur im Code
-     * (Vorlagen, Backend::on()), nie in Inhalten aus der Datenbank - ein dort
-     * eingeschleustes onclick bleibt, was es ist, und der Browser führt es nicht aus.
+     * The script policy of the backend forbids handler attributes. backend-handlers.js
+     * turns the marked attributes into listeners, via a script with the nonce of the
+     * page. The marker is the nonce in the attribute name: it only appears in the code
+     * (templates, Backend::on()), never in content from the database - an onclick
+     * injected there stays what it is, and the browser does not run it.
      */
     private function markHandlers(string $html): string
     {
         if (!str_contains($html, 'on') && stripos($html, 'javascript:') === false && !str_contains($html, '<script')) return $html;
         $mark = 'data-c9h-' . $this->securityHeaders()->nonce() . '-';
-        // <script> der Vorlage selbst: Nonce der Seite
+        // <script> of the template itself: nonce of the page
         $html = preg_replace('~<script(?=[\s>])(?![^>]*\snonce=)~i', '<script' . $this->nonceAttr(), $html);
         $html = preg_replace('~(?<=\s)href="javascript:~i', 'href="#" ' . $mark . 'js="', $html);
         return preg_replace_callback('~(?<=\s)on([a-z]+)(?==")~i',
@@ -1379,15 +1378,15 @@ class Backend {
     }
 
     /**
-     * Event-Handler für HTML, das nicht aus einer Vorlage kommt (19-csp.md) - statt
-     * onclick="…" im PHP-Code:
+     * Event handler for HTML that does not come from a template (developer docs, chapter 14 (Security: web)) - instead of
+     * onclick="…" in the PHP code:
      *
      *     '<a href="#"' . $backend->on('click', "cApp.layers.add('X/y.php')") . '>'
      *
-     * @param string $event  click, change, keydown … oder 'js' (wie href="javascript:…":
-     *                       Klick, Standardaktion immer verhindert)
-     * @param string $code   Javascript wie in einem onclick-Attribut (this, event,
-     *                       return false); wird hier fürs Attribut maskiert
+     * @param string $event  click, change, keydown … or 'js' (like href="javascript:…":
+     *                       click, default action always prevented)
+     * @param string $code   JavaScript as in an onclick attribute (this, event,
+     *                       return false); escaped here for the attribute
      * @return string        ' data-c9h-{nonce}-{event}="…"'
      */
     public function on(string $event, string $code): string
@@ -1397,10 +1396,10 @@ class Backend {
     }
 
     /**
-     * Text für einen Platzhalter von template(): HTML-escaped und '{' als Entity.
-     * template() ersetzt nach dem Einsetzen noch {#label}-Marken - auch in den
-     * eingesetzten Werten. Ein Wert mit "{#…}" (Handbuch, Snippet-Text, Eingabe eines
-     * Users) würde sonst durch ein Snippet ersetzt.
+     * Text for a placeholder of template(): HTML-escaped and '{' as an entity.
+     * After insertion template() still replaces {#label} markers - also in the
+     * inserted values. A value with "{#…}" (manual, snippet text, user input)
+     * would otherwise be replaced by a snippet.
      */
     public function escape(string $text): string
     {
@@ -1408,10 +1407,10 @@ class Backend {
     }
 
     /**
-     * <option>-Liste aus der Vorlage option.
+     * <option> list from the template option.
      *
-     * @param array $options              Wert => Beschriftung (Text, wird maskiert)
-     * @param string|int|null $selected   ausgewählter Wert (Vergleich als String), null = keiner
+     * @param array $options              value => label (text, is escaped)
+     * @param string|int|null $selected   selected value (compared as string), null = none
      */
     public function options(array $options, string|int|null $selected = null): string
     {
@@ -1426,13 +1425,13 @@ class Backend {
         return $html;
     }
 
-    /** Fertiges HTML für einen Platzhalter von template() - '{' als Entity, siehe escape() */
+    /** Finished HTML for a placeholder of template() - '{' as an entity, see escape() */
     public function protect(string $html): string
     {
         return str_replace('{', '&#123;', $html);
     }
 
-    /** ' nonce="…"' für ein <script>-Tag (Script-Policy, 19-csp.md) */
+    /** ' nonce="…"' for a <script> tag (script policy, developer docs, chapter 14 (Security: web)) */
     public function nonceAttr(): string
     {
         return $this->securityHeaders()->nonceAttr();
@@ -1444,17 +1443,17 @@ class Backend {
     }
 
     /**
-     * Platzhalter einer Vorlage, die in einem Attributwert mit doppelten
-     * Anführungszeichen stehen - je Vorlage einmal ermittelt.
+     * Placeholders of a template that stand in an attribute value with double
+     * quotes - determined once per template.
      *
-     * @return string[]  z. B. ['{value}', '{title}']
+     * @return string[]  e.g. ['{value}', '{title}']
      */
     private function attributePlaceholders(string $tpl, string $html): array
     {
         if (isset($this->attributePlaceholderCache[$tpl])) return $this->attributePlaceholderCache[$tpl];
         $found = [];
         if (str_contains($html, '{')) {
-            // Tags quote-bewusst, darin die Attributwerte in "…"
+            // Tags quote-aware, with the attribute values in "…"
             preg_match_all('~<[a-z][a-z0-9-]*(?:[^>"\']|"[^"]*"|\'[^\']*\')*>~i', $html, $tags);
             foreach ($tags[0] as $tag) {
                 preg_match_all('~=\s*"([^"]*)"~', $tag, $values);
@@ -1468,32 +1467,32 @@ class Backend {
     }
 
     /**
-     * Bereinigt einen user-definierten Pfad
+     * Sanitizes a user-defined path
      *
-     * @param string $arg     Der zu sichernde Pfad
-     * @param array  $options Mögliche Keys: 'allowAbsolute' (bool)
+     * @param string $arg     the path to sanitize
+     * @param array  $options Possible keys: 'allowAbsolute' (bool)
      * @return string
      */
     public function sanitizePath(string $arg, array $options = []): string
     {
-        // Standardwerte extrahieren
+        // Extract default values
         $allowAbsolute = $options['allowAbsolute'] ?? false;
 
         if ($arg !== '') {
-            // Normalisierung der Slashes
+            // Normalize the slashes
             $arg = str_replace('\\', '/', $arg);
             
-            // Entfernen verbotener Zeichen
+            // Remove forbidden characters
             $arg = preg_replace('/[\x00<>:"\'|?*%\\\\]/u', '', $arg);
             
-            // Bereinigung von Doppelslashes und Aufstiegsversuchen (..)
+            // Clean up double slashes and attempts to climb (..)
             $arg = preg_replace('/\/+/u', '/', $arg);
             $arg = preg_replace('/^\.+\//u', '', $arg);
             $arg = rtrim($arg, '/');
             $arg = preg_replace('/\.+/u', '.', $arg);
             $arg = preg_replace('/(\/\.)+\//u', '/', $arg);
             
-            // Behandlung des führenden Slashes
+            // Handling of the leading slash
             if (!$allowAbsolute) {
                 $arg = ltrim($arg, '/');
             }
@@ -1502,9 +1501,9 @@ class Backend {
     }
 
     /**
-     * Balloon-Message erzeugen
-     * @string $type    Bootstrap Alert-Klasse 'success', 'danger', ...
-     * @string $msg     Message-Text
+     * Create a balloon message
+     * @string $type    Bootstrap alert class 'success', 'danger', ...
+     * @string $msg     message text
      */
     public function balloon(string $type, string $msg): void
     {
@@ -1512,10 +1511,10 @@ class Backend {
     }
 
     /**
-     * Wert als Javascript-String-Literal in einfachen Anführungszeichen: ' " < > &
-     * als \u00.. - damit sicher in <script> UND in einem Attribut (onclick="…"),
-     * ohne weiteres Maskieren. Für jeden Wert, der nicht aus dem Code selbst stammt
-     * (Request, Datenbank, Übersetzungen mit Apostroph).
+     * Value as a JavaScript string literal in single quotes: ' " < > &
+     * as \u00.. - thus safe in <script> AND in an attribute (onclick="…"),
+     * without further escaping. For every value that does not come from the code itself
+     * (request, database, translations with apostrophe).
      */
     public function jsString(string $value): string
     {
@@ -1525,8 +1524,8 @@ class Backend {
     }
 
     /**
-     * Wrapper, um JavaScript zu schreiben, z. B. im Ajax Load
-     * @string $code    JS-Code
+     * Wrapper to write JavaScript, e.g. in the Ajax load
+     * @string $code    JS code
      */
     public function script(string $code): void
     {
@@ -1534,19 +1533,19 @@ class Backend {
     }
 
     /**
-     * Liefere Objekt in lesbarem Format
+     * Return an object in readable format
      * Objects:
      *   status, admin, group
-     * 
-     * @param string $type  Objekttyp (Tabellen-Name)
-     * @param int $id       Primary key
-     * @param bool $linked  true (default): verlinkt auf infoseite des Objektes
-     * @param bool $icon    true (default): mit Icon
-     * @return string       Label oder ''
+     *
+     * @param string $type  object type (table name)
+     * @param int $id       primary key
+     * @param bool $linked  true (default): linked to the info page of the object
+     * @param bool $icon    true (default): with icon
+     * @return string       label or ''
      */
     public function teaser(string $type, int $id, bool $linked = true, bool $icon = true, $label = true): string {
-        // Verweis nur, wenn die Gruppe das Modul der Info-Seite öffnen darf - sonst
-        // nur der Text (12-group-rights.md)
+        // Link only if the group may open the module of the info page - otherwise
+        // only the text (developer docs, chapter 11 (Permissions))
         if ($linked) {
             $script = match ($type) {
                 'area'   => 'Area/area_info.php',
@@ -1557,7 +1556,7 @@ class Backend {
         }
         switch($type) {
             case 'status':
-                // BESONDERHEIT: status === 0 ist definiert
+                // SPECIAL CASE: status === 0 is defined
                 // $linked is not computed
                 if ($id > 1) {
                     $this->db->pushResult();
@@ -1629,7 +1628,7 @@ class Backend {
                 $this->db->popResult();
                 if ($data === null) return '';
 
-                // Default-Feld, Sortierung und Icon des Breichs ermitteln
+                // Determine the default field, sorting and icon of the area
                 $areaId = (int)$data['area_id'];
                 $areaData = $this->areaData($areaId);
                 $defaultFieldName = (string)$areaData['default_field_name'];
@@ -1638,7 +1637,7 @@ class Backend {
                 $labelHtml = $this->backendValue($data[$defaultFieldName] ?? '', $colDef);
                 
                 if ($icon) {
-                    // Icon + Label
+                    // Icon + label
                     $iconHtml = $this->template('icon', [
                         '{name}' => $areaData['icon']]
                     );
@@ -1680,13 +1679,13 @@ class Backend {
                 // Label
                 $labelHtml = $this->cms->textOrSnippet($label);
                 if ($icon && !empty($t['icon'])) {
-                    // Icon + Label
+                    // Icon + label
                     $labelHtml = $this->template($t['icon']) . ' ' . $labelHtml; 
                 }
-                // (Hier stand ein zweites popResult() - es hätte, aus einem
-                //  pushResult()-Kontext heraus aufgerufen, das Ergebnis des AUFRUFERS
-                //  vom Stapel geholt und geschlossen; die Abfrage oben ist bereits
-                //  mit ihrem eigenen Paar push/pop abgeschlossen.)
+                // (There used to be a second popResult() here - called from a pushResult()
+                //  context, it would have taken the result of the CALLER off the stack
+                //  and closed it; the query above is already finished with its own
+                //  push/pop pair.)
                 if ($linked) {
                     $href = $t['script'] . '?id=' . $id . '&back=true';
                     return $this->template('link_replace', [
@@ -1699,12 +1698,12 @@ class Backend {
     }
 
     /**
-     * Suchfeld in Formular einfügen, anstelle von Platzhalter {filter_...}
-     * 
+     * Insert a search field into the form, in place of the placeholder {filter_...}
+     *
      * @param Dataset $dataset
      * @param array   $param [
-     *      string $name       Feldname
-     *      array  $colDef     Schema des Feldes
+     *      string $name       field name
+     *      array  $colDef     schema of the field
      * ]
      */
     public function searchField(Dataset $dataset, array $param): void {
@@ -1713,7 +1712,7 @@ class Backend {
     }
 
     /**
-     * Platzhalter im Formular ersetzen, Workaround für Zusatzkomponenten
+     * Replace placeholders in the form, workaround for add-on components
      * var string $from
      * var string $to
      */
@@ -1722,8 +1721,8 @@ class Backend {
     }
 
     /**
-     * Fertiges HTML an der Stelle eines Platzhalters ins Formular setzen - fehlt
-     * der Platzhalter, ans Ende anhängen (wie formField() mit 'append').
+     * Place finished HTML into the form at the position of a placeholder - if the
+     * placeholder is missing, append it at the end (as formField() with 'append').
      *
      * @param string $placeholder  z. B. '{data_feld}'
      * @param string $html
@@ -1739,12 +1738,11 @@ class Backend {
     }
 
     /**
-     * Das im Aufbau befindliche Formular beiseitelegen und mit einem leeren
-     * Puffer weitermachen - für Teilformulare, die in ein anderes Formular
-     * eingesetzt werden (die eingebetteten Datensätze eines 'link'-Feldes,
-     * RecordBackendEdit::_embedCell()): formField() usw. arbeiten danach auf dem
-     * leeren Puffer, formPop() liefert dessen Inhalt und stellt das Formular wieder
-     * her. Verschachtelung ist erlaubt.
+     * Set the form under construction aside and continue with an empty
+     * buffer - for partial forms that are inserted into another form
+     * (the embedded records of a 'link' field, RecordBackendEdit::_embedCell()):
+     * formField() etc. then work on the empty buffer, formPop() returns its content and
+     * restores the form. Nesting is allowed.
      */
     public function formPush(): void
     {
@@ -1753,8 +1751,8 @@ class Backend {
     }
 
     /**
-     * Gegenstück zu formPush(): den seit formPush() aufgebauten Puffer liefern
-     * und das beiseitegelegte Formular wiederherstellen.
+     * Counterpart to formPush(): return the buffer built since formPush()
+     * and restore the form that was set aside.
      */
     public function formPop(): string
     {
@@ -1764,12 +1762,12 @@ class Backend {
     }
 
     /**
-     * Sortierfeld in Formular einfügen, anstelle von Platzhalter {sort_order}
-     * 
-     * @param array $sortOptions        Feldnamen => Feldlabel
-     * @param string|null $sortValue    Wert aus $_REQUEST['sort']
-     * @param string|null $orderValue   Wert aus $_REQUEST['order']
-     * @param bool $append              wenn true: Das Feld wird ans Formular angehängt, wenn der Platzhalter {data_feldname} fehlt, (default ist false)
+     * Insert a sort field into the form, in place of the placeholder {sort_order}
+     *
+     * @param array $sortOptions        field names => field label
+     * @param string|null $sortValue    value from $_REQUEST['sort']
+     * @param string|null $orderValue   value from $_REQUEST['order']
+     * @param bool $append              if true: the field is appended to the form if the placeholder {data_fieldname} is missing (default is false)
      */
     public function searchFieldSortOrder(array $sortOptions, ?string $sortValue = null, ?string $orderValue = null, $append = false): void
     {
@@ -1794,8 +1792,8 @@ class Backend {
         $html = $this->template('search_form_sort_order', [
             '{sort_options}' => $sortOptionsHtml,
             '{order_options}' => $orderOptionsHtml,
-            // verbindet <label for> mit dem <select> - ohne die Ersetzung blieb der
-            // Platzhalter als Id im Markup stehen
+            // links <label for> with the <select> - without the replacement the
+            // placeholder would remain as an id in the markup
             '{uid_sort}' => $this->crypt->randomKey(16)
         ]);
 
@@ -1808,65 +1806,64 @@ class Backend {
     }
 
     /**
-     * Eingabefeld in Formular einfügen, anstelle von Platzhalter {data_...}
-     * 
+     * Insert an input field into the form, in place of the placeholder {data_...}
+     *
      * @param Dataset $dataset
-     * @param array $param          Array mit folgenden Werten
-     *      bool   $append          wenn true: Das Feld wird ans Formular angehängt, wenn der Platzhalter {data_feldname} fehlt, (default ist false)
-     *      array  $colDef          Definition (nur des Feldes!) - siehe Dataset::hookDefinition()
-     *      string $name            FeldName
-     *      int    $id              > 0 : Id des Datensatzes, < 1 : Datensatz wird neu erstellt
-     *      mixed  $value           Wert aus $data
-     *      string $varName         default: 'data', wird durch searchField() in 'filter' geändert
-     *      string $note            Hinweis unter der Beschriftung (Text oder #snippet),
-     *                              gilt auch für Suchfelder
-     *      string $placeholder     Platzhalter im Formualar der ersetzt wird, default: data_{$name}
-     *      string $display_type    Display Type aus der colDef ersetzen
-     *      array  $options         bei type 'select', Auswahl-Optionen key => value
-     *                              keys, die mit 'disabled' beginnen, sind nicht auswählbar
-     *      bool   $selectPlease    true: "-- bitte wählen --" Option am Anfang, (unterschiedliche Defaults für data und filter)
-     *      string $template        Überschreibt das entsprechend display_type gewählte Template
-     *      array  $lookupOptions   Optionen für Lookupfeld [
+     * @param array $param          array with the following values
+     *      bool   $append          if true: the field is appended to the form if the placeholder {data_fieldname} is missing (default is false)
+     *      array  $colDef          definition (of the field only!) - see Dataset::hookDefinition()
+     *      string $name            field name
+     *      int    $id              > 0 : id of the record, < 1 : record is created anew
+     *      mixed  $value           value from $data
+     *      string $varName         default: 'data', changed to 'filter' by searchField()
+     *      string $note            note under the label (text or #snippet),
+     *                              also applies to search fields
+     *      string $placeholder     placeholder in the form that is replaced, default: data_{$name}
+     *      string $display_type    replace the display type from the colDef
+     *      array  $options         for type 'select', selection options key => value
+     *                              keys starting with 'disabled' are not selectable
+     *      bool   $selectPlease    true: "-- please select --" option at the start (different defaults for data and filter)
+     *      string $template        overrides the template chosen by display_type
+     *      array  $lookupOptions   options for lookup field [
      *                                (string) $source_table
      *                                (string) $destination_table
      *                                (string) $relation_table
      *                                (bool) $button_new
      *                              ]
-     *      string $contextMenu     nur display_type 'lookup': Template des Kontextmenüs;
-     *                              '' unterdrückt es (default: {modul}.lookup_context_menu)
-     *      array $attr             zusätzliche Attribute wie 'onchange' => "..."
-     *                              (Auch 'class' und 'style' sind erlaubt und
-     *                              werden zwar zu vorhandenen hinzugefügt
-     *                              das widerspricht aber der MCV-Logik über Backend-Tempaltes)
-     *      bool $fullWidth         Ganze breite einnehmend
-     *      int  $langId            mehrsprachiges Feld: Sprache dieses Eingabefeldes.
-     *                              Der Feldname wird zu data[name][{langId}], die
-     *                              Beschriftung erhält $langSuffix, Fehler werden unter
-     *                              "name.{langId}" gesucht (Dataset::validateFieldValue())
-     *      string $langSuffix      Zusatz zur Beschriftung, z. B. "de" - erscheint als
-     *                              "| de" in gedämpfter Farbe (nur mit $langId)
-     *      string $textLang        Sprache des Inhalts (Code bzw. Locale, z. B. "ar_SA"):
-     *                              legt die Schreibrichtung fest (fieldDirection()).
-     *                              Vorgabe bei $langId: $langSuffix; ohne Angabe erbt
-     *                              das Feld die Richtung des Backends
-     *      string $dir             'ltr' | 'rtl' | 'auto' - Schreibrichtung erzwingen
-     *      string $labelPrefix     HTML, das VOR die Beschriftung gesetzt wird (z. B. die
-     *                              Auswahl-Checkbox der Stapelverarbeitung)
-     *      bool $primary           Nur <input type="text">: Fett (für Hauptfeld)
-     *      bool   $flatName        Name mit Punkt nicht als Unterarray (data[a][b]),
-     *                              sondern wörtlich (data[a.b])
-     *      string $blockClass      zusätzliche CSS-Klasse(n) des Feldblocks (Spalte mit
-     *                              dem Eingabefeld), z. B. 'warning'
-     *      string $errorPrefix     Präfix, unter dem Feldfehler in Cms::errors stehen -
-     *                              z. B. "embed.{record_id}." für die eingebetteten
-     *                              Datensätze eines 'link'-Feldes (RecordBackendEdit)
+     *      string $contextMenu     only display_type 'lookup': template of the context menu;
+     *                              '' suppresses it (default: {module}.lookup_context_menu)
+     *      array $attr             additional attributes such as 'onchange' => "..."
+     *                              (also 'class' and 'style' are allowed and
+     *                              are added to existing ones, but this contradicts the MVC logic via backend templates)
+     *      bool $fullWidth         takes the full width
+     *      int  $langId            multilingual field: language of this input field.
+     *                              The field name becomes data[name][{langId}], the
+     *                              label receives $langSuffix, errors are searched under
+     *                              "name.{langId}" (Dataset::validateFieldValue())
+     *      string $langSuffix      addition to the label, e.g. "de" - appears as
+     *                              "| de" in muted colour (only with $langId)
+     *      string $textLang        language of the content (code or locale, e.g. "ar_SA"):
+     *                              determines the writing direction (fieldDirection()).
+     *                              Default with $langId: $langSuffix; without specification
+     *                              the field inherits the direction of the backend
+     *      string $dir             'ltr' | 'rtl' | 'auto' - force the writing direction
+     *      string $labelPrefix     HTML that is placed BEFORE the label (e.g. the
+     *                              selection checkbox of batch processing)
+     *      bool $primary           only <input type="text">: bold (for the main field)
+     *      bool   $flatName        name with a dot not as a sub-array (data[a][b]),
+     *                              but literally (data[a.b])
+     *      string $blockClass      additional CSS class(es) of the field block (column with
+     *                              the input field), e.g. 'warning'
+     *      string $errorPrefix     prefix under which field errors are stored in Cms::errors -
+     *                              e.g. "embed.{record_id}." for the embedded
+     *                              records of a 'link' field (RecordBackendEdit)
      */
     public function formField(
             Dataset $dataset,
             array $param,
         ): void
     {
-        // Parameter
+        // Parameters
         $name = (string)($param['name'] ?? '');
         $paramName = $name;
         $value = $param['value'] ?? null; // mixed
@@ -1876,19 +1873,19 @@ class Backend {
 
         $colDef = $param['colDef'] ?? [];
         if (empty($colDef)) {
-            // Wenn Feld-Schema nicht explizit angegeben, dann ziehe Feld-Schema aus Schema der Dataset-Kindklasse
+            // If the field schema is not given explicitly, take it from the schema of the dataset subclass
             $colDef = $dataset->getSchema()[$paramName] ?? [];
         }
 
         $varName = $param['varName'] ?? 'data'; // 'data' or 'filter'
         $type = (string)($colDef['type'] ?? '');
         $displayType = $param['display_type'] ?? $colDef['display_type'] ?? 'text';
-        // übergebene Optionen gehen dem Schema vor; Beschriftungen als #snippet
+        // passed options take precedence over the schema; labels as #snippet
         $options = array_map(fn($label) => is_string($label) ? $this->cms->textOrSnippet($label) : $label,
             (array)($param['options'] ?? $colDef['options'] ?? []));
         $flags = (array)($colDef['flags'] ?? []);
 
-        // Kein Eingabefeld für Volltext (berechnet sich aus anderen Textfeldern)
+        // No input field for full text (computed from other text fields)
         if ($type == 'fulltext' && $varName == 'data') return;
         
         $placeholder = $param['placeholder'] ?? '{' . $varName . '_' .str_replace('.', '_', $name) . '}';
@@ -1897,7 +1894,7 @@ class Backend {
             $this->form .= "\n" . $placeholder;
         }
 
-        // Parameter und Schema prüfen
+        // Check parameters and schema
         if (empty($colDef)) {
             $html = 'Error: schema for field "' . htmlspecialchars($name) . '" is not defined.<br>';
             $this->form = str_replace($placeholder, $html, $this->form);
@@ -1925,8 +1922,8 @@ class Backend {
             return;
         }
 
-        // name format name(.subname) ? - flatName: der Punkt bleibt im Feldnamen
-        // (filter[bild.width] für die Unterfelder einer Datei, Cms::buildFileExists())
+        // name format name(.subname) ? - flatName: the dot stays in the field name
+        // (filter[bild.width] for the sub-fields of a file, Cms::buildFileExists())
         if (strpos($name, '.') === false || !empty($param['flatName'])) {
             $inputName = $name;
         }
@@ -1934,7 +1931,7 @@ class Backend {
             [$name, $subname] = explode('.', $name);
             $inputName = $name . '][' . $subname; // -> data[name][subname]
         }
-        // mehrsprachiges Feld: eine Array-Ebene je Sprache -> data[name][{langId}]
+        // multilingual field: one array level per language -> data[name][{langId}]
         if ($langId !== null) {
             $inputName .= '][' . $langId;
         }
@@ -1942,7 +1939,7 @@ class Backend {
         // textarea rows="..."
         $height = (int)$colDef['height'] ?? 0;
 
-        // Zusätzliche Klassen und Attribute für das Eingabefeld sammeln
+        // Collect additional classes and attributes for the input field
 
         $class = [];
         $style = [];
@@ -1951,16 +1948,16 @@ class Backend {
         foreach ((array)($param['attr'] ?? []) as $key => $val) {
                 if ($key === 'style') $style[] = "$val";
                 elseif ($key === 'class') $class[] = "$val";
-                // Event-Handler ('onchange' => '…', Code roh): markiert (19-csp.md)
+                // Event handler ('onchange' => '…', raw code): marked (developer docs, chapter 14 (Security: web))
                 elseif (preg_match('/^on([a-z]+)$/i', (string)$key, $m)) $attr[] = ltrim($this->on($m[1], (string)$val));
                 else $attr[] = "$key=\"$val\"";
         }
         
         if (!empty($param['primary'])) $class[] = 'c9-input-primary';
 
-        // Schreibrichtung: erzwungen ('dir') oder nach der Sprache des Inhalts - ein
-        // arabischer Text steht auch im deutschen Backend rechts nach links
-        // (fieldDirection()). Nur in der Eingabemaske; Suchfelder erben.
+        // Writing direction: forced ('dir') or according to the language of the content - an
+        // Arabic text is also right-to-left in the German backend
+        // (fieldDirection()). Only in the input mask; search fields inherit.
         $dir = (string)($param['dir'] ?? '');
         if (!in_array($dir, ['ltr', 'rtl', 'auto'], true)) {
             $textLang = (string)($param['textLang'] ?? ($langId !== null ? $langSuffix : ''));
@@ -1968,7 +1965,7 @@ class Backend {
         }
         if ($dir !== '') $attr[] = 'dir="' . $dir . '"';
 
-        // uniqueID for=..., aria-labeled-by=...
+        // unique ID for=..., aria-labeled-by=...
         $uid = $this->crypt->randomKey(16);
 
         // Prefix, Suffix
@@ -1980,7 +1977,7 @@ class Backend {
             $prefix = $this->template('instance.icon_instance');
         }
         if ($type == 'timestampl') {
-            // Zeitzone
+            // Time zone
             $suffix = $this->cms->userTZ;
         }
         else {
@@ -1995,11 +1992,11 @@ class Backend {
                 
             }
             elseif ($prefix !== '') {
-                // Erst die Id erzeugen, dann eintragen: als Platzhalter geschrieben
-                // käme sie nie an. {attr} wird weiter unten per strtr() in die
-                // Feldvorlage gesetzt - strtr ersetzt in EINEM Durchlauf und sieht
-                // den frisch eingesetzten Text nicht noch einmal an, ein Platzhalter
-                // darin bliebe also als aria-describedby="{id_prefix}" stehen.
+                // Create the id first, then insert it: written as a placeholder
+                // it would never arrive. {attr} is set further below via strtr() into the
+                // field template - strtr replaces in ONE pass and does not look at
+                // the freshly inserted text again, so a placeholder inside it would
+                // remain as aria-describedby="{id_prefix}".
                 $templateId = 'input_group_prefix';
                 $idPrefix = $this->crypt->randomKey(16);
                 $attr[] = "aria-describedby=\"$idPrefix\"";
@@ -2040,9 +2037,9 @@ class Backend {
                     $note = $this->cms->_formatFloat(1000, 0);
                 }
                 elseif (in_array('name', $flags, true)) {
-                    // Anmerkung unter Label
+                    // Note under the label
                     $note = 'a..z 0..9 _';
-                    // Tooltip bei Hover über Label
+                    // Tooltip on hover over the label
                     $tooltip = $this->cms->snippet('tooltip_name_format');
                     $pattern = '[a-z0-9_]+';
                     $class[] = 'c9-monospace';
@@ -2053,7 +2050,7 @@ class Backend {
                 $pattern = '[^@]+@[^@]+\\.[^@]+';
             }
 
-            // Übergabewerte überschreiben automatisch ermittelte Werte
+            // Passed values override automatically determined values
             if ((string)($colDef['note'] ?? '') != '') $note = $this->cms->textOrSnippet($colDef['note']);
             if ((string)($colDef['tooltip'] ?? '') != '') $tooltip = $this->cms->textOrSnippet($colDef['tooltip']);
             if ((string)($colDef['pattern'] ?? '') != '') $pattern = (string) $colDef['pattern'];
@@ -2067,24 +2064,24 @@ class Backend {
             if (in_array('not_empty', $flags, true)) {
                 $label .= $this->template('mandatory_field_indicator');
             }
-            // Schloss: der Wert wird verschlüsselt gespeichert
+            // Lock: the value is stored encrypted
             if ($type === 'encrypted') {
                 $label .= $this->template('encrypted_field_indicator');
             }
         }
-        // Sprachkürzel hinter der Beschriftung eines mehrsprachigen Feldes
+        // Language code after the label of a multilingual field
         if ($langId !== null && $langSuffix !== '') {
             $label .= $this->template('label_lang_suffix', [
                 '{lang}' => htmlspecialchars($langSuffix)
             ]);
         }
 
-        // Hinweis des Aufrufers - auch in Suchmasken, wo der aus der Felddefinition
-        // (colDef['note']) nicht gilt
+        // Note from the caller - also in search masks, where the one from the field definition
+        // (colDef['note']) does not apply
         if ((string)($param['note'] ?? '') !== '') $note = $this->cms->textOrSnippet((string)$param['note']);
 
         if (in_array($displayType, ['checkbox', 'radio', 'sortable'], true)) {
-            // Label linke Spalte erhält kein for="" 
+            // Label in the left column gets no for=""
             $templateId = match (true) {
                 $note != '' && $tooltip != '' => 'group_label_with_note_tt',
                 $tooltip != ''                => 'group_label_tt',
@@ -2179,7 +2176,7 @@ class Backend {
 
         $max = 0;
         if ($varName != 'filter') {
-            // nur in der Eingabemaske, nicht in der Suchmaske...
+            // only in the input mask, not in the search mask...
 
             // min
             // --------------------
@@ -2187,10 +2184,10 @@ class Backend {
             if ($min !== '') {
                 if (in_array($type, ['chars','text'], true)) {
                     if ($displayType == 'password' && $id > 0) {
-                        // Ausnahme: Passwort darf bei Datensatz-Änderung leer bleiben
+                        // Exception: password may stay empty when a record is changed
                     }
                     else {
-                        // Zeichenanzahl
+                        // Character count
                         $min = (int)$min;
                         $attr[] = 'minlength="' . (string)$min . '"';
                     }
@@ -2202,7 +2199,7 @@ class Backend {
             $max = (string)($colDef['max'] ?? '');
             if ($max !== '') {
                 if (in_array($type, ['chars','text'], true)) {
-                    // Zeichenanzahl
+                    // Character count
                     $max = (int)$max;
                     $attr[] = 'maxlength="' . (string)$max . '"';
                 }
@@ -2213,19 +2210,19 @@ class Backend {
             // not_empty
             if (in_array('not_empty', $flags, true)) {
                 if ($displayType == 'password' && $id > 0) {
-                    // Ausnahme: Passwort darf bei Datensatz-Änderung leer bleiben
+                    // Exception: password may stay empty when a record is changed
                 }
                 elseif ($displayType === 'upload') {
-                    // Upload-Feld: required nur, solange keine Datei vorliegt - sonst
-                    // verlangte der Browser bei jedem Speichern eine neue Datei.
-                    // $value ist der Datei-Eintrag (Metadaten) der angezeigten Sprache;
-                    // die eigentliche Prüfung macht VirtualFieldsTrait::validateFileRequired()
+                    // Upload field: required only as long as no file is present - otherwise
+                    // the browser would demand a new file on every save.
+                    // $value is the file entry (metadata) of the displayed language;
+                    // the actual check is done by VirtualFieldsTrait::validateFileRequired()
                     $file = is_array($value) ? $value : [];
                     if (empty($file['size']) || !empty($file['deleted'])) {
                         // $attr[] = 'required';
-                        // Deaktiviert weil sich derzeit die echte File-Auswahl und
-                        // die Auswahl über den Serverfile-Button nicht kombinieren lässt
-                        // Eingabeprüfung geschieht ohnehin über PHP
+                        // Disabled because the real file selection and the selection via
+                        // the server-file button currently cannot be combined;
+                        // input checking happens via PHP anyway
                     }
                 }
                 else {
@@ -2239,23 +2236,23 @@ class Backend {
         if ($displayType == 'select') {
             $optionsHTML = '';
 
-            // "Bitte auswählen"-Option am Anfang
+            // "Please select" option at the start
             if ($varName == 'filter') {
-                // bei filter-Feld ist default: true
+                // for a filter field the default is: true
                 $selectPlease = (bool)($param['selectPlease'] ?? true);
                 $selectMessage = $this->emptyPlaceholder;
             }
             else {
-                // ansonsten ist default: false
+                // otherwise the default is: false
                 $selectPlease = (bool)($param['selectPlease'] ?? false);
                 $selectMessage = $this->cms->snippet('please_select');
             }
-            // Bei Suchfeld: immer anzeigen
+            // For a search field: always show
             if ($selectPlease) {
                 $optionsHTML .= '<option value="">'. $selectMessage . "</option>\n";
             }
 
-            // Optionen; eine Gruppe als Beschriftung => [Wert => Beschriftung] (<optgroup>)
+            // Options; a group as label => [value => label] (<optgroup>)
             $optionHtml = function (string|int $val, string $label) use ($value): string {
                 $optAttr = '';
                 if (str_starts_with((string)$val, 'disabled')) {
@@ -2323,8 +2320,8 @@ class Backend {
 
         // display_type 'checkbox'
         // --------------------
-        // erzeugt immer Array. Eine Option mit dem Label ['group' => HTML] ist keine
-        // Auswahl, sondern eine Zwischenüberschrift (Schlüssel beliebig, eindeutig).
+        // always creates an array. An option with the label ['group' => HTML] is not a
+        // selection but a subheading (key arbitrary, unique).
         elseif ($displayType === 'checkbox') {
             if (empty($options)) {
                 $options =  ['1' => $this->cms->snippet('yes')];
@@ -2355,29 +2352,28 @@ class Backend {
 
         // display_type 'sortable'
         // --------------------
-        // erzeugt immer Array
+        // always creates an array
         //
-        // Wie 'checkbox', aber jede Option steht in einer eigenen .c9-smartrows-row
-        // und lässt sich mit den Pfeil-Buttons verschieben (Core/public_master/backend/
-        // assets/js/backend-smartrows.js). Anders als bei den Domain-Zeilen gibt es
-        // KEIN Anfügen und Entfernen: die Auswahl steht fest, frei ist nur ihre
-        // REIHENFOLGE.
+        // Like 'checkbox', but every option stands in its own .c9-smartrows-row
+        // and can be moved with the arrow buttons (Core/public_master/backend/
+        // assets/js/backend-smartrows.js). Unlike the domain rows there is
+        // NO adding and removing: the selection is fixed, only its
+        // ORDER is free.
         //
-        // Ein Formular übermittelt nur die angehakten Checkboxen, und zwar in der
-        // Reihenfolge, in der ihre Zeilen im Dokument stehen. Genau das ist hier die
-        // gespeicherte Sortierung. Damit sie sichtbar wird, stehen die ausgewählten
-        // Optionen oben - in der Reihenfolge von $value -, die übrigen darunter in
-        // der Reihenfolge von $options.
+        // A form submits only the checked checkboxes, in the order in which their
+        // rows stand in the document. That is exactly the stored sort order here. To make
+        // it visible, the selected options stand at the top - in the order of $value -,
+        // the others below in the order of $options.
         elseif ($displayType === 'sortable') {
-            // Ausgewählte Optionen in der Reihenfolge des gespeicherten Wertes
+            // Selected options in the order of the stored value
             $selected = [];
             foreach ((array)$value as $val) {
                 $val = (string)$val;
-                // Unbekannte Werte (Option zwischenzeitlich entfallen) übergehen
+                // Skip unknown values (option no longer exists)
                 if (!array_key_exists($val, $options)) continue;
                 $selected[$val] = $options[$val];
             }
-            // Rest in der Reihenfolge der Optionen
+            // Rest in the order of the options
             $rows = [];
             foreach ($selected as $val => $label) {
                 $rows[] = [$val, $label, ' checked'];
@@ -2408,7 +2404,7 @@ class Backend {
         elseif ($displayType == 'multiselect') {
             $optionsHTML = '';
             foreach ($options as $val => $label) {
-                // wie bei 'select': Schlüssel mit Präfix 'disabled' sind nicht wählbar
+                // as with 'select': keys with prefix 'disabled' are not selectable
                 if (str_starts_with((string)$val, 'disabled')) {
                     $selected = ' disabled';
                     $val = '';
@@ -2435,13 +2431,13 @@ class Backend {
 
         // display_type 'text', 'textarea', 'password', 'email', 'tel'
         // --------------------
-        // keine besonderen Anpassungen
+        // no special adjustments
 
         if ($varName != 'filter') {
                 
             // styles
             // --------------------
-            // Eingabefeld nicht überflüssig breit machen, wenn Zeichenlänge begrenzt ist
+            // Do not make the input field unnecessarily wide when the character length is limited
             if ($displayType == 'text') {
                 if (in_array($type, $this->cms->textTypes, true)) {
                     if ($max > 0 && $max < 64) {
@@ -2462,8 +2458,8 @@ class Backend {
             }
         }
 
-        // Extension (13 §3.4): nur in der Eingabemaske, nur wenn sie aktiv ist -
-        // eine Klasse und zwei data-Attribute, cApp.extensions macht den Rest
+        // Extension (developer docs, chapter 08 (Components and extensions)): only in the input mask, only if it is active -
+        // one class and two data attributes, cApp.extensions does the rest
         if ($varName === 'data') {
             $ext = $this->fieldExtension($colDef);
             if ($ext !== null) {
@@ -2477,11 +2473,11 @@ class Backend {
         // value
         if (is_array($value)) $valueHtml = implode("\n", $value);
         else $valueHtml = (string)$value;
-        // textarea : führender Zeilenumbruch wird laut HTML Spezifikation ignoriert
-        // gebe daher erst \n aus, damit User-Input mit führendem Umbruch möglich bleibt
+        // textarea: a leading line break is ignored according to the HTML specification,
+        // so output \n first, so that user input with a leading break stays possible
         if ($displayType == 'textarea') $valueHtml = "\n" . $valueHtml;
         
-        // Ersetzungen - alle Typen
+        // Replacements - all types
         // --------------------
         $replacements = [
             '{name}' => $varName . '[' . $inputName . ']',
@@ -2491,7 +2487,7 @@ class Backend {
             '{height}' => $height,
             '{value}' => htmlspecialchars($valueHtml),
         ];
-        // Ersetzungen Lookup-Feld werden nachträglich im BackendScript durchgeführt
+        // Lookup field replacements are performed afterwards in the backend script
         // {src_id}
         // {src_field}
         // {search_url}
@@ -2508,10 +2504,10 @@ class Backend {
             '{id_suffix}' => $idSuffix,
         ]);
 
-        // Lookup-Feld: ctx Menu dahinter packen
-        // Ein Lookup-Feld, das keine Verknüpfungen schreibt (z. B. die Auswahl des
-        // Vaterdatensatzes), hat für das Kontextmenü nichts anzubieten - dafür kann
-        // der Aufrufer es mit contextMenu = '' unterdrücken oder ersetzen.
+        // Lookup field: append the context menu
+        // A lookup field that writes no links (e.g. the selection of the
+        // parent record) has nothing to offer for the context menu - the caller can
+        // suppress or replace it with contextMenu = ''.
         if ($displayType == 'lookup') {
             $moduleName = $dataset->getModuleName();
             $ctxTemplate = (string)($param['contextMenu'] ?? $moduleName . '.lookup_context_menu');
@@ -2526,10 +2522,10 @@ class Backend {
 
         // c9-col1 + 2
         // --------------------
-        // Fehlermeldung (aus Klasse Dataset)
-        // Bei mehrsprachigen Feldern registriert Dataset::validateFieldValue() den
-        // Fehler unter "name.{langId}" - nur das Eingabefeld dieser Sprache wird
-        // hervorgehoben
+        // Error message (from class Dataset)
+        // For multilingual fields Dataset::validateFieldValue() registers the
+        // error under "name.{langId}" - only the input field of this language is
+        // highlighted
         $errorFields = $this->cms->getErrorFields();
         $errorKey = ($langId !== null) ? $paramName . '.' . $langId : $paramName;
         $errorKey = (string)($param['errorPrefix'] ?? '') . $errorKey;
@@ -2544,8 +2540,8 @@ class Backend {
             $errorMsg = '';
         }
         
-        // zusätzliche Klasse des Feldblocks (z. B. 'warning' für ein temporär
-        // hinzugefügtes Suchfeld, RecordBackendSearch)
+        // additional class of the field block (e.g. 'warning' for a temporarily
+        // added search field, RecordBackendSearch)
         $blockClass = preg_replace('/[^a-z0-9_ -]/i', '', (string)($param['blockClass'] ?? ''));
         if ($blockClass !== '') $groupClass .= ' ' . trim($blockClass);
 
@@ -2557,7 +2553,7 @@ class Backend {
             '{class}' => $groupClass,
         ]);
 
-        // Platzhalter ersetzen
+        // Replace the placeholder
         $this->form = str_replace($placeholder, $html, $this->form);
     }
 
@@ -2576,10 +2572,10 @@ class Backend {
     }
 
     /**
-     * Ergebnisse aus Dataset::select aufbereiten
-     * Inkl. Close-Button
-     * 
-     * @param array $f  Rückgabewerte von Dataset::select
+     * Prepare the results of Dataset::select
+     * Including close button
+     *
+     * @param array $f  return values of Dataset::select
      */
     public function filterText(array $f): string
     {
@@ -2609,20 +2605,20 @@ class Backend {
     }
 
     /**
-     * Bereitet Inhalt aus einer Dataset::fetch() Zeile für die Darstellung im Backend auf
-     * 
-     * @param array|string|bool|int|null &$value  Inhalt
-     * @param array &$colDef                      Zugehörige Spaltendefinition aus dem Schema, 'type' benötigt<
+     * Prepares content from a Dataset::fetch() row for display in the backend
+     *
+     * @param array|string|bool|int|null &$value  content
+     * @param array &$colDef                      associated column definition from the schema, 'type' required<
      * @param string $format                      'short' (default), 'medium', 'long'
-     * @param string $id                          Datensatz-Id, für die Ermittlung von Relations
+     * @param string $id                          record id, for determining relations
      * @return string
      */
     public function backendValue(array|string|bool|int|null $value, array $colDef, $format = 'short', $id = null): string {
         $type = $colDef['type'] ?? 'text';
         $displayType = $colDef['display_type'] ?? 'text';
         $name = $colDef['name'] ?? '';
-        // Nicht jeder Zweig setzt $text (z. B. ein leeres json-Feld) - am Ende steht
-        // dann der Platzhalter für "kein Inhalt".
+        // Not every branch sets $text (e.g. an empty json field) - at the end
+        // the placeholder for "no content" is then used.
         $text = '';
         if ($type === 'currency') {
             $text = $this->cms->_formatFloat((float)($value ?? 0) / 100, 2);
@@ -2640,17 +2636,16 @@ class Backend {
             $text = $this->cms->_formatTime((string)$value);
         }
         elseif ($type == 'json' || $type == 'reltable') {
-            // json / reltable (gleiche Darstellung - Liste der Einträge)
+            // json / reltable (same display - list of entries)
             // --------------------
             if (!empty($value)) {
-                // Lange Listen abschneiden: in der Datensatzliste nach 5 Einträgen,
-                // auf der Info-Seite nach 10. Die Auslassung wird EINMAL angehängt,
-                // danach ist die Schleife zu Ende - alles Weitere stünde ohnehin
-                // hinter den drei Punkten.
+                // Truncate long lists: in the record list after 5 entries,
+                // on the info page after 10. The ellipsis is appended ONCE,
+                // then the loop ends - anything further would be behind the three dots anyway.
                 $limit = match ($format) {
                     'short'  => 5,
                     'medium' => 10,
-                    default  => 0, // 'long': alles
+                    default  => 0, // 'long': everything
                 };
                 $items = [];
                 foreach ((array)$value as $item) {
@@ -2681,15 +2676,15 @@ class Backend {
             // upload, thumbnail
             // --------------------
             if (!empty($value['size'])) {
-                // preview-Link
-                // Nie direkt ins Medienverzeichnis: das Backend holt jede Datei über
-                // backend/file.php (RecordBackendServerFile::filePreview()). Nur das
-                // Script kennt die Ablage {instance_id}/{field_id}, prüft die
-                // Anmeldung und entscheidet, ob es auf die Datei umleiten darf oder
-                // sie selbst liest (Domain-Sperre der Instanz, user_auth des Feldes).
-                // Bei mehrsprachigen Datei-Feldern die Datei der Sprache als dritter
-                // Pfadteil. `version` als Cache-Brecher: ein neuer Upload bekommt
-                // eine neue Adresse.
+                // preview link
+                // Never directly into the media directory: the backend fetches every file via
+                // backend/file.php (RecordBackendServerFile::filePreview()). Only that
+                // script knows the storage {instance_id}/{field_id}, checks the
+                // login and decides whether it may redirect to the file or
+                // reads it itself (domain lock of the instance, user_auth of the field).
+                // For multilingual file fields the file of the language as third
+                // path part. `version` as cache buster: a new upload gets
+                // a new address.
                 $mediaPath = $this->config->get('paths.media');
                 $fieldId = (int)$colDef['field_id'];
                 $extension = $value['extension'] ?? '';
@@ -2706,13 +2701,13 @@ class Backend {
                 }
                 $value['size'] = $this->system->convertSize((int)$value['size']);
                 if ($format === 'short') {
-                    // File-Feld in Listendarstellung
+                    // File field in list display
                     // --------------------
                     $mimeType = $value['mime_type'] ?? '';
                     if ($displayType === 'thumbnail') {
                         // Thumbnail-Feld
                         if (in_array($mimeType, $this->webImageFormats, true)) {
-                            // Webfähige (und sichere) Vorschau möglich -> Img-Tag
+                            // Web-capable (and safe) preview possible -> img tag
                             $text = $this->template('img_thumbnail', [
                                 '{src}' => $filePath,
                                 '{width}' => (string)$width,
@@ -2722,7 +2717,7 @@ class Backend {
                         else {
                             $icon = $this->defaultImg($mimeType, $extension);
                             $placeholderUrl = $mediaPath . $icon;
-                            // Keine Vorschau möglich -> Icon
+                            // No preview possible -> icon
                             $text = $this->template('record.file_placeholder', [
                                 '{url}' => $placeholderUrl,
                                 '{extension}' => $extension
@@ -2730,7 +2725,7 @@ class Backend {
                         }
                     }
                     else {
-                        // Upload-Feld
+                        // Upload field
                         $shorts = [
                             $value['mime_type'] ?? 'unknown_type',
                             $value['size']
@@ -2741,7 +2736,7 @@ class Backend {
                 }
     
                 else {
-                    // File-Feld auf der Info-Seite
+                    // File field on the info page
                     // --------------------
                     $text = $this->template('a_blank', [
                         '{url}' => $filePath,
@@ -2758,7 +2753,7 @@ class Backend {
                     $subFields[] = 'dimensions';
                     foreach ($subFields as $subFieldName) {
                         if ($subFieldName === 'width' || $subFieldName === 'height') continue;
-                        // Dateiname: bei Schreibrecht auch leer, damit er sich nachtragen lässt
+                        // File name: with write permission also empty, so that it can be entered
                         if (!empty($value[$subFieldName])
                             || ($subFieldName === 'filename' && isset($this->fileRenameIds[(int)$id]))
                         ) {
@@ -2793,8 +2788,8 @@ class Backend {
                 }
             }
             elseif (!empty($value['token'])) {
-                // Datei wird gerade von Hintergrundprozess erstellt
-                // Erzeuge Container mit Meta-Daten, der bei Abschluss des Hintergrundprozesses aktualisiert wird
+                // File is currently being created by a background process
+                // Create a container with metadata that is updated when the background process finishes
                 if ($format === 'short') {
                     $url = $this->config->get('paths.backend') . "/file.php?file={$colDef['field_id']}/{$id}";
                 }
@@ -2816,9 +2811,9 @@ class Backend {
                 $text = $this->cms->_nl2br($this->cms->_strlimit(htmlspecialchars((string)($value ?? '')), '400s'));
             }
             else {
-                // Ganzer Text (Info-Seite nach "mehr"): Felder mit Editor-Extension
-                // als HTML - Markdown über Camindo\Core\Markdown (HTML im Text
-                // maskiert), HTML der Extension HTMLVisual durch den HtmlSanitizer
+                // Full text (info page after "more"): fields with editor extension
+                // as HTML - Markdown via Camindo\Core\Markdown (HTML in the text
+                // masked), HTML of the extension HTMLVisual through the HtmlSanitizer
                 $text = match ($this->editorExtension($colDef)) {
                     'markdownvisual' => $this->template('rich_text', ['{html}' => (new Markdown())->toHtml((string)($value ?? ''))]),
                     'htmlvisual'     => $this->template('rich_text', ['{html}' => $this->cms->_sanitize_html((string)($value ?? ''))]),
@@ -2831,8 +2826,8 @@ class Backend {
     }
 
     /**
-     * Editor-Extension eines Feldes (details.extension) in Kleinbuchstaben, '' = keine.
-     * Meta-Felder aus dem PHP-Schema tragen sie direkt als 'extension'.
+     * Editor extension of a field (details.extension) in lowercase, '' = none.
+     * Meta fields from the PHP schema carry it directly as 'extension'.
      */
     public function editorExtension(array $colDef): string
     {
@@ -2845,15 +2840,15 @@ class Backend {
     }
 
     /**
-     * Abfrage der in einem Verknüpfungsfeld gespeicherten Datensätze (Cms::select()
-     * mit src_id + relation, $limit + 1 Zeilen - die eine zusätzliche zeigt an, dass
-     * es mehr gibt). Sortierung: manuelle Reihenfolge des Feldes, sonst bei einem
-     * Zielbereich dessen Standardsortierung, bei mehreren Änderungsdatum absteigend.
-     * Das Ergebnis steht danach in Database (fetch()).
+     * Query the records stored in a link field (Cms::select()
+     * with src_id + relation, $limit + 1 rows - the one extra shows that
+     * there are more). Sorting: manual order of the field, otherwise for one
+     * target area its default sorting, for several by change date descending.
+     * The result then stands in Database (fetch()).
      *
-     * @param int  $skip   Versatz (Blättern, relatedPage())
-     * @param bool $count  Gesamtzahl zählen (Database::$num_rows_unlimited)
-     * @return bool  false: kein Verknüpfungsfeld bzw. kein Zielbereich (keine Abfrage)
+     * @param int  $skip   offset (paging, relatedPage())
+     * @param bool $count  count the total (Database::$num_rows_unlimited)
+     * @return bool  false: not a link field resp. no target area (no query)
      */
     private function relatedSelect(int $id, array $colDef, int $limit, int $skip = 0, bool $count = false): bool
     {
@@ -2878,21 +2873,21 @@ class Backend {
         $areaIds = $this->system->sanitizeIds((array)$areaIds, true);
         if (empty($areaIds)) return false;
 
-        // Sortierung
+        // Sorting
         // --------------------
         if ((int)($colDef['custom_order'] ?? 0) > 0) {
-            // Manuelle Sortierung
+            // Manual sorting
             $sort = '_custom';
             $order = 'ASC';
         }
         elseif (count($areaIds) === 1) {
-            // Ein Bereich -> dessen Standardsortierung
+            // One area -> its default sorting
             $areaData = $this->areaData((int)$areaIds[0]) ?: [];
             $sort = (string)($areaData['sort_field_name'] ?? '') ?: 'changed_at';
             $order = (string)($areaData['sort_order'] ?? '') ?: 'DESC';
         }
         else {
-            // Mehrere Bereiche ohne manuelle Sortierung -> Änderungsdatum absteigend
+            // Several areas without manual sorting -> change date descending
             $sort = 'changed_at';
             $order = 'DESC';
         }
@@ -2910,8 +2905,8 @@ class Backend {
     }
 
     /**
-     * Eine Seite der in einem Verknüpfungsfeld gespeicherten Datensätze (Reihenfolge
-     * wie relatedDatasets()) samt Gesamtzahl - zum Blättern (API, RecordApi::fieldValue()).
+     * One page of the records stored in a link field (order
+     * as relatedDatasets()) including total count - for paging (API, RecordApi::fieldValue()).
      *
      * @return array{0:int[],1:int}  [record_ids dieser Seite, Gesamtzahl]
      */
@@ -2932,8 +2927,8 @@ class Backend {
     }
 
     /**
-     * Ids der in einem Verknüpfungsfeld gespeicherten Datensätze, höchstens $limit
-     * (Reihenfolge wie relatedDatasets()).
+     * Ids of the records stored in a link field, at most $limit
+     * (order as relatedDatasets()).
      *
      * @return array{0:int[],1:bool}  [record_ids, es gibt mehr]
      */
@@ -2956,20 +2951,20 @@ class Backend {
     }
 
     /**
-     * Ermittle die im Feld $name gespeicherten Datensätze und erstelle daraus ein Array
-     * [record_id => Default-Feld]
-     * Wenn das Relationfeld manuelle Sortierung unterstützt, dann
-     *     sortiert nach manueller Reihenfolge 
-     * Ansonsten
-     *     - Bei max 1 Bereich nach dessen Defaultsortierung
-     *     - Bei mehreren Bereichen nach Änderungsdatum absteigend
-     * Hilfsfunktion für Backend::backendValue(), aber auch RecordBackendEdit (Loopup-Preview-Bereich)
-     * 
-     * @param int $id         Datensatz-Id
-     * @param array $colDef   Spaltendefnition des Relation-Feldes
-     * @param string $format  'short' => 10 Datensätze (standard),
-     *                        'long' => admin.list_max_datasets aus Config
-     * @return array          Datensätze als flaches Array
+     * Determine the records stored in field $name and build an array from them
+     * [record_id => default field]
+     * If the relation field supports manual sorting, then
+     *     sorted by manual order
+     * Otherwise
+     *     - for max 1 area by its default sorting
+     *     - for several areas by change date descending
+     * Helper function for Backend::backendValue(), but also RecordBackendEdit (lookup preview area)
+     *
+     * @param int $id         record id
+     * @param array $colDef   column definition of the relation field
+     * @param string $format  'short' => 10 records (default),
+     *                        'long' => admin.list_max_datasets from config
+     * @return array          records as a flat array
      */
     public function relatedDatasets(int $id, array $colDef, $format = 'short'): array
     {
@@ -2977,12 +2972,12 @@ class Backend {
             return [];
         }
 
-        // maximal angezeigte Anzahl Datensätze
+        // maximum number of records displayed
         // --------------------
         if ($format === 'short') $limit = 10;
         else $limit = (int)($this->config->get('admin.list_max_datasets') ?? 200);
 
-        // Datensätze sammeln (Ergebnis bleibt für die Schleife unten stehen)
+        // Collect the records (result stays for the loop below)
         // --------------------
         $this->db->pushResult();
         if (!$this->relatedSelect($id, $colDef, $limit)) {
@@ -2990,7 +2985,7 @@ class Backend {
             return [];
         }
 
-        // Array bilden
+        // Build the array
         // --------------------
         $displayNumber = min($this->db->num_rows, $limit);
         $isCutted = ($this->db->num_rows > $displayNumber);
@@ -3003,7 +2998,7 @@ class Backend {
             $defaultFieldType =  (string)$areaData['default_field_type'];
 
             if (in_array($defaultFieldType, $this->cms->relationTypes, true)) {
-                // keine Verknüfungen von den Verknüpfungen laden
+                // do not load links from the links
                 $value = '(relations)';
             }
             else {
@@ -3017,7 +3012,7 @@ class Backend {
         }
         $this->db->popResult();
 
-        // Ellipsis-Eintrag anhängen
+        // Append the ellipsis entry
         if ($isCutted) {
             $datasets[''] = $this->cms->snippet('ellipsis');
         }
@@ -3026,9 +3021,9 @@ class Backend {
 
 
     /**
-     * Hilfsfunktion: Standard-Sortierung eines Bereichs ermitteln
+     * Helper function: determine the default sorting of an area
      *
-     * @param int $areaId  Bereichs-Id
+     * @param int $areaId  area id
      * @return array       [$fieldName, $sort]
      */
     public function getDefaultSort(int $areaId): array {
@@ -3094,16 +3089,16 @@ class Backend {
             } elseif (str_contains($mimeType, 'word') || str_contains($mimeType, 'document')) {
                 $icon = 'txt';
             } else {
-                $icon = 'oth'; // Endgültiger Fallback
+                $icon = 'oth'; // final fallback
             }
         }
         return "/default/file_{$icon}.png";
     }
     /**
-     * Hilfsfunktion: Haupt-Feld (für kompakte Listen) eines Bereichs ermitteln
-     * Caching, weil zugriff auf selbe area_id in Listen häufig.
+     * Helper function: determine the main field (for compact lists) of an area
+     * Caching, because access to the same area_id is frequent in lists.
      *
-     * @param int $areaId  Bereichs-Id
+     * @param int $areaId  area id
      * @return array       Spaltendefinition des Feldes
      */
     public function getDefaultField(int $areaId): array {
@@ -3134,7 +3129,7 @@ class Backend {
     }
 
     /**
-     * Hilfsfunktion - Text innerhalb Node Parameter säubern, auch innerhalb Click-Handler
+     * Helper function - clean text inside node parameters, also inside click handlers
      */
     public function _escapeParam($s, $br = '<br>') {
         return $this->cms->_nl2br(
@@ -3147,7 +3142,7 @@ class Backend {
     }
 
     /**
-     * Wandelt PHP-Ini-Größenangaben (z. B. "8M", "1G", "500K") in Bytes um.
+     * Converts PHP ini size values (e.g. "8M", "1G", "500K") into bytes.
      */
     public function parseSize(string $value): int
     {
@@ -3160,10 +3155,10 @@ class Backend {
         switch ($unit) {
             case 'g':
                 $size *= 1024;
-                // Fall-through beabsichtigt
+                // Fall-through intended
             case 'm':
                 $size *= 1024;
-                // Fall-through beabsichtigt
+                // Fall-through intended
             case 'k':
                 $size *= 1024;
                 break;
@@ -3172,17 +3167,17 @@ class Backend {
     }
 
     /**
-     * Daten eines Inhaltsbereichs laden und in Cache aufbewahren
-     * Für Listen, die teilweise durcheinander Ergebnisse aus unterschiedlichen Bereichen verarbeiten.
-     * (Gelöschte Inhaltsbereichs werde nicht zurückgegeben)
-     * 
+     * Load the data of a content area and keep it in the cache
+     * For lists that process results from different areas in a mixed way.
+     * (Deleted content areas are not returned)
+     *
      * @param int $areaId     area_id
      * @return array|null
      */
     public function areaData(int $areaId): ?array
     {
         if (isset($this->areaCache[$areaId])) {
-            // liegt bereits im Cache
+            // already in the cache
             return $this->areaCache[$areaId];
         }
 
@@ -3204,16 +3199,16 @@ class Backend {
     }
 
     /**
-     * Profil-Bereiche (type 'profile'), deren User aus Sicht einer Instanz
-     * angemeldet sein können: die der Instanz selbst und die ihrer lesbaren
-     * Instanzen (`readable_instances`, siehe InstanceCache) - nur deren Datensätze
-     * sieht das Frontend dieser Instanz.
+     * Profile areas (type 'profile') whose users may be logged in from the point of view of an instance:
+     * those of the instance itself and those of its readable
+     * instances (`readable_instances`, see InstanceCache) - only their records
+     * are visible to the frontend of this instance.
      *
-     * Für die Checkbox-Listen "Profil-Bereiche" eines UGC-Bereichs
-     * (AreaBackend::_editForm()) und eines Upload-Feldes mit user_auth
+     * For the checkbox lists "profile areas" of a UGC area
+     * (AreaBackend::_editForm()) and of an upload field with user_auth
      * (FieldBackend::_editForm()).
      *
-     * @param int $instanceId  Instanz des Bereichs bzw. Feldes
+     * @param int $instanceId  instance of the area resp. field
      * @return array  area_id => "Label (Instanz)"
      */
     public function profileAreaOptions(int $instanceId): array

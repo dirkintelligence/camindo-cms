@@ -1,16 +1,16 @@
 <?php
 /**
- * Kleines Debug-Werkzeug: zeigt den Inhalt der aktuellen Sitzung.
+ * Small debug tool: shows the content of the current session.
  *
- * Aufgerufen über backend/tool_info.php, dargestellt im Aside-Bereich. Nützlich, wenn
- * die Anmeldung sich merkwürdig verhält - man sieht, was Session tatsächlich hält:
- * session_id, admin_id, letzter Zugriff und die Benutzerdaten unter 'details'.
+ * Called via backend/tool_info.php, displayed in the aside area. Useful when
+ * the login behaves strangely - one sees what the session actually holds:
+ * session_id, admin_id, last access and the user data under 'details'.
  *
- * Reine Entwicklungshilfe. Die Ausgabe erfolgt ungefiltert per var_dump() und gehört
- * daher nicht in eine produktive Installation.
+ * Pure development aid. The output is unfiltered via var_dump() and therefore
+ * does not belong in a production installation.
  *
  * @see Camindo\Core\Session
- * @see Camindo\Core\Modules\Tools\ToolDeveloper  blendet den Knopf dafür ein
+ * @see Camindo\Core\Modules\Tools\ToolDeveloper  shows the button for it
  */
 namespace Camindo\Core\Modules\Tools;
 
@@ -33,13 +33,13 @@ class ToolInfo {
     }
 
     /**
-     * Sitzungsdaten ausgeben.
+     * Output session data.
      *
-     * (Der bisherige Kommentar "Snippet-Cache-Files neu aufbauen" gehörte zu einer
-     * anderen Klasse.)
+     * (The earlier comment "Rebuild snippet cache files" belonged to a
+     * different class.)
      */
     public function debugSessionData(): void {
-        // Zusatzrecht "developer" (Backend-Benutzergruppen; ohne Session - Cache-Bootstrap, CLI - gilt alles)
+        // Additional right "developer" (backend user groups; without session - cache bootstrap, CLI - everything applies)
         $this->accessGuard('developer');
         echo "<strong>session_id:</strong><br>";
         echo $this->session->get('session_id');
@@ -58,8 +58,8 @@ class ToolInfo {
         echo "</pre>";
     }
     /**
-     * Zusatzrecht des Moduls Tools prüfen - Meldung und Abbruch, wenn es fehlt.
-     * Ohne geladene Rechte (kein Backend-Request) verweigert Access nichts.
+     * Check the additional right of the module Tools - message and abort if it is missing.
+     * Without loaded rights (no backend request) Access denies nothing.
      */
     private function accessGuard(string $right): void
     {

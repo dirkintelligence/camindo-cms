@@ -1,39 +1,38 @@
 <?php
 /**
- * Zweiter Faktor per Authenticator-App (TOTP, RFC 6238 - die Rechnung steht in
- * Camindo\Core\Totp) samt Wiederherstellungscodes. 16-sicherheit.md §16.
+ * Second factor via authenticator app (TOTP, RFC 6238 - the calculation is in
+ * Camindo\Core\Totp) including recovery codes. Developer docs, chapter 13 (Security: authentication).
  *
- * WAS IN DER DATENBANK STEHT
+ * WHAT IS STORED IN THE DATABASE
  * --------------------
- *     admin.second_factor     'totp' = aktiv, '' = kein eigener Faktor (E-Mail laut
- *                             admin.2_factor). Teil der Zeilensignatur (Integrity):
- *                             per UPDATE auf '' zurückgestellt, ist die Zeile ungültig.
- *     admin.totp_secret       Crypt::encrypt() binär, Zusatzdaten 'totp|{admin_id}' -
- *                             in eine andere Admin-Zeile kopiert, entschlüsselt es
- *                             nicht mehr.
- *     admin.totp_step         zuletzt angenommener Zeitschritt (Replay-Schutz): ein
- *                             Code gilt nur für Schritte danach, auch wenn er noch
- *                             im ±1-Fenster läge.
+ *     admin.second_factor     'totp' = active, '' = no own factor (email according to
+ *                             admin.2_factor). Part of the row signature (Integrity):
+ *                             if reset to '' by an UPDATE, the row is invalid.
+ *     admin.totp_secret       Crypt::encrypt() binary, additional data 'totp|{admin_id}' -
+ *                             copied into another admin row, it no longer decrypts.
+ *     admin.totp_step         last accepted time step (replay protection): a
+ *                             code only applies to later steps, even if it would still
+ *                             lie within the ±1 window.
  *     admin.totp_enabled_at   seit wann (Anzeige)
- *     admin_recovery_code     je Code eine Zeile mit Crypt::hash() (HMAC mit
- *                             .camindo.key) über 'recovery|{admin_id}|{Code}'.
- *                             Einmal benutzt, wird die Zeile gelöscht.
+ *     admin_recovery_code     one row per code with Crypt::hash() (HMAC with
+ *                             .camindo.key) over 'recovery|{admin_id}|{code}'.
+ *                             Once used, the row is deleted.
  *
- * EINRICHTEN OHNE ZWISCHENSTAND IN DER DATENBANK
+ * SETUP WITHOUT AN INTERIM STATE IN THE DATABASE
  * --------------------
- * newSetup() würfelt ein Secret und gibt es verschlüsselt als "Setup-Token" zurück,
- * das im Formular mitreist (Zusatzdaten an die admin_id gebunden, SETUP_SECONDS
- * gültig). Erst enable() - nach einem gültigen Code aus der App - schreibt es in die
- * Zeile. Ein abgebrochenes Einrichten hinterlässt damit nichts.
+ * newSetup() generates a secret and returns it encrypted as a "setup token",
+ * which travels along in the form (additional data bound to the admin_id, valid for SETUP_SECONDS).
+ * Only enable() - after a valid code from the app - writes it into the
+ * row. An aborted setup therefore leaves nothing behind.
  *
- * Wer TOTP an- oder abschaltet oder einen Wiederherstellungscode verbraucht, steht im
- * Audit-Log, und der Admin bekommt eine Nachricht (LoginNotifierInterface, Ereignisse
- * totp_enabled, totp_disabled, recovery_code_used) - auch wenn ein Superuser das
- * Zurücksetzen war.
+ * Whoever switches TOTP on or off or uses up a recovery code is recorded in the
+ * audit log, and the admin receives a message (LoginNotifierInterface, events
+ * totp_enabled, totp_disabled, recovery_code_used) - even if a superuser did the
+ * reset.
  *
  * @see Camindo\Core\Totp
  * @see Camindo\Core\Modules\Admin\SecondFactorInterface
- * @see Camindo\Core\Modules\Admin\AdminBackend::totp()  Oberfläche
+ * @see Camindo\Core\Modules\Admin\AdminBackend::totp()  Interface
  */
 namespace Camindo\Core\Modules\Admin;
 
@@ -48,16 +47,16 @@ use Camindo\Core\Totp;
 
 class TotpFactor implements SecondFactorInterface {
 
-    /** Werte von security.admin_2fa */
+    /** Values of security.admin_2fa */
     public const MODES = ['email', 'totp', 'totp_required'];
 
     /** Anzahl Wiederherstellungscodes je Satz */
     public const RECOVERY_COUNT = 10;
 
-    /** Gültigkeit eines Setup-Tokens (QR-Code bis Bestätigung) in Sekunden */
+    /** Validity of a setup token (QR code until confirmation) in seconds */
     public const SETUP_SECONDS = 900;
 
-    /** Zeichen der Wiederherstellungscodes: ohne 0/O, 1/I/L */
+    /** Characters of the recovery codes: without 0/O, 1/I/L */
     private const RECOVERY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     public function __construct(
@@ -87,13 +86,13 @@ class TotpFactor implements SecondFactorInterface {
         return in_array($mode, self::MODES, true) ? $mode : 'totp';
     }
 
-    /** Dürfen Admins TOTP benutzen (security.admin_2fa nicht 'email')? */
+    /** May admins use TOTP (security.admin_2fa not 'email')? */
     public function available(): bool
     {
         return $this->mode() !== 'email';
     }
 
-    /** Muss ein Admin dieser Gruppe TOTP haben (totp_required gilt für Superuser)? */
+    /** Must an admin of this group have TOTP (totp_required applies to superusers)? */
     public function requiredFor(int $groupId): bool
     {
         return $this->mode() === 'totp_required' && $groupId === InstanceCache::SUPERUSER_GROUP_ID;
@@ -102,14 +101,14 @@ class TotpFactor implements SecondFactorInterface {
     // ====================
     // Anmeldung (SecondFactorInterface)
 
-    /** Nichts zu tun - der Code entsteht in der App */
+    /** Nothing to do - the code is generated in the app */
     public function start(array $admin): bool
     {
         return true;
     }
 
     /**
-     * TOTP-Code (6 Ziffern) oder Wiederherstellungscode.
+     * TOTP code (6 digits) or recovery code.
      */
     public function verify(array $admin, string $code): bool
     {
@@ -128,11 +127,11 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * TOTP-Code prüfen und den Zeitschritt verbrauchen.
+     * Check the TOTP code and consume the time step.
      *
-     * Das UPDATE mit "totp_step < ?" ist die eigentliche Sperre: zwei gleichzeitige
-     * Anfragen mit demselben Code kommen beide durch Totp::verify(), aber nur eine
-     * ändert die Zeile.
+     * The UPDATE with "totp_step < ?" is the actual lock: two simultaneous
+     * requests with the same code both pass Totp::verify(), but only one
+     * changes the row.
      */
     public function verifyTotp(int $adminId, string $code): bool
     {
@@ -157,7 +156,7 @@ class TotpFactor implements SecondFactorInterface {
     // ====================
     // Zustand
 
-    /** Hat der Admin TOTP eingerichtet? */
+    /** Has the admin set up TOTP? */
     public function isActive(int $adminId): bool
     {
         $row = $this->row($adminId);
@@ -165,7 +164,7 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * @return array  active (bool), enabled_at (UTC 'Y-m-d H:i:s' oder ''),
+     * @return array  active (bool), enabled_at (UTC 'Y-m-d H:i:s' or ''),
      *                recovery_left (int)
      */
     public function state(int $adminId): array
@@ -183,11 +182,11 @@ class TotpFactor implements SecondFactorInterface {
     // Einrichten, abschalten
 
     /**
-     * Neues Secret für das Einrichten (siehe Klassenkommentar).
+     * New secret for the setup (see class comment).
      *
      * @param array $admin  admin_id, name
-     * @return array        token (fürs Formular), uri (otpauth:// für den QR-Code),
-     *                      secret (Base32, zum Abtippen)
+     * @return array        token (for the form), uri (otpauth:// for the QR code),
+     *                      secret (Base32, to type in)
      */
     public function newSetup(array $admin): array
     {
@@ -196,8 +195,8 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * Anzeige zu einem vorhandenen Setup-Token (erneutes Anzeigen nach einem
-     * falschen Code). null = Token ungültig oder abgelaufen.
+     * Display for an existing setup token (showing again after a
+     * wrong code). null = token invalid or expired.
      */
     public function setupFromToken(array $admin, string $token): ?array
     {
@@ -206,13 +205,13 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * TOTP einschalten: Code aus der App gegen das Secret im Setup-Token prüfen,
-     * dann Secret speichern, Zeile neu signieren und einen Satz
+     * Enable TOTP: check the code from the app against the secret in the setup token,
+     * then save the secret, re-sign the row and create a set
      * Wiederherstellungscodes erzeugen.
      *
      * @param array $admin  Admin::load()
-     * @return array|null   die Wiederherstellungscodes im Klartext (nur jetzt zu
-     *                      sehen), null = Token ungültig oder Code falsch
+     * @return array|null   the recovery codes in plain text (only now to
+     *                      be seen), null = token invalid or code wrong
      */
     public function enable(array $admin, string $token, string $code): ?array
     {
@@ -243,15 +242,15 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * TOTP abschalten - durch den Admin selbst oder als Zurücksetzen durch einen
-     * Superuser (dann steht der Superuser als Handelnder im Audit-Log).
+     * Switch off TOTP - by the admin themselves or as a reset by a
+     * superuser (then the superuser is recorded as the actor in the audit log).
      *
-     * Hat der Admin Passkeys, bleiben sie beim eigenen Abschalten der zweite Faktor
-     * (second_factor = 'webauthn') samt Wiederherstellungscodes. Das Zurücksetzen
-     * durch einen Superuser entfernt auch sie.
+     * If the admin has passkeys, when switching off their own, they remain the second factor
+     * (second_factor = 'webauthn') along with the recovery codes. The reset
+     * by a superuser removes them as well.
      *
-     * @param array $admin   Admin::load() des betroffenen Admins
-     * @param bool  $reset   true: Zurücksetzen durch einen Superuser
+     * @param array $admin   Admin::load() of the affected admin
+     * @param bool  $reset   true: reset by a superuser
      */
     public function disable(array $admin, bool $reset = false): void
     {
@@ -283,9 +282,9 @@ class TotpFactor implements SecondFactorInterface {
     // Wiederherstellungscodes
 
     /**
-     * Neuen Satz erzeugen, der alte verfällt.
+     * Create a new set; the old one expires.
      *
-     * @return string[]  Codes im Klartext (Form XXXXX-XXXXX)
+     * @return string[]  codes in plain text (form XXXXX-XXXXX)
      */
     public function regenerateRecoveryCodes(array $admin): array
     {
@@ -304,7 +303,7 @@ class TotpFactor implements SecondFactorInterface {
         return $codes;
     }
 
-    /** Noch unbenutzte Wiederherstellungscodes */
+    /** Recovery codes not yet used */
     public function recoveryCount(int $adminId): int
     {
         $this->db->pushResult();
@@ -318,8 +317,8 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * Wiederherstellungscode einlösen: die Zeile wird gelöscht, ein zweites Mal
-     * greift er nicht.
+     * Redeem a recovery code: the row is deleted; a second time
+     * it does not apply.
      */
     private function useRecoveryCode(int $adminId, string $code): bool
     {
@@ -327,9 +326,9 @@ class TotpFactor implements SecondFactorInterface {
         if ($normalized === '') return false;
         $this->db->pushResult();
         try {
-            // HMAC unter allen Schlüsseln: Codes aus der Zeit vor einer
-            // Schlüsselrotation gelten weiter, solange der alte Schlüssel im
-            // Schlüsselbund ist (Crypt::hashAll(), KeyRotation)
+            // HMAC under all keys: codes from the time before a
+            // key rotation remain valid as long as the old key is in the
+            // key ring (Crypt::hashAll(), KeyRotation)
             $hashes = $this->crypt->hashAll('recovery|' . $adminId . '|' . $normalized, true);
             $this->db->query(
                 "DELETE FROM `admin_recovery_code` WHERE `admin_id` = ? AND `code_hash` IN ("
@@ -364,7 +363,7 @@ class TotpFactor implements SecondFactorInterface {
         return array_values($codes);
     }
 
-    /** Groß, ohne Bindestrich und Leerzeichen; '' = kann kein Code sein */
+    /** Uppercase, without hyphen and spaces; '' = cannot be a code */
     private function normalizeRecoveryCode(string $code): string
     {
         $code = strtoupper(preg_replace('/[\s-]+/', '', $code) ?? '');
@@ -396,7 +395,7 @@ class TotpFactor implements SecondFactorInterface {
         }
     }
 
-    /** Zusatzdaten der Verschlüsselung: bindet das Secret an die Zeile */
+    /** Encryption additional data: binds the secret to the row */
     private function aad(int $adminId): string
     {
         return 'totp|' . $adminId;
@@ -407,7 +406,7 @@ class TotpFactor implements SecondFactorInterface {
         return $this->crypt->encrypt(time() . '|' . Totp::base32Encode($secret), 'totp-setup|' . $adminId);
     }
 
-    /** Secret aus dem Setup-Token, '' = ungültig, fremd oder abgelaufen */
+    /** Secret from the setup token, '' = invalid, foreign or expired */
     private function secretFromToken(int $adminId, string $token): string
     {
         if ($adminId < 1 || $token === '') return '';
@@ -430,10 +429,10 @@ class TotpFactor implements SecondFactorInterface {
     }
 
     /**
-     * Audit-Eintrag 'update' am Admin. Wert sind nur Kennungen (email/totp/reset)
-     * bzw. Anzahlen - nie Secret oder Code.
+     * audit entry 'update' on the admin. Values are only identifiers (email/totp/reset)
+     * or counts - never secret or code.
      *
-     * @param string $actorName  bei der Anmeldung (noch keine Session): der Admin selbst
+     * @param string $actorName  during login (no session yet): the admin themselves
      */
     private function audit(array $admin, string $key, string $before, string $after, string $actorName = ''): void
     {

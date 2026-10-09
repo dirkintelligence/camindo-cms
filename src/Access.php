@@ -1,76 +1,76 @@
 <?php
 /**
- * Rechte der angemeldeten Benutzergruppe im Backend.
+ * Rights of the logged-in user group in the backend.
  *
- * WOHER DIE RECHTE KOMMEN
+ * WHERE THE RIGHTS COME FROM
  * --------------------
- * Session::create()/load() ruft load($groupId); die Klasse liest dann die
- * Gruppendatei var/cache/group-{group_id}.php (InstanceCache::group()) und
- * beantwortet alle Fragen aus diesem Array - ohne weitere Datenbankabfragen. Nur
- * groupOf() fragt `admin` (einmal je Owner und Request), um die Gruppe des
- * Besitzers eines Datensatzes zu erfahren.
+ * Session::create()/load() calls load($groupId); the class then reads the
+ * group file var/cache/group-{group_id}.php (InstanceCache::group()) and
+ * answers all questions from this array - without further database queries. Only
+ * groupOf() queries `admin` (once per owner and request) to learn the group of
+ * the owner of a record.
  *
- * Was die Gruppendatei enthält, steht in InstanceCache ("Gruppendateien"); das
- * Rechtemodell selbst in docs/developers/12-group-rights.md:
+ * What the group file contains is described in InstanceCache ("group files"); the
+ * permission model itself in developer docs, chapter 11 (Permissions):
  *
- *     Modul        module(), moduleRight()     Zugriff ja/nein, Zusatzrechte aus
- *                                              {Modul}/install/settings.php 'access'
- *     Instanz      instance(), instanceIds()   zugewiesene Instanzen
- *     Bereich      areaRead()                  Zeile in rel_group_area = Leserecht
- *                  areaWrite()/areaDelete()    je nachdem, ob der Owner des
- *                                              Datensatzes zur eigenen Gruppe gehört
- *                                              (group_*) oder nicht (other_*)
- *                  areaCreate()                Anlegen = Schreiben mit sich selbst
- *                                              als Owner
- *                  areaSetOwner()              Zusatzrecht "Owner anpassen"
- *                  templateRead()/-Write()     Template-Bereiche (nur group_write)
- *     Sprache      languageRead()/-Write()     für die Inhalte im Modul Record
- *     Status       statusWrite()               welche Status die Gruppe einem
- *                                              Datensatz geben darf (lesen: alle);
- *                                              ein Datensatz in einem nicht setzbaren
- *                                              Status ist für sie nicht änderbar
+ *     Module       module(), moduleRight()     access yes/no, additional rights from
+ *                                              {module}/install/settings.php 'access'
+ *     Instance     instance(), instanceIds()   assigned instances
+ *     Area         areaRead()                  row in rel_group_area = read right
+ *                  areaWrite()/areaDelete()    depending on whether the owner of the
+ *                                              record belongs to the own group
+ *                                              (group_*) or not (other_*)
+ *                  areaCreate()                creating = writing with oneself
+ *                                              as owner
+ *                  areaSetOwner()              additional right "adjust owner"
+ *                  templateRead()/-Write()     template areas (group_write only)
+ *     Language     languageRead()/-Write()     for the contents in the Record module
+ *     Status       statusWrite()               which statuses the group may give
+ *                                              a record (reading: all);
+ *                                              a record in a status that cannot be
+ *                                              set is not changeable for it
  *                                              (recordWrite())
- *     Oberfläche   interface()                 über welche Oberfläche sich Admins
- *                                              der Gruppe anmelden dürfen (INTERFACES)
+ *     Interface    interface()                 via which interface admins of the
+ *                                              group may sign in (INTERFACES)
  *
- * OBERFLÄCHEN
+ * INTERFACES
  * --------------------
- * Dieselben Rechte gelten auf jeder Oberfläche - dem Backend, der Kommandozeile
- * (`camindo.php api`) und der PHP-API (Camindo\Core\Api). Welche davon eine Gruppe
- * benutzen darf, steht in `group`.`details`.`interfaces`; ohne Angabe nur das
- * Backend (DEFAULT_INTERFACES). Geprüft wird bei der Anmeldung
- * (Admin::loginByName(), ApiSession) und bei jedem Laden einer Session
- * (Session::load()) - ein entzogenes Recht beendet laufende Sessions.
+ * The same rights apply on every interface - the backend, the command line
+ * (`camindo.php api`) and the PHP API (Camindo\Core\Api). Which of these a group
+ * may use is stored in `group`.`details`.`interfaces`; without an entry only the
+ * backend (DEFAULT_INTERFACES). It is checked at sign-in
+ * (Admin::loginByName(), ApiSession) and on every load of a session
+ * (Session::load()) - a revoked right ends running sessions.
  *
- * UNGELADEN = KEINE PRÜFUNG
+ * NOT LOADED = NO CHECK
  * --------------------
- * Ohne Session (Frontend, Cron) bleibt die Klasse ungeladen und verweigert nichts:
- * das Frontend hat sein eigenes Rechtemodell (RecordUser), Hintergrundprozesse
- * laufen als System (Session::setCliAdmin() lädt bewusst keine Rechte - siehe
- * dort). Die Superuser-Gruppe (1) bekommt auf jede Frage ein Ja.
+ * Without a session (frontend, cron) the class stays unloaded and denies nothing:
+ * the frontend has its own permission model (RecordUser), background processes
+ * run as the system (Session::setCliAdmin() deliberately loads no rights - see
+ * there). The superuser group (1) gets a yes to every question.
  *
- * Schreibrecht setzt Leserecht voraus; ein Bereich ohne Zeile ist damit auch
- * nicht beschreibbar, unabhängig von den Flags.
+ * Write permission requires read permission; an area without a row is therefore
+ * not writable either, regardless of the flags.
  *
- * @see Camindo\Core\InstanceCache::group()   Aufbau der Gruppendatei
- * @see Camindo\Core\Session                  lädt die Rechte je Request
+ * @see Camindo\Core\InstanceCache::group()   structure of the group file
+ * @see Camindo\Core\Session                  loads the rights per request
  * @see Camindo\Core\Backend::isSuperuser()
  */
 namespace Camindo\Core;
 
 class Access {
 
-    /** Oberflächen, für die eine Gruppe freigeschaltet werden kann */
+    /** Interfaces a group can be enabled for */
     public const INTERFACES = ['backend', 'cli', 'php'];
 
-    /** Oberflächen einer Gruppe ohne Angabe in details.interfaces */
+    /** Interfaces of a group without an entry in details.interfaces */
     public const DEFAULT_INTERFACES = ['backend'];
 
-    /** Inhalt der Gruppendatei; null = ungeladen */
+    /** Content of the group file; null = not loaded */
     private ?array $group = null;
-    /** admin_id => group_id, je Request gemerkt (groupOf()) */
+    /** admin_id => group_id, remembered per request (groupOf()) */
     private array $groupOfAdmin = [];
-    /** admin_id der Session (für areaCreate()) */
+    /** admin_id of the session (for areaCreate()) */
     private int $adminId = 0;
 
     public function __construct(
@@ -83,11 +83,11 @@ class Access {
     // Laden
 
     /**
-     * Rechte einer Gruppe laden (Session).
+     * Load the rights of a group (session).
      *
-     * @param int $groupId  group_id der angemeldeten Gruppe
-     * @param int $adminId  admin_id der Session (Owner neuer Datensätze)
-     * @return bool         false, wenn es keine Gruppendatei gibt
+     * @param int $groupId  group_id of the signed-in group
+     * @param int $adminId  admin_id of the session (owner of new records)
+     * @return bool         false if there is no group file
      */
     public function load(int $groupId, int $adminId = 0): bool
     {
@@ -99,7 +99,7 @@ class Access {
     }
 
     /**
-     * Rechte verwerfen (Abmeldung, Wechsel der Session).
+     * Discard the rights (sign-out, change of session).
      */
     public function unload(): void
     {
@@ -114,8 +114,8 @@ class Access {
     }
 
     /**
-     * Superuser-Gruppe? Ungeladen: false (es gibt keine Gruppe, die alles dürfte -
-     * verweigert wird trotzdem nichts, siehe Klassenkommentar).
+     * Superuser group? Not loaded: false (there is no group that may do everything -
+     * nevertheless nothing is denied, see class comment).
      */
     public function isSuperuser(): bool
     {
@@ -128,13 +128,13 @@ class Access {
     }
 
     // ====================
-    // Oberflächen
+    // Interfaces
 
     /**
-     * Darf die geladene Gruppe diese Oberfläche benutzen? Anders als die übrigen
-     * Fragen ungeladen ein Nein: ohne Gruppe gibt es keine Anmeldung.
+     * May the loaded group use this interface? Unlike the other questions,
+     * a no when not loaded: without a group there is no sign-in.
      *
-     * @param string $interface  eine aus INTERFACES
+     * @param string $interface  one of INTERFACES
      */
     public function interface(string $interface): bool
     {
@@ -143,7 +143,7 @@ class Access {
     }
 
     /**
-     * Oberflächen der geladenen Gruppe. Ungeladen: leer.
+     * Interfaces of the loaded group. Not loaded: empty.
      *
      * @return string[]
      */
@@ -153,8 +153,8 @@ class Access {
     }
 
     /**
-     * Darf eine Gruppe diese Oberfläche benutzen - ohne sie zu laden (Anmeldung,
-     * bevor es eine Session gibt).
+     * May a group use this interface - without loading it (sign-in,
+     * before there is a session).
      */
     public function groupInterface(int $groupId, string $interface): bool
     {
@@ -163,10 +163,10 @@ class Access {
     }
 
     /**
-     * Oberflächen aus `group`.`details` bereinigen: nur bekannte, in der
-     * Reihenfolge von INTERFACES; fehlt die Angabe, DEFAULT_INTERFACES.
+     * Clean up the interfaces from `group`.`details`: only known ones, in the
+     * order of INTERFACES; if the entry is missing, DEFAULT_INTERFACES.
      *
-     * @param array|null $interfaces  details.interfaces (null = nicht gesetzt)
+     * @param array|null $interfaces  details.interfaces (null = not set)
      * @return string[]
      */
     public static function normalizeInterfaces(?array $interfaces): array
@@ -180,20 +180,20 @@ class Access {
     // Module
 
     /**
-     * Zugriff auf ein Modul?
+     * Access to a module?
      *
-     * Module, die nicht in Cms::$modules stehen oder dort nicht 'listed' sind
-     * (Start, Messaging), stehen jeder Gruppe offen - sie sind Teil der Oberfläche,
-     * nicht der Rechteverwaltung.
+     * Modules that are not in Cms::$modules or are not 'listed' there
+     * (Start, Messaging) are open to every group - they are part of the interface,
+     * not of the rights management.
      *
-     * @param string $module  Modulname wie in Cms::$modules ('Record', 'Tools' ...)
+     * @param string $module  module name as in Cms::$modules ('Record', 'Tools' ...)
      */
     public function module(string $module): bool
     {
-        // Superuser-Modul: der Gruppe 1 vorbehalten, auch wenn eine andere Gruppe
-        // es zugewiesen bekommen hat (settings.php 'superuser', z. B. Logfiles).
-        // Ungeladen bleibt es wie überall bei "ja" - das Modul selbst prüft
-        // zusätzlich mit Backend::isSuperuser(), das auch im CLI antwortet.
+        // Superuser module: reserved for group 1, even if another group
+        // has been assigned it (settings.php 'superuser', e.g. Logfiles).
+        // Not loaded it stays "yes" as everywhere - the module itself additionally
+        // checks with Backend::isSuperuser(), which also answers in the CLI.
         if ($this->isSuperuserModule($module) && !$this->allowsAll()) return false;
 
         if ($this->allowsAll()) return true;
@@ -202,7 +202,7 @@ class Access {
     }
 
     /**
-     * Unterliegt das Modul der Rechteverwaltung (in Cms::$modules und 'listed')?
+     * Is the module subject to rights management (in Cms::$modules and 'listed')?
      */
     public function isManagedModule(string $module): bool
     {
@@ -211,7 +211,7 @@ class Access {
     }
 
     /**
-     * Ist das Modul in seiner settings.php als Superuser-Modul gekennzeichnet?
+     * Is the module marked as a superuser module in its settings.php?
      */
     public function isSuperuserModule(string $module): bool
     {
@@ -220,10 +220,10 @@ class Access {
     }
 
     /**
-     * Zusatzrecht in einem Modul (settings.php 'access')?
+     * Additional right in a module (settings.php 'access')?
      *
-     * @param string $module  Modulname
-     * @param string $right   interner Name des Rechts, z. B. 'developer'
+     * @param string $module  module name
+     * @param string $right   internal name of the right, e.g. 'developer'
      */
     public function moduleRight(string $module, string $right): bool
     {
@@ -234,8 +234,8 @@ class Access {
     }
 
     /**
-     * Module, auf die die Gruppe Zugriff hat: Name => gewährte Zusatzrechte.
-     * Ungeladen: leer (der Aufrufer muss selbst entscheiden, ob "alles" gilt).
+     * Modules the group has access to: name => granted additional rights.
+     * Not loaded: empty (the caller must decide for itself whether "everything" applies).
      *
      * @return array  Modulname => string[]
      */
@@ -248,7 +248,7 @@ class Access {
     // Instanzen
 
     /**
-     * Zugewiesene Instanzen in Backend-Reihenfolge. Ungeladen: leer.
+     * Assigned instances in backend order. Not loaded: empty.
      *
      * @return int[]
      */
@@ -267,7 +267,7 @@ class Access {
     // Bereiche
 
     /**
-     * Leserecht auf einen Bereich (jeder Typ außer Ordner)?
+     * Read right on an area (every type except folders)?
      */
     public function areaRead(int $areaId): bool
     {
@@ -276,10 +276,10 @@ class Access {
     }
 
     /**
-     * Lesbare Bereiche, wahlweise nur bestimmter Typen, in Baumreihenfolge.
-     * Ungeladen: leer.
+     * Readable areas, optionally only of certain types, in tree order.
+     * Not loaded: empty.
      *
-     * @param string[] $types  z. B. Area::CONTENT_TYPES; leer = alle
+     * @param string[] $types  e.g. Area::CONTENT_TYPES; empty = all
      * @return int[]
      */
     public function readableAreaIds(array $types = []): array
@@ -293,10 +293,10 @@ class Access {
     }
 
     /**
-     * Lesbare Bereiche als Filter für Abfragen und Bäume: null, wenn nichts
-     * einzuschränken ist (Superuser, ungeladen), sonst die Ids (ggf. leer).
+     * Readable areas as a filter for queries and trees: null if nothing
+     * is to be restricted (superuser, not loaded), otherwise the ids (possibly empty).
      *
-     * @param string[] $types  wie readableAreaIds()
+     * @param string[] $types  as readableAreaIds()
      * @return int[]|null
      */
     public function areaFilter(array $types = []): ?array
@@ -306,11 +306,11 @@ class Access {
     }
 
     /**
-     * Bereiche, in denen die Gruppe Datensätze anlegen darf (Leserecht und
-     * group_write) - für Zielbereichslisten (Verschieben, Import); null = keine
-     * Einschränkung.
+     * Areas in which the group may create records (read right and
+     * group_write) - for target area lists (moving, import); null = no
+     * restriction.
      *
-     * @param string[] $types  wie readableAreaIds()
+     * @param string[] $types  as readableAreaIds()
      * @return int[]|null
      */
     public function creatableAreaFilter(array $types = []): ?array
@@ -324,7 +324,7 @@ class Access {
     }
 
     /**
-     * Zugewiesene Instanzen als Filter: null = keine Einschränkung.
+     * Assigned instances as a filter: null = no restriction.
      *
      * @return int[]|null
      */
@@ -335,11 +335,11 @@ class Access {
     }
 
     /**
-     * Schreibrecht auf einen Datensatz in einem Bereich.
+     * Write right on a record in an area.
      *
      * @param int      $areaId
-     * @param int|null $ownerId  owner_id des Datensatzes; null/0 = kein Owner
-     *                           (zählt als fremd)
+     * @param int|null $ownerId  owner_id of the record; null/0 = no owner
+     *                           (counts as foreign)
      */
     public function areaWrite(int $areaId, ?int $ownerId): bool
     {
@@ -347,7 +347,7 @@ class Access {
     }
 
     /**
-     * Löschrecht auf einen Datensatz in einem Bereich (Parameter wie areaWrite()).
+     * Delete right on a record in an area (parameters as areaWrite()).
      */
     public function areaDelete(int $areaId, ?int $ownerId): bool
     {
@@ -355,8 +355,8 @@ class Access {
     }
 
     /**
-     * Darf die Gruppe in dem Bereich Datensätze anlegen? Der Owner eines neuen
-     * Datensatzes ist der Session-Admin, das Recht also group_write.
+     * May the group create records in the area? The owner of a new
+     * record is the session admin, so the right is group_write.
      */
     public function areaCreate(int $areaId): bool
     {
@@ -365,7 +365,7 @@ class Access {
     }
 
     /**
-     * Zusatzrecht "Owner anpassen" in dem Bereich?
+     * Additional right "adjust owner" in the area?
      */
     public function areaSetOwner(int $areaId): bool
     {
@@ -374,7 +374,7 @@ class Access {
     }
 
     /**
-     * Leserecht auf einen Template-Bereich.
+     * Read right on a template area.
      */
     public function templateRead(int $areaId): bool
     {
@@ -382,8 +382,8 @@ class Access {
     }
 
     /**
-     * Schreibrecht auf einen Template-Bereich (Flag group_write; Templates haben
-     * keinen Owner).
+     * Write right on a template area (flag group_write; templates have
+     * no owner).
      */
     public function templateWrite(int $areaId): bool
     {
@@ -392,8 +392,8 @@ class Access {
     }
 
     /**
-     * Rechte-Flags eines Bereichs, wie sie in der Gruppendatei stehen; leer, wenn
-     * kein Leserecht besteht. Für die Anzeige (Gruppen-Info, Reiter "Zugriff").
+     * Right flags of an area as they appear in the group file; empty if
+     * there is no read right. For display (group info, tab "Access").
      *
      * @return array  group_write, group_delete, other_write, other_delete, set_owner (bool)
      */
@@ -403,7 +403,7 @@ class Access {
     }
 
     /**
-     * write/delete je nach Gruppe des Owners.
+     * write/delete depending on the group of the owner.
      */
     private function areaFlag(int $areaId, ?int $ownerId, string $action): bool
     {
@@ -417,9 +417,9 @@ class Access {
     }
 
     /**
-     * Gruppe eines Admins (Owner eines Datensatzes), je Request gemerkt.
+     * Group of an admin (owner of a record), remembered per request.
      *
-     * @return int  group_id; 0, wenn es den Admin nicht gibt
+     * @return int  group_id; 0 if the admin does not exist
      */
     public function groupOf(int $adminId): int
     {
@@ -436,7 +436,7 @@ class Access {
     // Sprachen
 
     /**
-     * Leserecht auf eine Sprache (Inhalte im Modul Record)?
+     * Read right on a language (contents in the Record module)?
      */
     public function languageRead(int $languageId): bool
     {
@@ -445,7 +445,7 @@ class Access {
     }
 
     /**
-     * Schreibrecht auf eine Sprache?
+     * Write right on a language?
      */
     public function languageWrite(int $languageId): bool
     {
@@ -454,7 +454,7 @@ class Access {
     }
 
     /**
-     * Lesbare Sprachen (einschließlich der schreibbaren). Ungeladen: leer.
+     * Readable languages (including the writable ones). Not loaded: empty.
      *
      * @return int[]
      */
@@ -464,7 +464,7 @@ class Access {
     }
 
     /**
-     * Schreibbare Sprachen. Ungeladen: leer.
+     * Writable languages. Not loaded: empty.
      *
      * @return int[]
      */
@@ -481,8 +481,8 @@ class Access {
     // Status
 
     /**
-     * Darf die Gruppe diesen Status setzen (rel_group_status)? Lesen darf jede
-     * Gruppe alle Status - eingeschränkt wird nur das Setzen.
+     * May the group set this status (rel_group_status)? Every group may read
+     * all statuses - only setting them is restricted.
      */
     public function statusWrite(int $statusId): bool
     {
@@ -491,7 +491,7 @@ class Access {
     }
 
     /**
-     * Setzbare Status (Reihenfolge wie `status`.`position`). Ungeladen: leer.
+     * Settable statuses (order as `status`.`position`). Not loaded: empty.
      *
      * @return int[]
      */
@@ -501,13 +501,13 @@ class Access {
     }
 
     /**
-     * Darf die Gruppe einen Datensatz ändern? Schreibrecht im Bereich (areaWrite())
-     * UND das Recht, seinen aktuellen Status zu setzen - wer einen Status nicht
-     * vergeben darf, bearbeitet auch keinen Datensatz, der ihn schon trägt (flacher
-     * Workflow: ein freigeschalteter Datensatz bleibt für die Redaktion gesperrt).
+     * May the group change a record? Write right in the area (areaWrite())
+     * AND the right to set its current status - whoever may not assign a status
+     * does not edit a record that already carries it either (flat
+     * workflow: an enabled record stays locked for the editorial team).
      *
      * @param int      $areaId
-     * @param int|null $ownerId   Owner des Datensatzes (siehe areaWrite())
+     * @param int|null $ownerId   owner of the record (see areaWrite())
      * @param int      $statusId  record.status_id
      */
     public function recordWrite(int $areaId, ?int $ownerId, int $statusId): bool
@@ -519,23 +519,23 @@ class Access {
     // Verweigern
 
     /**
-     * Darf ein Backend-Script eines Moduls aufgerufen werden? (Backend::backendPath())
+     * May a backend script of a module be called? (Backend::backendPath())
      *
-     *     Modul erlaubt    -> ja, sofern das Script kein Zusatzrecht verlangt, das
-     *                         fehlt (settings.php 'script_access': Script => Recht,
-     *                         z. B. die Reiter des Moduls Tools)
-     *     Modul verweigert -> ja nur für ein Script aus settings.php 'shared' im
-     *                         Lookup-Aufruf: Auswahllisten und Vorschaublöcke, die
-     *                         andere Module in ihren Formularen brauchen (Admin-Lookup
-     *                         im Modul Messaging, Datensatz-/Template-Lookup im Modul
-     *                         Instance); Lookup-Aufruf = Request-Parameter src_field
-     *                      -> ja für ein Script aus settings.php 'personal': die
-     *                         eigenen Einstellungen jedes Admins (Admin/settings.php,
-     *                         Admin/totp.php) - das Script beschränkt Nicht-Superuser
-     *                         selbst auf das eigene Konto
+     *     module allowed   -> yes, provided the script does not require an additional right
+     *                         that is missing (settings.php 'script_access': script => right,
+     *                         e.g. the tabs of the Tools module)
+     *     module denied    -> yes only for a script from settings.php 'shared' in a
+     *                         lookup call: selection lists and preview blocks that
+     *                         other modules need in their forms (admin lookup in the
+     *                         Messaging module, record/template lookup in the Instance
+     *                         module); lookup call = request parameter src_field
+     *                      -> yes for a script from settings.php 'personal': the
+     *                         personal settings of each admin (Admin/settings.php,
+     *                         Admin/totp.php) - the script itself restricts non-superusers
+     *                         to their own account
      *
-     * @param string $module  Modulname aus dem Pfad ('Admin')
-     * @param string $script  Dateiname des Scripts ('admin_list.php')
+     * @param string $module  module name from the path ('Admin')
+     * @param string $script  file name of the script ('admin_list.php')
      */
     public function script(string $module, string $script): bool
     {
@@ -550,11 +550,11 @@ class Access {
     }
 
     /**
-     * Backend: Meldung "Zugriff verweigert" ausgeben und abbrechen.
+     * Backend: output the "access denied" message and abort.
      *
-     * Für die Einstiegsscripte der Module ({Modul}/backend/*.php): sie laufen im
-     * Layer, eine Meldung im Layer ist deshalb der richtige Ort - nicht
-     * '##accessdenied##', das die Anmeldung öffnen würde.
+     * For the entry scripts of the modules ({module}/backend/*.php): they run in the
+     * layer, so a message in the layer is the right place - not
+     * '##accessdenied##', which would open the sign-in.
      */
     public function denied(): never
     {
@@ -563,8 +563,8 @@ class Access {
     }
 
     /**
-     * Die Meldung "Zugriff verweigert" als HTML - für Methoden, die die Seite
-     * regulär beenden wollen (container_footer, return).
+     * The "access denied" message as HTML - for methods that want to end the page
+     * normally (container_footer, return).
      */
     public function deniedHtml(): string
     {
@@ -576,7 +576,7 @@ class Access {
     // ====================
 
     /**
-     * Ungeladen oder Superuser: jede Frage wird mit Ja beantwortet.
+     * Not loaded or superuser: every question is answered with yes.
      */
     private function allowsAll(): bool
     {

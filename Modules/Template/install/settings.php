@@ -8,9 +8,9 @@ return [
 'description' => '#template.module_description',
 'icon' => 'extension',
 'listed' => true,
-// API: lesen und anlegen/ändern (TemplateApi)
+// API: read and create/change (TemplateApi)
 'api' => ['TemplateApi'],
-// Startseiten-Widget: Parser-Meldungen der Templates und der Hinweis auf CMS:NONCE
+// Start page widget: parser messages of the templates and the note on CMS:NONCE
 // (Camindo\Core\Widgets, TemplateBackend::widget())
 'widget' => [
     'class'  => 'TemplateBackend',
@@ -18,10 +18,10 @@ return [
     'label'  => '#template.widget_label',
     'icon'   => 'data_object',
 ],
-// Scripte, die andere Module ohne Modulzugriff als Lookup aufrufen dürfen (Access::script())
+// Scripts that other modules may call as lookup without module access (Access::script())
 'shared' => ['template_list.php', 'template_search.php'],
-// Zusätzliche Modulrechte:
-// keine
+// Additional module rights:
+// none
 'access' => [
 ]
 

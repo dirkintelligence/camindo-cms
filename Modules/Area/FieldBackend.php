@@ -1,57 +1,57 @@
 <?php
 /**
- * Backend-Oberfläche für die Eingabefelder eines Inhaltsbereichs (Tabelle `field`).
+ * Backend interface for the input fields of a content area (table `field`).
  *
- * Einstiegspunkte (die Scripte liegen in backend/):
+ * Entry points (the scripts are in backend/):
  *
  *     field_list.php     -> list()              Feldliste eines Bereichs
  *     field_info.php     -> info()              Detailansicht eines Feldes
- *     field_create.php   -> create()            Schritt 1: Feldtyp auswählen
- *     field_edit.php     -> edit()              Schritt 2 und alles weitere
- *     field_convert.php  -> convert()           Typ / Mehrsprachigkeit nachträglich ändern
- *     ajax_*.php         -> updateVisibility()  Sichtbarkeits-Häkchen in der Liste
+ *     field_create.php   -> create()            step 1: select field type
+ *     field_edit.php     -> edit()              step 2 and everything else
+ *     field_convert.php  -> convert()           change type / multilingualism afterwards
+ *     ajax_*.php         -> updateVisibility()  visibility ticks in the list
  *
  * ANLEGEN IN ZWEI SCHRITTEN
  * --------------------
- * Anders als in den übrigen Modulen führt "Neu" nicht direkt ins Formular. create()
- * zeigt erst die Typauswahl, weil der Typ das Formular bestimmt und sich über die
- * Maske nicht mehr ändern lässt. Der gewählte Typ landet als &function=create&data[type]=…
- * in der URL, edit() baut daraus das passende Formular.
+ * Unlike in the other modules, "New" does not lead directly to the form. create()
+ * first shows the type selection, because the type determines the form and it cannot be changed via the
+ * mask any more. The selected type ends up as &function=create&data[type]=…
+ * in the URL, edit() builds the matching form from it.
  *
- * TYP ÄNDERN NUR AUSDRÜCKLICH
+ * CHANGE TYPE ONLY EXPLICITLY
  * --------------------
- * Typ und Mehrsprachigkeit eines bestehenden Feldes ändert allein convert() - über den
- * Button "Typ ändern" der Detailansicht: erst die Auswahl der möglichen Ziele
- * (Field::conversionTargets(), mit Hinweis, wo Inhalte verloren gehen können), dann
- * eine Bestätigung, dann Field::convert(). Der Schalter "mehrsprachig" in der
- * Eingabemaske ist bei bestehenden Feldern deshalb nur noch eine Anzeige.
+ * Only convert() changes type and multilingualism of an existing field - via the
+ * button "Change type" of the detail view: first the selection of the possible targets
+ * (Field::conversionTargets(), with a note where content can be lost), then
+ * a confirmation, then Field::convert(). The switch "multilingual" in the
+ * input mask is therefore only a display for existing fields.
  *
- * DAS FORMULAR IST FÜR JEDEN TYP EIN ANDERES
+ * THE FORM IS DIFFERENT FOR EACH TYPE
  * --------------------
- * _editForm() wählt zuerst eine HTML-Vorlage (area.field_form_*) und blendet dann Block
- * für Block die Eingaben ein, die zu Typ und display_type passen: Präfix/Suffix nur bei
- * Text- und Zahlenfeldern, Zielbereiche nur bei Relationen und Pointern, Mime-Typen nur
- * beim Upload, Konverter nur beim Thumbnail. Was nicht passt, wird nicht gerendert -
- * die zugehörigen Platzhalter räumt form(removePlaceholders: true) am Ende weg.
+ * _editForm() first selects an HTML template (area.field_form_*) and then shows block
+ * by block the inputs that match type and display_type: prefix/suffix only for
+ * text and number fields, target areas only for relations and pointers, MIME types only
+ * for upload, converters only for thumbnails. What does not fit is not rendered -
+ * the associated placeholders are removed at the end by form(removePlaceholders: true).
  *
  * META-FELDER
  * --------------------
- * Trägt ein Feld den Namen einer festen Spalte aus Cms::$schema (status_id, online_at,
- * template_id, …), gilt es als Meta-Feld: Name und Typ stehen fest und werden nur noch
- * angezeigt (formStatic + formHidden). Der Redakteur kann daran nur Beschriftung,
- * Darstellung und Sichtbarkeit einstellen - der Inhalt liegt in `record` selbst und
- * nicht in einer data_*-Tabelle.
+ * If a field carries the name of a fixed column from Cms::$schema (status_id, online_at,
+ * template_id, …), it counts as a meta field: name and type are fixed and are only
+ * displayed (formStatic + formHidden). The editor can only set the label,
+ * display and visibility on it - the content lies in `record` itself and
+ * not in a data_* table.
  *
- * SICHTBARKEIT ALS PSEUDO-FELD
+ * VISIBILITY AS A PSEUDO FIELD
  * --------------------
- * In der Datenbank sind es drei Bit-Spalten (visibility_input / _search / _list). Im
- * Formular ist es EINE Checkbox-Gruppe namens 'visibility'. _visibilitySerialize() macht
- * aus den drei Spalten die Liste, _visibilityUnserialize() beim Speichern wieder drei
- * Werte daraus. Der Sonderfall 'fulltext' hat nur die Suchsichtbarkeit und umgeht die
+ * In the database these are three bit columns (visibility_input / _search / _list). In the
+ * form it is ONE checkbox group named 'visibility'. _visibilitySerialize() makes
+ * the list from the three columns, _visibilityUnserialize() turns it back into three
+ * values when saving. The special case 'fulltext' has only the search visibility and bypasses the
  * Umwandlung ganz.
  *
- * @see Camindo\Core\Modules\Area\Field       Dataset/Model der Tabelle `field`
- * @see Camindo\Core\Modules\Area\AreaBackend Backend des zugehörigen Bereichs
+ * @see Camindo\Core\Modules\Area\Field       Dataset/model of the table `field`
+ * @see Camindo\Core\Modules\Area\AreaBackend Backend of the associated area
  * @see Camindo\Core\Backend                    $displayTypes, $validationFlags, formField()
  */
 namespace Camindo\Core\Modules\Area;
@@ -72,17 +72,17 @@ abstract class FieldBackend {
     protected ?array $areaData = [];
     protected string $function = '';
 
-    // Die drei Sichtbarkeiten; im Formular eine Checkbox-Gruppe, in der Tabelle drei
-    // Bit-Spalten visibility_{input|search|list}. Dient auch als Weißliste in
+    // The three visibilities; in the form a checkbox group, in the table three
+    // bit columns visibility_{input|search|list}. Also serves as an allowlist in
     // updateVisibility().
     protected array $visibilityFields = ['input', 'search', 'list'];
 
-    // Verknüpfungen je abgewähltem Zielbereich (area_id => Anzahl) - gefüllt von
-    // _editSave(), gezeigt von _editConfirmLinksForm()
+    // Links per deselected target area (area_id => count) - filled by
+    // _editSave(), shown by _editConfirmLinksForm()
     protected array $linkCounts = [];
 
-    protected array $fieldSchema = [];  // Schema der Tabelle `field` (die Felddefinition)
-    protected array $recordSchema = []; // Schema der Tabelle `record` (die Meta-Felder)
+    protected array $fieldSchema = [];  // Schema of the table `field` (the field definition)
+    protected array $recordSchema = []; // Schema of the table `record` (the meta fields)
 
     public function __construct(
         protected Backend $backend,
@@ -93,12 +93,12 @@ abstract class FieldBackend {
         protected Area $area,
         protected Field $field,
         protected InstanceCache $instanceCache,
-        protected AreaBackend $areaBackend,     // Hinweis "Volltext veraltet" (Feldliste)
+        protected AreaBackend $areaBackend,     // Note "full text outdated" (field list)
     )
     {}
 
     /**
-     * Headline mit Feld-Label
+     * Headline with field label
      */
     protected function _headline(): void
     {
@@ -117,11 +117,11 @@ abstract class FieldBackend {
     }
 
     /**
-     * Bereichsdaten laden und das Bereichs-Label als Kopfzeile zurückgeben.
+     * Load area data and return the area label as the header line.
      *
-     * Gibt HTML zurück, statt es auszugeben - der Aufrufer entscheidet, ob und wo es
-     * hingehört. Schlägt das Laden fehl, wird zusätzlich $this->function auf 'skip'
-     * gesetzt: edit() überspringt dann Formular und Aktionen und zeigt nur den Fehler.
+     * Returns HTML instead of outputting it - the caller decides whether and where it
+     * belongs. If loading fails, $this->function is additionally set to 'skip'
+     * : edit() then skips the form and actions and only shows the error.
      */
     protected function _loadArea(): string
     {

@@ -1,51 +1,51 @@
 <?php
 /**
- * Lösch-Policies ausführen (Modul Privacy). Instanzname im Code: $privacyJobs.
+ * Execute deletion policies (module Privacy). Instance name in the code: $privacyJobs.
  *
- * Wird ein Datensatz eines Inhaltsbereichs gelöscht, löscht ihn niemand mehr direkt:
- * delete() legt für jeden passenden Block der Policy des Bereichs (DeletePolicy) einen
- * Auftrag in `privacy_job` an - fällig sofort oder nach der eingestellten Frist - und
- * führt die sofort fälligen gleich aus. Die übrigen erledigt runDue() - aus der
- * Zeitplaner-Aufgabe "Lösch-Policies anwenden" (Typ privacy, SchedulerRunner).
+ * When a record of a content area is deleted, nobody deletes it directly any more:
+ * delete() creates a job in `privacy_job` for each matching block of the policy of the
+ * area (DeletePolicy) - due immediately or after the set period - and
+ * runs the immediately due ones straight away. The rest is handled by runDue() - from the
+ * scheduler task "apply deletion policies" (type privacy, SchedulerRunner).
  *
- * AUSLÖSER (DeletePolicy::SOURCES)
+ * TRIGGERS (DeletePolicy::SOURCES)
  * --------------------
- *     record   delete() - jeder Weg: RecordService::delete() (Maske, Stapel, API),
+ *     record   delete() - every way: RecordService::delete() (mask, batch, API),
  *              CMS:USER_DELETE (RecordUser::cmsDelete())
- *     profile  ein Profil wurde gelöscht (Auslöser record oder mit seinem Bereich):
- *              immer alle Datensätze mit record.user_id = Profil (triggerLinked())
- *     area     ein Bereich wurde gelöscht (scheduleArea(), aus
- *              Area::hookOnSoftDelete()) - seine Datensätze liegen schon im Papierkorb
+ *     profile  a profile was deleted (trigger record or with its area):
+ *              always all records with record.user_id = profile (triggerLinked())
+ *     area     an area was deleted (scheduleArea(), from
+ *              Area::hookOnSoftDelete()) - its records already lie in the trash
  *
- * UNTERDATENSÄTZE
+ * SUB-RECORDS
  * --------------------
- * Mit dem Hauptdatensatz gelöschte Kinder im Baum ($withChilds) und fest verknüpfte
- * Inhalte (link, rekursiv) bekommen die Aufträge der Policy IHRES Bereichs - ohne
- * soft_delete und purge (DeletePolicy::REMOVE_ACTIONS): Papierkorb und endgültiges
- * Löschen erledigt der Hauptdatensatz für alle (Teilbaum, cascadeDependents()).
- * Dessen Aufträge tragen dafür 'children' in `fields`.
+ * Children in the tree deleted together with the main record ($withChilds) and firmly
+ * linked contents (link, recursively) get the jobs of the policy of THEIR area - without
+ * soft_delete and purge (DeletePolicy::REMOVE_ACTIONS): the main record handles the trash and
+ * final deletion for all (subtree, cascadeDependents()).
+ * Its jobs carry 'children' in `fields` for this.
  *
- * Bei Profil-Datensätzen werden - unabhängig von Policy - sofort die bekannten Geräte
- * und Sitzungen des Users gelöscht.
+ * For profile records the known devices and sessions of the user are deleted
+ * immediately - independent of the policy.
  *
- * AUFTRÄGE
+ * JOBS
  * --------------------
- * Jeder Auftrag trägt die Felder seines Blocks bei sich: eine spätere Änderung der
- * Policy wirkt nur auf künftige Löschungen. Bei gleichem Zeitpunkt laufen die Aktionen
- * in der Reihenfolge von DeletePolicy::ACTIONS (Datenbank vor Audit-Log). Scheitert
- * ein Auftrag (etwa weil jemand den Datensatz gerade bearbeitet), bleibt er offen und
- * wird beim nächsten Lauf wiederholt - höchstens MAX_ATTEMPTS mal, danach steht er
- * mit Fehler im Log 'privacy'. Wird ein Datensatz aus dem Papierkorb
- * wiederhergestellt, verfallen seine offenen Aufträge (cancel()).
+ * Each job carries the fields of its block with it: a later change to the
+ * policy only affects future deletions. At the same point in time the actions
+ * run in the order of DeletePolicy::ACTIONS (database before audit log). If
+ * a job fails (for example because someone is just editing the record), it stays open and
+ * is repeated on the next run - at most MAX_ATTEMPTS times, after that it is
+ * recorded with an error in the log 'privacy'. If a record is
+ * restored from the trash, its open jobs expire (cancel()).
  *
- * Datenbank-Aktionen laufen im Policy-Modus der Datasets (Dataset::asPolicy()):
- * keine Pflichtfelder, keine Gruppenrechte, im Audit-Log als 'privacy' ohne die
- * bisherigen Werte. Hat audit_set_fields das Audit-Log eines Datensatzes schon
- * überschrieben, schreibt AuditLog::write() jeden späteren Eintrag (etwa 'purge' mit
- * dem letzten Stand) gleich so (auditOverride()).
+ * Database actions run in the policy mode of the datasets (Dataset::asPolicy()):
+ * no mandatory fields, no group rights, in the audit log as 'privacy' without the
+ * previous values. If audit_set_fields has already overwritten the audit log of a record,
+ * AuditLog::write() writes every later entry (for example 'purge' with
+ * the last state) in the same way (auditOverride()).
  *
  * @see Camindo\Core\Modules\Privacy\DeletePolicy
- * @see Camindo\Core\Modules\Privacy\PrivacyBackend::hintHtml()  Hinweis im Löschdialog
+ * @see Camindo\Core\Modules\Privacy\PrivacyBackend::hintHtml()  note in the delete dialog
  */
 namespace Camindo\Core\Modules\Privacy;
 
@@ -60,10 +60,10 @@ use Camindo\Core\Modules\Record\Record;
 
 class PrivacyJobs {
 
-    /** Versuche je Auftrag, bevor er als gescheitert abgelegt wird */
+    /** Attempts per job before it is recorded as failed */
     public const MAX_ATTEMPTS = 20;
 
-    /** Aufträge je Lauf von runDue() */
+    /** Jobs per run of runDue() */
     public const RUN_LIMIT = 500;
 
     public function __construct(
@@ -80,25 +80,25 @@ class PrivacyJobs {
     {}
 
     // ====================
-    // Auslösen
+    // Triggering
 
     /**
-     * Einen Datensatz nach der Policy seines Bereichs löschen - mit seinen
-     * Unterdatensätzen (siehe Klassenkommentar). Ist er ein Profil, werden danach
-     * immer alle Datensätze des Users mit dem Auslöser 'profile' gelöscht.
+     * Delete a record according to the policy of its area - together with its
+     * sub-records (see class comment). If it is a profile, afterwards
+     * all records of the user are always deleted with the trigger 'profile'.
      *
-     * @param int           $recordId    produktiver Datensatz
+     * @param int           $recordId    live record
      * @param string        $source      record | profile
-     * @param callable|null $softDelete  function(int $recordId): ?string - wie die
-     *                                   sofortige Aktion soft_delete ausgeführt wird
-     *                                   (RecordService: Teilbaum, Hintergrund);
+     * @param callable|null $softDelete  function(int $recordId): ?string - how the
+     *                                   immediate action soft_delete is executed
+     *                                   (RecordService: subtree, background);
      *                                   null = Record::delete()
-     * @param bool          $withChilds  Kinder im Baum mit löschen, sonst rücken sie
-     *                                   eine Ebene hoch
-     * @return string|null  'deleted' (im Papierkorb bzw. endgültig gelöscht),
-     *                      'background' (Papierkorb per Hintergrundprozess),
-     *                      'changed' (bleibt, angepasst), 'scheduled' (nur spätere
-     *                      Aktionen), null bei Fehler (Meldung in Cms::errors)
+     * @param bool          $withChilds  delete children in the tree too, otherwise they move
+     *                                   up one level
+     * @return string|null  'deleted' (in the trash resp. finally deleted),
+     *                      'background' (trash via background process),
+     *                      'changed' (remains, adjusted), 'scheduled' (only later
+     *                      actions), null on error (message in Cms::errors)
      */
     public function delete(int $recordId, string $source = 'record', ?callable $softDelete = null, bool $withChilds = false): ?string
     {
@@ -122,7 +122,7 @@ class PrivacyJobs {
 
         $subIds = $this->subrecordIds($row, $withChilds, false);
         $ids = array_merge([$recordId], $subIds);
-        // Profile: Geräte und Sitzungen immer sofort weg
+        // Profiles: devices and sessions always removed immediately
         $profileIds = [];
         foreach ($ids as $id) {
             $member = $id === $recordId ? $row : $this->recordRow($id);
@@ -131,7 +131,7 @@ class PrivacyJobs {
         foreach ($profileIds as $id) $this->removeLogins($id);
 
         if (!$policy) {
-            // Bereich ohne Policy (vor der Migration angelegt): wie früher in den Papierkorb
+            // Area without policy (created before the migration): to the trash as before
             $this->system->log('privacy', "record $recordId: area {$row['area_id']} has no delete policy - moved to trash");
             $status = $this->softDelete($recordId, $softDelete, $withChilds) === 'background' ? 'background' : 'deleted';
             foreach ($profileIds as $id) $this->triggerLinked($id);
@@ -156,11 +156,11 @@ class PrivacyJobs {
         $this->system->log('privacy', sprintf('record %d (area %d): policy %d, source %s, %d subrecords, %d jobs',
             $recordId, (int)$row['area_id'], (int)$policy['privacy_policy_id'], $source, count($subIds), $count));
 
-        // Datensätze der gelöschten Profile - vor den eigenen Aktionen, solange die
-        // Verknüpfung noch steht
+        // Records of the deleted profiles - before the own actions, while the
+        // link still exists
         foreach ($profileIds as $id) $this->triggerLinked($id);
 
-        // Sofort Fälliges gleich ausführen
+        // Run immediately due jobs right away
         $status = 'scheduled';
         foreach ($this->dueJobs($ids) as $job) {
             $result = $this->run($job, (int)$job['record_id'] === $recordId ? $softDelete : null);
@@ -173,20 +173,20 @@ class PrivacyJobs {
     }
 
     /**
-     * Ein Bereich wurde gelöscht (in den Papierkorb, Area::hookOnSoftDelete()): für
-     * seine dabei gelöschten Datensätze die Blöcke der Bereichs-Policy mit dem
-     * Auslöser 'area' planen. Ausgeführt werden sie vom nächsten Lauf der
-     * Zeitplaner-Aufgabe - auch die sofort fälligen; der Bereich wird noch gelöscht
-     * (Transaktion). Wird der Bereich wiederhergestellt, verfallen die Aufträge
+     * An area was deleted (into the trash, Area::hookOnSoftDelete()): for
+     * its records deleted in the process, schedule the blocks of the area policy with the
+     * trigger 'area'. They are executed by the next run of the
+     * scheduler task - also the immediately due ones; the area is still deleted
+     * (transaction). If the area is restored, the jobs expire
      * (Record::hookOnRestore()).
      *
-     * Ein Profil-Bereich: Geräte und Sitzungen der Profile gleich weg, und die
-     * Datensätze der User werden wie bei jedem gelöschten Profil sofort nach ihren
-     * Policies gelöscht (Auslöser 'profile') - das macht eine Wiederherstellung des
-     * Bereichs nicht rückgängig, sie liegen dann ggf. im Papierkorb.
+     * A profile area: devices and sessions of the profiles are removed at once, and the
+     * records of the users are deleted immediately according to their
+     * policies, as with any deleted profile (trigger 'profile') - restoring the
+     * area does not undo this, they may then lie in the trash.
      *
-     * @param int[] $recordIds  die mit dem Bereich gelöschten Datensätze, Blätter zuerst
-     * @return int  angelegte Aufträge
+     * @param int[] $recordIds  the records deleted with the area, leaves first
+     * @return int  jobs created
      */
     public function scheduleArea(int $areaId, array $recordIds): int
     {
@@ -215,14 +215,14 @@ class PrivacyJobs {
     }
 
     /**
-     * Beim endgültigen Löschen eines Datensatzes, für den es nie Policy-Aufträge
-     * gab (etwa vor Einführung der Policies in den Papierkorb gelegt), wenigstens
-     * die Aktionen der Bereichs-Policy für das Audit-Log planen - wie beim Auslöser
-     * 'area', Frist ab dem Löschen (record.changed_at des Papierkorbs). Ausgeführt von runDue(), also
-     * nach dem Eintrag 'purge'. Läuft in der Transaktion des Löschens
-     * (Record::hookOnDelete()) - ein Rollback nimmt die Aufträge mit.
+     * When finally deleting a record that never had policy jobs
+     * (e.g. put into the trash before the policies were introduced), at least
+     * schedule the actions of the area policy for the audit log - as with the trigger
+     * 'area', period counted from the deletion (record.changed_at of the trash). Executed by runDue(), so
+     * after the entry 'purge'. Runs in the transaction of the deletion
+     * (Record::hookOnDelete()) - a rollback takes the jobs with it.
      *
-     * @return int  angelegte Aufträge
+     * @return int  jobs created
      */
     public function scheduleWithoutPolicy(int $recordId): int
     {
@@ -231,7 +231,7 @@ class PrivacyJobs {
             $this->db->query("SELECT `area_id`, `user_id`, `deleted`, `changed_at` FROM `record` WHERE `record_id` = ? AND `tmp` = 0", 'i', [$recordId]);
             $row = $this->db->fetch();
             if (!$row || (int)$row['deleted'] !== 1) return 0;
-            // Lief schon eine Policy (auch erledigt), regelt sie das Audit-Log
+            // If a policy already ran (also completed), it governs the audit log
             $this->db->query("SELECT COUNT(*) FROM `privacy_job` WHERE `record_id` = ?", 'i', [$recordId]);
             if ((int)($this->db->fetchNum()[0] ?? 0) > 0) return 0;
         }
@@ -252,8 +252,8 @@ class PrivacyJobs {
     }
 
     /**
-     * Aufträge für Blöcke anlegen, fällig ab $start + Frist des Blocks. $children:
-     * soft_delete und purge erfassen die Kinder im Baum (fields.children).
+     * Create jobs for blocks, due from $start + the period of the block. $children:
+     * soft_delete and purge include the children in the tree (fields.children).
      */
     private function insertJobs(int $recordId, int $areaId, ?int $userId, array $policy, string $source, array $blocks,
         \DateTimeImmutable $start, bool $children): void
@@ -284,8 +284,8 @@ class PrivacyJobs {
     }
 
     /**
-     * Offene Aufträge eines Datensatzes verwerfen - er wurde aus dem Papierkorb
-     * wiederhergestellt (Record::hookOnRestore()).
+     * Discard open jobs of a record - it was restored from the trash
+     * (Record::hookOnRestore()).
      */
     public function cancel(int $recordId): int
     {
@@ -301,13 +301,13 @@ class PrivacyJobs {
     }
 
     /**
-     * Aufträge eines Datensatzes entfernen, nachdem sein Audit-Log von Hand gelöscht
-     * wurde (`camindo.php audit delete`): erledigte immer, offene nur, wenn es den
-     * Datensatz nicht mehr gibt - sonst könnte die Policy ihn nicht mehr zu Ende löschen.
-     * Ohne erledigte Aufträge plant ein späteres endgültiges Löschen die Audit-Aktionen
-     * neu (scheduleWithoutPolicy()) - sie räumen dann auch den Eintrag 'purge' ab.
+     * Remove jobs of a record after its audit log was deleted by hand
+     * (`camindo.php audit delete`): completed ones always, open ones only if the
+     * record no longer exists - otherwise the policy could no longer finish deleting it.
+     * Without completed jobs a later final deletion schedules the audit actions
+     * anew (scheduleWithoutPolicy()) - they then also clear the entry 'purge'.
      *
-     * @return array  deleted, kept (offene Aufträge, die bleiben)
+     * @return array  deleted, kept (open jobs that remain)
      */
     public function forget(int $recordId, bool $dryRun = false): array
     {
@@ -327,7 +327,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Offene Aufträge eines Datensatzes */
+    /** Open jobs of a record */
     public function pendingCount(int $recordId): int
     {
         $this->db->pushResult();
@@ -340,7 +340,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Nächster offener Auftrag eines Datensatzes (Zeitpunkt UTC) oder '' */
+    /** Next open job of a record (point in time UTC) or '' */
     public function nextDue(int $recordId): string
     {
         $this->db->pushResult();
@@ -354,11 +354,11 @@ class PrivacyJobs {
     }
 
     // ====================
-    // Ausführen
+    // Execute
 
     /**
-     * Fällige Aufträge aller Datensätze ausführen (höchstens RUN_LIMIT) - aus der
-     * Zeitplaner-Aufgabe vom Typ privacy, die so oft aufruft, bis keine mehr fällig sind.
+     * Execute due jobs of all records (at most RUN_LIMIT) - from the
+     * scheduler task of type privacy, which calls as often until none are due any more.
      *
      * @return array  done, failed
      */
@@ -374,12 +374,12 @@ class PrivacyJobs {
         finally {
             $this->db->popResult();
         }
-        // Audit-Log: Herkunft 'privacy'
+        // Audit log: origin 'privacy'
         $context = $this->auditLog->context();
         $this->auditLog->setContext('privacy');
         try {
             foreach ($jobs as $job) {
-                // Ein früherer Auftrag dieses Laufs kann ihn erledigt haben (cancel())
+                // An earlier job of this run may have completed it (cancel())
                 if ($this->isDone((int)$job['job_id'])) continue;
                 $this->run($job) === null ? $result['failed']++ : $result['done']++;
             }
@@ -391,9 +391,9 @@ class PrivacyJobs {
     }
 
     /**
-     * Einen Auftrag ausführen und das Ergebnis vermerken.
+     * Execute a job and record the result.
      *
-     * @return string|null  deleted | background | changed | done, null bei Fehler
+     * @return string|null  deleted | background | changed | done, null on error
      */
     private function run(array $job, ?callable $softDelete = null): ?string
     {
@@ -434,9 +434,9 @@ class PrivacyJobs {
     }
 
     /**
-     * Felder des Datensatzes überschreiben - über eine Arbeitskopie wie das Frontend
-     * (RecordUser), im Policy-Modus. Ist der Datensatz schon endgültig gelöscht oder
-     * im Papierkorb, gibt es nichts mehr zu tun.
+     * Overwrite the fields of the record - via a working copy like the frontend
+     * (RecordUser), in policy mode. If the record is already finally deleted or
+     * in the trash, there is nothing more to do.
      */
     private function setFields(int $recordId, array $fields, array $job): string
     {
@@ -450,7 +450,7 @@ class PrivacyJobs {
             $data = $this->record->load($recordId);
             if ($data === null) throw new \RuntimeException('record not loadable');
             if (!$tmpId = $this->record->checkOut($data)) throw new \RuntimeException($this->cms->errorMsg(' | ') ?: 'check-out failed');
-            // Mehrsprachige Felder bekommen den Wert in allen Sprachen des Datensatzes
+            // Multilingual fields get the value in all languages of the record
             $languageIds = $this->record->languageIdsOf($tmpId);
             $written = [];
             foreach ($fields as $name => $value) {
@@ -460,8 +460,8 @@ class PrivacyJobs {
                 $multilingual = $this->cms->isMultilingualField($colDef);
                 $value = AuditLog::renderValue((string)$value, $vars);
                 if ($type === 'file') {
-                    // Datei entfernen (samt abgeleiteter Thumbnails) - einen anderen Wert
-                    // kann ein Upload-Feld nicht annehmen; ein Thumbnail-Feld allein nicht
+                    // Remove the file (including derived thumbnails) - an upload field
+                    // cannot accept another value; a thumbnail field alone cannot
                     if ($value !== '' || (string)($colDef['display_type'] ?? '') !== 'upload' || empty($colDef['field_id'])) continue;
                     foreach ($multilingual ? $languageIds : [null] as $languageId) {
                         if (!$this->record->markFileDeleted($tmpId, (int)$colDef['field_id'], $languageId)) {
@@ -501,7 +501,7 @@ class PrivacyJobs {
         });
     }
 
-    /** In den Papierkorb - endgültig gelöscht nach admin.trash_retention_days */
+    /** To the trash - finally deleted after admin.trash_retention_days */
     private function softDelete(int $recordId, ?callable $softDelete, bool $children): string
     {
         $row = $this->recordRow($recordId);
@@ -518,8 +518,8 @@ class PrivacyJobs {
     }
 
     /**
-     * Endgültig löschen, samt Audit-Log - mit den Kindern im Baum ($children, sonst
-     * rücken sie hoch) und den fest verknüpften Inhalten, auch deren Audit-Log.
+     * Finally delete, including the audit log - with the children in the tree ($children, otherwise
+     * they move up) and the firmly linked contents, including their audit log.
      */
     private function purge(int $recordId, bool $children): string
     {
@@ -551,15 +551,15 @@ class PrivacyJobs {
     }
 
     /**
-     * Trigger-Template des Bereichs auf den Datensatz anwenden: onPrivacyAction($action,
-     * &$data, $context) mit dem geladenen Datensatz - mehrsprachige Felder als
-     * language_id => Wert, Dateifelder mit ihren Metadaten. Was das Template an $data
-     * ändert (außer Dateifeldern und Kennungen), wird über eine Arbeitskopie im
-     * Policy-Modus gespeichert; verknüpfte Datensätze, Dateien usw. bearbeitet es
-     * selbst ($this->record, $this->db …). Eine Ausnahme im Template lässt den
-     * Auftrag scheitern (neuer Versuch beim nächsten Lauf). Liegt der Datensatz im
-     * Papierkorb, läuft das Template mit $context['deleted'] = true, gespeichert wird
-     * dann nichts.
+     * Apply the trigger template of the area to the record: onPrivacyAction($action,
+     * &$data, $context) with the loaded record - multilingual fields as
+     * language_id => value, file fields with their metadata. What the template changes
+     * in $data (except file fields and identifiers) is saved via a working copy in
+     * policy mode; linked records, files etc. it handles
+     * itself ($this->record, $this->db …). An exception in the template makes
+     * the job fail (new attempt at the next run). If the record is in the
+     * trash, the template runs with $context['deleted'] = true, and then
+     * nothing is saved.
      */
     private function recordTrigger(int $recordId, string $action, array $job): string
     {
@@ -570,8 +570,8 @@ class PrivacyJobs {
         $schema = $this->record->virtualSchema($areaId);
         $context = $this->triggerContext($job, 'record') + ['deleted' => (int)$row['deleted'] === 1];
 
-        // Im Papierkorb: das Template läuft (verknüpfte Daten aufräumen …), am
-        // Datensatz selbst wird nichts gespeichert - auschecken lässt er sich nicht
+        // In the trash: the template runs (clean up linked data …), nothing is saved
+        // on the record itself - it cannot be checked out
         if ($context['deleted']) {
             return $this->record->asPolicy(function () use ($recordId, $areaId, $action, $context) {
                 $data = $this->record->load($recordId) ?? ['record_id' => $recordId];
@@ -585,7 +585,7 @@ class PrivacyJobs {
             if ($data === null) throw new \RuntimeException('record not loadable');
             if (!$tmpId = $this->record->checkOut($data)) throw new \RuntimeException($this->cms->errorMsg(' | ') ?: 'check-out failed');
             try {
-                // Mehrsprachige Felder in allen Sprachen (load() liefert nur eine)
+                // Multilingual fields in all languages (load() returns only one)
                 $tmp = $this->record->loadTmpData($tmpId);
                 foreach ($schema as $name => $colDef) {
                     if ((string)($colDef['type'] ?? '') === 'file' || !$this->cms->isMultilingualField($colDef)) continue;
@@ -622,9 +622,9 @@ class PrivacyJobs {
     }
 
     /**
-     * Trigger-Template des Bereichs auf das Audit-Log des Datensatzes anwenden:
-     * onPrivacyAction($action, &$entry, $context) je Eintrag (AuditLog::transformObject()).
-     * Auch für einen schon gelöschten Datensatz - der Bereich steht im Auftrag.
+     * Apply the trigger template of the area to the audit log of the record:
+     * onPrivacyAction($action, &$entry, $context) per entry (AuditLog::transformObject()).
+     * Also for an already deleted record - the area is stated in the job.
      */
     private function auditTrigger(int $recordId, string $action, array $job): string
     {
@@ -638,7 +638,7 @@ class PrivacyJobs {
         return 'done';
     }
 
-    /** Ohne Trigger-Template mit onPrivacyAction() kann die Aktion nicht laufen */
+    /** Without a trigger template with onPrivacyAction() the action cannot run */
     private function requireTrigger(int $areaId): void
     {
         if (!$this->triggers->has($this->record, $areaId, 'onPrivacyAction')) {
@@ -646,7 +646,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Drittes Argument von onPrivacyAction() */
+    /** Third argument of onPrivacyAction() */
     private function triggerContext(array $job, string $target): array
     {
         return [
@@ -661,16 +661,16 @@ class PrivacyJobs {
     }
 
     /**
-     * Die Datensätze des Users (record.user_id = Profil) nach den Policies ihrer
-     * Bereiche mit dem Auslöser "profile" löschen - immer, wenn ein Profil gelöscht
-     * wird. Wer dort keinen Block für "profile" hat, bleibt stehen.
+     * Delete the records of the user (record.user_id = profile) according to the policies of their
+     * areas with the trigger "profile" - always when a profile is deleted.
+     * Whoever has no block for "profile" there remains.
      */
     private function triggerLinked(int $profileId): void
     {
         foreach ($this->linkedIds($profileId) as $id) {
             $this->cms->errorsReset();
             if ($this->delete($id, 'profile') === null && $this->cms->hasErrors) {
-                // keine Aktion für "profile" ist kein Fehler des Profils
+                // no action for "profile" is not an error of the profile
                 $this->system->log('privacy', "record $id (linked to profile $profileId): " . $this->cms->errorMsg(' | '));
             }
         }
@@ -681,9 +681,9 @@ class PrivacyJobs {
     // Audit-Log
 
     /**
-     * Schon ausgeführte Überschreibung des Audit-Logs eines Datensatzes - für
-     * AuditLog::write(): [fields, vars] des letzten erledigten Auftrags
-     * audit_set_fields, sonst null.
+     * Already executed overwrite of the audit log of a record - for
+     * AuditLog::write(): [fields, vars] of the last completed job
+     * audit_set_fields, otherwise null.
      */
     public function auditOverride(int $recordId): ?array
     {
@@ -701,16 +701,16 @@ class PrivacyJobs {
     }
 
     // ====================
-    // Beschreibung (Hinweis im Löschdialog)
+    // Description (note in the delete dialog)
 
     /**
-     * Was beim Löschen eines Datensatzes mit der Datenbank geschieht - für den
-     * Hinweis im Löschdialog (PrivacyBackend::hintHtml()).
+     * What happens with the database when a record is deleted - for the
+     * note in the delete dialog (PrivacyBackend::hintHtml()).
      *
-     * @return array  type (Bereichstyp), policy (Bezeichnung), pending (Zeitpunkt des
-     *                nächsten offenen Auftrags oder ''), plan (siehe plan()), linked
-     *                (bei Profilen, Liste je Bereich: count, area, plan - null =
-     *                bleiben), linked_count (alle Datensätze des Users)
+     * @return array  type (area type), policy (label), pending (point in time of the
+     *                next open job or ''), plan (see plan()), linked
+     *                (for profiles, list per area: count, area, plan - null =
+     *                remain), linked_count (all records of the user)
      */
     public function describe(int $recordId, string $source = 'record'): array
     {
@@ -746,7 +746,7 @@ class PrivacyJobs {
     }
 
     /**
-     * Wie describe(), nur für einen Bereich statt eines Datensatzes (Stapelverarbeitung):
+     * Like describe(), but for an area instead of a record (batch processing):
      * type, policy, plan.
      */
     public function describeArea(int $areaId, string $source = 'record'): array
@@ -771,11 +771,11 @@ class PrivacyJobs {
     }
 
     /**
-     * Die Datenbank-Aktionen von Blöcken, nach Zeitpunkt geordnet.
+     * The database actions of blocks, ordered by point in time.
      *
-     * @return array  now: trash | purge | change | keep, now_fields (Liste aus
-     *                label/value/kind für "change"), later: Liste aus delay, unit,
-     *                items (Liste aus kind = purge | trash | field, label, value, kind)
+     * @return array  now: trash | purge | change | keep, now_fields (list of
+     *                label/value/kind for "change"), later: list of delay, unit,
+     *                items (list of kind = purge | trash | field, label, value, kind)
      */
     private function plan(array $blocks, int $areaId): array
     {
@@ -810,7 +810,7 @@ class PrivacyJobs {
             $later[$key] ??= ['delay' => (int)$block['delay'], 'unit' => $block['unit'], 'items' => []];
             $later[$key]['items'] = array_merge($later[$key]['items'], $items);
         }
-        // In den Papierkorb: endgültig nach der Frist des Papierkorbs
+        // To the trash: finally deleted after the period of the trash
         if ($plan['now'] === 'trash') {
             $days = max(0, (int)($this->config->get('admin.trash_retention_days') ?? 7));
             $key = 'days:' . $days;
@@ -822,7 +822,7 @@ class PrivacyJobs {
         return $plan;
     }
 
-    /** Ein Feld der Beschreibung: Beschriftung, Wert, Art der Darstellung */
+    /** A field of the description: label, value, kind of display */
     private function fieldItem(array $colDef, string $name, string $value): array
     {
         $type = (string)($colDef['type'] ?? 'text');
@@ -838,7 +838,7 @@ class PrivacyJobs {
     // ====================
     // Hilfen
 
-    /** record-Zeile mit Typ des Bereichs, null = gibt es nicht (mehr) */
+    /** record row with the type of the area, null = does not exist (any more) */
     private function recordRow(int $recordId): ?array
     {
         $this->db->pushResult();
@@ -852,7 +852,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Policy eines Bereichs als Zeile (blocks dekodiert), null = keine */
+    /** Policy of an area as a row (blocks decoded), null = none */
     public function policyOfArea(int $areaId): ?array
     {
         $this->db->pushResult();
@@ -869,13 +869,13 @@ class PrivacyJobs {
         return $row;
     }
 
-    /** Blöcke einer Policy für einen Auslöser */
+    /** Blocks of a policy for a trigger */
     private function blocksFor(array $policy, string $source): array
     {
         return array_values(array_filter((array)$policy['blocks'], fn($b) => in_array($source, (array)$b['sources'], true)));
     }
 
-    /** Produktive Datensätze eines Users (record.user_id) */
+    /** Live records of a user (record.user_id) */
     private function linkedIds(int $profileId): array
     {
         $this->db->pushResult();
@@ -889,7 +889,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Geräte und Sitzungen eines Profils */
+    /** Devices and sessions of a profile */
     private function removeLogins(int $profileId): void
     {
         $this->db->pushResult();
@@ -902,7 +902,7 @@ class PrivacyJobs {
         }
     }
 
-    /** Fällige, offene Aufträge von Datensätzen in Ausführungsreihenfolge */
+    /** Due, open jobs of records in execution order */
     private function dueJobs(array $recordIds): array
     {
         $recordIds = array_map('intval', $recordIds);
@@ -918,7 +918,7 @@ class PrivacyJobs {
         }
     }
 
-    /** ORDER BY-Ausdruck: Aktionen in der Reihenfolge von DeletePolicy::ACTIONS */
+    /** ORDER BY expression: actions in the order of DeletePolicy::ACTIONS */
     private function actionOrder(): string
     {
         return "FIELD(`action`, '" . implode("', '", DeletePolicy::ACTIONS) . "')";
@@ -954,12 +954,12 @@ class PrivacyJobs {
     }
 
     /**
-     * Unterdatensätze, die mit einem Datensatz gelöscht werden: die Kinder im Baum
-     * ($withChilds), dazu - rekursiv, auch von den Kindern - die fest verknüpften
-     * Inhalte (link). Ohne den Datensatz selbst.
+     * Sub-records that are deleted with a record: the children in the tree
+     * ($withChilds), plus - recursively, also from the children - the firmly linked
+     * contents (link). Without the record itself.
      *
      * @param array $row             recordRow()
-     * @param bool  $includeDeleted  auch Datensätze im Papierkorb (endgültiges Löschen)
+     * @param bool  $includeDeleted  also records in the trash (final deletion)
      * @return int[]
      */
     private function subrecordIds(array $row, bool $withChilds, bool $includeDeleted): array

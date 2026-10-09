@@ -1,48 +1,48 @@
 <?php
  /**
- * Trait für Dataset Kind-Klassen
- * Verarbeitet Daten aus virtuellen Tabellenfeldern in den data-Tabellen
+ * Trait for Dataset subclasses
+ * Processes data from virtual table fields in the data tables
  *
- * Konzept "Einzelschritt-Updates" (Dataset::save() mit $stayTemporary = true):
- * 
- * Konzept "Dateien sofort sichern, Thumbnails später":
- * Eine Datei (Upload aus $_FILES oder ausgewählte Server-Datei aus $data) wird
- * SOFORT auf Typ geprüft und - wenn zulässig - physisch unter der Id der
- * Arbeitskopie abgelegt und in deren Arbeitsstand eingetragen (secureUploads()).
- * Damit übersteht sie eine anschließend scheiternde Eingabeprüfung und erscheint
- * in der erneut angezeigten Eingabemaske.
- * Die Thumbnail-Erzeugung ist davon entkoppelt: der Datei-Eintrag wird mit
- * 'thumbnails_pending' = true markiert und erst beim FINALEN Speichern über
- * writePendingThumbnails() (aus saveVirtualFields()) abgearbeitet - also einmal
- * pro Datensatz statt bei jedem Zwischenschritt.
+ * Concept "single-step updates" (Dataset::save() with $stayTemporary = true):
  *
- * Felder:
- *      'tmp'             : Zustand 0 = produktiv, 1 = temporär
- *      'origin_id'       : `{tableName}_id` des produktiven Originals, 0 bei neuem Datensatz
- *      'changed_at'      : Zeitpunkt der letzten Änderung
- *      'changed_by'      : Admin-Id der letzten Änderung
- *      'deleted'         : 1 = wenn produktiv: Datensatz wurde gelöscht (Papierkorb)
- *                              wenn temporär: Arbeitskopie kann nicht mehr produktiv gehen (Edit-Lock geklöscht)
- * 
- * Tabelle `record` zusätzlich - der ARBEITSSTAND der Arbeitskopie:
- *      Er liegt nicht in einer eigenen Spalte, sondern wie der produktive Stand je
- *      Sprache in `record_cache` - unter der Id der Arbeitskopie, im selben Format
- *      (Cms::createRecordCache(): feldname => [typ, wert, Fallback-Kennzeichen]).
- *      Cms::fetch() liest eine Arbeitskopie damit genauso wie einen produktiven
- *      Datensatz. Er dient als Zwischenspeicher für Einzelschritt-Updates
- *      (Dataset::save() mit $stayTemporary = true - geschrieben werden nur die
- *      Sprachzeilen, die sich ändern) und als Datenbasis der Eingabemaske /
- *      Datei-Previews; beim checkOut wird er aus dem `record_cache` des produktiven
- *      Originals übernommen (VirtualFieldsTrait::_loadTmpData() / _saveTmpData()),
- *      beim checkIn fällt er mit der Arbeitskopie weg (FK-Cascade).
- *      Verschlüsselte Inhalte stehen darin als Geheimtext, Passwörter gar nicht.
- *                          Datei-Einträge tragen Flags:
- *                          'temporary' = true: neue Datei der Arbeitskopie (physisch
- *                              unter deren Id abgelegt; der `data_fil`-Eintrag entsteht
- *                              erst beim checkIn, siehe promoteTmpFiles())
- *                          'deleted' = true: Datei wurde per x-Button entfernt
- *                          Einträge OHNE Flags beschreiben die unveränderte Datei
- *                          des produktiven Originals (origin_id)
+ * Concept "secure files immediately, thumbnails later":
+ * A file (upload from $_FILES or a selected server file from $data) is checked for
+ * type IMMEDIATELY and - if allowed - physically stored under the id of the
+ * working copy and entered in its working state (secureUploads()).
+ * This way it survives an input check that subsequently fails and appears
+ * in the redisplayed input mask.
+ * Thumbnail generation is decoupled from this: the file entry is marked with
+ * 'thumbnails_pending' = true and only processed during the FINAL save via
+ * writePendingThumbnails() (from saveVirtualFields()) - thus once
+ * per record instead of at every intermediate step.
+ *
+ * Fields:
+ *      'tmp'             : state 0 = live, 1 = temporary
+ *      'origin_id'       : `{tableName}_id` of the live original, 0 for a new record
+ *      'changed_at'      : time of the last change
+ *      'changed_by'      : admin id of the last change
+ *      'deleted'         : 1 = if live: record was deleted (trash)
+ *                              if temporary: working copy can no longer go live (edit lock deleted)
+ *
+ * Table `record` additionally - the WORKING STATE of the working copy:
+ *      It does not live in its own column, but like the live state per
+ *      language in `record_cache` - under the id of the working copy, in the same format
+ *      (Cms::createRecordCache(): field name => [type, value, fallback flag]).
+ *      Cms::fetch() reads a working copy in this way just like a live
+ *      record. It serves as a buffer for single-step updates
+ *      (Dataset::save() with $stayTemporary = true - only the language
+ *      rows that change are written) and as the data basis of the input mask /
+ *      file previews; at checkOut it is taken from the `record_cache` of the live
+ *      original (VirtualFieldsTrait::_loadTmpData() / _saveTmpData()),
+ *      at checkIn it disappears along with the working copy (FK cascade).
+ *      Encrypted contents are stored there as ciphertext, passwords not at all.
+ *                          File entries carry flags:
+ *                          'temporary' = true: new file of the working copy (physically
+ *                              stored under its id; the `data_fil` entry is only created
+ *                              at checkIn, see promoteTmpFiles())
+ *                          'deleted' = true: file was removed via the x button
+ *                          Entries WITHOUT flags describe the unchanged file
+ *                          of the live original (origin_id)
  */
 namespace Camindo\Core;
 
@@ -50,22 +50,22 @@ trait TemporaryTrait
 {
     /**
      * CREATE
-     * Temporären Datensatz erstellen
-     * (Um temporäre Relations hinzufügen zu können)
+     * Create a temporary record
+     * (in order to be able to add temporary relations)
      */
     public function tmpInit(array $defaults = [], int $forceId = 0): ?array
     {
         $idField = $this->tableName . '_id';
 
-        // area_id - auch im temporären Datensatz speichern, kann gut für lookup-Feld gebraucht werden
+        // area_id - also store it in the temporary record, it can be useful for lookup fields
         $areaId = $this->hasAreaId ? (int)$defaults['area_id'] : null;
 
-        // Rechte der Benutzergruppe: Anlegen im Bereich
+        // Rights of the user group: create in the area
         if ($areaId !== null && !$this->accessCheck('create', $areaId)) return null;
 
-        // $forceId: die Arbeitskopie bekommt diese Id und geht später unter ihr
-        // produktiv - der Import legt so Datensätze mit der Id aus der Importdatei an
-        // (RecordImport); die Id muss frei sein (Record::freeRecordId())
+        // $forceId: the working copy gets this id and later goes live under it - the import
+        // thus creates records with the id from the import file (RecordImport); the id must
+        // be free (Record::freeRecordId())
         if (!$tmpId = $this->insertTmpRecord(0, $areaId, 0, $forceId)) {
             return null;
         }
@@ -76,10 +76,10 @@ trait TemporaryTrait
     }
 
     /**
-     * Prüfe, ob Temporäre Arbeitskopie für einen produktiven Datensatz besteht
-     * 
-     * @param array &$data  Metafeld-Inhalte
-     * @return array        Wenn Editlock besteht: [changed_by, changed_at], ansonsten []
+     * Check whether a temporary working copy exists for a live record
+     *
+     * @param array &$data  meta field contents
+     * @return array        If an edit lock exists: [changed_by, changed_at], otherwise []
      */
     public function getLock(array &$data): array
     {
@@ -90,7 +90,7 @@ trait TemporaryTrait
         $idField = $tableName . '_id';
         $id = (int)$data[$idField];
         
-        // Änderungsdatum und -Admin stecken in der temporären Kopie
+        // Change date and admin are stored in the temporary copy
         $sql = "SELECT `changed_by`,`changed_at` FROM `$tableName`"
             ." WHERE `tmp`=1 AND `deleted`=0 AND `origin_id` = ? ORDER BY `changed_at` DESC";
         $this->db->query($sql, 'i', [$id]);
@@ -100,54 +100,54 @@ trait TemporaryTrait
         }
         [$changedBy, $changedAt] = $this->db->fetchNum();
 
-        // Prüfe letzte Änderung (changed_at ist UTC-Zeit, datetime(3)) - eine Kopie,
-        // die länger als admin.edit_lock_sec unberührt ist, sperrt nicht mehr
+        // Check last change (changed_at is UTC time, datetime(3)) - a copy
+        // that has been untouched for longer than admin.edit_lock_sec no longer locks
         $lockSec = (int)$this->config->get('admin.edit_lock_sec');
         $outdatedAt = gmdate('Y-m-d H:i:s', time() - $lockSec);
         if ($changedAt < $outdatedAt) {
-            // Letzte Änderung an der Kopie liegt zuweit zurück
-            // -> auch wenn von anderem Admin: sie kann gelöscht werden
+            // Last change to the copy lies too far back
+            // -> even if by another admin: it can be deleted
             return [];
         }
 
-        // Prüfe wer die temporäre Kopie erstellt hat
+        // Check who created the temporary copy
         $sessionAdminId = (int)$this->session->get('admin_id');
         if ($changedBy === $sessionAdminId) {
-            // Die Kopie stammt vom Session-Admin selbst
-            // -> ignoriere Lock, gehe davon aus, dass Admin weiß, was er tut
+            // The copy comes from the session admin himself
+            // -> ignore the lock, assume the admin knows what he is doing
             return [];
         }
 
-        // Edit-Lock berücksichtigen
+        // Respect the edit lock
         return [$changedBy, $changedAt];
     }
 
     /**
      * CHECKOUT
-     * Erzeugt eine temporäre Arbeitskopie eines produktiven Datensatzes
-     * Voraussetzungen:
-     * - Datensatz ist produktiv (tmp=0, deleted=0)
-     * - Datensatz wurde mit load() geladen
-     * 
-     * Edit-Lock sollte vorher geprüft werden, siehe
+     * Creates a temporary working copy of a live record
+     * Prerequisites:
+     * - record is live (tmp=0, deleted=0)
+     * - record was loaded with load()
+     *
+     * The edit lock should be checked beforehand, see
      * - Dataset::getLock()
-     * 
-     * Urpsprungsdatensatz erhält:
+     *
+     * The original record receives:
      * - `locked` = 1
-     * 
-     * Arbeitskopie erhält:
+     *
+     * The working copy receives:
      * - `tmp` = 1
-     * - `origin_id`  = Id des Ursprungsdatensatzes
+     * - `origin_id`  = id of the original record
      * - `changed_by` = sessionAdminId
      * - `changed_at` = UTC_TIMESTAMP()
-     * - `record_cache`-Zeilen (nur Tabelle `record`): der produktive Stand aller
-     *                  Sprachen als Arbeitsstand - Zwischenspeicher für
-     *                  Einzelschritt-Updates und Datenbasis der Eingabemaske
-     * 
-     * @param array &$data  aus vorangehendem Dataset::load()
-     * @param bool $copy    true: Es wird eine Kopie mit origin_id = 0 erstellt
-     *                        Ursprungsdatensatz wird nicht gelockt
-     * @return int|null     `{tableName}_id` der Arbeitskopie, oder null bei Fehler
+     * - `record_cache` rows (table `record` only): the live state of all
+     *                  languages as working state - buffer for
+     *                  single-step updates and data basis of the input mask
+     *
+     * @param array &$data  from the preceding Dataset::load()
+     * @param bool $copy    true: a copy with origin_id = 0 is created
+     *                        the original record is not locked
+     * @return int|null     `{tableName}_id` of the working copy, or null on error
      */
     public function checkOut(array &$data, $copy = false): ?int
     {
@@ -166,19 +166,19 @@ trait TemporaryTrait
             return null;
         }
 
-        // Rechte der Benutzergruppe: Ändern des Originals bzw. Anlegen der Kopie
+        // Rights of the user group: changing the original resp. creating the copy
         if (!$this->accessCheck($copy ? 'create' : 'write', (int)($data['area_id'] ?? 0), isset($data['owner_id']) ? (int)$data['owner_id'] : null)) {
             return null;
         }
 
-        // Transaktion (Database unterstützt Verschachtelung)
+        // Transaction (Database supports nesting)
         try {
             $this->db->beginTransaction();
             if (!$copy) {
-                // Bestehende Arbeitskopien zum Original als ungültig markieren
-                // Deren physische Dateien werden entfernt (anhand der 'temporary'-
-                // Einträge in ihrem Arbeitsstand; Arbeitskopien besitzen keine
-                // `data_fil`-Einträge mehr)
+                // Mark existing working copies of the original as invalid
+                // Their physical files are removed (based on the 'temporary'
+                // entries in their working state; working copies no longer have
+                // `data_fil` entries)
                 $oldTmpIds = [];
                 if ($tableName == 'record' && method_exists($this, 'deleteRecordFiles')) {
                     $sql = "SELECT `record_id` FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
@@ -190,12 +190,12 @@ trait TemporaryTrait
                 }
                 $sql = "UPDATE `$tableName` SET `deleted` = 1, `changed_by` = ?, `changed_at` = UTC_TIMESTAMP() WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
                 $this->db->query($sql, 'ii', [$sessionAdminId, $id]);
-                // Verknüpfungen der ungültigen Kopien entfernen. Die Zeilen bleiben
-                // (save() erkennt daran den verlorenen Edit-Lock), ihre Kanten nicht:
-                // _copyRelations() hat auch EINGEHENDE Kanten auf die Kopie gelegt -
-                // beim eingebetteten Inhalt (link) z. B. Original-Quelle -> Kopie. Blieben
-                // sie stehen, käme die tote Kopie beim nächsten Check-out der Quelle
-                // wieder in deren Maske, und Speichern scheiterte an ihr.
+                // Remove the links of the invalid copies. The rows stay
+                // (save() recognizes the lost edit lock from them), their edges do not:
+                // _copyRelations() also placed INCOMING edges onto the copy -
+                // for embedded content (link) e.g. original source -> copy. If they
+                // remained, the dead copy would reappear in the mask of the source at its
+                // next check-out, and saving would fail because of it.
                 if ($oldTmpIds) {
                     $in = implode(',', $oldTmpIds);
                     $this->db->query("DELETE FROM `data_rel` WHERE `src_id` IN ($in) OR `dest_id` IN ($in)");
@@ -203,22 +203,22 @@ trait TemporaryTrait
                 }
             }
 
-            // area_id - auch im temporären Datensatz speichern, kann gut für lookup-Feld gebraucht werden
+            // area_id - also store it in the temporary record, it can be useful for lookup fields
             $areaId = $this->hasAreaId ? (int)$data['area_id'] : null;
 
             $originId = $copy ? 0 : $id;
-            // $id ist die Quelle auch beim Kopieren ($copy) - dort ist originId 0,
-            // die Datumswerte sollen aber trotzdem vom Vorbild kommen.
+            // $id is the source also when copying ($copy) - there originId is 0,
+            // but the date values should nevertheless come from the template.
             if (!$tmpId = $this->insertTmpRecord($originId, $areaId, $id)) {
-                // Kopie nicht erzeugt
+                // Copy not created
                 $errorMsg = $this->cms->snippet('error_create_temporary');
                 $this->cms->error($errorMsg);
                 throw new \Exception('#' . $errorMsg);
             }
-            // Arbeitsstand: der produktive Stand aller Sprachen aus `record_cache`
-            // des Originals (fehlende Sprachzeilen werden dabei nachgebaut) in die
-            // `record_cache`-Zeilen der Arbeitskopie - Zwischenspeicher für
-            // Einzelschritt-Updates ($stayTemporary), Datenbasis der Eingabemaske
+            // Working state: the live state of all languages from `record_cache`
+            // of the original (missing language rows are rebuilt in the process) into the
+            // `record_cache` rows of the working copy - buffer for
+            // single-step updates ($stayTemporary), data basis of the input mask
             if ($tableName === 'record' && method_exists($this, '_tmpDataFromRecordCache')) {
                 $schemaVirtual = $this->virtualSchema((int)$areaId, false);
                 $langCtx = $this->languageContext((int)$areaId);
@@ -230,12 +230,12 @@ trait TemporaryTrait
             $data['tmp'] = 1;
             $data['origin_id'] = $originId;
 
-            // Relations kopieren
+            // Copy relations
             // --------------------
             if ($tableName === 'record') {
                 $this->_copyRelations($id, $tmpId, $copy);
-                // Stand beim Check-out merken - der Check-in überträgt nur, was sich an
-                // der Arbeitskopie seither geändert hat (_copyRelationsBack())
+                // Note the state at check-out - the check-in only transfers what has
+                // changed on the working copy since then (_copyRelationsBack())
                 if (!$copy) {
                     $this->db->query(
                         "INSERT INTO `data_rel_checkout` (`tmp_id`, `field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
@@ -244,15 +244,15 @@ trait TemporaryTrait
                         'iii', [$tmpId, $tmpId, $tmpId]
                     );
                 }
-                // Eine KOPIE gehört keinem Quelldatensatz: eingehende 'link'-Verknüpfungen
-                // (fest verknüpfte Inhalte, je Zieldatensatz höchstens ein
-                // Quelldatensatz) bleiben beim Vorbild (LinkTrait)
+                // A COPY belongs to no source record: incoming 'link' links
+                // (firmly linked contents, at most one source record per target record)
+                // stay with the template (LinkTrait)
                 if ($copy && method_exists($this, 'removeIncomingLinks')) {
                     $this->removeIncomingLinks($tmpId);
                 }
             }
 
-            // Dateien kopieren, wenn Kopie erstellt wird
+            // Copy files when a copy is created
             // --------------------
             if ($tableName === 'record' && $copy === true) {
                 $this->_copyFiles($id, $tmpId);
@@ -262,25 +262,25 @@ trait TemporaryTrait
             return $tmpId;
 
         } catch (\Exception $e) {
-            // Fehlermeldungen, die noch nicht in Cms::errors gesammelt wurden, hinzufügen
+            // Add error messages that have not yet been collected in Cms::errors
             $errorMsg = $e->getMessage();
             if (!str_starts_with($errorMsg, '#')) $this->cms->error($errorMsg);
-            // Alles rückgängig machen
+            // Undo everything
             $this->db->rollback();
             return null;
         }
     }
 
     /**
-     * Hilfsfunktion: temporären Datensatz anlegen
-     * (gemeinsamer INSERT von tmpInit() und checkOut())
+     * Helper function: create a temporary record
+     * (shared INSERT of tmpInit() and checkOut())
      *
-     * @param int      $originId  Id des produktiven Originals, 0 bei neuem Datensatz / Kopie
-     * @param int|null $areaId    area_id oder null, wenn Tabelle keine area_id hat
-     * @param int      $sourceId  Vorbild für die Datumsspalten (checkOut: das Original
-     *                            bzw. die Kopiervorlage), 0 bei Neuanlage
-     * @param int      $forceId   Id, die die Arbeitskopie bekommen soll (0 = auto_increment)
-     * @return int                Id der Arbeitskopie (0 bei Fehler)
+     * @param int      $originId  id of the live original, 0 for a new record / copy
+     * @param int|null $areaId    area_id or null if the table has no area_id
+     * @param int      $sourceId  template for the date columns (checkOut: the original
+     *                            resp. the copy template), 0 for new creation
+     * @param int      $forceId   id the working copy should get (0 = auto_increment)
+     * @return int                id of the working copy (0 on error)
      */
     private function insertTmpRecord(int $originId, ?int $areaId, int $sourceId = 0, int $forceId = 0): int
     {
@@ -303,13 +303,13 @@ trait TemporaryTrait
             $sqlValues[] = $areaId;
         }
         if ($tableName == 'record') {
-            // instance_id - schon in der Arbeitskopie
+            // instance_id - already in the working copy
             // --------------------
-            // Die Spalte trägt einen Fremdschlüssel auf `instance` und hat keinen
-            // brauchbaren Default: was das INSERT nicht setzt, füllt MySQL mit 0 -
-            // eine Instanz mit der Id 0 gibt es aber nicht, das INSERT liefe in den
-            // Fremdschlüssel. Maßgeblich ist die Instanz des Inhaltsbereichs; beim
-            // Speichern holt Record::hookOnSave() sie ohnehin von dort (Dataset::areaInstanceId()).
+            // The column carries a foreign key to `instance` and has no
+            // usable default: what the INSERT does not set, MySQL fills with 0 -
+            // but there is no instance with id 0, the INSERT would fail on the
+            // foreign key. What matters is the instance of the content area; when
+            // saving, Record::hookOnSave() fetches it from there anyway (Dataset::areaInstanceId()).
             $sql .= ", `instance_id` = ?";
             $sqlTypes .= 'i';
             $sqlValues[] = $this->areaInstanceId((int)$areaId);
@@ -318,19 +318,19 @@ trait TemporaryTrait
         $tmpId = $forceId > 0 ? $forceId : (int)$this->db->insert_id;
         if ($tmpId < 1) return 0;
 
-        // Datumsspalten aus dem Ursprungsdatensatz uebernehmen
+        // Take over the date columns from the original record
         // --------------------
-        // Die datetime-Spalten sind NOT NULL und haben keinen DB-Default. Was das
-        // INSERT oben nicht setzt, fuellt MySQL deshalb mit dem Null-Datum
-        // 0000-00-00 00:00:00 (der sql_mode dieser Installation laesst das zu) - und
-        // beim Check-in wanderte dieser Wert in den produktiven Datensatz. Genau so
-        // sind die Null-Daten im Bestand entstanden.
+        // The datetime columns are NOT NULL and have no DB default. What the
+        // INSERT above does not set, MySQL therefore fills with the null date
+        // 0000-00-00 00:00:00 (the sql_mode of this installation allows that) - and
+        // at check-in this value moved into the live record. That is exactly how
+        // the null dates in the existing data came about.
         //
-        // Kopiert wird per SQL aus der Quellzeile, nicht ueber $data: dort stehen
-        // timestampl-Werte bereits in der Zeitzone des Users (Cms::utcToUserTZ()),
-        // beim Zurueckschreiben waeren sie um den Zonenversatz verschoben.
+        // Copied via SQL from the source row, not via $data: there timestamp
+        // values are already in the user's time zone (Cms::utcToUserTZ()),
+        // when written back they would be shifted by the zone offset.
         //
-        // changed_at bleibt aussen vor - es steht oben schon auf UTC_TIMESTAMP().
+        // changed_at is left out - it is already set to UTC_TIMESTAMP() above.
         $dateCols = [];
         foreach ($this->schema as $colName => $colDef) {
             if ($colName === 'changed_at') continue;
@@ -351,9 +351,9 @@ trait TemporaryTrait
                 $this->db->query($sql, 'ii', [$sourceId, $tmpId]);
             }
             else {
-                // Neuanlage (tmpInit): es gibt kein Vorbild. Die Untergrenze steht
-                // fuer "kein Datum gesetzt"; die eigentlichen Vorgaben aus dem Schema
-                // ('now' fuer online_at) setzt init() in $data und save() schreibt sie.
+                // New creation (tmpInit): there is no template. The lower bound stands
+                // for "no date set"; the actual defaults from the schema
+                // ('now' for online_at) are set by init() in $data and save() writes them.
                 foreach ($dateCols as $colName) {
                     $set[] = "`$colName` = '" . self::DATE_MIN . "'";
                 }
@@ -368,32 +368,32 @@ trait TemporaryTrait
 
     /**
      * CHECKIN
-     * Setzt eine temporäre Arbeitskopie produktiv.
-     * Wird von Dataset::save() aufgerufen, wenn temporärer Datensatz gespeichert wird
+     * Makes a temporary working copy live.
+     * Called by Dataset::save() when a temporary record is saved
      *
-     * Zieht Dateien der Arbeitskopie auf den produktiven Datensatz um und erzeugt
-     * dabei die `data_fil`-Einträge aus den Datei-Metadaten des Arbeitsstands bzw. löscht per
-     * Löschmarkierung entfernte Dateien (promoteTmpFiles)
-     * Kopiert die Relations der Arbeitskopie in den produktiven Datensatz
-     * Löscht den temporären Datensatz
+     * Moves files of the working copy to the live record and creates
+     * the `data_fil` entries from the file metadata of the working state, or deletes
+     * files removed via deletion marker (promoteTmpFiles)
+     * Copies the relations of the working copy into the live record
+     * Deletes the temporary record
      *
-     * @param int $tmpId            Id des temporären Zustands
-     * @param int|null $prodId      Id des produktiven Zustands, falls vorhanden
-     * @param array $schemaVirtual  Schema mit Eingabefeldern (relation-Felder benötigt)
+     * @param int $tmpId            id of the temporary state
+     * @param int|null $prodId      id of the live state, if present
+     * @param array $schemaVirtual  schema with input fields (relation fields needed)
      */
     protected function checkIn(int $tmpId, ?int $prodId, array $schemaVirtual): void
     {
         if (!$prodId) {
-            // temporäre Kopie geht unter ihrer eigenen Id produktiv (neuer
-            // Datensatz oder Kopie): 'temporary'-Dateien aus ihrem Arbeitsstand jetzt
-            // in `data_fil` eintragen (promoteTmpFiles mit tmpId als Ziel-Id;
-            // ein physischer Umzug findet dabei nicht statt). Ihre `record_cache`-
-            // Zeilen hat saveVirtualFields() bereits zum produktiven Stand gemacht.
+            // The temporary copy goes live under its own id (new record
+            // or copy): enter the 'temporary' files from its working state into
+            // `data_fil` now (promoteTmpFiles with tmpId as target id;
+            // no physical move takes place). Its `record_cache`
+            // rows saveVirtualFields() has already brought to the live state.
             if ($this->tableName == 'record' && method_exists($this, 'promoteTmpFiles')) {
                 $this->promoteTmpFiles($tmpId, $tmpId);
             }
-            // Verknüpfungen hängen schon an der endgültigen Id - nur die Regel
-            // "höchstens ein Ziel" auf der Gegenseite durchsetzen
+            // Links already hang on the final id - only enforce the rule
+            // "at most one target" on the other side
             if ($this->tableName == 'record') {
                 $this->_enforceSingleRelations($tmpId, $schemaVirtual);
             }
@@ -404,27 +404,27 @@ trait TemporaryTrait
         $idField       = $tableName . '_id';
 
         if ($this->tableName == 'record') {
-            // Dateien der Arbeitskopie jetzt dem Original zuweisen und deren
-            // `data_fil`-Einträge aus den Datei-Metadaten erzeugen bzw. per
-            // Löschmarkierung entfernte Dateien löschen
-            // (VOR dem Löschen der Kopie: promoteTmpFiles() liest deren Arbeitsstand)
+            // Assign the files of the working copy to the original now and create their
+            // `data_fil` entries from the file metadata, or delete files
+            // removed via deletion marker
+            // (BEFORE deleting the copy: promoteTmpFiles() reads its working state)
             if (method_exists($this, 'promoteTmpFiles')) {
                 $this->promoteTmpFiles($tmpId, $prodId);
             }
-            // Verknüpfungen der temporären Kopie jetzt dem Orignal zuweisen
+            // Assign the links of the temporary copy to the original now
             $this->_copyRelationsBack($tmpId, $prodId, $schemaVirtual);
         }
 
-        // temporäre Kopie löschen (löscht auch deren Relations)
+        // delete the temporary copy (also deletes its relations)
         $sql = "DELETE FROM `{$tableName}` WHERE `$idField` = ?";
         $this->db->query($sql, 'i', [$tmpId]);
     }
 
     /**
-     * Bearbeitenprozess abbrechen - Löscht tempräre Arbeitskopie
-     * und entfernt Edit-Lock
-     * 
-     * @param int $tmpId    Id eines temporären Datensatzes
+     * Cancel the editing process - deletes the temporary working copy
+     * and removes the edit lock
+     *
+     * @param int $tmpId    id of a temporary record
      */
     public function cancel(int $tmpId): void
     {
@@ -434,54 +434,54 @@ trait TemporaryTrait
             return;
         }
 
-        // Arbeitskopie ist temporär und gehört dem Session-Admin
+        // Working copy is temporary and belongs to the session admin
         $tableName     = $this->tableName;
         $idField       = $tableName . '_id';
-        // Physische Dateien der Arbeitskopie entfernen
-        // (anhand der 'temporary'-Einträge in ihrem Arbeitsstand; Arbeitskopien
-        //  besitzen keine `data_fil`-Einträge mehr)
+        // Remove the physical files of the working copy
+        // (based on the 'temporary' entries in its working state; working copies
+        //  no longer have `data_fil` entries)
         if ($tableName == 'record' && method_exists($this, 'deleteRecordFiles')) {
             $this->deleteRecordFiles($tmpId);
         }
-        // Arbeitskopie löschen
+        // Delete the working copy
         $this->db->query("DELETE FROM `$tableName` WHERE `$idField` = ?", 'i', [$tmpId]);
     }
 
     /**
-     * Hilfsfunktion: Verknüpfungen aus 'relation' und 'pointer'-Feldern von Datensatz $id1 nach $id2 kopieren
+     * Helper function: copy the links of the 'relation' and 'pointer' fields from record $id1 to $id2
      *
-     * Check-out ($asCopy = false): alle Kanten 1:1, auch die eingehenden
-     * (andere Datensätze -> $id1) mit ihrer Position - die Arbeitskopie steht für
-     * das Original. (Der Check-in kopiert nicht zurück, sondern gleicht ab:
+     * Check-out ($asCopy = false): all edges 1:1, also the incoming ones
+     * (other records -> $id1) with their position - the working copy stands for
+     * the original. (The check-in does not copy back, but reconciles:
      * _copyRelationsBack().)
      *
-     * Kopie eines Datensatzes ($asCopy = true): die Kopie ist ein NEUER Datensatz.
-     *   - Eingehende Kanten (X -> $id1 im Feld von X) hängen hinten an X' Liste
-     *     (MAX(position) + 1) - sonst teilten sich Vorbild und Kopie eine Position,
-     *     die Reihenfolge wäre zufällig.
-     *   - Kanten, deren andere Seite nur EIN Ziel erlaubt (Feld von X bzw. Gegenfeld
-     *     vom Typ relation1/pointer1 oder max = 1), werden nicht übernommen: X hat
-     *     sein eines Ziel schon (das Vorbild). Sonst setzte der Check-in der Kopie
-     *     die Regel "höchstens ein Ziel" durch (_enforceSingleRelations()) und nähme
-     *     sie dem Vorbild weg.
+     * Copy of a record ($asCopy = true): the copy is a NEW record.
+     *   - Incoming edges (X -> $id1 in the field of X) are appended to the end of X's list
+     *     (MAX(position) + 1) - otherwise template and copy would share a position,
+     *     the order would be random.
+     *   - Edges whose other side allows only ONE target (field of X resp. counter field
+     *     of type relation1/pointer1 or max = 1) are not taken over: X already has
+     *     its one target (the template). Otherwise the check-in of the copy would
+     *     enforce the rule "at most one target" (_enforceSingleRelations()) and take
+     *     it away from the template.
      */
     protected function _copyRelations(int $id1, int $id2, bool $asCopy = false): void
     {
-        // Verknüpfungen des Ziel-Datensatzes löschen
+        // Delete the links of the target record
         $sql = "DELETE FROM `data_rel` WHERE `src_id` = ? OR `dest_id` = ?";
         $this->db->query($sql, 'ii', [$id2, $id2]);
 
         if (!$asCopy) {
-            // Relations kopieren, bei denen $id1 die Quelle (src_id) ist
-            // Kopiert (src_id = $id1, dest_id = X) -> zu (src_id = $id2, dest_id = X)
+            // Copy relations where $id1 is the source (src_id)
+            // Copies (src_id = $id1, dest_id = X) -> to (src_id = $id2, dest_id = X)
             $sql = "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
                 ." SELECT `field_id`, `fieldname_id`, ?, `dest_id`, `position`"
                 ." FROM `data_rel`"
                 ." WHERE `src_id` = ?";
             $this->db->query($sql, 'ii', [$id2, $id1]);
 
-            // Relations kopieren, bei denen $id1 das Ziel (dest_id) ist
-            // Kopiert (src_id = X, dest_id = $id1) -> zu (src_id = X, dest_id = $id2)
+            // Copy relations where $id1 is the target (dest_id)
+            // Copies (src_id = X, dest_id = $id1) -> to (src_id = X, dest_id = $id2)
             $sql = "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
                 ." SELECT `field_id`, `fieldname_id`, `src_id`, ?, `position`"
                 ." FROM `data_rel`"
@@ -490,11 +490,11 @@ trait TemporaryTrait
             return;
         }
 
-        // Feld nimmt nur ein Ziel auf (Alias als Platzhalter)
+        // Field accepts only one target (alias as placeholder)
         $single = "(%s.`type` IN ('" . implode("','", $this->cms->singleRelationTypes) . "') OR %s.`max` = '1')";
 
-        // Eigene Kanten der Kopie ($id2 -> X), Position wie beim Vorbild - außer
-        // das Gegenfeld von X erlaubt nur ein Ziel
+        // Own edges of the copy ($id2 -> X), position as in the template - except
+        // when the counter field of X allows only one target
         $sql = "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
             ." SELECT `r`.`field_id`, `r`.`fieldname_id`, ?, `r`.`dest_id`, `r`.`position`"
             ." FROM `data_rel` `r`"
@@ -504,9 +504,9 @@ trait TemporaryTrait
             ." AND NOT (`g`.`field_id` IS NOT NULL AND " . sprintf($single, '`g`', '`g`') . ")";
         $this->db->query($sql, 'ii', [$id2, $id1]);
 
-        // Eingehende Kanten (X -> $id2) hinten an die Liste von X - außer das Feld
-        // von X erlaubt nur ein Ziel. Je (X, Feld) gibt es höchstens eine solche
-        // Kante (dest_id ist Teil des Primärschlüssels), MAX + 1 bleibt eindeutig.
+        // Incoming edges (X -> $id2) appended to the list of X - except when the field
+        // of X allows only one target. For each (X, field) there is at most one such
+        // edge (dest_id is part of the primary key), MAX + 1 stays unique.
         $sql = "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
             ." SELECT `r`.`field_id`, `r`.`fieldname_id`, `r`.`src_id`, ?,"
             ."   (SELECT COALESCE(MAX(`p`.`position`), -1) + 1 FROM `data_rel` `p`"
@@ -519,38 +519,38 @@ trait TemporaryTrait
     }
 
     /**
-     * Verknüpfungen der Arbeitskopie beim Check-in auf das Original übertragen.
+     * Transfer the links of the working copy to the original at check-in.
      *
-     * Übertragen wird nur, was sich AN DER ARBEITSKOPIE seit dem Check-out geändert
-     * hat - verglichen mit dem Stand, den checkOut() in `data_rel_checkout` abgelegt
-     * hat. Was andere Datensätze inzwischen am Original geändert haben, bleibt:
-     * etwa ein Verweis B -> A, der gesetzt wurde, während A ausgecheckt war, oder
-     * die Spiegelkante A -> B eines bidirektionalen Feldes, das B bearbeitet hat.
-     * (Früher ersetzte der Check-in alle Kanten des Originals durch die der
-     * Arbeitskopie - solche Änderungen gingen verloren.)
+     * Only what has changed ON THE WORKING COPY since the check-out is transferred -
+     * compared with the state that checkOut() stored in `data_rel_checkout`.
+     * What other records have meanwhile changed on the original remains:
+     * for example a reference B -> A that was set while A was checked out, or
+     * the mirror edge A -> B of a bidirectional field that B has edited.
+     * (Previously the check-in replaced all edges of the original with those of the
+     * working copy - such changes were lost.)
      *
-     * Drei Mengenoperationen, die Arbeitskopie jeweils auf das Original abgebildet:
+     * Three set operations, each mapping the working copy onto the original:
      *
-     *   1. entfernt: Kanten des Check-out-Stands, die der Arbeitskopie fehlen
-     *      -> am Original löschen
-     *   2. neu oder geändert (Position, Feld): Kanten der Arbeitskopie, die im
-     *      Check-out-Stand fehlen oder anders aussehen -> am Original anlegen bzw.
-     *      aktualisieren. Dazu IMMER die Kanten zu anderen Arbeitskopien: über sie
-     *      wandern fest verknüpfte Inhalte zwischen den Arbeitskopien
+     *   1. removed: edges of the check-out state that the working copy lacks
+     *      -> delete on the original
+     *   2. new or changed (position, field): edges of the working copy that are missing
+     *      in the check-out state or look different -> create resp.
+     *      update on the original. For this ALWAYS the edges to other working copies:
+     *      firmly linked contents move between the working copies via them
      *      (LinkTrait::_repointLink(), checkInDependents())
-     *   3. die Reihenfolge der eigenen Verknüpfungen des Originals lückenlos neu
-     *      zählen - Kanten von der Arbeitskopie und von anderen können sich eine
-     *      Position teilen
+     *   3. renumber the order of the original's own links without gaps -
+     *      edges from the working copy and from others can share a
+     *      position
      *
-     * Danach die Regel "höchstens ein Ziel" auf der Gegenseite - jetzt für das
-     * Original, dessen Kanten feststehen.
+     * Afterwards the rule "at most one target" on the other side - now for the
+     * original, whose edges are settled.
      */
     protected function _copyRelationsBack(int $tmpId, int $prodId, array $schemaVirtual): void
     {
-        // Kante der Arbeitskopie -> Kante des Originals (nur Ganzzahlen, literal)
+        // Edge of the working copy -> edge of the original (integers only, literal)
         $map = fn(string $column) => "CASE {$column} WHEN {$tmpId} THEN {$prodId} ELSE {$column} END";
 
-        // 1. entfernt
+        // 1. removed
         $this->db->query(
             "DELETE `d` FROM `data_rel_checkout` `b`"
             . " INNER JOIN `data_rel` `d` ON `d`.`src_id` = " . $map('`b`.`src_id`')
@@ -561,7 +561,7 @@ trait TemporaryTrait
             'i', [$tmpId]
         );
 
-        // 2. neu oder geändert, dazu die Kanten zu anderen Arbeitskopien
+        // 2. new or changed, plus the edges to other working copies
         $this->db->query(
             "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
             . " SELECT `r`.`field_id`, `r`.`fieldname_id`, " . $map('`r`.`src_id`') . ", " . $map('`r`.`dest_id`') . ", `r`.`position`"
@@ -577,7 +577,7 @@ trait TemporaryTrait
             'iiiii', [$tmpId, $tmpId, $tmpId, $tmpId, $tmpId]
         );
 
-        // 3. Reihenfolge der eigenen Verknüpfungen je Feld
+        // 3. Order of the own links per field
         $this->db->query(
             "UPDATE `data_rel` `d` INNER JOIN ("
             . "   SELECT `src_id`, `fieldname_id`, `dest_id`,"
@@ -592,37 +592,36 @@ trait TemporaryTrait
     }
 
     /**
-     * Regel "höchstens ein Ziel" (relation1 / pointer1 bzw. max = 1) für die
-     * Verknüpfungen des Datensatzes $srcId durchsetzen - beim Check-in, wenn die
-     * Verknüpfungen der Arbeitskopie endgültig werden (Arbeitskopie mit Original
-     * oder neuer Datensatz unter seiner eigenen Id).
+     * Enforce the rule "at most one target" (relation1 / pointer1 resp. max = 1) for the
+     * links of record $srcId - at check-in, when the links of the working copy become final
+     * (working copy with original or new record under its own id).
      *
-     * Die eigene Seite hält createRelations() sauber (nie mehr als eine Zeile je
-     * …1-Feld). Hier geht es um die GEGENSEITE eines 'relation'-Feldes: erlaubt das
-     * Gegenfeld nur ein Ziel, darf jeder Zieldatensatz nur von diesem einen
-     * Datensatz verknüpft sein - seine bisherigen Verknüpfungen in diesem Feldpaar
-     * (von anderen Quelldatensätzen) werden gelöst, beide Richtungen.
+     * The own side is kept clean by createRelations() (never more than one row per
+     * …1 field). Here it concerns the COUNTER SIDE of a 'relation' field: if the
+     * counter field allows only one target, each target record may be linked only by this one
+     * source record - its previous links in this field pair
+     * (from other source records) are dissolved, in both directions.
      *
-     * Beispiel: Artikel.topic (relation1) <-> Rubrik.rel_artikel (relation). Wird
-     * Artikel A an Rubrik 3 gehängt, verliert er Rubrik 1. Erst hier und nicht in
-     * createRelations(): solange die Verknüpfung an der Arbeitskopie hängt, muss sie
-     * sich verwerfen lassen (cancel), ohne dass Artikel A etwas verliert.
+     * Example: Article.topic (relation1) <-> Section.rel_article (relation). If
+     * article A is attached to section 3, it loses section 1. Only here and not in
+     * createRelations(): as long as the link hangs on the working copy, it must
+     * be discardable (cancel) without article A losing anything.
      *
-     * Unabhängig von visibility_input - die Regel gilt auch für Verknüpfungen, die
-     * nicht über die Maske, sondern per Import oder Stapelverarbeitung entstehen.
+     * Independent of visibility_input - the rule also applies to links that
+     * arise not via the mask but via import or batch processing.
      *
-     * @param int   $srcId          Datensatz, dessen Verknüpfungen gelten sollen
-     * @param array $schemaVirtual  Schema mit Eingabefeldern
+     * @param int   $srcId          record whose links should apply
+     * @param array $schemaVirtual  schema with input fields
      */
     protected function _enforceSingleRelations(int $srcId, array $schemaVirtual): void
     {
         foreach ($schemaVirtual as $name => $colDef) {
             $type = $colDef['type'] ?? 'text';
             if (!str_starts_with($type, 'relation')) continue;
-            // Hole Infos zum Gegenfeld
+            // Fetch info on the counter field
             $relFieldId = (int)$colDef['rel_field_id'];
             if (!$relField = $this->fieldData($relFieldId)) {
-                // Fall sollte nie eintreten
+                // this case should never occur
                 $this->createFieldError('record.error_dest_relationfield', $name, $colDef['label'] ?? $name);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
@@ -631,8 +630,8 @@ trait TemporaryTrait
             if (!$relIsSingle) continue;
             $fieldId = (int)$colDef['field_id'];
 
-            // Kein anderer Datensatz darf (im eigenen Feld) auf einen der Zieldatensätze verweisen
-            // außer der Quelldatensatz
+            // No other record may point (in its own field) to one of the target records
+            // except the source record
             $sql = "DELETE `d2` FROM `data_rel` `d2`"
                    ." INNER JOIN `data_rel` `d1`"
                    ."     ON `d1`.`field_id` = ?"
@@ -642,9 +641,9 @@ trait TemporaryTrait
                    ." AND `d2`.`src_id` != ?";
             $this->db->query($sql, 'iiii', [$fieldId, $srcId, $fieldId, $srcId]);
 
-            // Bidirektionalität beachten
-            // Die Zieldatensätze dürfen (im Gegenfeld) auf keinen anderen Datensatz verweisen
-            // außer auf den Quelldatensatz
+            // Respect bidirectionality
+            // The target records may (in the counter field) not point to any other record
+            // except the source record
             $sql = "DELETE `d2` FROM `data_rel` `d2`"
                     ." INNER JOIN `data_rel` `d1`"
                     ."     ON `d1`.`field_id` = ?"
@@ -657,22 +656,22 @@ trait TemporaryTrait
     }
 
     /**
-     * Dateien des produktiven Datensatzes $id1 physisch für die Kopie $id2
-     * duplizieren und im Arbeitsstand der Kopie mit 'temporary' = true markieren.
-     * Es werden KEINE `data_fil`-Einträge für die Kopie erzeugt: diese entstehen
-     * erst beim Produktivgehen in promoteTmpFiles() aus den Datei-Metadaten
-     * (die Kopie geht mit origin_id = 0 unter ihrer eigenen Id produktiv,
-     *  siehe checkIn()).
+     * Physically duplicate the files of the live record $id1 for the copy $id2
+     * and mark them with 'temporary' = true in the working state of the copy.
+     * NO `data_fil` entries are created for the copy: these arise only when going live
+     * in promoteTmpFiles() from the file metadata
+     * (the copy goes live with origin_id = 0 under its own id,
+     *  see checkIn()).
      */
     private function _copyFiles(int $id1, int $id2): void
     {
         $mediaDir = $this->config->get('paths.media_dir');
 
-        // Metadaten der produktiven Dateien lesen (inkl. Feldname für den
-        // Feldnamen) - nur die Zeilen der physischen Dateien: einsprachige
-        // Felder führen je Sprache dieselbe Zeile (file_language_id NULL), bei
-        // mehrsprachigen zählt je Sprache die eigene Datei (file_language_id =
-        // language_id); Fallback-Zeilen zeigen auf eine davon.
+        // Read the metadata of the live files (incl. field name for the
+        // field name) - only the rows of the physical files: single-language
+        // fields carry the same row per language (file_language_id NULL), for
+        // multilingual ones each language counts its own file (file_language_id =
+        // language_id); fallback rows point to one of them.
         $sql = "SELECT DISTINCT `df`.`field_id`, `df`.`file_language_id`, `df`.`extension`, `df`.`mime_type`,"
             ." `df`.`filename`, `df`.`size`, `df`.`width`, `df`.`height`, `df`.`data`, `fn`.`name`"
             ." FROM `data_fil` `df`"
@@ -686,8 +685,8 @@ trait TemporaryTrait
             $rows[] = $f;
         }
 
-        // Arbeitsstand der Kopie fortschreiben
-        // (wurde beim checkOut bereits vom Original übernommen)
+        // Update the working state of the copy
+        // (already taken over from the original at checkOut)
         $cache = $this->_loadTmpData($id2);
         foreach ($rows as $f) {
             $name = (string)($f['name'] ?? '');
@@ -696,23 +695,22 @@ trait TemporaryTrait
             $extension = (string)$f['extension'];
             $fileLang = $this->cms->fileLanguageId($f);
 
-            // 1. Datei kopieren
-            // (leere Extension = Thumbnail-Feld ohne greifenden Converter, keine Datei)
+            // 1. Copy the file
+            // (empty extension = thumbnail field without an applicable converter, no file)
             if ($extension !== '') {
                 $src  = "$mediaDir/" . $this->cms->mediaPath($fieldId, $id1, $fileLang, $extension);
                 $dest = "$mediaDir/" . $this->cms->mediaPath($fieldId, $id2, $fileLang, $extension);
                 if (!@copy($src, $dest)) {
-                    // Abbruch statt stillem Weiterlaufen: sonst entstünde beim
-                    // Produktivgehen ein `data_fil`-Eintrag ohne physische Datei
+                    // Abort instead of silently continuing: otherwise a `data_fil`
+                    // entry without a physical file would arise when going live
                     $this->system->log('file-errors', "$src > $dest : copy failed.");
                     throw new \Exception("Error: _copyFiles(): could not copy \"$src\".");
                 }
             }
 
-            // 2. Datei-Eintrag mit 'temporary' markieren
-            // (promoteTmpFiles() erzeugt daraus beim Produktivgehen den
-            //  `data_fil`-Eintrag; deleteRecordFiles() findet darüber die
-            //  physische Datei, falls die Kopie abgebrochen wird)
+            // 2. Mark the file entry with 'temporary'
+            // (promoteTmpFiles() creates the `data_fil` entry from it when going live;
+            //  deleteRecordFiles() finds the physical file via it if the copy is cancelled)
             $this->setFileEntry($cache, $name, $fileLang, [
                 'extension' => $extension,
                 'mime_type' => (string)$f['mime_type'],
@@ -730,14 +728,14 @@ trait TemporaryTrait
     }
 
     /**
-     * Prüft
-     * - ist Datensatz temporär
-     * - gehört temporärer Datensatz dem Session-Admin
-     * wenn nicht -> null
-     * ansonsten  -> id und area_id des produktiven Datensatzes
-     * 
-     * @param int $tmpId    Id eines temporären Datensatzes
-     * @return array|null   [Id, AreaId] des produktiven Datensatzes oder null
+     * Checks
+     * - is the record temporary
+     * - does the temporary record belong to the session admin
+     * if not -> null
+     * otherwise -> id and area_id of the live record
+     *
+     * @param int $tmpId    id of a temporary record
+     * @return array|null   [id, area_id] of the live record or null
      */
     public function getProdData(int $tmpId): ?array
     {
@@ -751,19 +749,19 @@ trait TemporaryTrait
         $sql = "SELECT $sqlCols FROM `$tableName` WHERE `$idField` = ?";
         $this->db->query($sql, 'i', [$tmpId]);
         if ($this->db->num_rows < 1) {
-            // nicht gefunden
+            // not found
             return null; 
         }
 
         [$tmp, $prodId, $changedBy, $areaId] = $this->db->fetchNum();
         if (empty($tmp)) {
-            // nicht temporär
+            // not temporary
             return null;
         }
 
         $sessionAdminId = (int)$this->session->get('admin_id');
         if ((int)$changedBy !== $sessionAdminId) {
-            // gehört nicht dem Session-Admin
+            // does not belong to the session admin
             return null;
         }
 

@@ -1,94 +1,93 @@
 <?php
 /**
- * Erweiterung für Kindklassen von Dataset
- * Behandlung von Nested Sets mit Adjacency Lists
- * 
- * Felder:
- *      'parent_id' : Id des Parent-Datensatzes
- *      'position'  : Position innerhalb direktem Parent
- *                    Hinweis: es wird 'previous_id' verwarbeitet (vorangehender Datensatz)
- *                    Das ist aber kein echtes Datenbankeld - sondern daraus errechnet sich 'position'
- *      'lft' und
- *      'rgt'       : Grenzen im Nested Set
- *      'depth'     : Hierarchietiefe, 0-basiert (Wurzelknoten haben depth = 0)
+ * Extension for child classes of Dataset
+ * Handling of nested sets with adjacency lists
  *
- * EIN BAUM JE INHALTSBEREICH
+ * Fields:
+ *      'parent_id' : id of the parent record
+ *      'position'  : position within the direct parent
+ *                    Note: 'previous_id' is processed (preceding record)
+ *                    This is not a real database column - 'position' is derived from it
+ *      'lft' and
+ *      'rgt'       : boundaries in the nested set
+ *      'depth'     : depth of the hierarchy, 0-based (root nodes have depth = 0)
+ *
+ * ONE TREE PER CONTENT AREA
  * --------------------
- * Hat die Tabelle eine `area_id` (also: `record`), dann ist der Baum NICHT
- * tabellenweit, sondern es gibt einen eigenen, in sich geschlossenen Baum je
- * Inhaltsbereich:
+ * If the table has an `area_id` (i.e. `record`), the tree is NOT table-wide,
+ * but there is a separate, self-contained tree per content area:
  *
- *      - `lft`, `rgt` beginnen in JEDEM Bereich wieder bei 1
- *      - `position` zählt je Bereich und Parent
- *      - jede Abfrage über `lft`/`rgt` MUSS deshalb `area_id` mitfiltern
+ *      - `lft`, `rgt` start again at 1 in EVERY area
+ *      - `position` counts per area and parent
+ *      - every query via `lft`/`rgt` MUST therefore filter on `area_id` as well
  *
- * Ob ein Bereich überhaupt einen Baum führt, entscheidet der Redakteur: nur wenn er
- * im Bereich ein Eingabefeld mit dem Namen `parent_id` anlegt (Metafeld), ist der
- * Baum dort aktiv - isTreeArea(). In allen anderen Bereichen bleiben
+ * Whether an area has a tree at all is decided by the editor: only if they create an
+ * input field named `parent_id` in the area (meta field) is the tree
+ * active there - isTreeArea(). In all other areas
  *
  *      parent_id  = NULL
  *      lft, rgt   = 0
  *      depth      = 0
  *      parent_ids = []
  *
- * und es findet KEINE Baumpflege statt. Das ist der Normalfall und der Grund für
- * die Unterscheidung: die meisten Bereiche sind flach, enthalten aber sehr viele
- * Datensätze - ein tabellenweiter rebuildTree() bei jedem Speichern wäre dort ein
- * Update je Datensatz der ganzen Tabelle, ohne jeden Nutzen.
+ * and NO tree maintenance takes place. This is the normal case and the reason for
+ * the distinction: most areas are flat, but contain very many
+ * records - a table-wide rebuildTree() on every save would mean an
+ * update per record of the whole table there, without any benefit.
  *
- * Tabellen ohne `area_id` (`area` selbst) haben genau einen Baum über die ganze
- * Tabelle; isTreeArea() liefert dort immer true und die area-Filter entfallen.
+ * Tables without `area_id` (`area` itself) have exactly one tree over the whole
+ * table; isTreeArea() always returns true there and the area filters are dropped.
  *
- * Soft-Delete:
- *      Als deleted markierte Einträge verbleiben vorerst im Baum.
- *      Sie laufen bei Änderungen mit (lft, rgt, position, depth),
- *      bis sie endgültig gelöscht werden.
- *      In den Select-Listen der Eingabemasken (parent_id, previous_id)
- *      stehen sie jedoch nicht zur Auswahl, daher überspringen
- *      getPreviousId() und validateNodeExists() deleted-Datensätze.
- *      Soft-Delete ohne Kinder (withChilds == false): Kinddatensätze werden
- *      vorher dem Parent zugewiesen (liftChildren()), analog zum echten Löschen.
- *      Alle in einem Vorgang markierten Datensätze erhalten exakt denselben
- *      changed_at (Dataset::$markTimestamp); restore() stellt nur Datensätze
- *      desselben Löschvorgangs wieder her (Dataset::$restoreTimestamp).
+ * Soft delete:
+ *      Entries marked as deleted initially remain in the tree.
+ *      They take part in changes (lft, rgt, position, depth)
+ *      until they are finally deleted.
+ *      However, they are not selectable in the select lists of the input masks
+ *      (parent_id, previous_id), therefore getPreviousId() and validateNodeExists()
+ *      skip deleted records.
+ *      Soft delete without children (withChilds == false): child records are
+ *      first assigned to the parent (liftChildren()), analogous to real deletion.
+ *      All records marked in one operation receive exactly the same
+ *      changed_at (Dataset::$markTimestamp); restore() only restores records of
+ *      the same deletion operation (Dataset::$restoreTimestamp).
  *
- * Keine Massen-Operationen mehr:
- *      Früher räumten deleteWithChilds() und setDeletedWithChilds() einen ganzen
- *      Teilbaum mit EINEM SQL-Statement über lft/rgt ab - dabei liefen keine Hooks.
- *      Beide sind entfallen. Der Trait liefert jetzt nur noch die Ids des Teilbaums
- *      (subtreeIds()); Dataset schickt sie einzeln durch softDeleteOne(),
- *      restoreOneCore() bzw. finalDeleteOne(). Der Baum wird dabei einmal am Ende
- *      des Vorgangs neu berechnet (rebuildTreeNow()), nicht je Datensatz.
+ * No more mass operations:
+ *      Previously deleteWithChilds() and setDeletedWithChilds() removed a whole
+ *      subtree with ONE SQL statement via lft/rgt - no hooks ran in the process.
+ *      Both have been removed. The trait now only supplies the ids of the subtree
+ *      (subtreeIds()); Dataset sends them through softDeleteOne(),
+ *      restoreOneCore() or finalDeleteOne() one at a time. The tree is recalculated
+ *      once at the end of the operation (rebuildTreeNow()), not per record.
  */
 
 namespace Camindo\Core;
 trait TreeManagerTrait
 {
     /**
-     * Merker je Inhaltsbereich: führt er einen Baum? (isTreeArea())
-     * Dataset-Kindklassen sind Shared Services - der Cache lebt daher so lange wie
-     * der Request. Wird ein `parent_id`-Feld angelegt oder entfernt, muss er
-     * verworfen werden: clearTreeAreaCache().
+     * Flag per content area: does it have a tree? (isTreeArea())
+     * Dataset subclasses are shared services - the cache therefore lives as long as
+     * the request. If a `parent_id` field is created or removed, it must be
+     * discarded: clearTreeAreaCache().
      */
     private array $treeAreaCache = [];
 
     /**
-     * Führt dieser Inhaltsbereich einen Baum?
+     * Does this content area have a tree?
      *
-     * Maßgeblich ist, ob im Bereich ein Eingabefeld `parent_id` definiert ist -
-     * dieselbe Prüfung, mit der das Backend entscheidet, ob es die Liste als Baum
-     * darstellt (isset($schemaVirtual['parent_id'])). Hier wird nur die Tabelle
-     * `field` gefragt, damit die Antwort auch in den Lösch-Pfaden ohne geladenes
-     * Schema zur Verfügung steht.
+     * Decisive is whether an input field `parent_id` is defined in the area -
+     * the same check the backend uses to decide whether it displays the list as a tree
+     * (isset($schemaVirtual['parent_id'])). Here only the table `field` is
+     * queried, so that the answer is also available in the delete paths without a
+     * loaded schema.
      *
-     * Tabellen ohne `area_id` (`area`) führen genau einen Baum -> immer true.
+     * Tables without `area_id` (`area`) have exactly one tree -> always true.
      *
-     * @param int $areaId  Id des Inhaltsbereichs
+     * @param int $areaId  id of the content area
      */
     public function isTreeArea(int $areaId): bool
     {
         if (!$this->hasParentId) return false;
-        if (!$this->hasAreaId)   return true;   // Tabelle ohne Bereiche: ein Baum
+        if (!$this->hasAreaId)   return true;   // table without areas: one tree
         if ($areaId < 1)         return false;
 
         if (isset($this->treeAreaCache[$areaId])) {
@@ -106,10 +105,10 @@ trait TreeManagerTrait
     }
 
     /**
-     * Ids aller Inhaltsbereiche, die einen Baum führen.
-     * Für Reparatur-/Migrationswerkzeuge, die alle Bäume neu berechnen.
+     * Ids of all content areas that have a tree.
+     * For repair/migration tools that recalculate all trees.
      *
-     * @return int[]  bei Tabellen ohne `area_id`: leeres Array (ein Baum, keine Bereiche)
+     * @return int[]  for tables without `area_id`: empty array (one tree, no areas)
      */
     public function treeAreaIds(): array
     {
@@ -124,8 +123,8 @@ trait TreeManagerTrait
     }
 
     /**
-     * Merker aus isTreeArea() verwerfen.
-     * Nötig, sobald ein `parent_id`-Feld angelegt oder entfernt wurde
+     * Discard the flag from isTreeArea().
+     * Necessary as soon as a `parent_id` field has been created or removed
      * (Field::hookOnSaved() / Field::hookOnDeleted()).
      */
     public function clearTreeAreaCache(): void
@@ -134,14 +133,14 @@ trait TreeManagerTrait
     }
 
     /**
-     * Hilfsmethode: SQL-Filter für Datensätze, die zum Baum gehören.
-     * Temporäre Arbeitskopien (tmp=1) gehören nie zum Baum.
-     * Als deleted markierte Datensätze verbleiben im Baum (lft, rgt, position)
-     * und werden daher standardmäßig NICHT herausgefiltert.
+     * Helper method: SQL filter for records that belong to the tree.
+     * Temporary working copies (tmp=1) never belong to the tree.
+     * Records marked as deleted remain in the tree (lft, rgt, position)
+     * and are therefore by default NOT filtered out.
      *
-     * @param bool $excludeDeleted  true: zusätzlich `deleted`=0 fordern
-     *                              (für Eingabemasken / Select-Listen)
-     * @return string               ' AND ...' zum Anhängen an eine WHERE-Klausel
+     * @param bool $excludeDeleted  true: additionally require `deleted`=0
+     *                              (for input masks / select lists)
+     * @return string               ' AND ...' to append to a WHERE clause
      */
     private function treeFilter(bool $excludeDeleted = false): string
     {
@@ -152,17 +151,17 @@ trait TreeManagerTrait
     }
 
     /**
-     * Hilfsmethode: WHERE-Bedingung für den Inhaltsbereich aufbauen.
+     * Helper method: build the WHERE condition for the content area.
      *
-     * Jeder Baum lebt innerhalb EINES Bereichs (siehe Klassenkommentar). Ohne diesen
-     * Filter würden sich Geschwister-Operationen auf der Wurzelebene
-     * (`parent_id` IS NULL) über alle Bereiche hinweg auswirken - dort ist der
-     * Bereich das einzige Unterscheidungsmerkmal.
+     * Every tree lives within ONE area (see class comment). Without this
+     * filter, sibling operations on the root level
+     * (`parent_id` IS NULL) would affect all areas - there the
+     * area is the only distinguishing feature.
      *
-     * @param int    $areaId      Id des Inhaltsbereichs (0: kein Filter)
-     * @param string &$bindTypes  Bind-Typen (werden ergänzt)
-     * @param array  &$values     Bind-Werte (werden ergänzt)
-     * @return string             '' oder ' AND `area_id` = ?'
+     * @param int    $areaId      id of the content area (0: no filter)
+     * @param string &$bindTypes  bind types (are added to)
+     * @param array  &$values     bind values (are added to)
+     * @return string             '' or ' AND `area_id` = ?'
      */
     private function areaCondition(int $areaId, string &$bindTypes, array &$values): string
     {
@@ -173,16 +172,16 @@ trait TreeManagerTrait
     }
 
     /**
-     * Hilfsmethode: WHERE-Bedingung für den Parent aufbauen.
-     * parent_id = 0 steht für die Wurzelebene (`parent_id` IS NULL).
-     * Der Bereichsfilter läuft immer mit (siehe areaCondition()).
-     * Bind-Typen und -Werte werden bei Bedarf ergänzt.
+     * Helper method: build the WHERE condition for the parent.
+     * parent_id = 0 stands for the root level (`parent_id` IS NULL).
+     * The area filter always runs along (see areaCondition()).
+     * Bind types and values are added as needed.
      *
-     * @param int    $parentId    Id des Parent-Datensatzes oder 0
-     * @param int    $areaId      Id des Inhaltsbereichs (0: kein Filter)
-     * @param string &$bindTypes  Bind-Typen (werden ergänzt)
-     * @param array  &$values     Bind-Werte (werden ergänzt)
-     * @return string             SQL-Bedingung
+     * @param int    $parentId    id of the parent record or 0
+     * @param int    $areaId      id of the content area (0: no filter)
+     * @param string &$bindTypes  bind types (are added to)
+     * @param array  &$values     bind values (are added to)
+     * @return string             SQL condition
      */
     private function parentCondition(int $parentId, int $areaId, string &$bindTypes, array &$values): string
     {
@@ -198,11 +197,11 @@ trait TreeManagerTrait
     }
 
     /**
-     * Bereichs-Id eines Datensatzes nachschlagen.
-     * Für die wenigen Stellen, die nur eine Id in der Hand haben.
+     * Look up the area id of a record.
+     * For the few places that only have an id at hand.
      *
      * @param int $id  `{tableName}_id`
-     * @return int     0, wenn die Tabelle keine Bereiche kennt oder der Datensatz fehlt
+     * @return int     0 if the table does not know areas or the record is missing
      */
     private function areaIdOf(int $id): int
     {
@@ -218,21 +217,21 @@ trait TreeManagerTrait
     }
 
     /**
-     * Lesezugriff: Lädt einen Zweig inklusive aller Kinder.
-     * Wird 0 übergeben, wird der gesamte Baum des Bereichs geladen.
+     * Read access: loads a branch including all children.
+     * If 0 is passed, the entire tree of the area is loaded.
      *
-     * @param int $rootId    Id des Root-Datensatzes oder 0 für den gesamten Baum
-     * @param int $levels    Tiefe relativ zum Root-Knoten:
-     *                       -1: unbegrenzt (Standard)
-     *                        0: nur der Root-Knoten selbst, keine Kinder
-     *                        1: Root + direkte Kinder
-     *                        n: Root + n Ebenen Kinder
-     * @param bool $includeDeleted  true:  als deleted markierte Datensätze mitliefern (Standard,
-     *                                     sie verbleiben im Baum; das Feld `deleted` steht im Ergebnis)
-     *                              false: nur nicht-gelöschte Datensätze
-     * @param int $areaId    Inhaltsbereich; bei $rootId > 0 wird er aus dem Root-Knoten
-     *                       übernommen. Ohne $rootId bei Tabellen mit `area_id` zwingend,
-     *                       sonst kämen die Bäume aller Bereiche gemischt zurück.
+     * @param int $rootId    id of the root record, or 0 for the entire tree
+     * @param int $levels    depth relative to the root node:
+     *                       -1: unlimited (default)
+     *                        0: only the root node itself, no children
+     *                        1: root + direct children
+     *                        n: root + n levels of children
+     * @param bool $includeDeleted  true:  also return records marked as deleted (default,
+     *                                     they remain in the tree; the field `deleted` is in the result)
+     *                              false: only non-deleted records
+     * @param int $areaId    content area; with $rootId > 0 it is taken
+     *                       from the root node. Without $rootId mandatory for tables with `area_id`,
+     *                       otherwise the trees of all areas would come back mixed.
      */
     public function loadTree(int $rootId = 0, int $levels = -1, bool $includeDeleted = true, int $areaId = 0): array
     {
@@ -241,7 +240,7 @@ trait TreeManagerTrait
         $values     = [];
         $rootDepth  = 0;
         if ($rootId > 0) {
-            // Root-Knoten laden, um lft/rgt/depth/area_id für die Bereichsabfrage zu kennen
+            // Load the root node to know lft/rgt/depth/area_id for the area query
             $sql = "SELECT `lft`, `rgt`, `depth`"
                  . ($this->hasAreaId ? ", `area_id`" : "")
                  . " FROM `{$this->tableName}` WHERE `{$this->tableName}_id` = ?";
@@ -255,28 +254,28 @@ trait TreeManagerTrait
                 return [];
             }
             if ((int)$root['lft'] < 1) {
-                // Kein gültiger Nested-Set-Bereich (Bereich ohne Baum) -> nur der Knoten
+                // Not a valid nested-set range (area without a tree) -> only the node
                 return $this->loadOne($rootId);
             }
             $areaId    = (int)($root['area_id'] ?? $areaId);
             $rootDepth = (int)$root['depth'];
-            // Teilbaum: alle Knoten im lft/rgt-Bereich des Root-Knotens
+            // Subtree: all nodes in the lft/rgt range of the root node
             $conditions[] = '`lft` BETWEEN ? AND ?';
             $bindTypes   .= 'ii';
             $values[]     = (int)$root['lft'];
             $values[]     = (int)$root['rgt'];
         }
         else {
-            // Ohne Root-Knoten nur echte Baum-Knoten (lft = 0 heißt: kein Baum)
+            // Without a root node only real tree nodes (lft = 0 means: no tree)
             $conditions[] = '`lft` > 0';
         }
-        // Ein Baum je Bereich - ohne diesen Filter kämen fremde Bereiche mit
+        // One tree per area - without this filter foreign areas would come along
         if ($this->hasAreaId && $areaId > 0) {
             $conditions[] = '`area_id` = ?';
             $bindTypes   .= 'i';
             $values[]     = $areaId;
         }
-        // tmp-Kopien nie, deleted nur auf Wunsch herausfiltern
+        // tmp copies never, deleted only filtered out on request
         if ($this->hasTmp) {
             $conditions[] = '`tmp`=0';
         }
@@ -284,12 +283,12 @@ trait TreeManagerTrait
             $conditions[] = '`deleted`=0';
         }
         if ($levels >= 0) {
-            // Tiefenbegrenzung: absoluter depth-Wert = root-Tiefe + gewünschte Ebenen
+            // Depth limit: absolute depth value = root depth + desired levels
             $conditions[] = '`depth` <= ?';
             $bindTypes   .= 'i';
             $values[]     = $rootDepth + $levels;
         }
-        // WHERE-Klausel zusammensetzen
+        // Assemble the WHERE clause
         $where = !empty($conditions)
             ? 'WHERE ' . implode(' AND ', $conditions)
             : '';
@@ -301,7 +300,7 @@ trait TreeManagerTrait
     }
 
     /**
-     * Hilfsmethode für loadTree(): einzelnen Datensatz als einelementige Liste.
+     * Helper method for loadTree(): single record as a one-element list.
      */
     private function loadOne(int $id): array
     {
@@ -315,51 +314,51 @@ trait TreeManagerTrait
     }
 
     /**
-     * Tree-Elemente für das Erstellen eines neuen Datensatzes zusammentragen.
-     * Setzt position und bereitet Platzhalter für lft/rgt/depth vor.
-     * rebuildTree() wird nach dem INSERT in Dataset::save() aufgerufen.
+     * Collect tree elements for creating a new record.
+     * Sets position and prepares placeholders for lft/rgt/depth.
+     * rebuildTree() is called after the INSERT in Dataset::save().
      *
-     * Wird nur für Bereiche mit Baum gerufen (Dataset::save() prüft isTreeArea()).
+     * Only called for areas with a tree (Dataset::save() checks isTreeArea()).
      *
-     * @param array $data    Daten, die zum Speichern bereit sind (werden erweitert)
-     * @param int   $areaId  Inhaltsbereich des Datensatzes
+     * @param array $data    data ready for saving (is extended)
+     * @param int   $areaId  content area of the record
      */
     public function createInTree(array &$data, int $areaId = 0): void
     {
         $parentId   = (int)($data['parent_id']   ?? 0);
         $previousId = (int)($data['previous_id'] ?? 0);
-        // Validierung der angegebenen Datensätze (müssen im selben Bereich liegen)
+        // Validation of the given records (must lie in the same area)
         $this->validateNodeExists($parentId,   'parent_id',   $areaId);
         $this->validateNodeExists($previousId, 'previous_id', $areaId);
-        // Positionen der Zielebene müssen 1..n lauten, sonst rechnet
-        // calculatePosition() mit Doppelbelegungen weiter (normalizeLevel())
+        // Positions of the target level must be 1..n, otherwise
+        // calculatePosition() would continue with duplicate assignments (normalizeLevel())
         $this->normalizeLevel($parentId, $areaId);
-        // position aus previous_id ableiten und Geschwister nach hinten schieben
+        // derive position from previous_id and shift siblings backwards
         $data['position'] = $this->calculatePosition($parentId, $previousId, $areaId);
         $this->shiftPositionsDown($parentId, $data['position'], 0, $areaId);
-        // Platzhalter – rebuildTree() setzt die echten Werte nach dem INSERT
+        // Placeholders – rebuildTree() sets the real values after the INSERT
         $data['lft']  = 0;
         $data['rgt']  = 0;
         $data['depth'] = 0;
     }
 
     /**
-     * Tree-Elemente für das Aktualisieren eines Datensatzes zusammentragen.
-     * Prüft intern, ob eine Neupositionierung überhaupt nötig ist –
-     * previous_id (Vorangehender Datensatz): wird zwar in $data angegeben, aber nicht selbst
-     * in der Datenbank gespeichert und fehlt daher in $previousData daher immer
-     * und muss daher abgeleitet werden.
-     * 
-     * Schließt die Lücke am alten Platz, schafft Platz am neuen Platz
-     * und schreibt parent_id + position direkt in die DB.
-     * rebuildTree() wird nach dem UPDATE in Dataset::save() aufgerufen.
+     * Collect tree elements for updating a record.
+     * Internally checks whether a repositioning is needed at all –
+     * previous_id (preceding record): it is specified in $data, but is not itself
+     * stored in the database and therefore is always missing from $previousData
+     * and must be derived.
      *
-     * @param array $data          Daten die zum Speichern bereit sind (werden erweitert)
-     * @param array $previousData  Bisherige Daten des Datensatzes
-     * @param int   $areaId        Inhaltsbereich des Datensatzes (Ziel-Bereich)
-     * @return bool                true, wenn der Datensatz tatsächlich umgehängt oder
-     *                             verschoben wurde - nur dann muss der Aufrufer den
-     *                             Baum neu berechnen lassen
+     * Closes the gap at the old place, makes room at the new place
+     * and writes parent_id + position directly into the DB.
+     * rebuildTree() is called after the UPDATE in Dataset::save().
+     *
+     * @param array $data          data ready for saving (is extended)
+     * @param array $previousData  previous data of the record
+     * @param int   $areaId        content area of the record (target area)
+     * @return bool                true if the record was actually re-attached or
+     *                             moved - only then must the caller have the
+     *                             tree recalculated
      */
     public function updateInTree(array &$data, array $previousData, int $areaId = 0): bool
     {
@@ -369,48 +368,48 @@ trait TreeManagerTrait
         $oldParentId = (int)($previousData['parent_id'] ?? 0);
         $oldPosition = (int)($previousData['position']  ?? 0);
         $oldAreaId   = (int)($previousData['area_id']   ?? $areaId);
-        // Bisherige Ebene auf 1..n bringen (Doppelbelegungen, Lücken, Position 0 aus
-        // Altbeständen) - sonst stimmen weder der abgeleitete Vorgänger noch die
-        // Verschiebungen. Die eigene Position hat sich dabei ggf. geändert.
+        // Bring the previous level to 1..n (duplicate assignments, gaps, position 0 from
+        // legacy data) – otherwise neither the derived predecessor nor the
+        // shifts are correct. Its own position may have changed in the process.
         if ($this->normalizeLevel($oldParentId, $oldAreaId)) {
             $oldPosition = $this->positionOf($id, $oldPosition);
         }
-        // previous_id (ID des vorangehenden Datensatzes) aus der DB ableiten,
-        // da dieses Feld nicht persistiert wird und in $previousData fehlt.
-        // WICHTIG: dieselbe Logik wie beim Befüllen der Eingabemaske verwenden
-        // (getPreviousId überspringt als deleted markierte Datensätze),
-        // damit der Vergleich mit der aus der Maske übermittelten previous_id
-        // konsistent bleibt - auch wenn Datensätze zwischenzeitlich
-        // deleted markiert und wiederhergestellt wurden.
+        // Derive previous_id (ID of the preceding record) from the DB,
+        // since this field is not persisted and is missing from $previousData.
+        // IMPORTANT: use the same logic as when filling the input mask
+        // (getPreviousId skips records marked as deleted),
+        // so that the comparison with the previous_id submitted from the mask
+        // stays consistent - even if records have meanwhile been
+        // marked as deleted and restored.
         $oldPreviousId = 0;
         if ($oldPosition > 1) {
             $oldPreviousId = $this->getPreviousId($oldParentId, $oldPosition, $oldAreaId);
         }
-        // Keine Neupositionierung nötig
+        // No repositioning needed
         if (
             $parentId   === $oldParentId
             && $previousId === $oldPreviousId
             && $areaId     === $oldAreaId
         ) {
-            // Aktuelle Position mitgeben: ohne Baum schreibt Dataset::save() die
-            // Spalte aus $data (der geladene Wert kann durch normalizeLevel() veraltet sein)
+            // Pass the current position: without a tree Dataset::save() writes the
+            // column from $data (the loaded value may be outdated due to normalizeLevel())
             $data['position'] = $oldPosition;
             return false;
         }
-        // Validierung der angegebenen Datensätze (müssen im selben Bereich liegen)
+        // Validation of the given records (must lie in the same area)
         $this->validateNodeExists($parentId,   'parent_id',   $areaId);
         $this->validateNodeExists($previousId, 'previous_id', $areaId);
-        // Lücke am alten Platz schließen
+        // Close the gap at the old place
         $this->shiftPositionsUp($oldParentId, $oldPosition, $id, $oldAreaId);
-        // Neue Ebene ebenfalls auf 1..n bringen (die eigene Zeile zählt dort nicht
-        // mit, sie steht noch auf der alten Ebene bzw. wird unten überschrieben)
+        // Also bring the new level to 1..n (its own row does not count there,
+        // it still stands on the old level or is overwritten below)
         if ($parentId !== $oldParentId || $areaId !== $oldAreaId) {
             $this->normalizeLevel($parentId, $areaId, $id);
         }
-        // Platz am neuen Platz schaffen
+        // Make room at the new place
         $newPosition = $this->calculatePosition($parentId, $previousId, $areaId);
         $this->shiftPositionsDown($parentId, $newPosition, $id, $areaId);
-        // parent_id und position direkt schreiben (vor rebuildTree)
+        // Write parent_id and position directly (before rebuildTree)
         $newParentSql = $parentId === 0 ? '`parent_id` = NULL' : '`parent_id` = ?';
         $bindTypes    = $parentId === 0 ? 'ii'                 : 'iii';
         $values       = $parentId === 0
@@ -421,43 +420,43 @@ trait TreeManagerTrait
             . " WHERE `{$this->tableName}_id` = ?",
             $bindTypes, $values
         );
-        // lft, rgt, depth – rebuildTree() übernimmt das nach dem UPDATE in save()
+        // lft, rgt, depth – rebuildTree() takes care of these after the UPDATE in save()
         $data['position'] = $newPosition;
         return true;
     }
 
     /**
-     * Ids eines Teilbaums in Bearbeitungsreihenfolge sammeln.
+     * Collect the ids of a subtree in processing order.
      *
-     * Ersetzt die früheren Massen-Operationen deleteWithChilds() und
-     * setDeletedWithChilds(), die den ganzen Teilbaum mit EINEM SQL-Statement über
-     * lft/rgt abgeräumt haben - dabei liefen keine Hooks. Stattdessen liefert diese
-     * Methode nur noch die Ids; Dataset schickt sie einzeln durch softDeleteOne(),
-     * restoreOneCore() bzw. finalDeleteOne().
+     * Replaces the former mass operations deleteWithChilds() and
+     * setDeletedWithChilds(), which cleared the whole subtree with ONE SQL statement via
+     * lft/rgt - no hooks ran in the process. Instead this method only returns the
+     * ids now; Dataset sends them one at a time through softDeleteOne(),
+     * restoreOneCore() or finalDeleteOne().
      *
-     * REIHENFOLGE
-     *     'delete', 'purge'  Blätter zuerst (rgt aufsteigend). Beim endgültigen
-     *                        Löschen zwingend: der Fremdschlüssel parent_id löscht
-     *                        mit ON DELETE CASCADE sonst ganze Teilbäume, ohne dass
-     *                        deren hookOnDelete() je liefe.
-     *     'restore'          Eltern zuerst (lft aufsteigend) - die Umkehrung.
+     * ORDER
+     *     'delete', 'purge'  leaves first (rgt ascending). Mandatory for permanent
+     *                        deletion: otherwise the foreign key parent_id would delete
+     *                        whole subtrees with ON DELETE CASCADE, without their
+     *                        hookOnDelete() ever running.
+     *     'restore'          parents first (lft ascending) - the reverse.
      *
      * FILTER
-     *     'delete'   nur noch nicht markierte Datensätze (`deleted` = 0): bereits
-     *                markierte behalten den changed_at ihres eigenen Löschvorgangs
-     *     'restore'  nur markierte Datensätze (`deleted` = 1), und nur die mit exakt
-     *                dem changed_at des rückgängig zu machenden Vorgangs
-     *                (Dataset::$restoreTimestamp) - Datensätze aus früheren
-     *                Löschvorgängen bleiben markiert
-     *     'purge'    alle Datensätze des Teilbaums
+     *     'delete'   only not yet marked records (`deleted` = 0): already
+     *                marked ones keep the changed_at of their own deletion operation
+     *     'restore'  only marked records (`deleted` = 1), and only those with exactly
+     *                the changed_at of the operation to be undone
+     *                (Dataset::$restoreTimestamp) - records from earlier
+     *                deletion operations remain marked
+     *     'purge'    all records of the subtree
      *
-     * Der lft/rgt-Bereich gilt je Inhaltsbereich, `area_id` läuft deshalb mit.
-     * Temporäre Arbeitskopien sind nie Teil des Baums (treeFilter()) und werden je
-     * Datensatz von den Einzel-Funktionen mitbehandelt.
+     * The lft/rgt range applies per content area, hence `area_id` runs along.
+     * Temporary working copies are never part of the tree (treeFilter()) and are
+     * handled by the individual functions per record.
      *
-     * @param array  $data  Datensatz mit lft / rgt / area_id (aus loadProductive())
+     * @param array  $data  record with lft / rgt / area_id (from loadProductive())
      * @param string $mode  'delete' | 'restore' | 'purge'
-     * @return int[]        Ids in Bearbeitungsreihenfolge
+     * @return int[]        ids in processing order
      */
     public function subtreeIds(array $data, string $mode = 'delete'): array
     {
@@ -465,8 +464,8 @@ trait TreeManagerTrait
         $lft = (int)($data['lft'] ?? 0);
         $rgt = (int)($data['rgt'] ?? 0);
         if ($lft < 1 || $rgt <= $lft) {
-            // Kein gültiger Nested-Set-Bereich (Bereich ohne Baum, Blatt ohne
-            // gültige Grenzen) -> nur der Datensatz selbst
+            // Not a valid nested-set range (area without a tree, leaf without
+            // valid boundaries) -> only the record itself
             $id = (int)($data[$idField] ?? 0);
             return $id > 0 ? [$id] : [];
         }
@@ -491,7 +490,7 @@ trait TreeManagerTrait
             }
         }
 
-        // Blätter zuerst bzw. Eltern zuerst
+        // Leaves first, or parents first
         $sql .= ($mode === 'restore') ? " ORDER BY `lft` ASC" : " ORDER BY `rgt` ASC";
 
         $this->db->pushResult();
@@ -503,15 +502,15 @@ trait TreeManagerTrait
     }
 
     /**
-     * Lücke schließen, die ein endgültig gelöschter Datensatz bei seinen Geschwistern
-     * hinterlässt (Adjacency-List-Positionierung).
+     * Close the gap that a permanently deleted record leaves among its siblings
+     * (adjacency-list positioning).
      *
-     * Wird von Dataset::finalDeleteOne() je gelöschtem Datensatz gerufen - nur für
-     * Datensätze aus Bereichen mit Baum. lft, rgt und depth bleiben dabei außen vor -
-     * die richtet der Aufrufer mit EINEM rebuildTree()-Lauf am Ende des gesamten
-     * Vorgangs.
+     * Called by Dataset::finalDeleteOne() for each deleted record - only for
+     * records from areas with a tree. lft, rgt and depth are left out here -
+     * the caller sorts them out with ONE rebuildTree() run at the end of the entire
+     * operation.
      *
-     * @param array $data  Datensatz mit parent_id / position / area_id
+     * @param array $data  record with parent_id / position / area_id
      */
     public function closePositionGap(array $data): void
     {
@@ -523,17 +522,17 @@ trait TreeManagerTrait
     }
 
     /**
-     * lft, rgt, depth und parent_ids sofort neu berechnen - INNERHALB der laufenden
-     * Transaktion des Aufrufers.
+     * Recalculate lft, rgt, depth and parent_ids immediately - WITHIN the running
+     * transaction of the caller.
      *
-     * Dataset ruft das einmal am Ende von purge() bzw. finalDelete(), nachdem alle
-     * Datensätze einzeln entfernt wurden. Der Umweg über eine eigene Methode existiert,
-     * weil rebuildTree() private ist.
+     * Dataset calls this once at the end of purge() or finalDelete(), after all
+     * records have been removed individually. The detour via its own method exists
+     * because rebuildTree() is private.
      *
-     * Nicht zu verwechseln mit externalRebuildTree(): das öffnet eine EIGENE
-     * Transaktion und ist für Aufrufer gedacht, die noch keine haben (Reparaturwerkzeuge).
+     * Not to be confused with externalRebuildTree(): that opens its OWN
+     * transaction and is meant for callers that do not have one yet (repair tools).
      *
-     * @param int $areaId  Inhaltsbereich, dessen Baum neu berechnet wird
+     * @param int $areaId  content area whose tree is recalculated
      */
     public function rebuildTreeNow(int $areaId = 0): void
     {
@@ -542,17 +541,17 @@ trait TreeManagerTrait
     }
 
     /**
-     * Löschen ohne Kinder (withChilds == false): direkte Kinddatensätze dem Parent des
-     * betroffenen Datensatzes zuweisen, damit sie nicht verwaisen. Gilt für Soft-Delete
-     * und endgültiges Löschen gleichermaßen; gerufen aus Dataset::collectIds().
-     * Unterschied zum echten Löschen: der markierte Datensatz verbleibt als
-     * (deleted) Blatt im Baum und behält seine Position; die Kinder werden
-     * direkt HINTER ihm beim Parent einsortiert (keine Lücke zu schließen).
-     * Als deleted markierte Kinder laufen dabei mit.
-     * Anschließend wird der Baum des Bereichs neu berechnet (lft, rgt, depth, parent_ids).
-     * Läuft innerhalb der Transaktion des Aufrufers (Dataset::delete() / purge()).
+     * Delete without children (withChilds == false): assign direct child records to the parent of the
+     * affected record, so that they do not become orphans. Applies to soft delete
+     * and permanent deletion alike; called from Dataset::collectIds().
+     * Difference to real deletion: the marked record remains as a
+     * (deleted) leaf in the tree and keeps its position; the children are
+     * sorted in directly AFTER it under the parent (no gap to close).
+     * Children marked as deleted take part as well.
+     * Afterwards the tree of the area is recalculated (lft, rgt, depth, parent_ids).
+     * Runs within the transaction of the caller (Dataset::delete() / purge()).
      *
-     * @param array $data  Bisherige Inhalte des zu markierenden Datensatzes
+     * @param array $data  previous contents of the record to be marked
      */
     public function liftChildren(array $data): void
     {
@@ -562,7 +561,7 @@ trait TreeManagerTrait
         $position = (int)($data['position']  ?? 0);
         $areaId   = (int)($data['area_id']   ?? 0);
         if ($id === 0) return;
-        // Direkte Kinder ermitteln (inklusive deleted, ohne tmp-Kopien)
+        // Determine direct children (including deleted, without tmp copies)
         $sql = "SELECT `{$idField}` FROM `{$this->tableName}` WHERE `parent_id` = ?";
         $sql .= $this->treeFilter();
         $sql .= " ORDER BY `position` ASC";
@@ -571,8 +570,8 @@ trait TreeManagerTrait
         $this->db->free();
         $count = count($children);
         if ($count === 0) return;
-        // Platz hinter dem markierten Datensatz schaffen:
-        // nachfolgende Geschwister um die Anzahl der Kinder nach hinten schieben
+        // Make room after the marked record:
+        // shift the following siblings backwards by the number of children
         $bindTypes = 'i';
         $values    = [$count];
         $sql = "UPDATE `{$this->tableName}` SET `position` = `position` + ?"
@@ -582,8 +581,8 @@ trait TreeManagerTrait
         $values[]   = $position;
         $sql .= $this->treeFilter();
         $this->db->query($sql, $bindTypes, $values);
-        // Kinder umhängen: neuer Parent, Positionen direkt hinter dem Datensatz
-        // (Reihenfolge der Kinder untereinander bleibt erhalten)
+        // Re-attach the children: new parent, positions directly after the record
+        // (order of the children among themselves is kept)
         $newParentSql = $parentId === 0 ? '`parent_id` = NULL' : '`parent_id` = ?';
         $pos = $position;
         foreach ($children as $childId) {
@@ -598,18 +597,18 @@ trait TreeManagerTrait
                 $bindTypes, $values
             );
         }
-        // lft, rgt, depth, parent_ids neu berechnen (Kinder sind eine Ebene hochgerückt)
-        // (Database erlaubt verschachtelte Transaktionen, siehe rebuildTree())
+        // Recalculate lft, rgt, depth, parent_ids (children have moved up one level)
+        // (Database allows nested transactions, see rebuildTree())
         $this->rebuildTree($areaId);
     }
 
     /**
-     * Kinder eines Knotens kopieren und sie an einen neuen (leeren) Knoten anhängen.
-     * Nach Duplizieren eines Datensatzes.
-     * Als deleted markierte Kinder werden nicht mitkopiert.
+     * Copy the children of a node and attach them to a new (empty) node.
+     * After duplicating a record.
+     * Children marked as deleted are not copied along.
      *
-     * @param int $idFrom  Id des Quell-Datensatzes
-     * @param int $idTo    Id des Ziel-Datensatzes
+     * @param int $idFrom  id of the source record
+     * @param int $idTo    id of the target record
      */
     public function copyChilds(int $idFrom, int $idTo): void
     {
@@ -623,56 +622,56 @@ trait TreeManagerTrait
     }
 
     /**
-     * Führt eine rekursive Kopie eines Teilbaums durch.
-     * Als deleted markierte Datensätze werden übersprungen.
+     * Perform a recursive copy of a subtree.
+     * Records marked as deleted are skipped.
      *
-     * @param int $sourceParentId  Id des Quell-Parent-Datensatzes
-     * @param int $targetParentId  Id des Ziel-Parent-Datensatzes
-     * @param int $areaId          Inhaltsbereich des ZIEL-Knotens
+     * @param int $sourceParentId  id of the source parent record
+     * @param int $targetParentId  id of the target parent record
+     * @param int $areaId          content area of the TARGET node
      */
     private function copySubtree(int $sourceParentId, int $targetParentId, int $areaId): void
     {
-        // Der Quell-Parent ist immer ein echter Knoten - mit 0 (Wurzelebene) wäre die
-        // Auswahl nicht auf einen Bereich eingegrenzt.
+        // The source parent is always a real node - with 0 (root level) the
+        // selection would not be restricted to an area.
         if ($sourceParentId < 1) return;
         $bindTypes = '';
         $values    = [];
-        // Quelle: der Bereich ergibt sich aus dem Quell-Parent selbst
+        // Source: the area follows from the source parent itself
         $sql = "SELECT `{$this->tableName}_id` FROM `{$this->tableName}`"
              . " WHERE " . $this->parentCondition($sourceParentId, 0, $bindTypes, $values);
-        $sql .= $this->treeFilter(true); // deleted nicht mitkopieren
+        $sql .= $this->treeFilter(true); // do not copy deleted ones
         $sql .= " ORDER BY `position` ASC";
         
         $this->db->query($sql, $bindTypes, $values, true);
         $children = $this->db->fetchAll();
         $this->db->free();
         $idField       = $this->tableName . '_id';
-        $previousNewId = 0; // erster Eintrag hat keinen Vorgänger
+        $previousNewId = 0; // first entry has no predecessor
         foreach ($children as $childId) {
             $data = $this->load($childId);
             if (!$data) continue;
-            $data[$idField]      = 0;               // wird neu vergeben
-            $data['parent_id']   = $targetParentId; // neuer Parent
-            $data['previous_id'] = $previousNewId;  // Vorgänger im Zielbaum
+            $data[$idField]      = 0;               // is assigned anew
+            $data['parent_id']   = $targetParentId; // new parent
+            $data['previous_id'] = $previousNewId;  // predecessor in the target tree
             $newChildId = $this->save([], $data);
             if (!$newChildId) continue;
-            // Für den nächsten Durchlauf: dieser neue Datensatz ist der Vorgänger
+            // For the next pass: this new record is the predecessor
             $previousNewId = $newChildId;
-            // Rekursiv tiefer in den Baum gehen
+            // Recurse deeper into the tree
             $this->copySubtree($childId, $newChildId, $areaId);
         }
     }
 
     /**
-     * Prüft, ob ein Knoten existiert und wirft andernfalls eine Exception.
-     * Als deleted markierte Knoten gelten als nicht wählbar
-     * (sie stehen in den Select-Listen der Eingabemasken nicht zur Auswahl).
-     * Mit $areaId wird zugleich geprüft, dass der Knoten im SELBEN Inhaltsbereich
-     * liegt - ein Zweig darf nie über Bereichsgrenzen hinweg hängen.
+     * Checks whether a node exists and otherwise throws an exception.
+     * Nodes marked as deleted count as not selectable
+     * (they are not available for selection in the select lists of the input masks).
+     * With $areaId it is also checked that the node lies in the SAME content area -
+     * a branch must never hang across area boundaries.
      *
-     * @param int    $nodeId  Id des zu prüfenden Knotens (0 wird übersprungen)
-     * @param string $name    Feldname für die Fehlermeldung ('parent_id', 'previous_id')
-     * @param int    $areaId  Inhaltsbereich, in dem der Knoten liegen muss (0: egal)
+     * @param int    $nodeId  id of the node to check (0 is skipped)
+     * @param string $name    field name for the error message ('parent_id', 'previous_id')
+     * @param int    $areaId  content area in which the node must lie (0: any)
      */
     private function validateNodeExists(int $nodeId, string $name, int $areaId = 0): void
     {
@@ -693,21 +692,21 @@ trait TreeManagerTrait
     }
 
     /**
-     * Positionen EINER Ebene (Geschwister unter $parentId) auf 1..n bringen, sofern
-     * sie es nicht schon sind.
+     * Bring the positions of ONE level (siblings under $parentId) to 1..n, if
+     * they are not already.
      *
-     * Alle Positionsrechnungen (calculatePosition(), shiftPositions*(),
-     * getPreviousId()) setzen eine lückenlose Zählung ab 1 voraus. Altbestände,
-     * direkte Datenbank-Eingriffe oder Datensätze, die ohne `position`-Feld angelegt
-     * wurden, tragen aber Doppelbelegungen, Lücken oder 0 - dort erzeugte jedes
-     * Umsortieren neue Doppelbelegungen (z. B. 0,0,0,1). Die bisherige Reihenfolge
-     * bleibt erhalten (Gleichstand: nach Id). Als deleted markierte Datensätze
-     * zählen mit (sie belegen Positionen), Arbeitskopien nicht.
+     * All position calculations (calculatePosition(), shiftPositions*(),
+     * getPreviousId()) require a gapless count starting at 1. Legacy data,
+     * direct database intervention or records created without a `position`
+     * field, however, carry duplicate assignments, gaps or 0 - there every
+     * re-sorting produced new duplicate assignments (e.g. 0,0,0,1). The previous
+     * order is kept (tie: by id). Records marked as deleted
+     * count (they occupy positions), working copies do not.
      *
-     * @param int $parentId   Id des Parent-Datensatzes oder 0
-     * @param int $areaId     Inhaltsbereich
-     * @param int $excludeId  Datensatz, der nicht mitgezählt wird (0: keiner)
-     * @return bool           true, wenn Positionen umgeschrieben wurden
+     * @param int $parentId   id of the parent record or 0
+     * @param int $areaId     content area
+     * @param int $excludeId  record that is not counted (0: none)
+     * @return bool           true if positions were rewritten
      */
     private function normalizeLevel(int $parentId, int $areaId = 0, int $excludeId = 0): bool
     {
@@ -749,10 +748,10 @@ trait TreeManagerTrait
     }
 
     /**
-     * Aktuelle `position` eines Datensatzes aus der Datenbank.
+     * Current `position` of a record from the database.
      *
      * @param int $id        `{tableName}_id`
-     * @param int $fallback  Rückgabe, wenn der Datensatz fehlt
+     * @param int $fallback  return value if the record is missing
      */
     private function positionOf(int $id, int $fallback = 0): int
     {
@@ -768,21 +767,21 @@ trait TreeManagerTrait
     }
 
     /**
-     * Hilfsmethode zur Ermittlung der numerischen Position anhand der previous_id.
-     * Berücksichtigt parent_id und area_id, um Fehlzuordnungen zwischen Zweigen
-     * und zwischen Bereichen zu verhindern.
-     * Als deleted markierte Datensätze belegen weiterhin Positionen und
-     * werden daher NICHT herausgefiltert.
+     * Helper method to determine the numeric position from the previous_id.
+     * Takes parent_id and area_id into account, to prevent misassignments between branches
+     * and between areas.
+     * Records marked as deleted still occupy positions and
+     * are therefore NOT filtered out.
      *
-     * @param int $parentId    Id des Parent-Datensatzes oder 0
-     * @param int $previousId  Id des vorangehenden Datensatzes oder 0
-     * @param int $areaId      Inhaltsbereich
+     * @param int $parentId    id of the parent record or 0
+     * @param int $previousId  id of the preceding record or 0
+     * @param int $areaId      content area
      */
     private function calculatePosition(int $parentId, int $previousId, int $areaId = 0): int
     {
-        // Kein Vorgänger angegeben → erstes Element im Zweig
+        // No predecessor given → first element in the branch
         if ($previousId === 0) return 1;
-        // Position des Vorgängers laden – dabei prüfen ob er wirklich zum Parent gehört
+        // Load the predecessor's position – checking whether it really belongs to the parent
         $bindTypes = 'i';
         $values    = [$previousId];
         $sql = "SELECT `position` FROM `{$this->tableName}`"
@@ -795,7 +794,7 @@ trait TreeManagerTrait
         if ($prevPos) {
             return (int)$prevPos['position'] + 1;
         }
-        // Fallback: previous_id gehört nicht zum parent → ans Ende des Zweigs anhängen
+        // Fallback: previous_id does not belong to the parent → append at the end of the branch
         $bindTypes = '';
         $values    = [];
         $sql = "SELECT MAX(`position`) AS `max_pos` FROM `{$this->tableName}`"
@@ -809,14 +808,14 @@ trait TreeManagerTrait
     }
 
     /**
-     * Geschwister ab $fromPosition um +1 verschieben (Platz schaffen).
-     * Als deleted markierte Datensätze laufen dabei mit.
+     * Shift siblings from $fromPosition by +1 (make room).
+     * Records marked as deleted take part as well.
      *
-     * @param int $parentId      Id des Parent-Datensatzes oder 0
-     * @param int $fromPosition  Zielposition (ab hier wird verschoben)
-     * @param int $excludeId     Eigene Id (wird ausgeschlossen)
-     * @param int $areaId        Inhaltsbereich - auf der Wurzelebene das einzige
-     *                           Merkmal, das die Bereiche auseinanderhält
+     * @param int $parentId      id of the parent record or 0
+     * @param int $fromPosition  target position (shifting starts here)
+     * @param int $excludeId     own id (is excluded)
+     * @param int $areaId        content area - on the root level the only
+     *                           feature that keeps the areas apart
      */
     private function shiftPositionsDown(int $parentId, int $fromPosition, int $excludeId, int $areaId = 0): void
     {
@@ -834,13 +833,13 @@ trait TreeManagerTrait
     }
 
     /**
-     * Geschwister nach $fromPosition um -1 verschieben (Lücke schließen).
-     * Als deleted markierte Datensätze laufen dabei mit.
+     * Shift siblings after $fromPosition by -1 (close the gap).
+     * Records marked as deleted take part as well.
      *
-     * @param int $parentId      Id des Parent-Datensatzes oder 0
-     * @param int $fromPosition  Bisherige Position (ab hier+1 wird verschoben)
-     * @param int $excludeId     Eigene Id (wird ausgeschlossen)
-     * @param int $areaId        Inhaltsbereich (siehe shiftPositionsDown())
+     * @param int $parentId      id of the parent record or 0
+     * @param int $fromPosition  previous position (shifting starts at here+1)
+     * @param int $excludeId     own id (is excluded)
+     * @param int $areaId        content area (see shiftPositionsDown())
      */
     private function shiftPositionsUp(int $parentId, int $fromPosition, int $excludeId, int $areaId = 0): void
     {
@@ -858,25 +857,25 @@ trait TreeManagerTrait
     }
 
     /**
-     * Baum EINES Inhaltsbereichs neu aufbauen (lft, rgt, depth, parent_ids).
-     * Liest position + parent_id aus der DB und berechnet daraus
-     * das komplette Nested Set in einem Durchlauf.
-     * Als deleted markierte Datensätze verbleiben im Baum und
-     * erhalten daher ebenfalls aktuelle lft/rgt/depth-Werte.
+     * Rebuild the tree of ONE content area (lft, rgt, depth, parent_ids).
+     * Reads position + parent_id from the DB and calculates from them
+     * the complete nested set in one pass.
+     * Records marked as deleted remain in the tree and
+     * therefore also receive current lft/rgt/depth values.
      *
-     * `lft` beginnt in jedem Bereich wieder bei 1, `depth` bei 0.
+     * `lft` starts again at 1 in each area, `depth` at 0.
      *
-     * Datensätze, deren parent_id auf einen Knoten außerhalb der gelesenen Menge
-     * zeigt (Datenfehler, bereichsübergreifende parent_id), werden als Wurzelknoten
-     * behandelt - sie fielen sonst aus dem Baum und behielten alte lft/rgt-Werte.
+     * Records whose parent_id points to a node outside the read set
+     * (data error, cross-area parent_id) are treated as root nodes -
+     * otherwise they would fall out of the tree and keep old lft/rgt values.
      *
-     * @param int $areaId  Inhaltsbereich; bei Tabellen ohne `area_id` ohne Bedeutung
+     * @param int $areaId  content area; irrelevant for tables without `area_id`
      */
     private function rebuildTree(int $areaId = 0): void
     {
         if ($this->hasAreaId && $areaId < 1) return;
 
-        // FOR UPDATE nur innerhalb einer laufenden Transaktion
+        // FOR UPDATE only within a running transaction
         $forUpdate = $this->db->inTransaction() ? ' FOR UPDATE' : '';
 
         $bindTypes  = '';
@@ -905,7 +904,7 @@ trait TreeManagerTrait
         }
         foreach ($rows as $row) {
             $pId = (int)($row['parent_id'] ?? 0);
-            // Parent außerhalb der Menge (anderer Bereich, Datenfehler) -> Wurzel
+            // Parent outside the set (other area, data error) -> root
             if ($pId > 0 && !isset($known[$pId])) $pId = 0;
             $tree[$pId][] = (int)$row[$idField];
         }
@@ -913,7 +912,7 @@ trait TreeManagerTrait
         $updates = [];
         $traverse = function (int $nodeId, int $depth, array $parentIds) use (&$traverse, &$tree, &$counter, &$updates): void {
             $lft = $counter++;
-            // Für die Kinder dieses Knotens: Aktuellen Pfad kopieren und eigene ID anhängen
+            // For the children of this node: copy the current path and append own id
             $nextParentIds = $parentIds;
             $nextParentIds[] = $nodeId;
             if (isset($tree[$nodeId])) {
@@ -931,15 +930,15 @@ trait TreeManagerTrait
         };
         if (isset($tree[0])) {
             foreach ($tree[0] as $rootId) {
-                // Wurzelknoten: Tiefe 0, keine übergeordneten Elemente
+                // Root node: depth 0, no parent elements
                 $traverse($rootId, 0, []);
             }
         }
         if (!empty($updates)) {
-            // DB-Klasse erlaubt verschachtelte Transaktionen
+            // DB class allows nested transactions
             $this->db->beginTransaction();
             try {
-                // Prepared Statement statt riesiger SQL-String
+                // Prepared statement instead of a huge SQL string
                 $sql = "UPDATE `{$this->tableName}`"
                     . " SET `lft` = ?, `rgt` = ?, `depth` = ?, `parent_ids` = ?"
                     . " WHERE `{$this->tableName}_id` = ?";
@@ -955,10 +954,10 @@ trait TreeManagerTrait
     }
 
     /**
-     * Öffentlicher Zugriff auf rebuildTree() für externe Aufrufe (z. B. Migrations-Skripte).
-     * Öffnet eine eigene Transaktion.
+     * Public access to rebuildTree() for external calls (e.g. migration scripts).
+     * Opens its own transaction.
      *
-     * @param int $areaId  Inhaltsbereich; bei Tabellen ohne `area_id` ohne Bedeutung
+     * @param int $areaId  content area; irrelevant for tables without `area_id`
      */
     public function externalRebuildTree(int $areaId = 0): void
     {
@@ -974,19 +973,18 @@ trait TreeManagerTrait
     }
 
     /**
-     * Baumfelder eines Inhaltsbereichs zurücksetzen.
+     * Reset the tree fields of a content area.
      *
-     * Gerufen, wenn das Eingabefeld `parent_id` aus einem Bereich entfernt wird
-     * (Field::hookOnDeleted()): der Bereich ist danach flach, also müssen auch seine
-     * Datensätze flach sein - sonst blieben parent_id-Verweise und lft/rgt-Grenzen
-     * stehen, die niemand mehr pflegt und über die weiterhin gefiltert würde.
+     * Called when the input field `parent_id` is removed from an area
+     * (Field::hookOnDeleted()): the area is flat afterwards, so its records must be flat
+     * too - otherwise parent_id references and lft/rgt boundaries would remain,
+     * which nobody maintains any more and by which filtering would continue.
      *
-     * `position` bleibt erhalten, wird aber in der bisherigen ANZEIGEREIHENFOLGE des
-     * Baums (lft) neu durchnummeriert: die Reihenfolge, die der Redakteur zuletzt
-     * gesehen hat, überlebt damit den Umbau. Ein Bereich ohne `position`-Feld nutzt
-     * die Werte schlicht nicht.
+     * `position` is kept, but renumbered in the previous DISPLAY ORDER of the
+     * tree (lft): the order the editor last saw survives the conversion this way. An area
+     * without a `position` field simply does not use the values.
      *
-     * @param int $areaId  Inhaltsbereich
+     * @param int $areaId  content area
      */
     public function resetTreeFields(int $areaId): void
     {
@@ -998,7 +996,7 @@ trait TreeManagerTrait
         $tmpFilter = $this->hasTmp ? " AND `tmp` = 0" : '';
 
         $this->db->pushResult();
-        // 1. position in der bisherigen Baum-Reihenfolge neu vergeben (1..n)
+        // 1. reassign position in the previous tree order (1..n)
         $sql = "UPDATE `{$tableName}` AS `t`"
              . " JOIN ("
              . "   SELECT `{$idField}` AS `id`,"
@@ -1008,7 +1006,7 @@ trait TreeManagerTrait
              . " SET `t`.`position` = `n`.`pos`";
         $this->db->query($sql, 'i', [$areaId]);
 
-        // 2. Baumfelder neutralisieren
+        // 2. neutralize the tree fields
         $sql = "UPDATE `{$tableName}` SET `parent_id` = NULL, `lft` = 0, `rgt` = 0,"
              . " `depth` = 0, `parent_ids` = '[]' WHERE `area_id` = ?";
         $this->db->query($sql, 'i', [$areaId]);
@@ -1018,15 +1016,15 @@ trait TreeManagerTrait
     }
 
     /**
-     * Baum eines Inhaltsbereichs erstmalig aufbauen.
+     * Build the tree of a content area for the first time.
      *
-     * Gegenstück zu resetTreeFields(): gerufen, wenn im Bereich ein Eingabefeld
-     * `parent_id` angelegt wurde (Field::hookOnSaved()). Alle vorhandenen Datensätze
-     * sind zunächst Wurzelknoten; ihre `position` wird in der bisherigen Sortierung
-     * eindeutig gemacht (sonst wäre die Reihenfolge der Wurzeln zufällig), danach
-     * werden lft/rgt/depth/parent_ids erstmalig berechnet.
+     * Counterpart to resetTreeFields(): called when an input field `parent_id`
+     * was created in the area (Field::hookOnSaved()). All existing records
+     * are initially root nodes; their `position` is made unique in the previous sort order
+     * (otherwise the order of the roots would be random), afterwards
+     * lft/rgt/depth/parent_ids are calculated for the first time.
      *
-     * @param int $areaId  Inhaltsbereich
+     * @param int $areaId  content area
      */
     public function initTreeArea(int $areaId): void
     {
@@ -1038,15 +1036,15 @@ trait TreeManagerTrait
     }
 
     /**
-     * `position` eines Inhaltsbereichs lückenlos neu vergeben: je Elternknoten 1..n,
-     * in der bisherigen Reihenfolge.
+     * Reassign `position` of a content area without gaps: per parent node 1..n,
+     * in the previous order.
      *
-     * Die Reihenfolge bleibt dabei erhalten - es verschwinden nur Lücken und
-     * Doppelbelegungen. Gebraucht wird das, wenn ein Bereich neu einen Baum bekommt
-     * (initTreeArea()) und beim einmaligen Umstellen von Altbeständen auf die
-     * bereichsweise Zählung (Core/cron/rebuild_trees.php).
+     * The order is kept in the process - only gaps and
+     * duplicate assignments disappear. This is needed when an area newly gets a tree
+     * (initTreeArea()) and when legacy data is converted once to the
+     * per-area counting (Core/cron/rebuild_trees.php).
      *
-     * @param int $areaId  Inhaltsbereich
+     * @param int $areaId  content area
      */
     public function normalizePositions(int $areaId): void
     {
@@ -1068,18 +1066,18 @@ trait TreeManagerTrait
         $this->db->popResult();
     }
 
-    /** 
-     * Hilfsfunktion: den vorangehenden Datensatz bei gleichem Parent finden
-     * Als deleted markierte Datensätze werden übersprungen:
-     * sie verbleiben zwar im Baum (belegen Positionen), stehen aber in den
-     * Select-Listen (previous_id) der Eingabemasken nicht zur Auswahl.
-     * Dadurch wird previous_id auch dann korrekt ermittelt, wenn Datensätze
-     * zwischenzeitlich deleted markiert und wiederhergestellt wurden.
-     * 
-     * @param int $parentId  Id des eigenen Parents oder 0 (parent_id IS NULL)
-     * @param int $position  eigene Position
-     * @param int $areaId    Inhaltsbereich - auf der Wurzelebene zwingend, sonst
-     *                       käme der Vorgänger womöglich aus einem fremden Bereich
+    /**
+     * Helper function: find the preceding record under the same parent
+     * Records marked as deleted are skipped:
+     * they remain in the tree (occupy positions), but are not selectable in the
+     * select lists (previous_id) of the input masks.
+     * This way previous_id is also determined correctly if records have meanwhile been
+     * marked as deleted and restored.
+     *
+     * @param int $parentId  id of the own parent or 0 (parent_id IS NULL)
+     * @param int $position  own position
+     * @param int $areaId    content area - mandatory on the root level, otherwise
+     *                       the predecessor could possibly come from a foreign area
      */
     public function getPreviousId(int $parentId, int $position, int $areaId = 0): int
     {
@@ -1092,7 +1090,7 @@ trait TreeManagerTrait
             ." AND `position` < ?";
         $bindTypes .= 'i';
         $values[]   = $position;
-        $sql .= $this->treeFilter(true); // deleted überspringen
+        $sql .= $this->treeFilter(true); // skip deleted
         $sql .= " ORDER BY `position` DESC LIMIT 1";
         $this->db->query($sql, $bindTypes, $values);
         if ($this->db->num_rows > 0) return (int) $this->db->fetchNum()[0];
@@ -1100,17 +1098,17 @@ trait TreeManagerTrait
     }
     
     /**
-     * Ermittelt die IDs aller übergeordneten Datensätze (Vorfahren) eines Knotens
-     * in absteigender Reihenfolge (Root -> ... -> Großvater -> Vater),
-     * um daraus z. B. eine Pfadangabe (Breadcrumb) zu bilden.
-     * * Nutzt das Nested-Set (lft/rgt) für maximale Performance ohne Rekursion.
-     * Der lft/rgt-Bereich gilt je Inhaltsbereich, `area_id` läuft deshalb mit.
-     * Als deleted markierte Vorfahren verbleiben im Baum und damit im Pfad
-     * (das Ergebnis wäre sonst lückenhaft).
-     * Gibt null zurück, wenn kein übergeordneter Datensatz existiert.
+     * Determine the IDs of all parent records (ancestors) of a node
+     * in descending order (root -> ... -> grandfather -> father),
+     * e.g. to form a path (breadcrumb) from them.
+     * * Uses the nested set (lft/rgt) for maximum performance without recursion.
+     * The lft/rgt range applies per content area, hence `area_id` runs along.
+     * Ancestors marked as deleted remain in the tree and thus in the path
+     * (otherwise the result would have gaps).
+     * Returns null if no parent record exists.
      *
-     * @param array $data  Felder {$tableName_}id, 'lft', 'rgt', 'area_id'
-     * @return array|null  Array mit den IDs der Vorfahren oder null
+     * @param array $data  fields {$tableName_}id, 'lft', 'rgt', 'area_id'
+     * @return array|null  array with the IDs of the ancestors or null
      */
     public function getParentIds(array $data): ?array
     {
@@ -1119,11 +1117,11 @@ trait TreeManagerTrait
         $lft = (int)($data['lft'] ?? 0);
         $rgt = (int)($data['rgt'] ?? 0);
         if ($lft < 1 || $rgt <= $lft) {
-            return null; // kein Baum (flacher Bereich)
+            return null; // no tree (flat area)
         }
-        // Finde alle Vorfahren anhand des Nested Set Modells
-        // lft kleiner als eigener lft UND rgt größer als eigener rgt
-        // ORDER BY lft ASC sortiert von oben nach unten (Root zuerst, dann Parent)
+        // Find all ancestors using the nested set model
+        // lft smaller than own lft AND rgt greater than own rgt
+        // ORDER BY lft ASC sorts from top to bottom (root first, then parent)
         $bindTypes = 'ii';
         $values    = [$lft, $rgt];
         $sql = "SELECT `{$idField}` FROM `{$this->tableName}`"
@@ -1138,7 +1136,7 @@ trait TreeManagerTrait
         $ancestors = $this->db->fetchAll(); // flaches Array
         $this->db->free();
         if (empty($ancestors)) {
-            return null; // Kein Parent vorhanden (Root-Knoten)
+            return null; // no parent present (root node)
         }
         return $ancestors;
     }

@@ -1,42 +1,41 @@
 <?php
 /**
- * Systemnahe Dienste: Logging, Dateien und Verzeichnisse anlegen, kleine Helfer.
- * Instanzname im Code: $system.
+ * System-level services: logging, creating files and directories, small helpers.
+ * Instance name in the code: $system.
  *
- * Sammelstelle für alles, was mit dem Dateisystem oder dem Laufzeitzustand zu tun hat
- * und in keine der fachlichen Klassen gehört. Sie kennt als einzige Abhängigkeit die
- * Config - dadurch ist sie überall einsetzbar, auch sehr früh im Bootstrap.
+ * Collection point for everything that has to do with the file system or the runtime
+ * state and belongs to none of the domain classes. Its only dependency is the
+ * Config - which makes it usable everywhere, even very early in the bootstrap.
  *
- * SCHREIBZUGRIFFE IMMER MIT BASISVERZEICHNIS
+ * WRITE ACCESS ALWAYS WITH A BASE DIRECTORY
  * --------------------
- * createDir() und filePutContents() nehmen den Zielpfad grundsätzlich zweiteilig
- * entgegen: ein $baseDir, das existieren muss, und einen $relativePath darunter.
+ * createDir() and filePutContents() always take the target path in two parts:
+ * a $baseDir, which must exist, and a $relativePath below it.
  *
  *     $system->filePutContents($varDir, 'log/2026-09-03_sql.log', $text, append: true);
  *
- * Das ist kein Stilfrage, sondern die Absicherung: der relative Teil kommt in einigen
- * Aufrufen aus Benutzereingaben, und die Trennung erlaubt es, ihn zu normalisieren und
- * ein Ausbrechen aus dem Basisverzeichnis zu verhindern. Beide Methoden legen fehlende
- * Zwischenverzeichnisse an und setzen die Rechte aus permissions.dir / permissions.file.
+ * This is not a question of style but of protection: the relative part comes from
+ * user input in some calls, and the separation makes it possible to normalize it and
+ * to prevent escaping from the base directory. Both methods create missing
+ * intermediate directories and set the permissions from permissions.dir / permissions.file.
  *
  * LOGS
  * --------------------
- * log($name, $text) schreibt nach var/log/{Y-m-d}_{name}.log, eine Datei je Tag und
- * Zweck. Im Bestand verwendet:
- *   'sql'         bei system.debugsql + system.development_version,
- *   'sql-errors'  SQL-Fehler
- *   'cron-errors' Fehler
- *   'security' (zu viele falsche Logins)
- * Davon getrennt liegt das PHP-eigene Fehlerlog, das Config im Konstruktor auf
- * var/log/{Y-m-d}_php_errors.log umbiegt.
+ * log($name, $text) writes to var/log/{Y-m-d}_{name}.log, one file per day and
+ * purpose. In use:
+ *   'sql'         with system.debugsql + system.development_version,
+ *   'sql-errors'  SQL errors
+ *   'cron-errors' errors
+ *   'security' (too many failed sign-ins)
+ * Separate from this is the PHP error log, which Config redirects in the constructor to
+ * var/log/{Y-m-d}_php_errors.log.
  *
- * EXCEPTION-HANDLER
+ * EXCEPTION HANDLER
  * --------------------
- * handleException() ist als globaler Handler gedacht, die Registrierung im Konstruktor
- * ist derzeit auskommentiert - unbehandelte Exceptions laufen also in die
- * PHP-Standardbehandlung. Wird der Handler aktiviert, behandelt er ausschließlich
- * Datenbankfehler gesondert (loggen, im Entwicklungsmodus ausgeben, beenden); alles
- * andere wirft er unverändert weiter.
+ * handleException() is meant as a global handler; its registration in the constructor
+ * is currently commented out - so uncaught exceptions go to the standard PHP handling.
+ * If the handler is enabled, it treats only database errors specially (log them, output
+ * them in development mode, exit); everything else it rethrows unchanged.
  */
 namespace Camindo\Core;
 
@@ -46,72 +45,72 @@ class System {
         private Config $config
     )
     {
-        // Exceptions abfangen
-        // Auskommentiert: solange die Zeile deaktiviert ist, wird handleException()
-        // nirgends automatisch aufgerufen (siehe Klassenkommentar).
+        // Catch exceptions
+        // Commented out: as long as the line is disabled, handleException()
+        // is never called automatically (see class comment).
         // set_exception_handler([$this, 'handleException']);
     }
     
     /**
-     * Exceptions abfangen, die nicht durch catch behandelt wurden
+     * Catch exceptions that were not handled by a catch
      *
-     * Datenbankfehler werden protokolliert und beenden den Request - im
-     * Entwicklungsmodus (system.development_version) zusätzlich mit Klartextausgabe.
-     * Alle anderen Exceptions werden unverändert weitergeworfen, damit sie nicht
-     * stillschweigend verschluckt werden.
+     * Database errors are logged and end the request - in development mode
+     * (system.development_version) additionally with plain-text output.
+     * All other exceptions are rethrown unchanged, so that they are not
+     * swallowed silently.
      *
-     * Wird derzeit nicht als Handler registriert, siehe Konstruktor.
+     * Currently not registered as a handler, see constructor.
      */
     public function handleException(\Throwable $e): void {
 
         if ($e instanceof \mysqli_sql_exception) {
             if ($this->config->get('system.development_version')) {
-                // Debug Ausgabe
+                // Debug output
                 echo "Database exception: " . $e->getMessage();
             }
-            // Loggen
+            // Log
             $this->log('sql-errors', $e->getMessage());
             exit;
         }
 
-        // Alle anderen Fehler werden unverändert weitergeworfen!
+        // All other errors are rethrown unchanged!
         throw $e;
     }
 
     /**
-     * Schreibe in Logfile, z. B. cms_errors
-     * @param string $logName  Logfile-Name (wird um Tag und Extension erweitert)
-     * @param string $logText  Inhalt
+     * Write to a log file, e.g. cms_errors
+     * @param string $logName  log file name (extended by date and extension)
+     * @param string $logText  content
      */
     public function log(string $logName, string $logText): void {
-        // Pfad zur Datei zusammenstellen
+        // Build the path to the file
         $varDir = $this->config->get('paths.var_dir');
         $date = date('Y-m-d');
         $file = $date . '_' . $logName . '.log';
         $relativePath = 'log/' . $file;
 
-        // Zeile zusammenstellen
+        // Build the line
         $time = date('H:i:s');
         $logEntry = "[$time] " . $logText . PHP_EOL;
 
-        // Schreiben mit Flag FILE_APPEND
+        // Write with flag FILE_APPEND
         $this->filePutContents($varDir, $relativePath, $logEntry, append: true);
     }
 
     /**
-     * Erstelle Verzeichnis (rekursiv) innerhalb baseDir
-     * und setze Rechte entsprechend der Konfiguration
-     * @param string $baseDir       Grundverzeichnis (muss existieren)
-     * @param string $relativePath  relativer Pfad zum Grundverzeichnis
-     * @return bool                 Im Erfolgsfall true
+     * Create a directory (recursively) inside baseDir
+     * and set permissions according to the configuration
+     * @param string $baseDir       base directory (must exist)
+     * @param string $relativePath  relative path to the base directory
+     * @return bool                 true on success
      */
     
     public function createDir(string $baseDir, string $relativePath): bool
     {
-        // Gewünschte Berechtigungen ermitteln
+        // Determine the desired permissions
         $permissions = $this->config->get('permissions.dir') ?? 0775;
 
-        // Pfade bereinigen und normalisieren
+        // Clean up and normalize paths
         $baseDir = rtrim($baseDir, '/\\');
         $relativePath = trim(
             str_replace('\\', '/', $relativePath),
@@ -128,17 +127,17 @@ class System {
         foreach ($parts as $part) {
             $currentPath .= '/' . $part;
 
-            // Prüfen, ob das Verzeichnis auf dieser Ebene bereits existiert
+            // Check whether the directory already exists at this level
             if (!is_dir($currentPath)) {
                 
-                // Verzeichnis erstellen. 
-                // Der zusätzliche is_dir() Check verhindert Fehler durch Race Conditions 
-                // (falls ein anderer Prozess das Verzeichnis im selben Millisekunden-Bruchteil erstellt).
+                // Create the directory.
+                // The additional is_dir() check prevents errors caused by race conditions
+                // (if another process creates the directory within the same millisecond fraction).
                 if (!mkdir($currentPath) && !is_dir($currentPath)) {
                     return false; 
                 }
 
-                // Rechte explizit setzen, unabhängig von der Server-umask
+                // Set permissions explicitly, independent of the server umask
                 if (!chmod($currentPath, $permissions)) {
                     return false; 
                 }
@@ -149,26 +148,26 @@ class System {
     }
 
     /**
-     * Schreibe Datei
-     * 
-     * @param string $baseDir       Grundverzeichnis
-     * @param string $relativePath  relativer Pfad zum Grundverzeichnis inkl. Dateiname
-     * @param string $content       Inhalt
-     * @param bool $append          true: Inhalt wird an angehängt, false: überschreibt vorhandene Datei
-     * @return bool                 Im Erfolgsfall true
+     * Write a file
+     *
+     * @param string $baseDir       base directory
+     * @param string $relativePath  relative path to the base directory, incl. file name
+     * @param string $content       content
+     * @param bool $append          true: content is appended, false: overwrites an existing file
+     * @return bool                 true on success
      */
     public function filePutContents(string $baseDir, string $relativePath, string $content, bool $append = false, bool $lock = false): bool
     {
-        // Pfade bereinigen und normalisieren
+        // Clean up and normalize paths
         $baseDir = rtrim($baseDir, '/\\');
         $relativePath = trim(str_replace('\\', '/', $relativePath), '/');
 
-        // Den relativen Verzeichnispfad von der eigentlichen Datei trennen
+        // Separate the relative directory path from the actual file
         $relativeDir = dirname($relativePath);
 
-        // dirname() gibt '.' zurück, wenn kein Schrägstrich im Pfad enthalten ist (Datei liegt direkt im baseDir)
+        // dirname() returns '.' if the path contains no slash (file lies directly in baseDir)
         if ($relativeDir !== '.' && $relativeDir !== '') {
-            // Sicherstellen, dass die Verzeichnisstruktur existiert
+            // Make sure the directory structure exists
             if (!$this->createDir($baseDir, $relativeDir)) {
                 return false;
             }
@@ -185,35 +184,35 @@ class System {
             $flags |= LOCK_EX;
         }
 
-        // file_put_contents() gibt bei Erfolg die Anzahl der geschriebenen Bytes zurück, bei Fehler false.
+        // file_put_contents() returns the number of bytes written on success, false on error.
         $writeResult = file_put_contents($fullPath, $content, $flags);
 
         if ($writeResult === false) {
             return false;
         }
 
-        // Berechtigungen ermitteln
+        // Determine permissions
         $filePermissions = $this->config->get('permissions.file') ?? 0664;
 
-        // Dateirechte explizit setzen, um umask-Einschränkungen zu umgehen.
+        // Set file permissions explicitly to get around umask restrictions.
         chmod($fullPath, $filePermissions);
 
         return true;
     }
 
     /**
-     * Säubert mehrere Integers z. B. für eine IN()-Anweisung in der Datenbank
-     * liefert echte int-Werte als Array
+     * Sanitizes several integers, e.g. for an IN() statement in the database;
+     * returns real int values as an array
      *
-     * @param array|string|int $ids   Integers
-     * @param bool $removeZero        true: 0-Wert entfernen
-     * @return array                  auch [] ist möglich
+     * @param array|string|int $ids   integers
+     * @param bool $removeZero        true: remove the 0 value
+     * @return array                  [] is also possible
      *
-     * Wird gebraucht, wo Id-Listen in ein IN (...) müssen - dort lassen sich keine
-     * Platzhalter binden. intval() + array_filter() stellen sicher, dass nur Zahlen
-     * in den SQL-String gelangen. Negative Werte fallen immer raus, die 0 nur mit
-     * $removeZero (sie ist an manchen Stellen ein gültiger Wert, z. B. status_id).
-     * Doppelte Einträge werden entfernt, die Schlüssel neu durchnummeriert.
+     * Needed where lists of ids must go into an IN (...) - placeholders cannot be bound
+     * there. intval() + array_filter() ensure that only numbers get into the SQL
+     * string. Negative values always drop out, the 0 only with
+     * $removeZero (in some places it is a valid value, e.g. status_id).
+     * Duplicate entries are removed, the keys are renumbered.
      */
     public function sanitizeIds(array|string|int $ids, bool $removeZero = false): array {
         if (!is_array($ids)) {
@@ -230,11 +229,11 @@ class System {
 
 
     /**
-     * Konvertiert Byte-Werte in ein lesbares Format (z. B. "1.5 MB" oder "1.5 MiB").
+     * Converts byte values into a readable format (e.g. "1.5 MB" or "1.5 MiB").
      *
-     * @param float|int $bytes  Die Umzurechnende Anzahl an Bytes
-     * @param int       $factor 1000 für dezimale Präfixe (SI), 1024 für binäre Präfixe (IEC)
-     * @param int       $decimals Anzahl der Nachkommastellen (Standard: 1)
+     * @param float|int $bytes  the number of bytes to convert
+     * @param int       $factor 1000 for decimal prefixes (SI), 1024 for binary prefixes (IEC)
+     * @param int       $decimals number of decimal places (default: 1)
      * @return string
      */
     public function convertSize(float $bytes, int $factor = 1000, int $decimals = 1): string 
@@ -250,9 +249,9 @@ class System {
             ? ['Bytes', 'kB', 'MB', 'GB', 'TB', 'PB'] 
             : ['Bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
 
-        // Berechnet den passenden Präfix-Index anhand des Logarithmus
+        // Calculate the matching prefix index from the logarithm
         $i = (int) floor(log($bytes, $factor));
-        $i = min($i, count($units) - 1); // Maximal verfügbare Einheit nicht überschreiten
+        $i = min($i, count($units) - 1); // Do not exceed the largest available unit
 
         if ($i === 0) {
             return (int) $bytes . "{$nbsp}Bytes";
@@ -262,21 +261,21 @@ class System {
         $decimalSep = localeconv()['decimal_point'] ?? '.';
         $formatted  = number_format($value, $decimals, $decimalSep, '');
 
-        // Schneidet unberechtigte Nuller nach dem Komma ab (z. B. 1.0 -> 1)
+        // Strip superfluous zeros after the decimal point (e.g. 1.0 -> 1)
         $formatted = rtrim(rtrim($formatted, '0'), '.');
 
         return $formatted . $nbsp . $units[$i];
     }
 
     /**
-     * 404-Status senden.
+     * Send a 404 status.
      *
-     * Setzt nur den Header, gibt keinen Inhalt aus und beendet den Request nicht -
-     * darum muss sich der Aufrufer kümmern (vgl. RecordBackendServerFile::filePreview(),
-     * wo jedem Aufruf ein return folgt).
+     * Only sets the header, outputs no content and does not end the request -
+     * the caller has to take care of that (cf. RecordBackendServerFile::filePreview(),
+     * where every call is followed by a return).
      *
-     * Im Frontend noch ungenutzt: Page::resolveRequest() endet bei allen Fehlern mit
-     * die() und liefert dabei Status 200.
+     * Not used in the frontend yet: Page::resolveRequest() ends with
+     * die() on all errors and then returns status 200.
      */
     public function error404() {
         header($_SERVER["SERVER_PROTOCOL"]." 404 Not Found");

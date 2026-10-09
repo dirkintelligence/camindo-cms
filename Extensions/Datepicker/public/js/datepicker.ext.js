@@ -1,29 +1,29 @@
 /*
- * Extension Datepicker - Handler für cApp.extensions (13 §3.4)
+ * Extension Datepicker - handler for cApp.extensions (developer docs, chapter 08 (Components and extensions))
  *
- * Stellt neben das Textfeld ein Kalenderfeld (vanillajs-datepicker) und, bei Datum
- * mit Uhrzeit, ein natives Zeitfeld. Sprache des Kalenders und Datumsformat folgen
- * der Locale des Admins (cConfig.locale, z. B. de_AT): der Kalender nimmt die
- * passende Übersetzung aus Datepicker.locales, geschrieben wird der Wert so, wie ihn
- * das Backend selbst anzeigt - Intl.DateTimeFormat mit dateStyle 'medium' (und
- * timeStyle 'short', wenn eine Uhrzeit ungleich 00:00 gesetzt ist), also derselbe
- * ICU-Stil wie Cms::_formatDate(); Dataset::dateInputToIso() liest ihn zurück.
- * Ein ISO-Wert oder ein Wert im Anzeigeformat im Textfeld wird beim Öffnen in
- * Kalender und Zeitfeld übernommen. Optionen: mode (auto|datetime|date),
- * buttons (0|1: "Heute"/"Löschen"), week_numbers (0|1).
+ * Places a calendar field (vanillajs-datepicker) next to the text field and, for a date
+ * with time, a native time field. The language of the calendar and the date format follow
+ * the admin's locale (cConfig.locale, e.g. de_AT): the calendar takes the
+ * matching translation from Datepicker.locales, the value is written the way
+ * the backend itself displays it - Intl.DateTimeFormat with dateStyle 'medium' (and
+ * timeStyle 'short' if a time other than 00:00 is set), i.e. the same
+ * ICU style as Cms::_formatDate(); Dataset::dateInputToIso() reads it back.
+ * An ISO value or a value in the display format in the text field is taken over into
+ * the calendar and time field on opening. Options: mode (auto|datetime|date),
+ * buttons (0|1: "Today"/"Clear"), week_numbers (0|1).
  */
 (function (cApp) {
     'use strict';
 
     const ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    // Uhrzeit am Ende des Anzeigeformats: "14:30", "2:30 PM", "2:30 p.m." (auch mit
-    // geschütztem oder schmalem Leerzeichen vor AM/PM)
+    // Time at the end of the display format: "14:30", "2:30 PM", "2:30 p.m." (also with
+    // a non-breaking or narrow space before AM/PM)
     const TIME_TAIL = /[\s,\u00a0\u202f]*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[\s\u00a0\u202f]*([AaPp])\.?\s?[Mm]\.?)?[\s.]*$/;
 
     const icuLocale = String((window.cConfig || {}).locale || '');
     const bcp47 = icuLocale.replace(/_/g, '-') || 'en';
 
-    // Sprache des Kalenders: de_AT -> de-AT, sonst de; zh_Hans_CN -> zh-CN; unbekannt -> en
+    // Language of the calendar: de_AT -> de-AT, otherwise de; zh_Hans_CN -> zh-CN; unknown -> en
     function pickerLanguage() {
         const known = {};
         Object.keys(Datepicker.locales).forEach((key) => { known[key.toLowerCase()] = key; });
@@ -41,10 +41,10 @@
         return 'en';
     }
 
-    // Format-String für Datepicker.parseDate(), abgeleitet aus dem mittleren
-    // Datumsformat der Locale (Intl.formatToParts). null, wenn sich das Format nicht
-    // in Tokens fassen lässt (Wochentag, Buchstaben zwischen den Teilen, fremde
-    // Ziffern) - dann wird nur ISO erkannt.
+    // Format string for Datepicker.parseDate(), derived from the medium
+    // date format of the locale (Intl.formatToParts). null if the format cannot
+    // be expressed in tokens (weekday, letters between the parts, foreign
+    // digits) - then only ISO is recognized.
     function parseFormat() {
         let parts;
         try {
@@ -86,7 +86,7 @@
         }
     }
 
-    // Textfeld lesen: {date: Date|null, time: 'HH:MM'|''}
+    // Read the text field: {date: Date|null, time: 'HH:MM'|''}
     function parseValue(value) {
         value = String(value || '').trim();
         const result = { date: null, time: '' };
@@ -114,7 +114,7 @@
         return result;
     }
 
-    // Wert für das Textfeld im Anzeigeformat des Backends
+    // Value for the text field in the backend's display format
     function formatValue(date, time) {
         if (!date) return '';
         const value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -157,8 +157,8 @@
                     toDisplay: (date) => formatValue(date, ''),
                 },
                 autohide: true,
-                buttonClass: 'btn btn-light border-0', // randlose Schaltflächen
-                // Chevrons statt « »; icon-dir spiegelt sie bei RTL-Sprachen
+                buttonClass: 'btn btn-light border-0', // borderless buttons
+                // Chevrons instead of « »; icon-dir mirrors them in RTL languages
                 prevArrow: '<span class="icon icon-dir" aria-hidden="true">chevron_left</span>',
                 nextArrow: '<span class="icon icon-dir" aria-hidden="true">chevron_right</span>',
                 todayButton: buttons,

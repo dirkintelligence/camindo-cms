@@ -1,25 +1,25 @@
 <?php
 /**
- * Feldwerte im neutralen Format der API - unabhängig von Locale und Zeitzone der
- * Eingabemaske.
+ * Field values in the neutral format of the API - independent of the locale and time zone of the
+ * input mask.
  *
- *     integer, id         int (leer: null)
- *     float, decimal      float - Dezimalpunkt
- *     currency            String mit zwei Nachkommastellen ("1999.00"), gespeichert in Cent
+ *     integer, id         int (empty: null)
+ *     float, decimal      float - decimal point
+ *     currency            String with two decimal places ("1999.00"), stored in cents
  *     bit                 0 | 1
- *     timestampl          ISO 8601 mit Offset in der Zeitzone des Admins (in UTC gespeichert;
- *                         output() erwartet den Wert wie Record::load() ihn liefert)
- *     datetime            "Y-m-d H:i:s" ohne Offset (Wandzeit)
+ *     timestampl          ISO 8601 with offset in the time zone of the admin (stored in UTC;
+ *                         output() expects the value as Record::load() supplies it)
+ *     datetime            "Y-m-d H:i:s" without offset (wall time)
  *     time                "H:i:s"
- *     json, reltable      Array
- *     text, chars …       Text wie gespeichert (HTML-Felder: bereinigtes HTML)
- *     password            nie (null)
- *     file                Metadaten: filename, mime_type, extension, size, width,
- *                         height, language (Code bei mehrsprachigen Dateien)
+ *     json, reltable      array
+ *     text, chars …       text as stored (HTML fields: sanitized HTML)
+ *     password            never (null)
+ *     file                metadata: filename, mime_type, extension, size, width,
+ *                         height, language (code for multilingual files)
  *
- * "Kein Datum" (Cms::DATE_MIN) und "kein Ende" (Cms::DATE_MAX) sind null. Die Eingabe
- * (input()) nimmt dieselben Formate, bei Zeitpunkten mit oder ohne Offset.
- * Verknüpfungsfelder bereitet die jeweilige API-Klasse auf (sie brauchen Abfragen).
+ * "No date" (Cms::DATE_MIN) and "no end" (Cms::DATE_MAX) are null. The input
+ * (input()) takes the same formats, for times with or without offset.
+ * Link fields are prepared by the respective API class (they need queries).
  *
  * @see Camindo\Core\Api\ApiContext::isoTime()
  */
@@ -39,11 +39,11 @@ class ApiValues
     }
 
     /**
-     * Wert aus Record::load() bzw. einem aufbereiteten Cache-Eintrag (fromCache())
-     * in das neutrale Format bringen.
+     * Bring a value from Record::load() resp. a prepared cache entry (fromCache())
+     * into the neutral format.
      *
-     * @param mixed $value   Wert
-     * @param array $colDef  Felddefinition (type, display_type)
+     * @param mixed $value   value
+     * @param array $colDef  field definition (type, display_type)
      */
     public function output(mixed $value, array $colDef): mixed
     {
@@ -63,7 +63,7 @@ class ApiValues
             case 'bit':
                 return (is_string($value) && strlen($value) === 1 && ord($value) < 2) ? ord($value) : (int)(bool)$value;
             case 'timestampl':
-                // Record::load() / Cms::fetch() liefern die Zeitzone des Admins
+                // Record::load() / Cms::fetch() supply the time zone of the admin
                 return $this->isDate((string)$value) ? $this->context->isoLocal((string)$value) : null;
             case 'datetime':
                 return $this->isDate((string)$value) ? substr((string)$value, 0, 19) : null;
@@ -78,27 +78,27 @@ class ApiValues
     }
 
     /**
-     * Eingabe im neutralen Format in das Datenbankformat bringen - für
-     * Record::importSave() mit $storedFields: dann entfällt die Umrechnung aus dem
-     * Eingabeformat der Maske (Locale, Zeitzone), geprüft wird nach den Regeln des
-     * Feldes wie sonst auch.
+     * Bring input in the neutral format into the database format - for
+     * Record::importSave() with $storedFields: then the conversion from the input format
+     * of the mask (locale, time zone) is omitted; checking takes place by the rules of the
+     * field as usual.
      *
-     *     integer, id      Ganzzahl bzw. Ziffernfolge
-     *     float, decimal   Zahl bzw. Zeichenkette mit Dezimalpunkt (kein Komma)
-     *     currency         Zahl bzw. "12.50" (höchstens zwei Nachkommastellen) -> Cent
+     *     integer, id      integer resp. digit sequence
+     *     float, decimal   number resp. string with decimal point (no comma)
+     *     currency         number resp. "12.50" (at most two decimal places) -> cents
      *     bit              true/false, 1/0, "true"/"false"
      *     timestampl       "2026-09-29 14:30", "2026-09-29T14:30:00+02:00",
-     *                      "2026-09-29 14:30 UTC+02:00", "…Z"; ohne Offset gilt die
-     *                      Zeitzone des Admins -> UTC
-     *     datetime         wie oben, aber ohne Offset (Wandzeit)
-     *     time             "14:30" bzw. "14:30:15"
-     *     json, reltable   Array (oder JSON-Text)
-     *     sonst            Text
+     *                      "2026-09-29 14:30 UTC+02:00", "…Z"; without offset the
+     *                      time zone of the admin applies -> UTC
+     *     datetime         as above, but without offset (wall time)
+     *     time             "14:30" resp. "14:30:15"
+     *     json, reltable   array (or JSON text)
+     *     else             text
      *
-     * Leer ('' oder null) bleibt leer und geht den gewöhnlichen Weg.
+     * Empty ('' or null) stays empty and takes the usual path.
      *
-     * @return array  [Wert, bool Datenbankformat]
-     * @throws \InvalidArgumentException  Wert passt nicht zum Typ (Meldung für den Nutzer)
+     * @return array  [value, bool database format]
+     * @throws \InvalidArgumentException  value does not match the type (message for the user)
      */
     public function input(mixed $value, array $colDef): array
     {
@@ -146,9 +146,9 @@ class ApiValues
     }
 
     /**
-     * Datum/Zeit im ISO-Format lesen - siehe input().
+     * Read date/time in ISO format - see input().
      *
-     * @param bool $utc  timestampl: in UTC umrechnen (Offset erlaubt); datetime: Wandzeit
+     * @param bool $utc  timestampl: convert to UTC (offset allowed); datetime: wall time
      */
     private function dateInput(string $value, bool $utc): string
     {
@@ -158,7 +158,7 @@ class ApiValues
         }
         $offset = strtoupper(trim((string)($m[4] ?? '')));
         if ($offset !== '' && !$utc) {
-            // Wandzeit: ein Offset würde den Wert stillschweigend verschieben
+            // wall time: an offset would silently shift the value
             throw new \InvalidArgumentException($this->cms->snippet('error_invalid_format'));
         }
         $text = $m[1] . ' ' . (($m[2] ?? '') !== '' ? $m[2] . (($m[3] ?? '') !== '' ? $m[3] : ':00') : '00:00:00');
@@ -177,10 +177,10 @@ class ApiValues
     }
 
     /**
-     * Eintrag des Inhalts-Caches einer Sprache (`record_cache`: [typ, wert, fallback])
-     * lesen - json dekodiert, verschlüsselte Werte entschlüsselt.
+     * Read an entry of the content cache of a language (`record_cache`: [type, value, fallback])
+     * - decoded JSON, encrypted values decrypted.
      *
-     * @return array  [Wert wie Record::load(), bool Fallback aus der Hauptsprache]
+     * @return array  [value as Record::load() gives it, bool fallback from the main language]
      */
     public function fromCache(?array $entry, array $colDef): array
     {
@@ -190,21 +190,21 @@ class ApiValues
             $value = $this->crypt->decrypt($value, '', false);
         }
         elseif ($type === 'timestampl' && is_string($value) && $this->isDate($value)) {
-            // im Cache UTC - wie Cms::fetch() in die Zeitzone des Admins
+            // in the cache UTC - converted like Cms::fetch() to the time zone of the admin
             $value = $this->cms->utcToUserTZ(substr($value, 0, 19));
         }
         return [$value, !empty($entry[2])];
     }
 
     /**
-     * Metadaten einer Datei (ohne interne Angaben wie token, version, data).
-     * Mehrsprachige Upload-Felder: je Sprache (Code => Metadaten).
+     * Metadata of a file (without internal details such as token, version, data).
+     * Multilingual upload fields: per language (code => metadata).
      */
     public function file(mixed $value): ?array
     {
         if (!is_array($value) || $value === []) return null;
         if (!isset($value['filename']) && !isset($value['extension'])) {
-            // mehrsprachig: language_id => Datei
+            // multilingual: language_id => file
             $files = [];
             foreach ($value as $languageId => $fileData) {
                 $file = $this->file($fileData);
@@ -229,7 +229,7 @@ class ApiValues
         ];
     }
 
-    /** Ein Datum, nicht nur der Platzhalter für "kein Datum" / "kein Ende" */
+    /** A date, not just the placeholder for "no date" / "no end" */
     private function isDate(string $value): bool
     {
         $value = substr(trim($value), 0, 19);

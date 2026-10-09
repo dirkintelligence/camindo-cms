@@ -5,12 +5,12 @@
  *         [--admin-name=… --admin-email=… --admin-pass-file=… --admin-lang=…]
  *         [--timezone=… --locale=…] [--https=y|n] [--backend-domain=…] [--dev]
  *
- * Der Installer (Install\Installer) - fragt, was er nicht weiß, und läuft die
- * Schritte 1-12 aus 14 §4.1 durch. Existiert var/install.lock, endet er sofort mit
- * Exit-Code 0 (Docker-Erststart darf ihn bei jedem Start aufrufen); --force setzt
- * die Datenbank neu auf und verlangt die Bestätigung des Datenbanknamens (--yes).
+ * The installer (Install\Installer) - asks what it does not know, and runs through the
+ * steps 1-12 (developer docs, chapter 09 (Installation and update)). If var/install.lock exists, it ends immediately with
+ * exit code 0 (the first Docker start may call it at every start); --force resets
+ * the database and requires confirmation of the database name (--yes).
  *
- * Jede Frage hat einen Parameter und eine Umgebungsvariable (Parameter gewinnt):
+ * Every question has a parameter and an environment variable (parameter wins):
  *
  *     --db-host      CAMINDO_DB_HOST         --admin-name       CAMINDO_ADMIN_NAME
  *     --db-port      CAMINDO_DB_PORT         --admin-email      CAMINDO_ADMIN_EMAIL
@@ -21,19 +21,19 @@
  *                                            --https            CAMINDO_HTTPS (y/n)
  *                                            --backend-domain   CAMINDO_BACKEND_DOMAIN
  *
- * Passwörter kommen aus Dateien (--*-pass-file, z. B. /run/secrets/…) oder den
- * Umgebungsvariablen CAMINDO_DB_PASS / CAMINDO_ADMIN_PASS, nie als Argument.
- * CAMINDO_DB_PASS gilt auch im Betrieb (Config::ENV_SECRETS): kommt das Passwort von
- * dort, bleibt es aus .camindo.php heraus, und .sqlpwd wird nicht geschrieben. Ist
- * CAMINDO_KEY gesetzt, entsteht keine .camindo.key (Crypt nimmt dann die Variable). Mit
- * --no-interaction bricht ein fehlender Pflichtwert mit Exit-Code 2 ab, bevor
- * irgendetwas geschrieben wird. Existiert .camindo.php schon (Entwicklungsstack),
- * werden Datenbank, Zeitzone und Locale daraus gelesen und nicht gefragt.
+ * Passwords come from files (--*-pass-file, e.g. /run/secrets/…) or the
+ * environment variables CAMINDO_DB_PASS / CAMINDO_ADMIN_PASS, never as an argument.
+ * CAMINDO_DB_PASS also applies in operation (Config::ENV_SECRETS): if the password comes from
+ * there, it stays out of .camindo.php, and .sqlpwd is not written. If
+ * CAMINDO_KEY is set, no .camindo.key is created (Crypt then takes the variable). With
+ * --no-interaction a missing required value aborts with exit code 2, before
+ * anything is written. If .camindo.php already exists (development stack),
+ * database, time zone and locale are read from it and not asked.
  *
- * --fixtures spielt dev.sql ein (Entwicklungsdaten samt Admins) - der Admin-Schritt
- * entfällt dann. --step=NAME führt einen Schritt einzeln aus (requirements, key,
- * config, sqlpwd, dirs, database, admin, core, components, runtime, finish), um eine
- * kaputte Installation zu reparieren; die Datenbank-Schritte database/admin nur mit
+ * --fixtures imports dev.sql (development data including admins) - the admin step
+ * is then omitted. --step=NAME runs one step individually (requirements, key,
+ * config, sqlpwd, dirs, database, admin, core, components, runtime, finish), to repair a
+ * broken installation; the database steps database/admin only with
  * --force.
  */
 namespace Camindo\Core\Cli;
@@ -75,7 +75,7 @@ class InstallCommand extends Command {
         }
 
         $steps = $step === '' ? self::STEPS : [$step];
-        // Backend-Assets: Kopie (Standard) oder Symlink für die Entwicklung am Core
+        // Backend assets: copy (default) or symlink for development on the core
         $symlinkAssets = !empty($options['symlink-assets']);
         $fixtures = !empty($options['fixtures']);
 
@@ -94,7 +94,7 @@ class InstallCommand extends Command {
             if ($step !== '') return Cli::OK;
         }
 
-        // 2. Fragen - nur, was für die gewählten Schritte gebraucht wird
+        // 2. Questions - only what is needed for the selected steps
         $needConfig = in_array('config', $steps, true) && !is_file($installer->configFile());
         $needAdmin = in_array('admin', $steps, true) && !$fixtures;
         $answers = [];
@@ -111,7 +111,7 @@ class InstallCommand extends Command {
             $this->out('  database connection ok');
         }
 
-        // 3-5. Punkt-Dateien
+        // 3-5. Dot files
         if (in_array('key', $steps, true)) {
             $this->out('key file');
             if (Config::env(Config::ENV_KEY) !== null && !is_file($installer->keyFile())) {
@@ -136,19 +136,19 @@ class InstallCommand extends Command {
         }
         foreach ($installer->checkSecretPermissions() as $warning) $this->out('  WARNING: ' . $warning);
 
-        // 6. Verzeichnisse
+        // 6. Directories
         if (in_array('dirs', $steps, true)) {
             $this->out('directories');
             $installer->createDirectories($symlinkAssets);
         }
 
-        // 7. Datenbank
+        // 7. Database
         if (in_array('database', $steps, true)) {
             $this->out('database' . ($fixtures ? ' (with fixtures)' : ''));
             $installer->createDatabase($fixtures, $force);
         }
 
-        // 8. Erster Admin
+        // 8. First admin
         if (in_array('admin', $steps, true)) {
             $this->out('admin');
             if ($fixtures || ($step === '' && $installer->hasAdmin())) {
@@ -173,8 +173,8 @@ class InstallCommand extends Command {
             $this->out('runtime');
             $installer->buildRuntime();
         }
-        // Vorgabe-Aufgaben des Zeitplaners - nach den Gruppendateien (runtime): der
-        // Admin 'scheduler' braucht die Oberfläche Kommandozeile (Scheduler::adminError())
+        // Default scheduler tasks - after the group files (runtime): the
+        // admin 'scheduler' needs the interface Command line (Scheduler::adminError())
         if (in_array('tasks', $steps, true)) {
             $this->out('tasks');
             $installer->createDefaultTasks();
@@ -190,9 +190,9 @@ class InstallCommand extends Command {
     // ==== Fragen ====
 
     /**
-     * Datenbank, Zeitzone, Locale, Programme - Verbindungstest sofort.
+     * Database, time zone, locale, programs - connection test immediately.
      *
-     * @return array  Werte für Installer::writeConfigFile()
+     * @return array  values for Installer::writeConfigFile()
      */
     private function askConfig(Installer $installer): array
     {
@@ -204,7 +204,7 @@ class InstallCommand extends Command {
             'user' => $this->value('db-user', 'CAMINDO_DB_USER', 'Database user', 'camindo'),
             'pass' => $this->secret('db-pass-file', 'CAMINDO_DB_PASS', 'Database password'),
         ];
-        // Aus der Umgebung (und nicht per --db-pass-file): bleibt dort, .camindo.php leer
+        // From the environment (and not via --db-pass-file): stays there, .camindo.php stays empty
         $db['pass_from_env'] = !is_string($this->options['db-pass-file'] ?? null) && Config::env('CAMINDO_DB_PASS') !== null;
         $timezone = $this->value('timezone', 'CAMINDO_TIMEZONE', 'Time zone', 'Europe/Berlin');
         if (!in_array($timezone, timezone_identifiers_list(), true)) {
@@ -214,8 +214,8 @@ class InstallCommand extends Command {
         if (!preg_match('/^[a-z]{2}_[A-Z]{2}$/', $locale)) {
             throw new \RuntimeException("locale must look like de_DE ('$locale')");
         }
-        // HTTPS? Bestimmt admin./user.cookie_secure. Vorgabe ja - nur für einen
-        // lokalen Test ohne SSL "n" (Entwicklungsstack --dev: Vorgabe n)
+        // HTTPS? Determines admin./user.cookie_secure. Default yes - only for a
+        // local test without SSL "n" (development stack --dev: default n)
         $dev = !empty($this->options['dev']) || !empty($this->options['fixtures']);
         $https = strtolower($this->value('https', 'CAMINDO_HTTPS',
             'Will the site be served over HTTPS? (n = local test via http:// only)', $dev ? 'n' : 'y'));
@@ -228,7 +228,7 @@ class InstallCommand extends Command {
             $this->out('  switch admin.cookie_secure and user.cookie_secure in .camindo.php to true once https:// works');
         }
         // Feste Backend-Domain (admin.backend_domain, BackendDomain) - leer: Backend
-        // unter jeder Domain. Im Entwicklungsstack nicht gefragt.
+        // under every domain. Not asked in the development stack.
         $backendDomain = $dev && !isset($this->options['backend-domain']) ? '' : $this->value('backend-domain', 'CAMINDO_BACKEND_DOMAIN',
             'Backend domain, e.g. a subdomain nobody guesses (empty = /backend/ under every domain)', '', false);
         if ($backendDomain !== '' && \Camindo\Core\BackendDomain::normalize($backendDomain) === '') {
@@ -246,7 +246,7 @@ class InstallCommand extends Command {
     }
 
     /**
-     * Erster Admin: Name, E-Mail, Passwort (verdeckt, zweimal), Backend-Sprache.
+     * First admin: name, email, password (hidden, twice), backend language.
      */
     private function askAdmin(array $answers): array
     {
@@ -259,8 +259,8 @@ class InstallCommand extends Command {
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new \RuntimeException("invalid e-mail '$email'");
         }
-        // Passwort-Richtlinie wie beim Speichern (security.password_policy; die
-        // .camindo.php der neuen Installation nennt keine eigene, es gelten die Vorgaben)
+        // Password policy as when saving (security.password_policy; the
+        // .camindo.php of the new installation names none of its own, the defaults apply)
         $rules = PasswordPolicy::DEFAULTS;
         $hint = 'at least ' . implode(', ', array_filter([
             $rules['min_length'] ? $rules['min_length'] . ' characters' : '',
@@ -279,10 +279,10 @@ class InstallCommand extends Command {
             }
             $this->out('  admin password: ' . $hint . ' - again');
         }
-        // Backend-Sprachen = Dateien in Core/backend/lang (en_US, de_DE, ar_SA …)
+        // Backend languages = files in Core/backend/lang (en_US, de_DE, ar_SA …)
         $available = Cms::scanLanguages(dirname(__DIR__, 2) . '/backend/lang');
         $input = $this->value('admin-lang', 'CAMINDO_ADMIN_LANG', 'Backend language (' . implode('|', $available) . ')', Cms::FALLBACK_LANG);
-        // Auch die früheren zweistelligen Kürzel (de, en) und Locales (de-AT)
+        // Also the earlier two-letter codes (de, en) and locales (de-AT)
         $lang = Cms::matchLanguage($input, $available);
         if ($lang === null) throw new \RuntimeException("backend language: unknown ('$input') - one of " . implode(', ', $available));
         return [
@@ -292,9 +292,9 @@ class InstallCommand extends Command {
     }
 
     /**
-     * Wert aus Option, Umgebungsvariable oder Frage.
+     * Value from option, environment variable or question.
      *
-     * @throws \RuntimeException  Pflichtwert fehlt (--no-interaction)
+     * @throws \RuntimeException  required value missing (--no-interaction)
      */
     private function value(string $option, string $env, string $question, string $default, bool $required = true): string
     {
@@ -308,7 +308,7 @@ class InstallCommand extends Command {
     }
 
     /**
-     * Passwort aus Datei (--*-pass-file), Umgebungsvariable oder verdeckter Eingabe.
+     * Password from file (--*-pass-file), environment variable or hidden input.
      */
     private function secret(string $fileOption, string $env, string $question, bool $twice = false): string
     {
@@ -351,7 +351,7 @@ class InstallCommand extends Command {
     }
 
     /**
-     * --force: Datenbankname bestätigen (interaktiv) oder --yes.
+     * --force: confirm the database name (interactive) or --yes.
      */
     private function confirmForce(Installer $installer): bool
     {

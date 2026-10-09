@@ -1,5 +1,5 @@
 /*
- * cApp.polling – Event-basierter Task Scheduler
+ * cApp.polling – Event-based task scheduler
  */
 (function (cApp) {
     'use strict';
@@ -8,22 +8,22 @@
 
         timerId: null,
 
-        // Letzte Ausführungszeitpunkte in Sekunden (Timestamp)
+        // Last execution times in seconds (timestamp)
         _lastBgprocCheck: 0,
         _lastMailCheck: 0,
 
-        // Status-Flags für laufende Prozesse
+        // Status flags for running processes
         _isCheckingBgproc: false,
         _isCheckingMails: false,
 
-        // Überwachung der Hintergrundprozesse - nur solange nötig.
-        // watchBgproc() schaltet sie ein (ein Hintergrundprozess wurde gestartet:
-        // BackgroundProcess::create() schickt den Aufruf mit der Antwort), die
-        // Antwort von bgproc_list.php meldet über bgprocState() zurück, ob noch etwas
-        // läuft. Weil Folgeprozesse (mehrstufige Thumbnails) erst vom Cron-Trigger
-        // gestartet werden, gilt "alles abgeschlossen" erst, wenn BGPROC_SETTLE
-        // Sekunden lang nichts mehr lief - dann EINE Meldung; nach BGPROC_GRACE
-        // Sekunden endet die Überwachung.
+        // Monitoring of background processes - only as long as needed.
+        // watchBgproc() switches it on (a background process was started:
+        // BackgroundProcess::create() sends the call with the response), the
+        // response of bgproc_list.php reports back via bgprocState() whether anything
+        // is still running. Because follow-up processes (multi-stage thumbnails) are only
+        // started by the cron trigger, "all finished" only applies once nothing has run
+        // for BGPROC_SETTLE seconds - then ONE message; after BGPROC_GRACE
+        // seconds the monitoring ends.
         _bgprocWatch: false,
         _bgprocIdleSince: 0,
         _bgprocSeenRunning: false,
@@ -32,28 +32,28 @@
 
         init() {
             if (this.timerId) return;
-            // Beim Start einmal nachsehen: laufende Prozesse aus einer früheren
-            // Sitzung werden dann weiter überwacht (bgprocState() schaltet ein)
+            // Check once at startup: running processes from an earlier
+            // session are then monitored further (bgprocState() switches it on)
             this._bgprocWatch = true;
             this._bgprocIdleSince = Math.floor(Date.now() / 1000);
-            // 1-Sekunden-Heartbeat
+            // 1-second heartbeat
             this.timerId = window.setInterval(() => this._tick(), 1000);
         },
 
         /**
-         * Überwachung einschalten - nach dem Start eines Hintergrundprozesses
-         * (aufgerufen aus der Antwort des Requests, der ihn gestartet hat)
+         * Switch monitoring on - after a background process has been started
+         * (called from the response of the request that started it)
          */
         watchBgproc() {
             this._bgprocWatch = true;
             this._bgprocIdleSince = 0;
-            this._lastBgprocCheck = 0; // nächster Tick prüft sofort
+            this._lastBgprocCheck = 0; // next tick checks immediately
         },
 
         /**
-         * Rückmeldung von bgproc_list.php: läuft noch ein Prozess des Admins?
+         * Feedback from bgproc_list.php: is a process of the admin still running?
          * @param {boolean} running
-         * @param {number}  failed   Anzahl fehlgeschlagener Prozesse in der Liste
+         * @param {number}  failed   Number of failed processes in the list
          */
         bgprocState(running, failed = 0) {
             const now = Math.floor(Date.now() / 1000);
@@ -68,7 +68,7 @@
             }
             const idle = now - this._bgprocIdleSince;
             if (this._bgprocSeenRunning && idle >= this.BGPROC_SETTLE) {
-                // Alles abgeschlossen (auch die Folgeprozesse) - eine Meldung
+                // All finished (including the follow-up processes) - one message
                 this._bgprocSeenRunning = false;
                 if (failed > 0) {
                     cApp.system.balloon('danger', cConfig.bgproc_finished_errors);
@@ -88,8 +88,8 @@
         _tick() {
             const now = Math.floor(Date.now() / 1000);
 
-            // Alle 2 Sekunden - nur solange Hintergrundprozesse zu überwachen sind
-            // (oder die Liste gerade offen ist)
+            // Every 2 seconds - only as long as background processes are to be monitored
+            // (or the list is currently open)
             if ((this._bgprocWatch || cApp.ui.bgprocVisible()) && now - this._lastBgprocCheck >= 2) {
                 if (!this._isCheckingBgproc) {
                     this._isCheckingBgproc = true;
@@ -102,7 +102,7 @@
                 }
             }
 
-            // Alle 30 Sekunden: Abzeichen der internen Nachrichten (cApp.mail)
+            // Every 30 seconds: badge of the internal messages (cApp.mail)
             if (now - this._lastMailCheck >= 30) {
                 if (!this._isCheckingMails && cApp.mail) {
                     this._isCheckingMails = true;
@@ -127,14 +127,14 @@
         // Processes
 
         /**
-         * Layer mit Hintergrundprozessen aktualisieren
+         * Update the layer with background processes
          * @param {number} timeoutMs 
          * @returns {Promise<boolean>}
          */
         refreshBgproc(timeoutMs = 5000) {
-            // Abgemeldet (Anmeldedialog offen): nicht anfragen - wie
-            // cApp.mail.refreshBadge(); die Antwort ##accessdenied## würde nur
-            // cApp.layers.login() erneut aufrufen
+            // Logged out (login dialog open): do not request - like
+            // cApp.mail.refreshBadge(); the response ##accessdenied## would only
+            // call cApp.layers.login() again
             if (cApp.layers && cApp.layers.loginOpen && cApp.layers.loginOpen()) {
                 return Promise.resolve(false);
             }
@@ -145,7 +145,7 @@
                 $container.cLoadContent({
                     url: 'Start/bgproc_list.php?details=' + encodeURIComponent(details),
                     spinner: false,
-                    // Polling: verlängert die Session nicht (cApp.mail.refreshBadge())
+                    // Polling: does not extend the session (cApp.mail.refreshBadge())
                     background: true,
                     timeout: timeoutMs,
                     callback: () => {

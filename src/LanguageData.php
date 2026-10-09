@@ -1,39 +1,39 @@
 <?php
 /**
- * Pflege der sprachabhängigen Inhaltszeilen, wenn sich die Sprachen einer Instanz
- * ändern.
+ * Maintenance of the language-dependent content rows when the languages of an instance
+ * change.
  *
- * DIE REGEL, DIE HIER DURCHGESETZT WIRD
+ * THE RULE ENFORCED HERE
  * --------------------
- * Jeder Datensatz führt in den data_*-Tabellen, in `data_dft` und in `record_cache`
- * je Sprache seiner Instanz GENAU EINE Zeile pro Feld - bei einsprachigen Feldern mit
- * demselben Wert in allen Sprachen, bei mehrsprachigen Feldern mit dem Fallback-Wert
- * der Hauptsprache, wo keine Übersetzung vorliegt (siehe VirtualFieldsTrait::
- * saveVirtualFields()). Nur so kann Cms::select() eine Sprache mit einer einzigen
- * JOIN-Bedingung (`language_id` = ?) filtern und sortieren.
+ * Every record carries, in the data_* tables, in `data_dft` and in `record_cache`,
+ * EXACTLY ONE row per field for each language of its instance - for single-language fields
+ * with the same value in all languages, for multilingual fields with the fallback value
+ * of the primary language where no translation exists (see VirtualFieldsTrait::
+ * saveVirtualFields()). Only this way can Cms::select() filter and sort a language with a
+ * single JOIN condition (`language_id` = ?).
  *
- * Beim Speichern eines Datensatzes entstehen diese Zeilen von selbst. Ändert sich
- * aber die Sprachliste einer Instanz, stimmen die Zeilen des Bestands nicht mehr:
+ * When a record is saved, these rows are created automatically. But if the language
+ * list of an instance changes, the rows of the existing data no longer match:
  *
- *     Sprache kommt hinzu     -> addLanguage(): die Zeilen der Hauptsprache werden
- *                                für die neue Sprache kopiert (Fallback)
- *     Sprache fällt weg       -> removeLanguage(): ihre Zeilen werden gelöscht,
- *                                eigene Dateien ebenso
- *     Sprache wird gelöscht   -> deleteLanguage(): dasselbe in allen Instanzen
+ *     language added     -> addLanguage(): the rows of the primary language are
+ *                           copied for the new language (fallback)
+ *     language removed   -> removeLanguage(): its rows are deleted,
+ *                           its own files likewise
+ *     language deleted   -> deleteLanguage(): the same in all instances
  *
- * `record_cache` wird in diesen Fällen nicht kopiert, sondern für die betroffenen
- * Datensätze verworfen (clearRecordCache()): der Cache braucht die Kennzeichnung, ob
- * ein Wert ein Fallback ist, und die entsteht beim Neuaufbau in
- * Cms::createRecordCache() aus dem Vergleich mit der Hauptsprache.
+ * `record_cache` is not copied in these cases, but discarded for the affected
+ * records (clearRecordCache()): the cache needs the marking of whether
+ * a value is a fallback, and that is produced when rebuilding in
+ * Cms::createRecordCache() by comparison with the primary language.
  *
- * Der Volltext (`data_ftx`) ist nach den Regeln seiner Sprache gefaltet
- * (Collation::fold()). Kopierte Zeilen stimmen deshalb nur, wenn beide
- * Sprachen dieselben Regeln haben (sameRules()); sonst markieren die Hooks ihn mit
- * markFulltextStale() als veraltet - neu aufgebaut wird er über "Jetzt aktualisieren"
- * im Modul Area oder den Zeitplaner (FulltextState).
+ * The full text (`data_ftx`) is folded according to the rules of its language
+ * (Collation::fold()). Copied rows therefore only match if both
+ * languages have the same rules (sameRules()); otherwise the hooks mark it
+ * as stale with markFulltextStale() - it is rebuilt via "Update now"
+ * in the Area module or the scheduler (FulltextState).
  *
- * Alle Methoden laufen in der Transaktion des Aufrufers (Hooks der Module Instance
- * und Language) - hier wird nichts committet.
+ * All methods run in the transaction of the caller (hooks of the Instance and
+ * Language modules) - nothing is committed here.
  *
  * @see Camindo\Core\Modules\Instance\Instance::hookOnSaved()
  * @see Camindo\Core\Modules\Language\Language::hookOnDelete()
@@ -51,7 +51,7 @@ class LanguageData {
         private ContainerInterface $container
     ) {}
 
-    /** Falten zwei Sprachen den Volltext gleich (Collation::sameRules())? */
+    /** Do two languages fold the full text the same way (Collation::sameRules())? */
     public function sameRules(int $languageIdA, int $languageIdB): bool
     {
         return Collation::sameRules(
@@ -61,8 +61,8 @@ class LanguageData {
     }
 
     /**
-     * Volltext aller Bereiche einer Instanz als veraltet markieren (FulltextState) -
-     * nicht sofort neu aufbauen, das hielte bei großen Instanzen den Request auf.
+     * Mark the full text of all areas of an instance as stale (FulltextState) -
+     * do not rebuild it at once, which would tie up the request for large instances.
      */
     public function markFulltextStale(int $instanceId): void
     {
@@ -70,10 +70,10 @@ class LanguageData {
     }
 
     /**
-     * Die data_*-Tabellen mit einer Spalte `language_id` samt der Spalten, die beim
-     * Kopieren einer Sprache mitgenommen werden (ohne `language_id`).
+     * The data_* tables with a column `language_id`, along with the columns that are
+     * carried over when a language is copied (without `language_id`).
      *
-     * @return array  tabelle => [spalten]
+     * @return array  table => [columns]
      */
     public function tables(): array
     {
@@ -83,8 +83,8 @@ class LanguageData {
             $table = 'data_' . $suffix;
             if (isset($tables[$table])) continue;
             $tables[$table] = match ($suffix) {
-                // Kantentabelle bzw. Anzeige-Typ ohne Tabelle
-                // (data_pwd und data_rid führen seit 2026-09-11 ebenfalls language_id)
+                // Edge table or display type without a table
+                // (data_pwd and data_rid have also carried language_id since 2026-09-11)
                 'rel', 'ids' => null,
                 'enc' => ['record_id', 'field_id', 'fieldname_id', 'data', 'hash'],
                 'fil' => ['file_language_id', 'record_id', 'fieldname_id', 'field_id', 'extension', 'mime_type',
@@ -98,11 +98,11 @@ class LanguageData {
     }
 
     /**
-     * Neue Sprache einer Instanz: Zeilen der Hauptsprache als Fallback kopieren.
+     * New language of an instance: copy the rows of the primary language as fallback.
      *
      * @param int $instanceId
-     * @param int $languageId        die hinzugekommene Sprache
-     * @param int $sourceLanguageId  die Hauptsprache, deren Werte übernommen werden
+     * @param int $languageId        the language that was added
+     * @param int $sourceLanguageId  the primary language whose values are taken over
      */
     public function addLanguage(int $instanceId, int $languageId, int $sourceLanguageId): void
     {
@@ -110,9 +110,9 @@ class LanguageData {
         foreach ($this->tables() as $table => $cols) {
             $colList = '`' . implode('`, `', $cols) . '`';
             $selList = '`d`.`' . implode('`, `d`.`', $cols) . '`';
-            // Tabellen mit `empty`: die Kopie ist bei einem MEHRSPRACHIGEN Feld ein
-            // Fallback aus der Hauptsprache (empty = 1), bei einsprachigen Feldern
-            // schlicht derselbe Wert (empty = 0) - siehe Cms::hasEmptyFlag()
+            // Tables with `empty`: for a MULTILINGUAL field the copy is a
+            // fallback from the primary language (empty = 1); for single-language fields
+            // simply the same value (empty = 0) - see Cms::hasEmptyFlag()
             $emptyCol = $emptySel = '';
             $join = '';
             if ($this->tableHasEmpty($table)) {
@@ -130,7 +130,7 @@ class LanguageData {
     }
 
     /**
-     * Führt die data_*-Tabelle die Spalte `empty` (Cms::hasEmptyFlag())?
+     * Does the data_* table have the column `empty` (Cms::hasEmptyFlag())?
      */
     private function tableHasEmpty(string $table): bool
     {
@@ -141,20 +141,20 @@ class LanguageData {
     }
 
     /**
-     * Sprache aus einer Instanz entfernt: ihre Inhalte löschen.
+     * Language removed from an instance: delete its contents.
      *
-     *     Dateien       eigene Dateien mehrsprachiger Datei-Felder in dieser Sprache
-     *                   werden gelöscht (deleteFiles()), auch die gelöschter
-     *                   Datensätze im Papierkorb
-     *     data_*        alle Zeilen der Sprache (Texte, Zahlen, Daten, Dateieinträge,
-     *                   Volltext, data_dft) - Verknüpfungen (`data_rel`) kennen keine
-     *                   Sprache und bleiben
-     *     record_cache  die Zeilen der Sprache, auch im Arbeitsstand von Arbeitskopien
-     *     privacy_template  Datenschutz-Vorlagen der Instanz in dieser Sprache
+     *     files         own files of multilingual file fields in this language
+     *                   are deleted (deleteFiles()), including those of deleted
+     *                   records in the trash
+     *     data_*        all rows of the language (texts, numbers, dates, file entries,
+     *                   full text, data_dft) - links (`data_rel`) know no
+     *                   language and remain
+     *     record_cache  the rows of the language, also in the working state of working copies
+     *     privacy_template  privacy templates of the instance in this language
      *
-     * Fallback-Zeilen anderer Sprachen, die auf eine Datei dieser Sprache zeigen (sie
-     * war früher Hauptsprache), richtet repairFileFallbacks() - aufzurufen, sobald die
-     * neue Sprachliste in `rel_instance_language` steht.
+     * Fallback rows of other languages that point to a file of this language (it
+     * was primary language before) are fixed by repairFileFallbacks() - to be called as soon as the
+     * new language list is in `rel_instance_language`.
      */
     public function removeLanguage(int $instanceId, int $languageId): void
     {
@@ -177,15 +177,15 @@ class LanguageData {
     }
 
     /**
-     * Sprache wird systemweit gelöscht: ihre Inhalte in allen Instanzen löschen.
+     * Language deleted system-wide: delete its contents in all instances.
      *
-     * Die Sprache darf nirgends Hauptsprache sein (prüft Language::hookOnDelete()).
-     * Je Instanz, die sie als weitere Sprache führt, removeLanguage(); danach werden
-     * Reste in Datensätzen anderer Instanzen (etwa nach dem Verschieben) ebenso
-     * entfernt. Die Zeilen in `rel_instance_language` und `rel_group_language` fallen
-     * per Fremdschlüssel mit der Sprache.
+     * The language must not be the primary language anywhere (checked by Language::hookOnDelete()).
+     * For each instance that carries it as an additional language, removeLanguage(); afterwards
+     * remnants in records of other instances (e.g. after moving) are removed as well.
+     * The rows in `rel_instance_language` and `rel_group_language` drop
+     * with the language via foreign keys.
      *
-     * @return int[]  Instanzen, die die Sprache geführt haben
+     * @return int[]  instances that carried the language
      */
     public function deleteLanguage(int $languageId): array
     {
@@ -195,7 +195,7 @@ class LanguageData {
             $this->removeLanguage($instanceId, $languageId);
         }
 
-        // Reste ausserhalb dieser Instanzen
+        // Remnants outside these instances
         $this->deleteFiles($languageId, null);
         $tables = array_keys($this->tables());
         $tables[] = 'record_cache';
@@ -204,7 +204,7 @@ class LanguageData {
             $this->db->query("DELETE FROM `{$table}` WHERE `language_id` = ?", 'i', [$languageId]);
         }
 
-        // Fallback-Zeilen, die noch auf Dateien der Sprache zeigen
+        // Fallback rows that still point to files of the language
         $this->db->query(
             "SELECT DISTINCT `r`.`instance_id` FROM `data_fil` `d`"
             . " INNER JOIN `record` `r` ON `r`.`record_id` = `d`.`record_id`"
@@ -219,13 +219,13 @@ class LanguageData {
     }
 
     /**
-     * Eigene Dateien einer Sprache (mehrsprachige Datei-Felder) löschen - im
-     * Medienverzeichnis und, bei gelöschten Datensätzen, im Papierkorb var/deleted
-     * (Name siehe VirtualFieldsTrait::trashFileName()). Danach gibt es keine
-     * `data_fil`-Zeile mehr, über die sie sich finden ließen.
+     * Delete the own files of a language (multilingual file fields) - in the
+     * media directory and, for deleted records, in the trash var/deleted
+     * (name see VirtualFieldsTrait::trashFileName()). Afterwards there is no
+     * `data_fil` row left by which they could be found.
      *
      * @param int      $languageId
-     * @param int|null $instanceId  nur Datensätze dieser Instanz (null: alle)
+     * @param int|null $instanceId  only records of this instance (null: all)
      */
     private function deleteFiles(int $languageId, ?int $instanceId): void
     {
@@ -252,16 +252,16 @@ class LanguageData {
     }
 
     /**
-     * Fallback-Zeilen mehrsprachiger Datei-Felder richten, die auf die Datei einer
-     * Sprache zeigen, die die Instanz nicht mehr führt.
+     * Fix fallback rows of multilingual file fields that point to the file of a
+     * language the instance no longer carries.
      *
-     * Wie beim Speichern (VirtualFieldsTrait::_syncFileRows()): jede Sprache ohne
-     * eigene Datei bekommt die Zeile der Hauptsprache - hat auch die keine eigene
-     * Datei, eine leere Zeile. Danach wird `record_cache` der Instanz verworfen.
+     * As when saving (VirtualFieldsTrait::_syncFileRows()): every language without
+     * its own file gets the row of the primary language - if that one has no
+     * file of its own either, an empty row. Afterwards `record_cache` of the instance is discarded.
      *
      * @param int   $instanceId
-     * @param int[] $excludeIds  Sprachen, die gerade wegfallen, aber noch in
-     *                           `rel_instance_language` stehen können
+     * @param int[] $excludeIds  languages that are just being dropped but may
+     *                           still be in `rel_instance_language`
      */
     public function repairFileFallbacks(int $instanceId, array $excludeIds = []): void
     {
@@ -285,7 +285,7 @@ class LanguageData {
         $cols  = '`' . implode('`, `', $colNames) . '`';
         $dCols = '`d`.`' . implode('`, `d`.`', $colNames) . '`';
         foreach ($languageIds as $languageId) {
-            // Datei der Hauptsprache
+            // file of the primary language
             if ($languageId !== $primaryId) {
                 $this->db->query(
                     "INSERT IGNORE INTO `data_fil` (`language_id`, `file_language_id`, {$cols})"
@@ -294,7 +294,7 @@ class LanguageData {
                     'iii', [$languageId, $instanceId, $primaryId]
                 );
             }
-            // hat auch die Hauptsprache keine: leer
+            // if the primary language has none either: empty
             $this->db->query(
                 "INSERT IGNORE INTO `data_fil` (`language_id`, `file_language_id`, {$cols})"
                 . " SELECT DISTINCT ?, ?, `d`.`record_id`, `d`.`fieldname_id`, `d`.`field_id`, '', '', '',"
@@ -305,7 +305,7 @@ class LanguageData {
         $this->clearRecordCache($instanceId);
     }
 
-    /** Sprachen einer Instanz laut Datenbank, Hauptsprache zuerst */
+    /** Languages of an instance according to the database, primary language first */
     private function instanceLanguageIds(int $instanceId): array
     {
         $this->db->query(
@@ -318,9 +318,9 @@ class LanguageData {
     }
 
     /**
-     * `record_cache` aller Datensätze einer Instanz verwerfen - Cms::fetch() baut ihn
-     * beim nächsten Zugriff neu auf. Arbeitskopien bleiben: ihr `record_cache` ist
-     * der Arbeitsstand, kein Cache.
+     * Discard the `record_cache` of all records of an instance - Cms::fetch() rebuilds it
+     * on the next access. Working copies remain: their `record_cache` is
+     * the working state, not a cache.
      */
     public function clearRecordCache(int $instanceId): void
     {

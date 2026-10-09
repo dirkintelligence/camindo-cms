@@ -1,33 +1,33 @@
 <?php
 /**
- * Anmelden, Abmelden und Mitarbeiten über die API.
+ * Signing in, signing out and working via the API.
  *
- * Die API ist eine weitere Oberfläche zum Backend: dieselben Admins, dieselben
- * Rechte ihrer Benutzergruppe. Welche Oberflächen eine Gruppe benutzen darf, steht
- * in der Gruppe (Access::interface(), `group`.`details`.`interfaces`).
+ * The API is another interface to the backend: the same admins, the same
+ * rights of their user group. Which interfaces a group may use is set in the
+ * group (Access::interface(), `group`.`details`.`interfaces`).
  *
- * VIER WEGE ZU EINER SESSION
+ * FOUR WAYS TO A SESSION
  * --------------------
- *     login()     PHP-API: Name + Passwort (+ zweiter Faktor über loginCode()),
- *                 eigene Session mit Höchstlaufzeit (Oberfläche php)
- *     runAs()     Kommandozeile und Zeitplaner: ohne Passwort - wer die
- *                 Kommandozeile des Servers hat, ist ohnehin vertrauenswürdig
- *                 (wie Session::setCliAdmin()). Nur mit PHP_SAPI = cli, eigene
- *                 Session (Oberfläche cli)
- *     attach()    ein LLM-Chat oder Custom Tool im Backend: arbeitet in der
- *                 Backend-Session des angemeldeten Admins mit, sieht genau, was er
- *                 sieht, und handelt als er (der Kanal steht im Audit-Log)
- *     resume()    eine bestehende cli-/php-Session wieder aufnehmen (jeder weitere
- *                 Prozess bzw. Request)
+ *     login()     PHP API: name + password (+ second factor via loginCode()),
+ *                 own session with maximum lifetime (interface php)
+ *     runAs()     command line and scheduler: without password - whoever has the
+ *                 command line of the server is trusted anyway
+ *                 (as Session::setCliAdmin()). Only with PHP_SAPI = cli, own
+ *                 session (interface cli)
+ *     attach()    an LLM chat or custom tool in the backend: works along in the
+ *                 backend session of the logged-in admin, sees exactly what they see, and
+ *                 acts as them (the channel is recorded in the audit log)
+ *     resume()    resume an existing cli/php session (each further
+ *                 process or request)
  *
- * Eine eigene Session (login, runAs) endet mit logout(): ihre Arbeitskopien werden
- * verworfen, die Zeile gelöscht. Nach attach() beendet logout() nur die Mitarbeit -
- * die Backend-Session gehört dem Admin.
+ * An own session (login, runAs) ends with logout(): its working copies are discarded,
+ * the row is deleted. After attach(), logout() ends only the collaboration -
+ * the backend session belongs to the admin.
  *
- * Fehler werfen ApiException (NOT_LOGGED_IN, SECOND_FACTOR …).
+ * Errors throw ApiException (NOT_LOGGED_IN, SECOND_FACTOR …).
  *
- * @see Camindo\Core\Api\ApiContext   Oberfläche, Kanal, Prüfung je Aufruf
- * @see Camindo\Core\Session          die Session-Zeilen (`interface`, `expires_at`)
+ * @see Camindo\Core\Api\ApiContext   interface, channel, check per call
+ * @see Camindo\Core\Session          the session rows (`interface`, `expires_at`)
  * @see Camindo\Core\Modules\Admin\Admin::loginByName()
  */
 namespace Camindo\Core\Api;
@@ -44,7 +44,7 @@ use Camindo\Core\Modules\Record\Record;
 
 class ApiSession
 {
-    /** Oberflächen mit Anmeldung per Passwort (login()) */
+    /** Interfaces with password login (login()) */
     public const LOGIN_INTERFACES = ['php'];
 
     public function __construct(
@@ -61,22 +61,22 @@ class ApiSession
     }
 
     // ====================
-    // Anmelden
+    // Sign in
 
     /**
-     * Mit Name und Passwort anmelden.
+     * Sign in with name and password.
      *
-     * Hat der Admin einen zweiten Faktor, kommt noch keine Session zurück, sondern
-     * ApiException SECOND_FACTOR mit ['factor' => email|totp|webauthn, 'uid' => …]
-     * in errors[0] - weiter mit loginCode(). Passkeys lassen sich über die API
-     * nicht bestätigen.
+     * If the admin has a second factor, no session comes back yet, but
+     * ApiException SECOND_FACTOR with ['factor' => email|totp|webauthn, 'uid' => …]
+     * in errors[0] - continue with loginCode(). Passkeys cannot be confirmed
+     * via the API.
      *
-     * @param string   $name         Admin-Name
-     * @param string   $password     Passwort
-     * @param int|null $maxLifetime  Höchstlaufzeit der Session in Sekunden (begrenzt
-     *                               auf api.max_lifetime; null = api.max_lifetime)
+     * @param string   $name         admin name
+     * @param string   $password     password
+     * @param int|null $maxLifetime  maximum lifetime of the session in seconds (limited
+     *                               to api.max_lifetime; null = api.max_lifetime)
      * @param string   $interface    LOGIN_INTERFACES
-     * @return array                 whoami() der neuen Session, dazu session_id
+     * @return array                 whoami() of the new session, plus session_id
      */
     public function login(string $name, string $password, ?int $maxLifetime = null, string $interface = 'php'): array
     {
@@ -97,13 +97,13 @@ class ApiSession
     }
 
     /**
-     * Zweiter Schritt der Anmeldung: Code aus E-Mail bzw. Authenticator-App (auch
-     * ein Wiederherstellungscode). Die uid ist mit dem Versuch verbraucht.
+     * Second step of the sign-in: code from e-mail resp. authenticator app (also
+     * a recovery code). The uid is used up with the attempt.
      *
-     * @param string   $uid          aus login() (SECOND_FACTOR)
-     * @param string   $code         der Code
-     * @param int|null $maxLifetime  wie login()
-     * @param string   $interface    wie login()
+     * @param string   $uid          from login() (SECOND_FACTOR)
+     * @param string   $code         the code
+     * @param int|null $maxLifetime  as login()
+     * @param string   $interface    as login()
      */
     public function loginCode(string $uid, string $code, ?int $maxLifetime = null, string $interface = 'php'): array
     {
@@ -118,14 +118,14 @@ class ApiSession
     }
 
     /**
-     * Als Admin anmelden, ohne Passwort - nur auf der Kommandozeile (siehe
-     * Klassenkommentar). Der Admin muss aktiv sein und seine Gruppe die Oberfläche
-     * benutzen dürfen.
+     * Sign in as admin without password - only on the command line (see class
+     * comment). The admin must be active and their group must be allowed to use the
+     * interface.
      *
-     * @param int|string $admin        admin_id oder Name
+     * @param int|string $admin        admin_id or name
      * @param string     $channel      cli | scheduler (ApiContext::CHANNELS)
-     * @param int|null   $maxLifetime  Höchstlaufzeit (null = api.max_lifetime)
-     * @param string     $interface    Oberfläche der Session (cli)
+     * @param int|null   $maxLifetime  maximum lifetime (null = api.max_lifetime)
+     * @param string     $interface    interface of the session (cli)
      */
     public function runAs(int|string $admin, string $channel = 'cli', ?int $maxLifetime = null, string $interface = 'cli'): array
     {
@@ -145,8 +145,8 @@ class ApiSession
     }
 
     /**
-     * In der Backend-Session des angemeldeten Admins mitarbeiten (LLM-Chat, Custom
-     * Tool) - siehe Klassenkommentar. Setzt eine geladene Backend-Session voraus.
+     * Work along in the backend session of the logged-in admin (LLM chat, custom
+     * tool) - see class comment. Requires a loaded backend session.
      *
      * @param string $channel  llm | tool
      */
@@ -161,11 +161,11 @@ class ApiSession
     }
 
     /**
-     * Eine cli-/php-Session wieder aufnehmen.
+     * Resume a cli/php session.
      *
-     * @param string $sessionId  aus login() / runAs()
-     * @param string $channel    '' = die Oberfläche der Session; scheduler für den
-     *                           Zeitplaner
+     * @param string $sessionId  from login() / runAs()
+     * @param string $channel    '' = the interface of the session; scheduler for the
+     *                           scheduler
      */
     public function resume(string $sessionId, string $channel = ''): array
     {
@@ -178,12 +178,12 @@ class ApiSession
     }
 
     // ====================
-    // Abmelden
+    // Sign out
 
     /**
-     * Abmelden - siehe Klassenkommentar.
+     * Sign out - see class comment.
      *
-     * @return array  ['closed' => bool] - false nach attach() (die Backend-Session bleibt)
+     * @return array  ['closed' => bool] - false after attach() (the backend session remains)
      */
     public function logout(): array
     {
@@ -194,7 +194,7 @@ class ApiSession
         }
         $adminId = (int)$this->session->get('admin_id');
         $sessionId = (string)$this->session->get('session_id');
-        // Arbeitskopien dieser Session verwerfen (Bearbeitungssperren freigeben)
+        // Discard working copies of this session (release edit locks)
         $this->container->get(Record::class)->cancelSession($sessionId);
         $this->auditLog->login('logout', $adminId);
         $this->session->close($sessionId);
@@ -203,14 +203,14 @@ class ApiSession
     }
 
     // ====================
-    // Auskunft
+    // Information
 
     /**
-     * Wer ist angemeldet, über welche Oberfläche, und was darf er?
+     * Who is signed in, via which interface, and what may they do?
      *
      * @return array  admin_id, name, group {id, label, superuser}, interface, channel,
-     *                attached, can_preview, expires_at (ISO mit Offset oder null), modules
-     *                (Name => Zusatzrechte), instances (Liste aus instance_id, label,
+     *                attached, can_preview, expires_at (ISO with offset or null), modules
+     *                (name => extra rights), instances (list of instance_id, label,
      *                languages [{code, language_id, primary, read, write}])
      */
     public function whoami(): array
@@ -222,7 +222,7 @@ class ApiSession
 
         $modules = [];
         foreach ($this->cms->modules as $name => $settings) {
-            // nur die der Rechteverwaltung - Start, Messaging … stehen jedem offen
+            // only the rights management ones - start, messaging … are open to everyone
             if (!$this->access->isManagedModule((string)$name) || !$this->access->module((string)$name)) continue;
             $modules[(string)$name] = $superuser
                 ? array_values(array_map('strval', array_keys((array)($settings['access'] ?? []))))
@@ -272,7 +272,7 @@ class ApiSession
     // ====================
 
     /**
-     * Neue eigene Session: Kanal setzen, Anmeldung ins Audit-Log, Auskunft.
+     * New own session: set channel, sign-in into the audit log, information.
      */
     private function started(string $sessionId, string $channel, int $adminId): array
     {
@@ -288,7 +288,7 @@ class ApiSession
         }
     }
 
-    /** admin_id zu Id oder Name (0 = unbekannt) */
+    /** admin_id for an Id or name (0 = unknown) */
     private function adminIdOf(int|string $admin): int
     {
         if (is_int($admin) || ctype_digit($admin)) return (int)$admin;

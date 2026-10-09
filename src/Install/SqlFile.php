@@ -1,21 +1,21 @@
 <?php
 /**
- * Eine .sql-Datei Anweisung für Anweisung ausführen.
+ * Execute a .sql file statement by statement.
  *
- * Für schema.sql, seed.sql, dev.sql und die *.sql-Migrationen. Getrennt wird am `;`
- * außerhalb von Strings und Kommentaren - kein multi_query, damit ein Fehler die
- * Anweisung nennt, die ihn ausgelöst hat (Database wirft mysqli_sql_exception).
+ * For schema.sql, seed.sql, dev.sql and the *.sql migrations. Splitting happens at the `;`
+ * outside strings and comments - no multi_query, so that an error names the
+ * statement that caused it (Database throws mysqli_sql_exception).
  *
- * Verstanden werden: 'string', "string", `bezeichner` (mit \-Escapes und
- * verdoppelten Anführungszeichen), -- Zeilenkommentare, # Zeilenkommentare,
- * Blockkommentare. mysqldump-Bedingungskommentare (/*!40101 … *\/) sind
- * Anweisungen und werden ausgeführt. Nicht unterstützt: DELIMITER (Stored
- * Procedures, Trigger) - dafür eine .php-Migration.
+ * Understood are: 'string', "string", `identifier` (with \ escapes and
+ * doubled quotes), -- line comments, # line comments,
+ * block comments. mysqldump conditional comments (/*!40101 … *\/) are
+ * statements and are executed. Not supported: DELIMITER (stored
+ * procedures, triggers) - use a .php migration for that.
  *
- * Kennt der Server die Kollation utf8mb4_0900_ai_ci nicht (MariaDB), wird sie vor dem
- * Ausführen durch seine neutrale ersetzt (Collation::portable()).
+ * If the server does not know the collation utf8mb4_0900_ai_ci (MariaDB), it is replaced before
+ * execution by its neutral equivalent (Collation::portable()).
  *
- * @see docs/developers/14-installation-und-update.md, 3.2
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Install;
 
@@ -29,13 +29,13 @@ class SqlFile {
     }
 
     /**
-     * Datei ausführen.
+     * Execute the file.
      *
-     * @param string        $file    absoluter Pfad
-     * @param callable|null $logger  function(string $line): void - je Anweisung ein Auszug
-     * @return int                   Zahl der ausgeführten Anweisungen
-     * @throws \RuntimeException     Datei fehlt; SQL-Fehler kommen als mysqli_sql_exception
-     *                               mit der Anweisung im Text
+     * @param string        $file    absolute path
+     * @param callable|null $logger  function(string $line): void - an excerpt per statement
+     * @return int                   number of executed statements
+     * @throws \RuntimeException     file missing; SQL errors come as mysqli_sql_exception
+     *                               with the statement in the text
      */
     public function run(string $file, ?callable $logger = null): int
     {
@@ -62,7 +62,7 @@ class SqlFile {
     }
 
     /**
-     * SQL-Text in Anweisungen zerlegen (ohne abschließendes `;`, ohne Leerzeilen).
+     * Split SQL text into statements (without the closing `;`, without blank lines).
      *
      * @return string[]
      */
@@ -76,14 +76,14 @@ class SqlFile {
             $c = $sql[$i];
             $next = $sql[$i + 1] ?? '';
 
-            // Zeilenkommentar: "-- " oder "#"
+            // line comment: "-- " or "#"
             if (($c === '-' && $next === '-' && in_array($sql[$i + 2] ?? "\n", [" ", "\t", "\n", "\r"], true))
                 || $c === '#') {
                 $end = strpos($sql, "\n", $i);
                 $i = $end === false ? $len : $end + 1;
                 continue;
             }
-            // Blockkommentar - außer mysqldump-Bedingungskommentar /*! … */
+            // block comment - except mysqldump conditional comment /*! … */
             if ($c === '/' && $next === '*' && ($sql[$i + 2] ?? '') !== '!') {
                 $end = strpos($sql, '*/', $i + 2);
                 $i = $end === false ? $len : $end + 2;
@@ -115,7 +115,7 @@ class SqlFile {
                 }
                 continue;
             }
-            // Ende der Anweisung
+            // end of statement
             if ($c === ';') {
                 $statement = trim($current);
                 if ($statement !== '') $statements[] = $statement;

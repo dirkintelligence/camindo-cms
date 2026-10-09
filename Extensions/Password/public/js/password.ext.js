@@ -1,25 +1,25 @@
 /*
- * Extension Password - Passwort-Richtlinie und Stärke-Anzeige (16-sicherheit.md §12)
+ * Extension Password - password policy and strength indicator (developer docs, chapter 13 (Security: authentication))
  *
- * Unter dem Passwort-Feld ein Balken (rot = schwach, orange = mittel, grün = stark),
- * beim Tippen eine Sprechblase mit den Anforderungen, erfüllte abgehakt. Solange eine
- * Anforderung fehlt, bleibt der Balken rot - geprüft wird ohnehin auf dem Server
- * (Camindo\Core\PasswordPolicy); die Zählung hier muss mit PasswordPolicy::count()
- * übereinstimmen.
+ * Below the password field a bar (red = weak, orange = medium, green = strong),
+ * while typing a speech bubble with the requirements, fulfilled ones checked. As long as a
+ * requirement is missing, the bar stays red - the server checks anyway
+ * (Camindo\Core\PasswordPolicy); the counting here must match
+ * PasswordPolicy::count().
  *
- * Läuft ohne Backend: im Frontend das Script und password.ext.css inline ins Template
- * setzen und das Feld markieren -
+ * Runs without the backend: in the frontend put the script and password.ext.css inline into the template
+ * and mark the field -
  *     <input type="password" name="data[passwort]" data-c9-password='{"rules":{…},"texts":{…}}'>
- * Felder mit data-c9-password werden beim Laden der Seite ausgestattet, andere per
- * C9Password.attach(input, options). Im Backend übernimmt cApp.extensions
- * (Backend::formField(), Optionen aus PasswordPolicy::clientOptions()).
+ * Fields with data-c9-password are equipped when the page loads, others via
+ * C9Password.attach(input, options). In the backend cApp.extensions takes over
+ * (Backend::formField(), options from PasswordPolicy::clientOptions()).
  *
  * options = {
  *     rules: { min_length, min_special, min_upper, upper_not_first, min_lower, min_digit },
- *     texts: { title, rules: { min_length: 'mindestens 12 Zeichen', … }, strength: [schwach, mittel, stark] }
+ *     texts: { title, rules: { min_length: 'at least 12 characters', … }, strength: [weak, medium, strong] }
  * }
- * Fehlende Regeln: die Vorgaben unten (= security.password_policy); fehlende Texte:
- * Englisch, {n} = Anzahl.
+ * Missing rules: the defaults below (= security.password_policy); missing texts:
+ * English, {n} = number.
  */
 (function (window, document) {
     'use strict';
@@ -37,12 +37,12 @@
         },
         strength: ['weak', 'medium', 'strong']
     };
-    // Häufige Bestandteile schwacher Passwörter - drücken die Stärke, sind aber keine Regel
+    // Common components of weak passwords - lower the strength, but are not a rule
     const COMMON = /(passwor[dt]|qwert[yz]|asdf|letmein|welcome|willkommen|hallo|admin|login|secret|geheim|abc123|iloveyou|123456|111111|000000)/i;
 
     let uid = 0;
 
-    // Zeichen je Klasse - wie PasswordPolicy::count()
+    // Characters per class - like PasswordPolicy::count()
     function count(pw) {
         const chars = Array.from(String(pw));
         const n = (re) => chars.filter((c) => re.test(c)).length;
@@ -65,7 +65,7 @@
         return rules;
     }
 
-    // Nicht erfüllte Regeln - wie PasswordPolicy::failed()
+    // Rules not fulfilled - like PasswordPolicy::failed()
     function check(pw, rules) {
         rules = rulesOf({ rules: rules });
         const c = count(pw);
@@ -78,8 +78,8 @@
         return failed;
     }
 
-    // Stärke 0 (leer) bis 3: geschätzte Entropie aus Länge und Zeichenvorrat, abzüglich
-    // Wiederholungen, Folgen (abc, 123) und häufiger Bestandteile
+    // Strength 0 (empty) to 3: estimated entropy from length and character pool, minus
+    // repetitions, sequences (abc, 123) and common components
     function strength(pw, rules) {
         pw = String(pw);
         if (pw === '') return 0;
@@ -124,7 +124,7 @@
         anchor.classList.add('c9-pw-anchor');
         if (!input.getAttribute('autocomplete')) input.setAttribute('autocomplete', 'new-password');
 
-        // Balken + Stufe
+        // Bar + level
         const meter = document.createElement('div');
         meter.className = 'c9-pw-meter';
         meter.hidden = true;
@@ -137,7 +137,7 @@
         meter.append(bar, label);
         host.insertAdjacentElement('afterend', meter);
 
-        // Sprechblase mit den Anforderungen
+        // Speech bubble with the requirements
         const bubble = document.createElement('div');
         bubble.className = 'c9-pw-bubble';
         bubble.id = id;
@@ -172,12 +172,12 @@
         }
         function show() {
             if (!Object.keys(items).length) return;
-            // unter Balken bzw. Feld, Pfeil zeigt nach oben
+            // below the bar or field, the arrow points up
             const below = meter.hidden ? host : meter;
             bubble.style.top = (below.offsetTop + below.offsetHeight + 10) + 'px';
             bubble.hidden = false;
-            // bündig mit dem Feldanfang: links, bei dir="rtl" rechts (der Pfeil folgt
-            // per inset-inline-start in password.ext.css)
+            // flush with the start of the field: left, with dir="rtl" right (the arrow follows
+            // via inset-inline-start in password.ext.css)
             const parent = bubble.offsetParent;
             if (parent && getComputedStyle(host).direction === 'rtl') {
                 bubble.style.left = '';
@@ -213,14 +213,14 @@
     function init(root) {
         (root || document).querySelectorAll('input[data-c9-password]').forEach((input) => {
             let options = {};
-            try { options = JSON.parse(input.getAttribute('data-c9-password') || '{}'); } catch (e) { /* Vorgaben */ }
+            try { options = JSON.parse(input.getAttribute('data-c9-password') || '{}'); } catch (e) { /* defaults */ }
             attach(input, options);
         });
     }
 
     window.C9Password = { attach: attach, detach: detach, init: init, check: check, strength: strength, count: count };
 
-    // Backend: Handler für cApp.extensions (13 §3.4)
+    // Backend: handler for cApp.extensions (developer docs, chapter 08 (Components and extensions))
     if (window.cApp && window.cApp.extensions) {
         window.cApp.extensions.register('password', {
             init(el, options) { attach(el, options); },
@@ -228,7 +228,7 @@
         });
     }
 
-    // Frontend: markierte Felder beim Laden
+    // Frontend: marked fields on load
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());
     else init();
 

@@ -2,13 +2,13 @@
 /**
  * fulltext [--area=ID[,ID…]] [--stale] [--token=…]
  *
- * Volltext neu aufbauen - RecordService::rebuildFulltext(): alle Volltextfelder und
- * den Standard-Volltext der Bereiche (ohne --area alle Datensatzbereiche). --stale
- * nimmt nur die als veraltet markierten (FulltextState). Bereiche, die gerade ein
- * anderer Prozess neu aufbaut, werden übersprungen.
+ * Rebuild full text - RecordService::rebuildFulltext(): all full-text fields and
+ * the default full text of the areas (without --area all record areas). --stale
+ * takes only those marked as stale (FulltextState). Areas that another
+ * process is currently rebuilding are skipped.
  *
- * --token=… meldet Fortschritt und Ende an den Eintrag in `bgproc` - so startet der
- * Button "Jetzt aktualisieren" (AreaBackend::fulltext()) den Befehl im Hintergrund.
+ * --token=… reports progress and end to the entry in `bgproc` - this is how the
+ * button "Update now" (AreaBackend::fulltext()) runs the command in the background.
  */
 namespace Camindo\Core\Cli;
 

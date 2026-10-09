@@ -1,43 +1,43 @@
 <?php
 /**
- * CMS:ZIP - mehrere Dateien als ZIP-Archiv herunterladen (etwa Pressebilder aus einem
- * Leuchtkasten, alle Bilder einer Meldung).
+ * CMS:ZIP - download several files as a ZIP archive (e.g. press photos from a
+ * light box, all images of a press release).
  *
- * Selten gebraucht, deshalb ein nachgeladener Dienst von Page ($lazyServices 'zip'):
- * Klasse und ZipArchive werden nur angefasst, wenn ein Template CMS:ZIP enthält.
+ * Rarely needed, hence a lazily loaded service of Page ($lazyServices 'zip'):
+ * the class and ZipArchive are only touched if a template contains CMS:ZIP.
  *
- * ABLAUF
+ * PROCESS
  * --------------------
- *  1. Datensätze wählen - wie CMS:SELECT (filter, relation, src_id, sort) über
- *     Cms::select() mit Cms::publishedSql(): nur veröffentlichte Datensätze der
- *     Instanzen des Auftritts. Oder 'ids' (kommaseparierte record_ids, dieselbe
- *     Prüfung) oder source=basket (Warenkorb der Session, 'category').
- *  2. Je Datensatz die erste Datei aus 'field' (Liste), die der Besucher abrufen
- *     darf - dieselben Prüfungen wie public/file.php (MediaDelivery::resolveFile():
- *     Instanz, produktiv, Feld gehört zum Bereich, user_auth + Profil-Bereich). So
- *     bekommt die Presse die Druckversion, alle anderen die Web-Version. Was nicht
- *     erlaubt ist, wird übergangen.
- *  3. Grenzen: höchstens user.zip.max_files Dateien und user.zip.max_mb MB (die
- *     Parameter maxfiles/maxsize dürfen nur kleiner sein), Drosselung je Herkunft
- *     (user.throttle.zip_ip) - nur beim tatsächlichen Erzeugen, nicht beim Treffer
- *     im Cache.
- *  4. Archiv unter var/tmp/zip/{hash}.zip - der Hash aus Instanz, Sprache, Dateien
- *     (Feld, Datensatz, Version) und Einstellungen; dieselbe Anfrage trifft den
- *     Cache. Bilder und Archive werden gespeichert, nicht noch einmal komprimiert.
- *     Ältere Archive als user.zip.retention_hours werden beim Erzeugen entfernt.
- *  5. Ausliefern (Content-Disposition: attachment) und Seite beenden.
+ *  1. Choose records - like CMS:SELECT (filter, relation, src_id, sort) via
+ *     Cms::select() with Cms::publishedSql(): only published records of the
+ *     instances of the site. Or 'ids' (comma-separated record_ids, same
+ *     check) or source=basket (session basket, 'category').
+ *  2. Per record the first file from 'field' (list) that the visitor may fetch -
+ *     the same checks as public/file.php (MediaDelivery::resolveFile():
+ *     instance, live, field belongs to the area, user_auth + profile area). So
+ *     the press gets the print version, all others the web version. What is not
+ *     allowed is skipped.
+ *  3. Limits: at most user.zip.max_files files and user.zip.max_mb MB (the
+ *     parameters maxfiles/maxsize may only be smaller), throttling per origin
+ *     (user.throttle.zip_ip) - only when an archive is actually built, not on a hit
+ *     in the cache.
+ *  4. Archive under var/tmp/zip/{hash}.zip - the hash from instance, language, files
+ *     (field, record, version) and settings; the same request hits the
+ *     cache. Images and archives are stored, not compressed again.
+ *     Archives older than user.zip.retention_hours are removed when building.
+ *  5. Deliver (Content-Disposition: attachment) and end the page.
  *
- * Ohne Datei oder bei einer Grenze bleibt die Seite stehen: Meldung in Cms::$errors
+ * Without a file or at a limit the page stays: message in Cms::$errors
  * (CMS:MESSAGE), $set['zip_error'] = empty | limit | throttled.
  *
- * @see Camindo\Core\MediaDelivery   Zugriffsprüfung je Datei
+ * @see Camindo\Core\MediaDelivery   access check per file
  * @see Camindo\Core\Page            $lazyServices
  */
 namespace Camindo\Core;
 
 class CmsZip
 {
-    // Endungen, die schon komprimiert sind - nur gespeichert (schneller, nicht größer)
+    // Extensions that are already compressed - only stored (faster, not larger)
     private const STORED = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'zip', 'gz', 'mp4', 'mov', 'mp3', 'pdf', 'docx', 'xlsx', 'pptx'];
 
     public function __construct(
@@ -53,7 +53,7 @@ class CmsZip
 
     public function cmsZip(array $p): void
     {
-        // Das Frontend puffert nicht: nach der ersten Ausgabe landete das Archiv im HTML
+        // The frontend does not buffer: after the first output the archive would end up in the HTML
         if (headers_sent()) {
             $this->cms->error('CMS:ZIP: headers already sent.');
             return;
@@ -63,17 +63,17 @@ class CmsZip
         $maxBytes = max(1, (int)($this->config->get('user.zip.max_mb') ?: 500)) * 1048576;
         if ((int)($p['maxsize'] ?? 0) > 0) $maxBytes = min($maxBytes, (int)$p['maxsize'] * 1048576);
 
-        // 1. Datensätze
+        // 1. Records
         $rows = $this->selectRecords($p, $maxFiles);
 
-        // 2. Dateien
+        // 2. Files
         $fields = array_values(array_filter(array_map('trim', explode(',', (string)($p['field'] ?? '')))));
         $cookieName = (string)($p['cookiename'] ?? '');
         $instanceIds = $this->instanceIds();
         $pattern = trim((string)($p['filenames'] ?? '')) ?: '{slug}.{extension}';
         $creditFields = array_values(array_filter(array_map('trim', explode(',', (string)($p['credits'] ?? '')))));
 
-        $files = [];      // Name im Archiv => ['file', 'version', ...]
+        $files = [];      // name in the archive => ['file', 'version', ...]
         $credits = [];
         $bytes = 0;
         foreach ($rows as $row) {
@@ -95,7 +95,7 @@ class CmsZip
         }
         if (!$files) { $this->fail('empty', $p); return; }
 
-        // 4. Archiv (Cache oder neu)
+        // 4. Archive (cache or new)
         $name = $this->safeName(trim((string)($p['name'] ?? '')) ?: 'download');
         $hash = hash('sha256', implode('|', [
             (int)($this->cms->instance['instance_id'] ?? 0), $this->cms->languageId, $pattern, implode(',', $creditFields),
@@ -104,20 +104,20 @@ class CmsZip
         $dir = $this->config->get('paths.tmp_dir') . '/zip';
         $zipFile = $dir . '/' . $hash . '.zip';
         if (!is_file($zipFile)) {
-            // 3. Drosselung - nur, wenn wirklich ein Archiv entsteht
+            // 3. Throttling - only if an archive is really created
             if (!$this->rateLimiter->hit('zip_ip', $this->clientIp->rateKey())) { $this->fail('throttled', $p); return; }
             if (!$this->build($dir, $zipFile, $files, $credits)) { $this->fail('empty', $p); return; }
         }
 
-        // 5. Ausliefern und Seite beenden
+        // 5. Deliver and end the page
         $this->mediaDelivery->sendFile($zipFile, 'application/zip', $name . '.zip', true, true);
         exit;
     }
 
     /**
-     * Datensätze wie CMS:SELECT - nur veröffentlichte, nur Instanzen des Auftritts.
+     * Records as CMS:SELECT - only published, only instances of the site.
      *
-     * @return array[]  Zeilen mit virtuellen Feldern (Cms::fetch()), höchstens $limit
+     * @return array[]  rows with virtual fields (Cms::fetch()), at most $limit
      */
     private function selectRecords(array $p, int $limit): array
     {
@@ -142,13 +142,13 @@ class CmsZip
             $param['filter']['record_id'] = implode(',', $ids);
         }
         elseif (empty($param['filter']) && trim((string)($param['relation'] ?? '')) === '') {
-            // ohne Auswahl keine Dateien - nie "alle Datensätze"
+            // no selection, no files - never "all records"
             return [];
         }
         if (trim((string)($param['relation'] ?? '')) !== '') {
-            // ohne src_id der aktuelle Datensatz; eine leere src_id (etwa aus einem
-            // fehlenden GET-Parameter) wählt nichts - Cms::select() ließe sonst die
-            // Verknüpfung weg und nähme alle Datensätze
+            // without src_id the current record; an empty src_id (e.g. from a
+            // missing GET parameter) selects nothing - otherwise Cms::select() would
+            // drop the relation and take all records
             if (!array_key_exists('src_id', $param)) $param['src_id'] = (int)($GLOBALS['cms']['record_id'] ?? 0);
             $param['src_id'] = (int)$param['src_id'];
             if ($param['src_id'] < 1) return [];
@@ -165,7 +165,7 @@ class CmsZip
         finally {
             $this->db->popResult();
         }
-        // Reihenfolge des Warenkorbs bzw. aus 'ids' behalten, wenn nicht sortiert wird
+        // Keep the order of the basket or of 'ids' if no sorting is requested
         if ($ids && empty($p['sort'])) {
             $order = array_flip($ids);
             usort($rows, fn($a, $b) => ($order[(int)$a['record_id']] ?? 0) <=> ($order[(int)$b['record_id']] ?? 0));
@@ -173,7 +173,7 @@ class CmsZip
         return $rows;
     }
 
-    /** record_ids im Warenkorb der Session (ohne eine Session anzulegen). */
+    /** record_ids in the session basket (without creating a session). */
     private function basketIds(int $category, string $cookieName): array
     {
         if (!$this->userSession->isActive() && !$this->userSession->load('', $cookieName)) return [];
@@ -188,7 +188,7 @@ class CmsZip
         return $ids;
     }
 
-    /** Instanzen des Auftritts (Cms::setInstanceAccess() aus Page). */
+    /** Instances of the site (Cms::setInstanceAccess() from Page). */
     private function instanceIds(): array
     {
         $ids = $this->cms->accessInstanceIds();
@@ -196,7 +196,7 @@ class CmsZip
         return array_values(array_filter(array_map('intval', $ids)));
     }
 
-    /** field_id eines Datei-Feldes im Bereich; 0 = gibt es dort nicht. */
+    /** field_id of a file field in the area; 0 = there is none. */
     private function fileFieldId(int $areaId, string $name): int
     {
         static $memo = [];
@@ -211,8 +211,8 @@ class CmsZip
     }
 
     /**
-     * Name im Archiv aus dem Muster: {slug}, {id}, {filename} (ursprünglicher Name
-     * ohne Endung), {extension}, {feld} (Inhalt eines Feldes des Datensatzes).
+     * Name in the archive from the pattern: {slug}, {id}, {filename} (original name
+     * without extension), {extension}, {field} (content of a field of the record).
      */
     private function entryName(string $pattern, array $row, array $fileData): string
     {
@@ -232,7 +232,7 @@ class CmsZip
         return $name;
     }
 
-    /** Doppelte Namen: -2, -3 … vor der Endung. */
+    /** Duplicate names: -2, -3 … before the extension. */
     private function uniqueName(string $name, array $files): string
     {
         if (!isset($files[$name])) return $name;
@@ -243,7 +243,7 @@ class CmsZip
         return $base . '-' . $i . $ext;
     }
 
-    /** Dateiname ohne Pfad, Steuerzeichen und Zeichen, die Dateisysteme ablehnen. */
+    /** File name without path, control characters and characters that file systems reject. */
     private function safeName(string $name): string
     {
         $name = preg_replace('/[\x00-\x1F\x7F\/\\\\:*?"<>|]+/', '-', strip_tags($name));
@@ -251,7 +251,7 @@ class CmsZip
         return mb_substr($name, 0, 120) ?: 'file';
     }
 
-    /** Zeilen für CREDITS.txt: Dateiname, dann die Werte der Felder. */
+    /** Lines for CREDITS.txt: file name, then the values of the fields. */
     private function creditLines(string $entry, array $row, array $fields): string
     {
         $lines = [$entry];
@@ -264,7 +264,7 @@ class CmsZip
         return implode("\n", $lines);
     }
 
-    /** Archiv schreiben (erst unter temporärem Namen, dann umbenennen). */
+    /** Write the archive (first under a temporary name, then rename). */
     private function build(string $dir, string $zipFile, array $files, array $credits): bool
     {
         if (!is_dir($dir) && !@mkdir($dir, 0775, true)) return false;
@@ -286,7 +286,7 @@ class CmsZip
         return @rename($tmp, $zipFile);
     }
 
-    /** Archive, die älter als user.zip.retention_hours sind, entfernen. */
+    /** Remove archives older than user.zip.retention_hours. */
     private function cleanup(string $dir): void
     {
         $hours = (int)($this->config->get('user.zip.retention_hours') ?: 24);
@@ -296,7 +296,7 @@ class CmsZip
         }
     }
 
-    /** Kein Archiv: Meldung (message[…] oder Snippet), $set['zip_error']. */
+    /** No archive: message (message[…] or snippet), $set['zip_error']. */
     private function fail(string $reason, array $p): void
     {
         $GLOBALS['set']['zip_error'] = $reason;

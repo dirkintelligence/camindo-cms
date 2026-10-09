@@ -1,33 +1,33 @@
 <?php
 /**
- * Vorlage des Datenexports personenbezogener Daten - die Seite auskunft.html im Zip
- * von RecordPersonalData (Website-User) und AdminPersonalData (Benutzer), erstellt im
- * Modul Privacy. Ein Teilauszug, den der Betreiber vor der Weitergabe an die
- * betroffene Person ergänzt (Rechtsgrundlagen, Logfiles des Servers …).
+ * Template of the personal data export - the page auskunft.html in the zip
+ * from RecordPersonalData (website users) and AdminPersonalData (users), created in
+ * the Privacy module. A partial extract that the operator completes before handing it
+ * to the data subject (legal bases, server logfiles …).
  *
- * WO DIE VORLAGE LIEGT
+ * WHERE THE TEMPLATE LIVES
  * --------------------
- * In der Tabelle `privacy_template`, getrennt für Website-User (kind 'user') und
- * Benutzer ('admin'), je Instanz und Sprache gepflegt im Modul Privacy (Reiter
- * "Vorlagen", Dataset Modules\Privacy\ExportTemplate). Die Auskunft entsteht in der
- * Sprache der gewählten Vorlage: wer sie erstellt, schaltet dafür die Snippet-Sprache
- * um (PrivacyBackend::export()). Neue Vorlagen sind mit
- * Core/install/privacy/privacy_{art}_{sprache}.html vorbelegt.
+ * In the table `privacy_template`, separately for website users (kind 'user') and
+ * users ('admin'), maintained per instance and language in the Privacy module (tab
+ * "Templates", dataset Modules\Privacy\ExportTemplate). The export is produced in the
+ * language of the chosen template: whoever creates it switches the snippet language
+ * for that (PrivacyBackend::export()). New templates are pre-filled from
+ * Core/install/privacy/privacy_{kind}_{language}.html.
  *
- * WAS IN DER VORLAGE STEHT
+ * WHAT THE TEMPLATE CONTAINS
  * --------------------
- *     {name}                       Platzhalter: Werte (maskiert) und fertige Blöcke
- *                                  (HTML-Tabellen und -Listen); unbekannte bleiben stehen
- *     {#modul.schluessel}          Sprach-Snippet der Sprache der Vorlage (maskiert)
+ *     {name}                       Placeholder: values (escaped) and ready-made blocks
+ *                                  (HTML tables and lists); unknown ones remain
+ *     {#module.key}                Language snippet in the template's language (escaped)
  *     <!-- if:NAME --> … <!-- endif:NAME -->
- *                                  nur, wenn die Bedingung NAME gilt - etwa audit oder
- *                                  logcleanup; Liste in retention(). Verschachtelbar,
- *                                  nur nicht mit gleichem NAME. Website-User und
- *                                  Benutzer haben getrennte Vorlagen, dafür braucht es
- *                                  keine Bedingung.
- *     <!-- sonstige Kommentare -->  Erläuterungen - fallen in der Auskunft weg
- * Die Vorlage schreibt der Betreiber - sie ist vertrauenswürdig wie ein Template.
- * Werte aus der Datenbank kommen nur maskiert hinein.
+ *                                  only if the condition NAME applies - e.g. audit or
+ *                                  logcleanup; list in retention(). Can be nested,
+ *                                  only not with the same NAME. Website users and
+ *                                  users have separate templates, so no condition is
+ *                                  needed for that.
+ *     <!-- other comments -->      Explanations - dropped from the export
+ * The operator writes the template - it is as trustworthy as a template.
+ * Values from the database only go in escaped.
  *
  * @see Camindo\Core\Modules\Record\RecordPersonalData
  * @see Camindo\Core\Modules\Admin\AdminPersonalData
@@ -36,7 +36,7 @@ namespace Camindo\Core;
 
 class PrivacyTemplate {
 
-    /** Sprache der Rückfall-Vorlagen des Core (Core/install/privacy/privacy_{art}_en_US.html) */
+    /** Language of the core's fallback templates (Core/install/privacy/privacy_{kind}_en_US.html) */
     public const FALLBACK = 'en_US';
 
     public function __construct(
@@ -49,22 +49,22 @@ class PrivacyTemplate {
     {}
 
     /**
-     * auskunft.html erzeugen - in der aktuellen Snippet-Sprache (Cms::getLang()).
+     * Build auskunft.html - in the current snippet language (Cms::getLang()).
      *
-     * @param string $content  die Vorlage (privacy_template.content)
-     * @param array  $values   Platzhalter => Text (wird maskiert)
-     * @param array  $blocks   Platzhalter => fertiges HTML
-     * @param array  $flags    Bedingung => bool (für <!-- if:NAME -->)
+     * @param string $content  the template (privacy_template.content)
+     * @param array  $values   Placeholder => text (will be escaped)
+     * @param array  $blocks   Placeholder => ready-made HTML
+     * @param array  $flags    Condition => bool (for <!-- if:NAME -->)
      */
     public function render(string $content, array $values, array $blocks, array $flags): string
     {
         $lang = $this->cms->getLang();
         $html = $content;
 
-        // Kommentare der Vorlage (Erläuterungen des Betreibers) gehören nicht in die Auskunft
+        // Comments in the template (the operator's explanations) do not belong in the export
         $html = (string)preg_replace('/<!--(?!\s*(?:end)?if:).*?-->\s*/s', '', $html);
-        // Bedingte Abschnitte - wiederholt, bis auch verschachtelte (mit anderem NAME)
-        // ausgewertet sind
+        // Conditional sections - repeated until nested ones (with another NAME)
+        // are evaluated too
         for ($pass = 0; $pass < 10; $pass++) {
             $html = (string)preg_replace_callback(
                 '/<!--\s*if:([a-z0-9_]+)\s*-->(.*?)<!--\s*endif:\1\s*-->/s',
@@ -73,13 +73,13 @@ class PrivacyTemplate {
             );
             if ($count === 0) break;
         }
-        // Snippets der Sprache der Vorlage
+        // Snippets in the template's language
         $html = (string)preg_replace_callback(
             '/\{#([a-z0-9_.]+)\}/i',
             fn(array $m) => $this->backend->escape($this->cms->snippet($m[1])),
             $html
         );
-        // Platzhalter in einem Durchgang - eingesetzte Werte werden nicht erneut ersetzt
+        // Placeholders in one pass - inserted values are not replaced again
         $replace = [
             '{lang}' => $this->backend->escape(substr($lang, 0, 2)),
             '{dir}' => $this->cms->textDirection(),
@@ -89,14 +89,14 @@ class PrivacyTemplate {
         return strtr($html, $replace);
     }
 
-    /** IP-Adresse für die Auskunft: gekürzte Stellen als "xxx" (ClientIp::display()) */
+    /** IP address for the export: shortened parts as "xxx" (ClientIp::display()) */
     public function displayIp(string $ip): string
     {
         return ClientIp::display($ip, ClientIp::v4Octets($this->config));
     }
 
     /**
-     * Domain und Bezeichnung einer Instanz (Platzhalter {domain}, {instance}).
+     * Domain and label of an instance (placeholders {domain}, {instance}).
      *
      * @return array  ['domain' => …, 'instance' => …]
      */
@@ -110,8 +110,8 @@ class PrivacyTemplate {
     }
 
     /**
-     * Fristen dieser Installation als Platzhalter und Bedingungen - für beide Arten
-     * der Auskunft gleich.
+     * Retention periods of this installation as placeholders and conditions - the same
+     * for both kinds of export.
      *
      * @return array  ['values' => [...], 'flags' => [...]]
      */
@@ -133,7 +133,7 @@ class PrivacyTemplate {
             'export_hours'       => $int('admin.export_retention_hours', 24),
             'log_days' => '', 'security_days' => '', 'attempt_days' => '', 'backups' => '',
         ];
-        // Aufgaben des Zeitplaners: Logs aufräumen, Datenbank-Backup
+        // Scheduler tasks: clean up logs, database backup
         $tasks = [];
         $this->db->pushResult();
         try {

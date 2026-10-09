@@ -1,6 +1,6 @@
 /*
- * vanillajs-datepicker 1.3.4 - alle Locales aus dist/js/locales in einer Datei
- * (https://github.com/mymth/vanillajs-datepicker, MIT - siehe LICENSE.vanillajs-datepicker)
+ * vanillajs-datepicker 1.3.4 - all locales from dist/js/locales in one file
+ * (https://github.com/mymth/vanillajs-datepicker, MIT - see LICENSE.vanillajs-datepicker)
  */
 /**
  * Arabic-Algeria translation for bootstrap-datepicker

@@ -1,61 +1,61 @@
 <?php
 /**
- * IP-Adressen nach Frist kürzen (DSGVO: berechtigtes Interesse an der vollen
- * Adresse höchstens einige Tage). run() läuft aus der Zeitplaner-Aufgabe
- * "Aufbewahrungsfristen anwenden" (Typ retention, Vorgabe täglich nachts).
+ * Shorten IP addresses after a retention period (GDPR: legitimate interest in the full
+ * address lasts at most a few days). run() runs from the scheduler task
+ * "Apply retention periods" (type retention, default daily at night).
  *
- * WAS GEKÜRZT WIRD
+ * WHAT IS SHORTENED
  * --------------------
- *     audit_log.ip                Einträge älter als privacy.ip_anonymize_days
- *     admin_login_attempt.ip      dito (die Zeilen leben meist nur Minuten -
- *     user_login_attempt.ip       LoginGuard::purge() -, gekürzt wird zur Sicherheit)
- *     login_device.ip             immer, ohne Frist: neue Geräte speichern ohnehin
- *                                 nur die gekürzte IP (LoginDevices::register()), hier
- *                                 geht es um Zeilen von vor dem Update
- *     var/log/{Y-m-d}_*.log       Dateien, deren Tag älter ist als die Frist - jede
- *                                 Zeichenfolge, die eine gültige IP ist
- * Gekürzt wird mit ClientIp::anonymize(): IPv4 ohne das letzte bzw. die letzten
- * zwei Oktette (privacy.ip_v4_octets), IPv6 ohne die letzten 80 Bit.
+ *     audit_log.ip                entries older than privacy.ip_anonymize_days
+ *     admin_login_attempt.ip      likewise (the rows usually live only minutes -
+ *     user_login_attempt.ip       LoginGuard::purge() -, but shortening is done to be safe)
+ *     login_device.ip             always, without a period: new devices only store
+ *                                 the shortened IP anyway (LoginDevices::register()); this
+ *                                 concerns rows from before the update
+ *     var/log/{Y-m-d}_*.log       files whose date is older than the period - every
+ *                                 character string that is a valid IP
+ * Shortening is done with ClientIp::anonymize(): IPv4 without the last or the last
+ * two octets (privacy.ip_v4_octets), IPv6 without the last 80 bits.
  *
- * Die Inhalte des Audit-Logs unter var/audit tragen die IP von Beginn an gekürzt
- * (AuditLog::write()); Altbestand: `camindo.php audit anonymize-ip`. Wird
- * privacy.ip_v4_octets erhöht (1 -> 2), kürzt run() sie einmal nach
- * (AuditLog::anonymizeFileIps(), neuer Kontrollpunkt je Datei).
+ * The contents of the audit log under var/audit have the IP shortened from the start
+ * (AuditLog::write()); existing data: `camindo.php audit anonymize-ip`. If
+ * privacy.ip_v4_octets is increased (1 -> 2), run() shortens it once more
+ * (AuditLog::anonymizeFileIps(), new checkpoint per file).
  *
- * WIE ES SCHNELL BLEIBT
+ * HOW IT STAYS FAST
  * --------------------
- * Ein Wasserstand (var/tmp/ip-anonymize.stamp, JSON) merkt sich die Grenze des
- * letzten Laufs; jeder Lauf nimmt nur das Zeitfenster seitdem - über den Index der
- * Zeitspalte, je Tag des Fensters ein SELECT DISTINCT der IPs und je zu kürzender
- * IP ein UPDATE. Es gibt wenige verschiedene IPs je Tag, also wenige Abfragen; das
- * Kürzen selbst rechnet PHP, damit es unter MySQL, MariaDB, Linux und Windows
- * dasselbe Ergebnis gibt wie beim Schreiben. Fehlt der Wasserstand (erster Lauf,
- * var/tmp geleert) oder wurde privacy.ip_v4_octets geändert, geht der Lauf einmal
- * über alles. Logdateien werden zeilenweise in eine temporäre Datei geschrieben
- * und nur ersetzt, wenn sich etwas geändert hat - auch große Dateien brauchen
- * kaum Speicher.
+ * A high-water mark (var/tmp/ip-anonymize.stamp, JSON) remembers the boundary of the
+ * last run; each run only takes the time window since then - via the index of the
+ * time column, per day of the window a SELECT DISTINCT of the IPs and per IP to be
+ * shortened an UPDATE. There are few different IPs per day, hence few queries; the
+ * shortening itself is computed by PHP, so that it gives the same result under MySQL,
+ * MariaDB, Linux and Windows as when writing. If the high-water mark is missing (first
+ * run, var/tmp emptied) or privacy.ip_v4_octets was changed, the run goes over
+ * everything once. Log files are written line by line to a temporary file
+ * and only replaced if something has changed - even large files need
+ * hardly any memory.
  *
- * Wird die Frist erhöht (Angriff verfolgen), bleibt der Wasserstand stehen, bis
- * die neue Grenze ihn überholt - Gekürztes kommt nicht zurück.
+ * If the period is increased (to follow an attack), the high-water mark stays until
+ * the new boundary overtakes it - what has been shortened does not come back.
  *
  * @see Camindo\Core\ClientIp::anonymize()
- * @see Camindo\Core\Modules\Scheduler\SchedulerRunner   Typ retention
+ * @see Camindo\Core\Modules\Scheduler\SchedulerRunner   type retention
  */
 namespace Camindo\Core;
 
 class IpAnonymizer {
 
-    /** Wasserstand unter paths.tmp_dir (*.stamp überlebt das Aufräumen von var/tmp, SchedulerRunner::cleanupTmp()) */
+    /** High-water mark under paths.tmp_dir (*.stamp survives the cleanup of var/tmp, SchedulerRunner::cleanupTmp()) */
     public const STAMP = 'ip-anonymize.stamp';
 
-    /** Tabellen mit Zeitspalte, deren IPs nach der Frist gekürzt werden */
+    /** Tables with a time column whose IPs are shortened after the period */
     private const TABLES = [
         'audit_log'           => 'created_at',
         'admin_login_attempt' => 'attempt_date',
         'user_login_attempt'  => 'attempt_date',
     ];
 
-    /** Ältester denkbarer Zeitpunkt (Lauf ohne Wasserstand) */
+    /** Earliest conceivable point in time (run without a high-water mark) */
     private const BEGIN = '1000-01-01 00:00:00';
 
     public function __construct(
@@ -65,17 +65,17 @@ class IpAnonymizer {
     )
     {}
 
-    /** privacy.ip_anonymize_days (0 = beim nächsten Lauf) */
+    /** privacy.ip_anonymize_days (0 = at the next run) */
     public function days(): int
     {
         return max(0, (int)($this->config->get('privacy.ip_anonymize_days') ?? 7));
     }
 
     /**
-     * Alles kürzen, was über der Frist liegt.
+     * Shorten everything that is older than the period.
      *
-     * @return array  rows (gekürzte Zeilen je Tabelle), files (umgeschriebene Logdateien),
-     *                audit (nachgekürzte Einträge unter var/audit)
+     * @return array  rows (shortened rows per table), files (rewritten log files),
+     *                audit (re-shortened entries under var/audit)
      */
     public function run(): array
     {
@@ -84,7 +84,7 @@ class IpAnonymizer {
         $stamp = $this->readStamp();
         $full = ($stamp['octets'] ?? null) !== $octets;
 
-        // Datenbank: UTC wie die Spalten
+        // Database: UTC like the columns
         $cutoff = gmdate('Y-m-d H:i:s', time() - $days * 86400);
         $from = $full ? self::BEGIN : (string)($stamp['db'] ?? self::BEGIN);
         $result = ['rows' => [], 'files' => 0];
@@ -93,14 +93,14 @@ class IpAnonymizer {
         }
         $result['rows']['login_device'] = $this->table('login_device', null, '', '', $octets);
 
-        // Logdateien: Dateiname im Datum der Systemzeitzone (System::log())
+        // Log files: file name in the date of the system time zone (System::log())
         $logCutoff = date('Y-m-d', time() - $days * 86400);
         $logFrom = $full ? '0000-00-00' : (string)($stamp['log'] ?? '0000-00-00');
         if ($logFrom < $logCutoff) $result['files'] = $this->logFiles($logFrom, $logCutoff, $octets);
 
-        // privacy.ip_v4_octets erhöht: auch die Inhalte des Audit-Logs (var/audit) weiter
-        // kürzen - sie wurden mit der früheren Einstellung geschrieben. Gesenkt bringt
-        // nichts zurück, dann bleibt es beim Stand der Dateien.
+        // privacy.ip_v4_octets increased: also shorten the contents of the audit log
+        // (var/audit) further - they were written with the earlier setting. Lowering it
+        // brings nothing back, then the files stay as they are.
         $result['audit'] = 0;
         if (isset($stamp['octets']) && $octets > (int)$stamp['octets']) {
             $result['audit'] = (int)$this->container->get(AuditLog::class)->anonymizeFileIps()['entries'];
@@ -115,9 +115,9 @@ class IpAnonymizer {
     }
 
     /**
-     * IPs einer Tabelle im Fenster [$from, $to) kürzen; ohne $column alle Zeilen.
+     * Shorten the IPs of a table in the window [$from, $to); without $column all rows.
      *
-     * @return int  geänderte Zeilen
+     * @return int  changed rows
      */
     private function table(string $table, ?string $column, string $from, string $to, int $octets): int
     {
@@ -126,7 +126,7 @@ class IpAnonymizer {
         try {
             if ($column === null) return $this->window($table, '', [], $octets);
 
-            // Fenster tageweise: der erste vorhandene Zeitpunkt ab $from überspringt Lücken
+            // Window day by day: the first existing point in time from $from skips gaps
             while ($from < $to) {
                 $this->db->query("SELECT MIN(`$column`) FROM `$table` WHERE `$column` >= ? AND `$column` < ? AND `ip` <> ''",
                     'ss', [$from, $to]);
@@ -144,7 +144,7 @@ class IpAnonymizer {
         return $changed;
     }
 
-    /** Die verschiedenen IPs eines Fensters lesen und je IP mit einem UPDATE kürzen */
+    /** Read the distinct IPs of a window and shorten each one with an UPDATE */
     private function window(string $table, string $where, array $values, int $octets): int
     {
         $types = str_repeat('s', count($values));
@@ -162,9 +162,9 @@ class IpAnonymizer {
     }
 
     /**
-     * Logdateien var/log/{Y-m-d}_*.log mit $from <= Tag < $to umschreiben.
+     * Rewrite log files var/log/{Y-m-d}_*.log with $from <= day < $to.
      *
-     * @return int  umgeschriebene Dateien
+     * @return int  rewritten files
      */
     private function logFiles(string $from, string $to, int $octets): int
     {
@@ -178,7 +178,7 @@ class IpAnonymizer {
         return $count;
     }
 
-    /** Eine Logdatei zeilenweise kürzen; true = geändert */
+    /** Shorten one log file line by line; true = changed */
     private function logFile(string $path, int $octets): bool
     {
         $in = @fopen($path, 'rb');
@@ -202,7 +202,7 @@ class IpAnonymizer {
             return false;
         }
         @chmod($tmp, (int)($this->config->get('permissions.file') ?: 0664));
-        // rename() ersetzt die Zieldatei auch unter Windows
+        // rename() also replaces the target file on Windows
         if (!@rename($tmp, $path)) {
             @unlink($tmp);
             return false;
@@ -211,9 +211,9 @@ class IpAnonymizer {
     }
 
     /**
-     * Alle IP-Adressen in einem Text kürzen. Kandidaten sind Folgen aus Ziffern,
-     * Hex-Zeichen, Punkten und Doppelpunkten; ersetzt wird nur, was filter_var() als
-     * IP anerkennt - Uhrzeiten wie 12:34:56 bleiben stehen.
+     * Shorten all IP addresses in a text. Candidates are sequences of digits,
+     * hex characters, dots and colons; only what filter_var() accepts as an
+     * IP is replaced - times such as 12:34:56 remain.
      */
     public static function anonymizeText(string $text, int $octets = 1): string
     {

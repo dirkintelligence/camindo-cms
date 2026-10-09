@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\Backend $this->backend
@@ -11,11 +11,11 @@
 $details = (array) ($data['details'] ?? []);
 
 /**
- * Auswahlwerte als Klartext ausgeben: gespeichert ist der Schlüssel ('jpg'),
- * angezeigt wird das Snippet dazu ('JPEG').
+ * Output selection values as plain text: the key ('jpg') is stored,
+ * the snippet for it ('JPEG') is shown.
  *
- * Sollte infoAdd() Referenzen mit führendem '#' nicht selbst auflösen, hier auf
- * $this->cms->snippet('proc.ffmpegimage.option_' . $value) umstellen.
+ * If infoAdd() does not resolve references with a leading '#' itself, switch here to
+ * $this->cms->snippet('proc.ffmpegimage.option_' . $value) .
  */
 $optionLabel = static function (string $value): string {
     if ($value === '') return '';
@@ -26,7 +26,7 @@ $optionLabel = static function (string $value): string {
 $this->backend->infoAdd($this->converter, 'details.format', $optionLabel((string) ($details['format'] ?? 'jpg')));
 $this->backend->infoAdd($this->converter, 'details.quality', (int) ($details['quality'] ?? 80) . ' %');
 
-// Bildauswahl: nur den Wert zeigen, der im gewählten Modus auch wirkt
+// Image selection: only show the value that is also effective in the chosen mode
 $frameMode = (string) ($details['frame_mode'] ?? 'percent');
 $this->backend->infoAdd($this->converter, 'details.frame_mode', $optionLabel($frameMode));
 if ($frameMode === 'percent') {
@@ -44,13 +44,13 @@ $this->backend->infoAdd($this->converter, 'details.height', $details['height'] ?
 $this->backend->infoAdd($this->converter, 'details.crop', ($details['crop'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.prevent_upscaling', ($details['prevent_upscaling'] ?? 0) ? 'yes' : 'no');
 
-// Bildbearbeitung
+// Image editing
 $this->backend->infoAdd($this->converter, 'details.deinterlace', $optionLabel((string) ($details['deinterlace'] ?? 'auto')));
 $this->backend->infoAdd($this->converter, 'details.auto_rotation', ($details['auto_rotation'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.sharpen', ($details['sharpen'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.strip_meta', ($details['strip_meta'] ?? 0) ? 'yes' : 'no');
 
-// Ausführung
+// Execution
 $this->backend->infoAdd($this->converter, 'details.threads', $details['threads'] ?? 0, ['notempty']);
 $this->backend->infoAdd($this->converter, 'details.background_process', ($details['background_process'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.max_time_out', (int) ($details['max_time_out'] ?? 120) . ' s');

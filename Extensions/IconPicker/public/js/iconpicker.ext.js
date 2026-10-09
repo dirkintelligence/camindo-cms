@@ -1,15 +1,15 @@
 /*
- * Extension IconPicker - Handler für cApp.extensions (13 §3.4)
+ * Extension IconPicker - handler for cApp.extensions (developer docs, chapter 08 (Components and extensions))
  *
- * Hängt an ein Textfeld, das einen Material-Icon-Namen trägt (z. B. area.icon),
- * ein Suffix mit der Vorschau des Icons und einem Knopf, der das Auswahlfenster
- * öffnet. Das Fenster zeigt die Icons einer Kategorie (blätterbar) oder - sobald
- * etwas im Suchfeld steht - alle Icons, deren Name oder Tags jeden Suchbegriff
- * enthalten. Ein Klick schreibt den Icon-Namen ins Feld.
+ * Attaches to a text field that holds a Material icon name (e.g. area.icon)
+ * a suffix with the preview of the icon and a button that opens the selection
+ * window. The window shows the icons of a category (pageable) or - as soon as
+ * something is in the search field - all icons whose name or tags contain every
+ * search term. A click writes the icon name into the field.
  *
- * Index und Texte kommen einmal je Seite von backendExtensions/IconPicker/index.php
- * (data/reduced-index.json, Sprache des Admins); die Icons selbst zeichnet der
- * Backend-Font ("icon"-Klasse, Ligaturen). Keine Optionen.
+ * Index and texts come once per page from backendExtensions/IconPicker/index.php
+ * (data/reduced-index.json, language of the admin); the icons themselves are drawn by the
+ * backend font ("icon" class, ligatures). No options.
  */
 (function (cApp) {
     'use strict';
@@ -24,8 +24,8 @@
                     return response.json();
                 })
                 .then((data) => {
-                    // Suchtext je Icon einmal vorbereiten: Name (mit Leerzeichen statt
-                    // Unterstrich) und Tags, kleingeschrieben
+                    // Prepare the search text once per icon: name (with spaces instead of
+                    // underscores) and tags, lowercase
                     data.icons.forEach((icon) => {
                         icon.search = (icon.name.replace(/_/g, ' ') + ' ' + icon.name + ' ' + (icon.tags || []).join(' ')).toLowerCase();
                     });
@@ -66,8 +66,8 @@
             this.query = '';
             this.open = false;
 
-            // Suffix: Vorschau + Knopf. Das Feld steckt entweder schon in einer
-            // .input-group (Backend::formField() mit prefix/suffix) oder bekommt eine.
+            // Suffix: preview + button. The field either already sits in an
+            // .input-group (Backend::formField() with prefix/suffix) or gets one.
             let group = input.closest('.input-group');
             if (!group) {
                 group = el('div', 'input-group');
@@ -103,8 +103,8 @@
             this.wrapper.addEventListener('keydown', this.onKey);
 
             this.updatePreview();
-            // Texte (Knopf-Titel) sobald die Daten da sind - das Fenster selbst wird
-            // erst beim Öffnen gebaut
+            // Texts (button title) as soon as the data is there - the window itself is
+            // only built when opening
             loadData().then((data) => {
                 this.data = data;
                 this.button.title = data.texts.speak_open;
@@ -122,7 +122,7 @@
             loadData().then((data) => {
                 this.data = data;
                 if (!this.panel) this.buildPanel();
-                // Kategorie des aktuellen Icons voreinstellen
+                // Preselect the category of the current icon
                 const current = this.input.value.trim();
                 if (current !== '' && this.query === '') {
                     const hit = data.icons.find((i) => i.name === current);
@@ -155,7 +155,7 @@
             panel.hidden = true;
             panel.setAttribute('role', 'dialog');
 
-            // Kopf: Suche, Schließen
+            // Header: search, close
             const head = el('div', 'c9-iconpicker-head');
             this.search = el('input', 'form-control form-control-sm');
             this.search.type = 'search';
@@ -174,7 +174,7 @@
             head.appendChild(this.search);
             head.appendChild(closeBtn);
 
-            // Kategorie-Navigation: zurück, Titel, vor
+            // Category navigation: back, title, forward
             const nav = el('div', 'c9-iconpicker-nav');
             this.prevBtn = el('button', 'btn btn-sm btn-light');
             this.prevBtn.type = 'button';
@@ -195,7 +195,7 @@
             nav.appendChild(this.nextBtn);
             this.nav = nav;
 
-            // Raster
+            // Grid
             this.grid = el('div', 'c9-iconpicker-grid');
             this.grid.addEventListener('click', (e) => {
                 const btn = e.target.closest('button[data-icon]');
@@ -215,7 +215,7 @@
             this.render();
         }
 
-        // Treffer der Suche: jeder Begriff muss in Name oder Tags vorkommen
+        // Search hits: every term must occur in the name or tags
         matches() {
             const terms = this.query.split(/\s+/).filter(Boolean);
             return this.data.icons.filter((i) => terms.every((t) => i.search.includes(t)));
@@ -239,7 +239,7 @@
                 this.title.textContent = category.label + ' (' + icons.length + ')';
             }
             const frag = document.createDocumentFragment();
-            // "Kein Icon" - leert das Feld
+            // "No icon" - clears the field
             const none = el('button', 'c9-iconpicker-item c9-iconpicker-none' + (current === '' ? ' active' : ''));
             none.type = 'button';
             none.dataset.icon = '';
@@ -277,7 +277,7 @@
             if (this.panel) this.panel.remove();
             this.preview.remove();
             this.button.remove();
-            // Hülle wieder entfernen; eine selbst angelegte .input-group ebenso
+            // Remove the wrapper again; likewise a self-created .input-group
             this.wrapper.parentNode.insertBefore(this.group, this.wrapper);
             this.wrapper.remove();
             if (this.group.children.length === 1 && this.group.firstElementChild === this.input) {

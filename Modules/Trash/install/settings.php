@@ -1,8 +1,8 @@
 <?php
-// Core-Modul Trash: der Papierkorb jedes Admins - gelöschte Datensätze (Superuser
-// auch Bereiche) ansehen und wiederherstellen.
-// Nicht 'listed': jeder Gruppe offen, keine Rechteverwaltung (Access::module()).
-// 'button' => true: trotzdem eine Kachel auf der Startseite (StartBackend).
+// Core module Trash: each administrator's trash - view and restore deleted records (superusers
+// also areas).
+// Not 'listed': open to every group, no permission management (Access::module()).
+// 'button' => true: still a tile on the start page (StartBackend).
 return [
 
 'version' => '9.0.0',
@@ -12,7 +12,7 @@ return [
 'icon' => 'delete',
 'listed' => false,
 'button' => true,
-// trash.list (TrashApi); Wiederherstellen über record.restore
+// trash.list (TrashApi); restoring via record.restore
 'api' => ['TrashApi'],
 'widget' => [
     'class'  => 'TrashBackend',

@@ -1,23 +1,23 @@
 <?php
 /**
- * check_include_cache.php - Selbsttest für den Ausgabe-Cache von CMS:INCLUDE
+ * check_include_cache.php - self-test for the output cache of CMS:INCLUDE
  *
  *     php Core/cron/check_include_cache.php
  *
- * Prüft ohne Datenbankinhalte:
- *   - IncludeCache::ttl() (caching=300, 5m, 1h, 1d, infinite, ungültige Werte)
- *   - IncludeCache::paramString() (cacheparams null/bool/int/string/Array)
- *   - den Compiler: cacheparams=$var bleibt ein PHP-Ausdruck ('php_value'),
- *     andere Parameter und gequotete Werte bleiben Strings
- *   - start()/finish(): Aufzeichnung, Treffer, Nonce-Platzhalter, kein Ablegen bei
- *     $store = false, Ungültigkeit nach Änderung der Template-Datei
- * Der Treffer-Test schreibt unter var/cache/include/0/zz_selftest und räumt danach ab.
- * Exit-Code 1 bei Abweichungen.
+ * Checks without database contents:
+ *   - IncludeCache::ttl() (caching=300, 5m, 1h, 1d, infinite, invalid values)
+ *   - IncludeCache::paramString() (cacheparams null/bool/int/string/array)
+ *   - the compiler: cacheparams=$var stays a PHP expression ('php_value'),
+ *     other parameters and quoted values stay strings
+ *   - start()/finish(): recording, hit, nonce placeholder, no storing when
+ *     $store = false, invalidity after a change of the template file
+ * The hit test writes under var/cache/include/0/zz_selftest and cleans up afterwards.
+ * Exit code 1 on deviations.
  */
 use Camindo\Core\IncludeCache;
 use Camindo\Core\Modules\Template\Template;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -26,7 +26,7 @@ if (PHP_SAPI !== 'cli') {
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 $failed = 0;

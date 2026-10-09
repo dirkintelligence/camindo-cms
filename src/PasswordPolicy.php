@@ -1,37 +1,38 @@
 <?php
 /**
- * Passwort-Richtlinie: Mindestlänge und Zeichenklassen (16-sicherheit.md §12).
+ * Password policy: minimum length and character classes (developer docs, chapter 13 (Security: authentication)):
+ * Security: authentication).
  *
- * Die Regeln stehen in security.password_policy; ein Passwort-Feld mit der Extension
- * "Password" kann einzelne Werte in details.extension_options überschreiben. Geprüft
- * wird auf dem Server (Dataset::validateValue(), wenn das Feld die Extension trägt,
- * und immer für admin.password); die Extension zeigt dieselben Regeln im Browser an
- * (Core/Extensions/Password) - die Texte dafür liefert clientOptions().
+ * The rules are in security.password_policy; a password field with the extension
+ * "Password" can override single values in details.extension_options. The check
+ * runs on the server (Dataset::validateValue() if the field carries the extension,
+ * and always for admin.password); the extension shows the same rules in the browser
+ * (Core/Extensions/Password) - the texts for that come from clientOptions().
  *
- * REGELN
+ * RULES
  * --------------------
- *     min_length       Mindestlänge in Zeichen (mb_strlen)
- *     min_special      Sonderzeichen = alles außer Buchstaben und Ziffern,
- *                      Zeichenklasse [^\p{L}\p{N}] - auch Leerzeichen und Umlaute
- *                      anderer Schriften zählen damit richtig
- *     min_upper        Großbuchstaben (\p{Lu})
- *     upper_not_first  ein Großbuchstabe am Anfang zählt nicht mit (das "Passwort1!"-
- *                      Muster erfüllt die Regel sonst mit dem ersten Zeichen)
- *     min_lower        Kleinbuchstaben (\p{Ll})
- *     min_digit        Ziffern (\p{N})
- * 0 bzw. false = keine Anforderung.
+ *     min_length       Minimum length in characters (mb_strlen)
+ *     min_special      Special characters = everything except letters and digits,
+ *                      character class [^\p{L}\p{N}] - spaces and umlauts or
+ *                      letters of other scripts also count correctly this way
+ *     min_upper        Uppercase letters (\p{Lu})
+ *     upper_not_first  an uppercase letter at the start does not count (otherwise the
+ *                      "Password1!" pattern meets the rule with the first character)
+ *     min_lower        Lowercase letters (\p{Ll})
+ *     min_digit        Digits (\p{N})
+ * 0 or false = no requirement.
  *
- * Der JavaScript-Teil (password.ext.js, C9Password.check()) zählt identisch; wer eine
- * Regel ergänzt, ändert beide.
+ * The JavaScript part (password.ext.js, C9Password.check()) counts identically; whoever
+ * adds a rule changes both.
  */
 namespace Camindo\Core;
 
 class PasswordPolicy {
 
-    /** Name der Extension, deren Optionen die Regeln eines Feldes überschreiben */
+    /** Name of the extension whose options override a field's rules */
     public const EXTENSION = 'Password';
 
-    /** Vorgaben von security.password_policy (Config, Installer) */
+    /** Defaults of security.password_policy (config, installer) */
     public const DEFAULTS = [
         'min_length'      => 12,
         'min_special'     => 1,
@@ -41,7 +42,7 @@ class PasswordPolicy {
         'min_digit'       => 0,
     ];
 
-    /** Regeln mit Typ - Reihenfolge = Reihenfolge der Anzeige */
+    /** Rules with type - order = display order */
     public const RULES = [
         'min_length'      => 'int',
         'min_special'     => 'int',
@@ -59,8 +60,8 @@ class PasswordPolicy {
     }
 
     /**
-     * Wirksame Regeln: security.password_policy, überschrieben durch $overrides.
-     * Leere Werte in $overrides ('' aus dem Feldformular) zählen nicht.
+     * Effective rules: security.password_policy, overridden by $overrides.
+     * Empty values in $overrides ('' from the field form) do not count.
      */
     public function rules(array $overrides = []): array
     {
@@ -77,9 +78,9 @@ class PasswordPolicy {
     }
 
     /**
-     * Regeln für eine Spalte bzw. ein Feld, wenn dort geprüft werden soll - sonst null.
-     * Meta-Felder aus dem PHP-Schema: 'extension' => 'Password' (admin.password);
-     * Felder der Bereiche: details.extension (JSON-String oder Array).
+     * Rules for a column or field if it is to be checked there - otherwise null.
+     * Meta fields from the PHP schema: 'extension' => 'Password' (admin.password);
+     * fields of areas: details.extension (JSON string or array).
      */
     public function rulesFor(array $colDef): ?array
     {
@@ -95,9 +96,9 @@ class PasswordPolicy {
     }
 
     /**
-     * Welche Regeln erfüllt ein Passwort nicht?
+     * Which rules does a password not meet?
      *
-     * @return string[]  Schlüssel aus RULES (upper_not_first erscheint als min_upper)
+     * @return string[]  Keys from RULES (upper_not_first appears as min_upper)
      */
     public static function failed(string $password, array $rules): array
     {
@@ -113,7 +114,7 @@ class PasswordPolicy {
     }
 
     /**
-     * Zeichen je Klasse zählen.
+     * Count characters per class.
      *
      * @return array{length:int, special:int, upper:int, upper_inner:int, lower:int, digit:int}
      */
@@ -132,8 +133,8 @@ class PasswordPolicy {
     }
 
     /**
-     * Beschriftung je aktiver Regel in der Sprache des Requests, z. B.
-     * ['min_length' => 'mindestens 12 Zeichen', …].
+     * Label per active rule in the language of the request, e.g.
+     * ['min_length' => 'at least 12 characters', …].
      */
     public function describe(array $rules, string $lang = ''): array
     {
@@ -148,7 +149,7 @@ class PasswordPolicy {
     }
 
     /**
-     * Fehlermeldung zu nicht erfüllten Regeln: "mindestens 2 Sonderzeichen, …".
+     * Error message for unmet rules: "at least 2 special characters, …".
      */
     public function message(array $failed, array $rules): string
     {
@@ -157,8 +158,8 @@ class PasswordPolicy {
     }
 
     /**
-     * Optionen für den Browser (data-c9-ext-options der Extension, Backend::fieldExtension()):
-     * wirksame Regeln und fertige Texte, damit Server und Browser dasselbe verlangen.
+     * Options for the browser (data-c9-ext-options of the extension, Backend::fieldExtension()):
+     * effective rules and ready-made texts, so that server and browser require the same.
      */
     public function clientOptions(array $options): array
     {

@@ -1,17 +1,17 @@
 <?php
 /**
- * Die Schleife hinter Core/cron/cron.php - dem EINZIGEN Cronjob von camindo CMS.
+ * The loop behind Core/cron/cron.php - the ONLY cron job of camindo CMS.
  *
- * Läuft ~10 Minuten am Stück (der Cronjob startet jede Minute, die Sperre 'cron'
- * verhindert parallele Läufe) und startet nur eigenständige Hintergrundprozesse:
+ * Runs about 10 minutes at a stretch (the cron job starts every minute, the lock 'cron'
+ * prevents parallel runs) and only starts independent background processes:
  *
- *     alle 2 s   trigger_ff.php, trigger_magick.php   Medienumwandlung
- *     jede Min.  Herzschlag (SystemHealth), scheduler.php (fällige Aufgaben des
- *                Zeitplaners), template_sync.php (var/templates abgleichen)
+ *     every 2 s   trigger_ff.php, trigger_magick.php   media conversion
+ *     every min.  heartbeat (SystemHealth), scheduler.php (due tasks of the
+ *                 scheduler), template_sync.php (reconcile var/templates)
  *
- * Alles Zeitgesteuerte darüber hinaus - auch die Wartung (Papierkorb leeren, var/tmp,
- * Lösch-Policies, Aufbewahrungsfristen, Audit-Prüfung, Update-Prüfung, Logs, Backup)
- * - sind Aufgaben des Zeitplaners (Modul Scheduler), angelegt vom Installer.
+ * Everything else time-controlled - including maintenance (empty trash, var/tmp,
+ * deletion policies, retention periods, audit check, update check, logs, backup)
+ * - are tasks of the scheduler (module Scheduler), created by the installer.
  *
  * @see Camindo\Core\Modules\Scheduler\SchedulerRunner
  */
@@ -25,16 +25,16 @@ use Camindo\Core\SystemHealth;
 
 class TriggerCron {
 
-    /** Hintergrundprozess-Typ */
+    /** Background process type */
     private const BGPROC_TYPE = 'cron';
 
-    /** Fehlermeldungen je Typ höchstens einmal je Intervall (Sekunden) */
+    /** Error messages per type at most once per interval (seconds) */
     private const ERROR_LOG_INTERVAL = 3600;
 
-    /** Stempeldatei in var/tmp: Zeitpunkt der letzten Meldung je Typ (JSON) */
+    /** Stamp file in var/tmp: time of the last message per type (JSON) */
     private const ERROR_STAMP = 'cron-errors.stamp';
 
-    /** Zeitpunkt der letzten Meldung je Typ - Inhalt von ERROR_STAMP */
+    /** Time of the last message per type - content of ERROR_STAMP */
     private ?array $errorStamps = null;
 
     public function __construct(
@@ -47,17 +47,17 @@ class TriggerCron {
     }        
 
     /**
-     * Fehler melden - höchstens einmal je Stunde und Typ.
+     * Report errors - at most once per hour and type.
      *
-     * Die Schleife läuft im Sekundentakt; schlägt ein Aufruf dauerhaft fehl (php
-     * nicht ausführbar, Trigger-Script defekt), stünde dieselbe Meldung sonst
-     * tausendfach in var/log/{Y-m-d}_cron-errors.log und in der Ausgabe (die der
-     * Cronjob meist in eine Datei umleitet). Der Zeitpunkt der letzten Meldung
-     * je Typ steht in var/tmp/cron-errors.stamp und überdauert so die 10-Minuten-
-     * Läufe von cron.php (die Aufgabe tmpcleanup lässt *.stamp in Ruhe).
+     * The loop runs at a per-second rhythm; if a call fails permanently (php
+     * not executable, trigger script defective), the same message would otherwise stand
+     * a thousand times in var/log/{Y-m-d}_cron-errors.log and in the output (which the
+     * cron job mostly redirects to a file). The time of the last message
+     * per type is in var/tmp/cron-errors.stamp and thus survives the 10-minute
+     * runs of cron.php (the task tmpcleanup leaves *.stamp alone).
      *
-     * @param string $type     Kennung der Fehlerquelle, z. B. 'php', 'trigger_ff'
-     * @param string $message  Meldung
+     * @param string $type     identifier of the error source, e.g. 'php', 'trigger_ff'
+     * @param string $message  message
      */
     private function logError(string $type, string $message): void
     {
@@ -78,11 +78,11 @@ class TriggerCron {
     }
 
     /**
-     * Ein Cron-Script als eigenen Hintergrundprozess starten; Fehler gedrosselt
-     * melden (logError()).
+     * Start a cron script as its own background process; report errors throttled
+     * (logError()).
      *
-     * @param string $script  Dateiname in Core/cron, zugleich der Fehler-Typ
-     * @return bool           true: gestartet
+     * @param string $script  file name in Core/cron, also the error type
+     * @return bool           true: started
      */
     private function startScript(string $script): bool
     {
@@ -95,10 +95,10 @@ class TriggerCron {
     }
 
     /**
-     * Intervallfunktion alle 2 Sek
+     * Interval function every 2 sec
      */
     private function tick2s(): bool {
-        // php executable testen
+        // test php executable
         $phpExec = $this->config->get('paths.php');
         if ($phpExec === '' || !is_executable($phpExec)) {
             $this->logError('php', "'php' is not executable ($phpExec)");
@@ -115,52 +115,52 @@ class TriggerCron {
     }
 
     /**
-     * Intervallfunktion alle 10 Sek
+     * Interval function every 10 sec
      */
     private function tick10s(): bool {
-        // Code für alle 10 Sekunden
+        // Code for every 10 seconds
         // echo "[" . date('H:i:s') . "] tick10s executed\n";
 
         return true;
     }
 
     /**
-     * Intervallfunktion alle 60 Sek
+     * Interval function every 60 sec
      */
     private function tick1m(): bool {
-        // ---- Herzschlag: die Startseite warnt, wenn er ausbleibt (SystemHealth) ----
+        // ---- Heartbeat: the start page warns if it fails to appear (SystemHealth) ----
         @touch($this->config->get('paths.tmp_dir') . '/' . SystemHealth::CRON_HEARTBEAT);
 
-        // ---- Scheduler: fällige Aufgaben starten (Modul Scheduler) ----
+        // ---- Scheduler: start due tasks (module Scheduler) ----
         $this->startScript('scheduler.php');
 
-        // ---- Template-Quelltexte: var/templates in die Datenbank übernehmen ----
-        // (angelegte Dateien/Verzeichnisse werden Templates/Bereiche, geänderte
-        //  Dateien werden neu kompiliert, gelöschte räumt es ab - siehe
+        // ---- Template source texts: take var/templates into the database ----
+        // (created files/directories become templates/areas, changed
+        //  files are recompiled, deleted ones are cleared away - see
         //  TemplateFiles::sync())
         $this->startScript('template_sync.php');
 
-        // Tägliche und stündliche Wartung (Papierkorb, var/tmp, Lösch-Policies,
-        // Aufbewahrungsfristen, Audit-Prüfung, Update-Prüfung …) sind Aufgaben des
-        // Zeitplaners (Scheduler::MAINTENANCE_TYPES) - terminierbar im Modul Zeitplaner
+        // Daily and hourly maintenance (trash, var/tmp, deletion policies,
+        // retention periods, audit check, update check …) are tasks of the
+        // scheduler (Scheduler::MAINTENANCE_TYPES) - schedulable in the module Scheduler
 
         return true;
     }
 
     public function run(): void
     {
-        // Keine parallelen Durchläufe erlauben
+        // Do not allow parallel runs
         if (!$this->bgproc->lock(self::BGPROC_TYPE)) {
             echo "Cron is already running. Exit.\n";
-            exit(0); // läuft bereits
+            exit(0); // already running
         }
 
-        // ---- Hauptschleife, Zeitsteuerung ----
+        // ---- Main loop, time control ----
         $exitCode = 0;
         $startTime = microtime(true);
-        $maxRunTime = 597; // 9 Minuten 57 Sekunden
-                           // 3 Sek Sicherheitsabstand sollten reichen - es werden ja nur
-                           // eigenständige Hintergrundprozesse gestartet
+        $maxRunTime = 597; // 9 minutes 57 seconds
+                           // a 3-second safety margin should be enough - only
+                           // independent background processes are started
         $last2s = 0;
         $last10s = 0;
         $last1m = 0;
@@ -169,12 +169,12 @@ class TriggerCron {
             $now = microtime(true);
             $elapsed = $now - $startTime;
 
-            // Abbruchbedingung: Maximale Laufzeit erreicht
+            // Termination condition: maximum run time reached
             if ($elapsed >= $maxRunTime) {
                 break;
             }
 
-            // Intervallfunktionen aufrufen
+            // Call interval functions
             if ($now - $last2s >= 2.0) {
                 $exitCode += $this->tick2s();
                 $last2s = $now;
@@ -190,7 +190,7 @@ class TriggerCron {
                 $last1m = $now;
             }
 
-            // CPU-Last schonen (100ms Schlafen)
+            // Spare the CPU (sleep 100 ms)
             usleep(100000); 
         }
 

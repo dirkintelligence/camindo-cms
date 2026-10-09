@@ -1,7 +1,7 @@
 <?php
 /**
- * API-Methoden der Status: auflisten, lesen, anlegen, ändern. Die beiden
- * Grundstatus (Id 0 und 1) lassen sich wie in der Oberfläche nicht ändern.
+ * API methods of the statuses: list, read, create, change. The two
+ * basic statuses (ids 0 and 1) cannot be changed, as in the UI.
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -24,9 +24,9 @@ class StatusApi extends DatasetApi
     }
 
     /**
-     * Alle Status.
+     * All statuses.
      *
-     * @param bool $withSchema  dazu die Beschreibung der Felder (für status.create)
+     * @param bool $withSchema  also the description of the fields (for status.create)
      */
     #[ApiMethod('status.list', '#status.api_list')]
     public function list(bool $withSchema = false): array
@@ -35,10 +35,10 @@ class StatusApi extends DatasetApi
     }
 
     /**
-     * Einen Status anlegen.
+     * Create a status.
      *
-     * @param array $data      Feld => Wert (siehe status.list with_schema)
-     * @param bool  $simulate  nur prüfen, nichts anlegen
+     * @param array $data      field => value (see status.list with_schema)
+     * @param bool  $simulate  only check, create nothing
      */
     #[ApiMethod('status.create', '#status.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(array $data, bool $simulate = false): array
@@ -47,11 +47,11 @@ class StatusApi extends DatasetApi
     }
 
     /**
-     * Einen Status ändern.
+     * Change a status.
      *
-     * @param int   $id        status_id (nicht 0 oder 1)
-     * @param array $data      Feld => Wert, nur die zu ändernden
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param int   $id        status_id (not 0 or 1)
+     * @param array $data      field => value, only the ones to change
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('status.update', '#status.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array

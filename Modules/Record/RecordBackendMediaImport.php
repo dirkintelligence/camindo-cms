@@ -1,31 +1,31 @@
 <?php
 /**
- * Medien-Import - die Maske (Erweiterung für RecordBackend).
+ * Media import - the mask (extension for RecordBackend).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
  *     record_media_import.php  -> import()
  *
- * Erreichbar über das Menü (more_vert) rechts in der Datensatzliste eines Bereichs,
- * unter "Import" - nur mit Upload-Feld im Bereich, Zusatzrecht import_media und dem
- * Recht, im Bereich anzulegen; nicht in abhängigen Bereichen (area.dependent: deren
- * Datensätze entstehen nur über ein Feld vom Typ link). Öffnet einen eigenen Layer
- * über der Liste; die Arbeit macht RecordMediaImport.
+ * Reachable via the menu (more_vert) on the right of the record list of an area,
+ * under "Import" - only with an upload field in the area, the additional right import_media
+ * and the right to create records in the area; not in dependent areas (area.dependent: their
+ * records are only created via a field of type link). Opens its own layer
+ * above the list; the work is done by RecordMediaImport.
  *
- * SCHRITTE (function)
+ * STEPS (function)
  * --------------------
- *     ''        Zip-Datei wählen: Upload oder eine Datei aus var/upload
- *     prepare   entpacken (RecordMediaImport::prepare()), weiter mit analyze
- *     analyze   Dateien nach Mime-Typ gruppiert, gefährliche ausgegraut; Auswahl der
- *               Typen, des Upload-Feldes (Pflicht, vorgewählt das erste) und des
- *               Feldes für den Dateinamen (optional, vorgewählt das Default-Feld).
- *               Ein Wechsel des Upload-Feldes zeigt die Maske neu - welche Typen das
- *               Feld annimmt, hängt von seinen Einstellungen ab
- *     run       importieren (immer INSERT), Protokoll; die Liste darunter lädt neu,
- *               sobald sie wieder oben liegt (cApp.layers.invalidate())
- *     cancel    Importverzeichnis entfernen, Layer schließen
+ *     ''        Choose the zip file: upload or a file from var/upload
+ *     prepare   unpack (RecordMediaImport::prepare()), continue with analyze
+ *     analyze   files grouped by MIME type, dangerous ones grayed out; selection of the
+ *               types, the upload field (required, the first one preselected) and the
+ *               field for the file name (optional, the default field preselected).
+ *               A change of the upload field shows the mask anew - which types the
+ *               field accepts depends on its settings
+ *     run       import (always INSERT), protocol; the list below reloads
+ *               as soon as it is visible again (cApp.layers.invalidate())
+ *     cancel    remove the import directory, close the layer
  *
- * @see Camindo\Core\Modules\Record\RecordMediaImport  die Arbeit
+ * @see Camindo\Core\Modules\Record\RecordMediaImport  the work
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -66,7 +66,7 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     /**
-     * Medien-Import (backend/record_media_import.php).
+     * Media import (backend/record_media_import.php).
      *
      * Request: area_id, function ('' | prepare | analyze | run | cancel), dir,
      *          importfile ($_FILES) | serverfile, types[], file_field, name_field
@@ -103,7 +103,7 @@ class RecordBackendMediaImport extends RecordBackend {
 
         switch ($function) {
             case 'cancel':
-                // Löscht das Importverzeichnis - nur per POST (17-csrf.md §2.7)
+                // Deletes the import directory - POST only (developer docs, chapter 14 (Security: web))
                 if ($this->dir !== '' && $this->backend->requirePost()) {
                     $this->import->removeDir($this->dir);
                 }
@@ -125,12 +125,12 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 0: Zip-Datei wählen
+    // Step 0: choose the zip file
 
     private function _importUploadForm(): void
     {
-        // wie das Upload-Feld der Eingabemaske: Datei-Input plus Knopf für eine Datei
-        // aus var/upload (Record/server_file.php -> ajax_import_file.php)
+        // like the upload field of the input mask: file input plus button for a file
+        // from var/upload (Record/server_file.php -> ajax_import_file.php)
         $preview = '';
         $serverFile = trim((string)($_REQUEST['serverfile'] ?? ''));
         if ($serverFile !== '') {
@@ -155,7 +155,7 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 1a: entpacken
+    // Step 1a: unpack
 
     private function _importPrepare(): void
     {
@@ -195,10 +195,10 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 1b: Einstellungen
+    // Step 1b: settings
 
     /**
-     * Query-String des Abbrechen-Knopfs: entfernt das Importverzeichnis.
+     * Query string of the cancel button: removes the import directory.
      */
     private function _cancelQuery(): string
     {
@@ -218,8 +218,8 @@ class RecordBackendMediaImport extends RecordBackend {
         $fileFields = $this->import->fileFields($this->areaId);
         $textFields = $this->import->textFields($this->areaId);
 
-        // Upload-Feld (Pflicht): gewählt bzw. das erste; Namensfeld: gewählt bzw. das
-        // Default-Feld des Bereichs (sofern ein Textfeld)
+        // Upload field (required): selected, or the first one; name field: selected, or the
+        // default field of the area (if it is a text field)
         $fileField = (string)($_REQUEST['file_field'] ?? '');
         if (!isset($fileFields[$fileField])) $fileField = (string)array_key_first($fileFields);
         if (isset($_REQUEST['file_field'])) {
@@ -230,9 +230,9 @@ class RecordBackendMediaImport extends RecordBackend {
         }
         if (!isset($textFields[$nameField])) $nameField = '';
 
-        // Mime-Typen: je Gruppe, wie viele Dateien das Upload-Feld annimmt. Nach einem
-        // Wechsel des Feldes bleibt die Auswahl; Typen, die das bisherige Feld nicht
-        // annahm (nicht in 'offered'), sind vorgewählt
+        // MIME types: per group, how many files the upload field accepts. After a
+        // change of the field the selection remains; types that the previous field did
+        // not accept (not in 'offered') are preselected
         $requested = isset($_REQUEST['file_field']) ? array_map('strval', (array)($_REQUEST['types'] ?? [])) : null;
         $offered = array_map('strval', (array)($_REQUEST['offered'] ?? []));
         $rows = '';
@@ -311,7 +311,7 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     /**
-     * Dateinamen für die Anzeige, bei vielen gekürzt.
+     * File names for display, shortened if there are many.
      */
     private function _fileList(array $paths, int $max = 8): string
     {
@@ -321,7 +321,7 @@ class RecordBackendMediaImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 2: importieren
+    // Step 2: import
 
     private function _importRun(): void
     {
@@ -339,7 +339,7 @@ class RecordBackendMediaImport extends RecordBackend {
             $this->_importAnalyze();
             return;
         }
-        // mehrsprachige Felder: geschrieben wird die Hauptsprache
+        // multilingual fields: the primary language is written
         $instanceId = (int)($this->areaData['instance_id'] ?? 0);
         if (!$this->backend->access()->languageWrite($this->instanceCache->primaryLanguageId($instanceId))) {
             $this->cms->error($this->cms->snippet('record.error_import_language_denied'));
@@ -356,7 +356,7 @@ class RecordBackendMediaImport extends RecordBackend {
         ];
         $result = $this->import->run($job);
         $this->import->removeDir($this->dir);
-        // die Liste darunter hat sich geändert: beim Wiederanzeigen neu laden
+        // the list below has changed: reload when it is shown again
         $this->backend->script('cApp.layers.invalidate();');
         echo $this->_protocolHtml($result);
         echo $this->backend->template('record.form_import_result_close');

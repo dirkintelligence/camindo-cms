@@ -1,52 +1,50 @@
 <?php
 /**
- * Datensatz in einen anderen Inhaltsbereich verschieben (Erweiterung für
+ * Move a record to another content area (extension for
  * RecordBackend).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
  *     record_move.php  -> move()
  *
- * Erreichbar über den Button "Verschieben" der Detailansicht (RecordBackendInfo) -
- * nicht aus einem Lookup-Fenster heraus (src_id > 0): dort geht es um das
- * Verknüpfen, nicht um den Datensatz selbst.
+ * Reachable via the "Move" button of the detail view (RecordBackendInfo) -
+ * not from a lookup window (src_id > 0): there it is about
+ * linking, not about the record itself.
  *
- * ZWEI SCHRITTE, EIN SCRIPT
+ * TWO STEPS, ONE SCRIPT
  * --------------------
- *     ohne target_area_id   Schritt 1: Zielbereich wählen. Die Auswahl schickt das
- *                           Formular gleich ab (record.record_select_area_id).
- *     mit target_area_id    Schritt 2: Felder gegenüberstellen - links die
- *                           Eingabefelder des Quellbereichs, rechts je Feld eine
- *                           Auswahl der passenden Zielfelder (MoveTrait::
- *                           moveTargets()), "Löschen" voran; vorgewählt ist das
- *                           gleichnamige Zielfeld.
- *     function=move         Verschieben in zwei Schritten (MoveTrait):
- *                           movePrepare() legt die Arbeitskopie im Zielbereich an -
- *                           scheitert schon das (Abbildung, Sperre, Kinder),
- *                           erscheint die Gegenüberstellung mit den Fehlern erneut.
- *                           moveSave() checkt sie ein; danach geht es zur
- *                           Detailansicht des Datensatzes, die nun zum Zielbereich
- *                           gehört.
+ *     without target_area_id   Step 1: choose the target area. The selection submits
+ *                              the form right away (record.record_select_area_id).
+ *     with target_area_id      Step 2: compare fields side by side - on the left the
+ *                              input fields of the source area, on the right for each field a
+ *                              selection of the matching target fields (MoveTrait::
+ *                              moveTargets()), "Delete" first; the target field of the
+ *                              same name is preselected.
+ *     function=move            Move in two steps (MoveTrait):
+ *                              movePrepare() creates the working copy in the target area -
+ *                              if that already fails (mapping, lock, children),
+ *                              the field mapping with the errors appears again.
+ *                              moveSave() checks it in; afterwards the detail view
+ *                              of the record is shown, which now belongs to the target area.
  *
- * SCHEITERT DIE PRÜFUNG IM ZIELBEREICH
+ * IF THE CHECK IN THE TARGET AREA FAILS
  * --------------------
- * Der Zielbereich kann Felder haben, die der Herkunftsbereich nicht kennt - ein
- * Pflichtfeld ohne Abbildung, eine Verknüpfung in einen anderen Bereich, strengere
- * Grenzwerte. Statt der Gegenüberstellung erscheint dann die EINGABEMASKE DES
- * ZIELBEREICHS mit der Arbeitskopie und den Fehlern an ihren Feldern
- * (RecordBackendEdit::_editWorkingCopyForm()): der Redakteur ergänzt, was fehlt.
- * Speichern ist der Check-in (record_edit.php, function=save - die Kopie trägt die
- * area_id des Zielbereichs), Abbrechen verwirft die Kopie, und der Datensatz bleibt
- * unverändert im bisherigen Bereich. Bis dahin ist er wie bei jeder Bearbeitung
- * gesperrt.
+ * The target area may have fields that the source area does not know - a required
+ * field without a mapping, a link to another area, stricter
+ * limits. Instead of the field mapping, the INPUT MASK OF THE TARGET AREA
+ * then appears with the working copy and the errors at its fields
+ * (RecordBackendEdit::_editWorkingCopyForm()): the editor completes what is missing.
+ * Saving is the check-in (record_edit.php, function=save - the copy carries the
+ * area_id of the target area), cancelling discards the copy, and the record remains
+ * unchanged in the previous area. Until then it is locked as with any edit.
  *
- * Die Fehler der Abbildung tragen den Namen des Quellfeldes (Gegenüberstellung),
- * die der Prüfung den des ZIELFELDES, mehrsprachig "name.{language_id}" - so, wie
- * die Eingabemaske sie an ihren Feldern zeigt.
+ * The errors of the mapping carry the name of the source field (field mapping),
+ * those of the check the name of the TARGET FIELD, for multilingual fields "name.{language_id}" - just as
+ * the input mask shows them at its fields.
  *
- * @see Camindo\Core\MoveTrait                            die eigentliche Arbeit
- * @see Camindo\Core\Modules\Record\RecordBackendInfo     der Button dazu
- * @see Camindo\Core\Modules\Record\RecordBackendEdit     die Eingabemaske des Zielbereichs
+ * @see Camindo\Core\MoveTrait                            the actual work
+ * @see Camindo\Core\Modules\Record\RecordBackendInfo     the button for it
+ * @see Camindo\Core\Modules\Record\RecordBackendEdit     the input mask of the target area
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -55,10 +53,10 @@ use Camindo\Core\Modules\Area\Area;
 class RecordBackendMove extends RecordBackendEdit {
 
     /**
-     * Verschieben-Maske (backend/record_move.php).
+     * Move mask (backend/record_move.php).
      *
-     * Request: id, area_id, target_area_id (auch als data[target_area_id] aus der
-     *          Bereichsauswahl), mapping[quellfeld] = zielfeld, function ('move')
+     * Request: id, area_id, target_area_id (also as data[target_area_id] from the
+     *          area selection), mapping[source_field] = target_field, function ('move')
      */
     public function move(): void
     {
@@ -75,10 +73,10 @@ class RecordBackendMove extends RecordBackendEdit {
         // Bread crum navi
         $this->backend->setNaviLabel('#button_move');
 
-        // Datensatz laden - produktiv, nicht gelöscht - und die Rechte der
-        // Benutzergruppe: Schreiben + Löschen im Quellbereich, und alle
-        // Verknüpfungsfelder müssen lesbare Zielbereiche haben (12-group-rights.md,
-        // RecordService::loadForAction(); den Zielbereich prüft MoveTrait::movePrepare())
+        // Load the record - productive, not deleted - and the rights of the
+        // user group: write + delete in the source area, and all
+        // link fields must have readable target areas (developer docs, chapter 11 (Permissions));
+        // RecordService::loadForAction(); the target area is checked by MoveTrait::movePrepare())
         if (!$this->data = $this->service->loadForAction($this->id, 'move')) {
             $this->errors();
             echo $this->backend->template('container_footer');
@@ -88,7 +86,7 @@ class RecordBackendMove extends RecordBackendEdit {
         $this->areaData = $this->backend->areaData($this->areaId);
         $this->params = 'area_id=' . $this->areaId;
 
-        // Bereichslabel, H1, Datensatz
+        // Area label, H1, record
         // --------------------
         echo $this->backend->template('record.prefix_content_area', [
             '{text}' => str_replace('{area_label}', $this->cms->textOrSnippet((string)$this->areaData['label']), $this->cms->snippet('area.headline_area_label'))
@@ -100,13 +98,13 @@ class RecordBackendMove extends RecordBackendEdit {
             '{text}' => $this->backend->teaser('record', $this->id)
         ]);
 
-        // Parameter der Schritte
+        // Parameters of the steps
         // --------------------
         $function = (string)($_REQUEST['function'] ?? '');
         $targetAreaId = (int)($_REQUEST['data']['target_area_id'] ?? $_REQUEST['target_area_id'] ?? 0);
         $mapping = (array)($_REQUEST['mapping'] ?? []);
 
-        // Verschieben
+        // Move
         // --------------------
         if ($function === 'move' && $targetAreaId > 0) {
             $tmpId = $this->record->movePrepare($this->id, $targetAreaId, $mapping);
@@ -120,8 +118,8 @@ class RecordBackendMove extends RecordBackendEdit {
                 return;
             }
             if ($tmpId) {
-                // Prüfung im Zielbereich gescheitert: die Arbeitskopie steht im
-                // Zielbereich, ihre Eingabemaske zeigt die Fehler (Klassenkommentar)
+                // Check in the target area failed: the working copy is in the
+                // target area, its input mask shows the errors (class comment)
                 echo $this->backend->template('alert_warning', [
                     '{text}' => strtr($this->cms->snippet('record.warning_move_edit'), [
                         '{area}' => htmlspecialchars($this->cms->textOrSnippet((string)($this->backend->areaData($targetAreaId)['label'] ?? $targetAreaId))),
@@ -132,17 +130,17 @@ class RecordBackendMove extends RecordBackendEdit {
                     echo $this->backend->template('container_footer');
                     return;
                 }
-                // Kopie nicht zugänglich (sollte nie eintreten): verwerfen, zurück zur Auswahl
+                // Copy not accessible (should never happen): discard, back to the selection
                 $this->record->cancel($tmpId);
                 $this->errors();
             }
             else {
-                // Abbildung, Sperre, Kinder: Gegenüberstellung mit den Fehlern erneut
+                // Mapping, lock, children: field mapping with the errors again
                 $this->errors();
             }
         }
 
-        // Schritt 2: Felder gegenüberstellen
+        // Step 2: compare fields side by side
         // --------------------
         $targetData = ($targetAreaId > 0 && $targetAreaId !== $this->areaId)
             ? $this->backend->areaData($targetAreaId)
@@ -151,7 +149,7 @@ class RecordBackendMove extends RecordBackendEdit {
             $this->_moveMappingForm($targetAreaId, $targetData, $mapping);
         }
         else {
-            // Schritt 1: Zielbereich wählen
+            // Step 1: choose the target area
             $this->_moveAreaForm();
         }
 
@@ -159,12 +157,12 @@ class RecordBackendMove extends RecordBackendEdit {
     }
 
     /**
-     * Schritt 1: Zielbereich wählen.
+     * Step 1: choose the target area.
      *
-     * Alle Datensatz-Bereiche (Area::CONTENT_TYPES) außer dem eigenen, eingerückt
-     * nach `depth`, in Baumreihenfolge. Bereiche einer anderen Instanz bekommen deren
-     * Namen als Zusatz - der Wechsel der Instanz ist möglich, aber folgenreich
-     * (siehe MoveTrait). Die Auswahl schickt das Formular sofort ab.
+     * All record areas (Area::CONTENT_TYPES) except the own one, indented
+     * by `depth`, in tree order. Areas of another instance get its
+     * name as an addition - changing the instance is possible, but has consequences
+     * (see MoveTrait). The selection submits the form right away.
      */
     private function _moveAreaForm(): void
     {
@@ -213,20 +211,20 @@ class RecordBackendMove extends RecordBackendEdit {
     }
 
     /**
-     * Schritt 2: Felder des Quellbereichs den Feldern des Zielbereichs zuordnen.
+     * Step 2: map the fields of the source area to the fields of the target area.
      *
-     * Je Quellfeld eine Zeile: links Beschriftung, Name, Typ (und ob mehrsprachig),
-     * rechts die Auswahl - "Löschen" zuerst, dann die passenden Zielfelder
-     * (MoveTrait::moveTargets()). Vorgewählt ist das gleichnamige Zielfeld, nach einem
-     * fehlgeschlagenen Versuch die Auswahl des Redakteurs ($mapping).
+     * One row per source field: on the left label, name, type (and whether multilingual),
+     * on the right the selection - "Delete" first, then the matching target fields
+     * (MoveTrait::moveTargets()). The target field of the same name is preselected; after a
+     * failed attempt, the editor's selection ($mapping).
      *
-     * Fehler: unter dem Quellfeld die der Abbildung, unter dem gewählten Zielfeld die
-     * der Eingabeprüfung im Zielbereich (mehrsprachig je Sprache) - beide erscheinen
-     * in der Zeile des Quellfeldes.
+     * Errors: under the source field those of the mapping, under the selected target field
+     * those of the input check in the target area (multilingual per language) - both appear
+     * in the row of the source field.
      *
      * @param int   $targetAreaId
-     * @param array $targetData    Backend::areaData() des Zielbereichs
-     * @param array $mapping       Auswahl aus dem Request (leer beim ersten Aufruf)
+     * @param array $targetData    Backend::areaData() of the target area
+     * @param array $mapping       selection from the request (empty on the first call)
      */
     private function _moveMappingForm(int $targetAreaId, array $targetData, array $mapping): void
     {
@@ -244,7 +242,7 @@ class RecordBackendMove extends RecordBackendEdit {
             $type = (string)($colDef['type'] ?? '');
             $targets = $this->record->moveTargets($colDef, $targetFields);
 
-            // Vorauswahl
+            // preselection
             if ($fromRequest) {
                 $selected = (string)($mapping[$name] ?? '');
             }
@@ -252,7 +250,7 @@ class RecordBackendMove extends RecordBackendEdit {
                 $selected = $defaults[$name] ?? '';
             }
 
-            // Optionen: Löschen, dann die Zielfelder
+            // options: Delete, then the target fields
             $options = '<option value="">' . htmlspecialchars($this->cms->snippet('record.option_move_delete')) . "</option>\n";
             foreach ($targets as $targetName => $targetDef) {
                 $optionLabel = $this->cms->textOrSnippet((string)($targetDef['label'] ?? $targetName))
@@ -262,7 +260,7 @@ class RecordBackendMove extends RecordBackendEdit {
                     . htmlspecialchars($optionLabel) . "</option>\n";
             }
 
-            // Fehler dieser Zeile: Abbildung (Quellfeld) und Prüfung (Zielfeld, je Sprache)
+            // errors of this row: mapping (source field) and check (target field, per language)
             $errorTexts = [];
             foreach ($errorFields as $errorKey) {
                 $errorKey = (string)$errorKey;
@@ -291,7 +289,7 @@ class RecordBackendMove extends RecordBackendEdit {
             ]) . "\n";
         }
 
-        // Hinweis bei Instanzwechsel
+        // notice on instance change
         $instanceWarning = '';
         if ((int)($targetData['instance_id'] ?? 0) !== (int)($this->areaData['instance_id'] ?? 0)) {
             $instanceWarning = $this->backend->template('alert_warning', [

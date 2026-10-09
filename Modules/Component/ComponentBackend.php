@@ -1,38 +1,38 @@
 <?php
 /**
- * Backend-Oberfläche der Komponentenverwaltung - die GUI zu ComponentManager.
+ * Backend UI of the component management - the GUI for ComponentManager.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     component_list.php       -> list()      drei Tabs (Module, Prozessoren, Extensions),
- *                                             Zustand je Komponente, Kontextmenü mit den
- *                                             im Zustand zulässigen Aktionen
- *     component_info.php       -> info()      Detailansicht mit Aktionsbuttons
- *     component_action.php     -> action()    Bestätigung + Optionen, dann Ausführung mit
- *                                             Protokoll (install, activate, deactivate,
+ *     component_list.php       -> list()      three tabs (modules, processors, extensions),
+ *                                             state per component, context menu with the
+ *                                             actions allowed in the state
+ *     component_info.php       -> info()      detail view with action buttons
+ *     component_action.php     -> action()    confirmation + options, then execution with
+ *                                             log (install, activate, deactivate,
  *                                             update, uninstall)
- *     refresh_components.php   -> refresh()   Verzeichnisse abgleichen (im Aside)
+ *     refresh_components.php   -> refresh()   compare directories (in the aside)
  *
- * Es gibt keine Eingabemaske: Komponenten entstehen durch Hinlegen eines Verzeichnisses
- * (Composer), der Abgleich entdeckt sie, die Aktionen wechseln den Zustand. Dieselben
- * Methoden ruft die Kommandozeile (`php Core/cron/camindo.php component …`); nur der
- * Logger ist ein anderer - hier eine Liste im Layer bzw. Aside.
+ * There is no input mask: components are created by placing a directory
+ * (Composer), the comparison discovers them, the actions change the state. The same
+ * methods are called by the command line (`php Core/cron/camindo.php component …`); only the
+ * logger is different - here a list in the layer or aside.
  *
- * Komponenten werden über ihren Schlüssel "kind/Name" angesprochen (Parameter name),
- * nicht über component_id - eine entdeckte Komponente hat noch keine Zeile.
+ * Components are addressed by their key "kind/Name" (parameter name),
+ * not via component_id - a discovered component does not have a row yet.
  *
- * ZULÄSSIGE AKTIONEN JE ZUSTAND (14 §5.2)
+ * ALLOWED ACTIONS PER STATE (developer docs, chapter 09 (Installation and update))
  * --------------------
- *     core        keine
+ *     core        none
  *     discovered  install
  *     inactive    activate, uninstall
  *     active      deactivate, uninstall
  *     update      update, uninstall
- *     orphaned    uninstall (nur Zeile, Caches; --purge über component.tables)
- *     error       deactivate (falls aktiv), uninstall (falls installiert)
+ *     orphaned    uninstall (only row, caches; --purge via component.tables)
+ *     error       deactivate (if active), uninstall (if installed)
  *
  * @see Camindo\Core\ComponentManager
- * @see docs/developers/14-installation-und-update.md, Kapitel 5 und 6
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Modules\Component;
 
@@ -53,9 +53,9 @@ class ComponentBackend {
     }
 
     /**
-     * Komponentenliste (backend/component_list.php).
+     * Component list (backend/component_list.php).
      *
-     * Request: type = modules|processors|extensions (Standard: modules)
+     * Request: type = modules|processors|extensions (default: modules)
      */
     public function list(): void
     {
@@ -79,7 +79,7 @@ class ComponentBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.aside.openPost('Component/refresh_components.php');");
         echo $this->backend->buttonBar();
 
-        // Tabelle
+        // Table
         $headColumns = $this->backend->template('component.component_table_head_columns', [
             '{label_label}'   => $this->cms->snippet('component.field_label'),
             '{label_version}' => $this->cms->snippet('component.field_version'),
@@ -112,7 +112,7 @@ class ComponentBackend {
     }
 
     /**
-     * Detailansicht (backend/component_info.php). Request: name = kind/Name
+     * Detail view (backend/component_info.php). Request: name = kind/Name
      */
     public function info(): void
     {
@@ -132,7 +132,7 @@ class ComponentBackend {
         echo $this->backend->headline($this->_kindIcon($entry['kind']) . ' '
             . htmlspecialchars($this->cms->textOrSnippet((string)($s['label'] ?? $row['label'] ?? $entry['name']))));
 
-        // Buttons: Schließen + zulässige Aktionen
+        // Buttons: close + allowed actions
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_close', 'cApp.layers.close()');
         foreach ($this->_allowedActions($entry) as $action) {
@@ -142,14 +142,14 @@ class ComponentBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log) - nur mit Zeile in `component`
+        // Tabs: Info | Changes (audit log) - only with a row in `component`
         $componentId = (int)($row['component_id'] ?? 0);
         if ($componentId > 0
             && $this->backend->infoAuditTabs('Component/component_info.php?name=' . rawurlencode($key), 'component', $componentId)) {
             return;
         }
 
-        // Daten
+        // Data
         $this->backend->infoReset();
         $this->backend->infoStatic('#component.field_name', htmlspecialchars($entry['name']));
         $this->backend->infoStatic('#component.field_kind', $this->cms->snippet('component.kind_' . $entry['kind']));
@@ -187,11 +187,11 @@ class ComponentBackend {
     }
 
     /**
-     * Aktion bestätigen und ausführen (backend/component_action.php).
+     * Confirm and run the action (backend/component_action.php).
      *
      * Request: name = kind/Name, action = install|activate|deactivate|update|uninstall,
-     *          function = '' (Formular) | run (ausführen; Optionen activate, purge,
-     *          force, backup aus dem Formular)
+     *          function = '' (form) | run (execute; options activate, purge,
+     *          force, backup from the form)
      */
     public function action(): void
     {
@@ -233,13 +233,13 @@ class ComponentBackend {
     }
 
     /**
-     * Verzeichnisse abgleichen (backend/refresh_components.php) - im Aside, Fortschritt
-     * des ComponentManagers als Liste; danach wird die Liste neu geladen.
+     * Compare directories (backend/refresh_components.php) - in the aside, progress
+     * of the ComponentManager as a list; afterwards the list is reloaded.
      */
     public function refresh(): void
     {
         echo $this->backend->template('headline4', ['{text}' => $this->cms->snippet('component.headline_refresh')]);
-        // Schreibt den Zustand der Komponenten fort - nur per POST (17-csrf.md §2.7)
+        // Writes the state of the components - POST only (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
@@ -265,10 +265,10 @@ class ComponentBackend {
     }
 
     // ====================
-    // action() Hilfsfunktionen
+    // action() helper functions
 
     /**
-     * Bestätigungsformular: Erklärung, Hinweise, Optionen je Aktion.
+     * Confirmation form: explanation, notes, options per action.
      */
     private function _actionForm(array $entry, string $action): void
     {
@@ -324,8 +324,8 @@ class ComponentBackend {
     }
 
     /**
-     * Ausführen: ComponentManager-Methode mit Listen-Logger, Ergebnis als Alert,
-     * darunter das Protokoll; die Liste darunter wird neu geladen.
+     * Execute: ComponentManager method with list logger, result as alert,
+     * below it the log; the list below it is reloaded.
      */
     private function _actionRun(array $entry, string $action): void
     {
@@ -377,10 +377,10 @@ class ComponentBackend {
     }
 
     // ====================
-    // Darstellung
+    // Presentation
 
     /**
-     * Eintrag zum Request-Parameter name (kind/Name), null wenn unbekannt.
+     * Entry for the request parameter name (kind/Name), null if unknown.
      */
     private function _entry(): ?array
     {
@@ -390,7 +390,7 @@ class ComponentBackend {
     }
 
     /**
-     * Zulässige Aktionen im Zustand (Klassenkommentar).
+     * Allowed actions in the state (class comment).
      *
      * @return string[]
      */
@@ -425,7 +425,7 @@ class ComponentBackend {
     }
 
     /**
-     * Versionsspalte: installierte Version, dazu die der Dateien, wenn sie abweicht.
+     * Version column: installed version, plus that of the files if it differs.
      */
     private function _versionCell(array $entry): string
     {
@@ -446,7 +446,7 @@ class ComponentBackend {
     }
 
     /**
-     * requires aus settings.php als Liste.
+     * requires from settings.php as a list.
      */
     private function _requiresList(array $entry): string
     {
@@ -469,7 +469,7 @@ class ComponentBackend {
     }
 
     /**
-     * Tabellen der Komponente: aus settings.php, für Verwaiste aus component.tables.
+     * Tables of the component: from settings.php, for orphaned ones from component.tables.
      *
      * @return string[]
      */

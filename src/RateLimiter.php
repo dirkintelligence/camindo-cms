@@ -1,35 +1,35 @@
 <?php
 /**
- * Drosselung: wie oft darf etwas in einem Zeitfenster passieren?
- * developer_docs/20-frontend-schutz.md A.
+ * Throttling: how often may something happen within a time window?
+ * Developer docs, chapter 14 (Security: web).
  *
- * Anders als LoginGuard, der nur FEHLVERSUCHE zählt und nach dem Erfolg leert,
- * zählt der RateLimiter JEDE Anfrage - gedacht für Aktionen, die schon im Erfolgsfall
- * Kosten verursachen: eine E-Mail an eine frei eingegebene Adresse ("Passwort
- * vergessen", Registrierung, Kontaktformular), ein Eintrag im Log.
+ * Unlike LoginGuard, which only counts FAILED attempts and clears on success,
+ * the RateLimiter counts EVERY request - meant for actions that already cause costs
+ * on success: an email to a freely entered address ("forgot password",
+ * registration, contact form), an entry in the log.
  *
  * BUCKETS
  * --------------------
- * Ein Bucket ist eine Regel mit Grenze und Zeitfenster aus user.throttle.{bucket}
- * ([höchstens, Sekunden], höchstens 0 = aus). Buckets mit dem Präfix 'admin_' gehören
- * dem Backend und stehen in admin.throttle.{Rest} (admin_login_ip →
- * admin.throttle.login_ip). Innerhalb eines Buckets wird je Schlüssel gezählt - der
- * eingegebenen Adresse, der Herkunft (ClientIp::rateKey()), der Instanz.
+ * A bucket is a rule with a limit and a time window from user.throttle.{bucket}
+ * ([at most, seconds], at most 0 = off). Buckets with the prefix 'admin_' belong
+ * to the backend and are in admin.throttle.{rest} (admin_login_ip →
+ * admin.throttle.login_ip). Within a bucket, counting is done per key - the
+ * entered address, the origin (ClientIp::rateKey()), the instance.
  *
- * NUR HASHES IN DER TABELLE
+ * ONLY HASHES IN THE TABLE
  * --------------------
- * `rate_limit` speichert den Schlüssel als HMAC (Crypt::hash("{bucket}|{key}")) -
- * weder IP-Adressen noch eingegebene E-Mail-Adressen stehen im Klartext darin. Wer
- * die Tabelle liest, erfährt nicht, wer "Passwort vergessen" angeklickt hat.
+ * `rate_limit` stores the key as an HMAC (Crypt::hash("{bucket}|{key}")) -
+ * neither IP addresses nor entered email addresses are stored in plain text in it.
+ * Anyone reading the table cannot tell who clicked "forgot password".
  *
- * GLEITENDES FENSTER, SCHLANKE TABELLE
+ * SLIDING WINDOW, LEAN TABLE
  * --------------------
- * Eine Zeile je gezählter Anfrage. Vor jeder Zählung verschwinden die Zeilen des
- * Buckets, die älter als sein Fenster sind; gelegentlich (1 %) alles, was älter als
- * das längste Fenster ist. Eine abgewiesene Anfrage wird NICHT gezählt - wer gegen die
- * Sperre klopft, füllt weder die Tabelle noch verlängert er die Sperre.
+ * One row per counted request. Before each count, the rows of the bucket that are
+ * older than its window disappear; occasionally (1 %) everything older than the
+ * longest window. A rejected request is NOT counted - whoever knocks against the
+ * lock neither fills the table nor extends the lock.
  *
- * Protokolliert wird nur der Übergang in die Sperre (Log 'security'), wie bei
+ * Only the transition into the lock is logged (log 'security'), as with
  * LoginGuard.
  *
  * @see Camindo\Core\ClientIp
@@ -47,9 +47,9 @@ class RateLimiter
     ) {}
 
     /**
-     * Anfrage zählen, wenn sie erlaubt ist.
+     * Count the request if it is allowed.
      *
-     * @return bool  true = erlaubt (und gezählt), false = Grenze erreicht
+     * @return bool  true = allowed (and counted), false = limit reached
      */
     public function hit(string $bucket, string $key): bool
     {
@@ -70,7 +70,7 @@ class RateLimiter
         }
     }
 
-    /** Wäre die nächste Anfrage erlaubt? (zählt nicht) */
+    /** Would the next request be allowed? (does not count) */
     public function allows(string $bucket, string $key): bool
     {
         [$max, $seconds] = $this->limits($bucket);
@@ -85,7 +85,7 @@ class RateLimiter
         }
     }
 
-    /** Anfrage zählen, ohne zu prüfen (z. B. einen Fehlversuch nach allows()) */
+    /** Count a request without checking it (e.g. a failed attempt after allows()) */
     public function record(string $bucket, string $key): void
     {
         [$max, $seconds] = $this->limits($bucket);
@@ -101,7 +101,7 @@ class RateLimiter
         }
     }
 
-    /** Zähler eines Schlüssels leeren */
+    /** Clear the counter of a key */
     public function clear(string $bucket, string $key): void
     {
         $this->db->pushResult();
@@ -117,10 +117,10 @@ class RateLimiter
     }
 
     /**
-     * Grenze und Zeitfenster eines Buckets aus user.throttle.{bucket} bzw.
-     * admin.throttle.{Rest} für Buckets 'admin_…'.
+     * Limit and time window of a bucket from user.throttle.{bucket}, or
+     * admin.throttle.{rest} for buckets 'admin_…'.
      *
-     * @return array{0:int,1:int}  [höchstens, Sekunden]
+     * @return array{0:int,1:int}  [at most, seconds]
      */
     public function limits(string $bucket): array
     {
@@ -131,8 +131,8 @@ class RateLimiter
     }
 
     /**
-     * Gibt es den Bucket in user.throttle? Die Backend-Buckets ('admin_…') zählen
-     * nicht mit - CMS:EMAIL throttle=name soll sie nicht mitbenutzen können.
+     * Does the bucket exist in user.throttle? The backend buckets ('admin_…') do not
+     * count - CMS:EMAIL throttle=name must not be able to use them.
      */
     public function hasBucket(string $bucket): bool
     {
@@ -170,8 +170,8 @@ class RateLimiter
     }
 
     /**
-     * Abgelaufene Zeilen des Buckets löschen; gelegentlich auch alles, was älter als
-     * das längste Fenster ist (Buckets, die gerade niemand benutzt).
+     * Delete expired rows of the bucket; occasionally also everything older than
+     * the longest window (buckets that nobody is using at the moment).
      */
     private function purge(string $bucket, int $seconds): void
     {

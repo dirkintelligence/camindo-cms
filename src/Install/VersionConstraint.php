@@ -1,29 +1,29 @@
 <?php
 /**
- * Versionsbedingungen nach Composer-Art, ohne composer/semver.
+ * Version constraints in Composer style, without composer/semver.
  *
  *     ^9.1        >= 9.1.0  < 10.0.0     (^0.3 -> >= 0.3.0 < 0.4.0)
  *     ~9.1        >= 9.1.0  < 10.0.0     ~9.1.2 -> >= 9.1.2 < 9.2.0
  *     9.1.*       >= 9.1.0  < 9.2.0      9.* -> >= 9.0.0 < 10.0.0
- *     >=9.1 <10   beide müssen gelten (AND: Leerzeichen oder Komma)
- *     ^8.2 || ^9.0   eine muss gelten (OR)
+ *     >=9.1 <10   both must hold (AND: space or comma)
+ *     ^8.2 || ^9.0   one must hold (OR)
  *     *           alles
- *     9.1.0       genau diese Version (=, != ebenfalls)
+ *     9.1.0       exactly this version (=, != as well)
  *
- * Verglichen wird mit version_compare(); Vorabversionen (9.1.0-alpha) gelten als
- * kleiner als die Freigabe, so wie dort. Eine unverständliche Bedingung ist
- * unerfüllt - lieber eine Komponente zu viel als "fehlerhaft" melden als eine
+ * Compared with version_compare(); pre-release versions (9.1.0-alpha) count as
+ * smaller than the release, as there. An incomprehensible constraint is
+ * unsatisfied - better to report one component too many as "faulty" than one
  * Bedingung stillschweigend ignorieren.
  *
- * Für settings.php 'requires' (core, components), siehe
- * docs/developers/14-installation-und-update.md, 5.3.
+ * For settings.php 'requires' (core, components), see
+ * developer docs, chapter 09 (Installation and update).
  */
 namespace Camindo\Core\Install;
 
 class VersionConstraint {
 
     /**
-     * Erfüllt $version die Bedingung $constraint?
+     * Does $version satisfy the constraint $constraint?
      */
     public static function satisfies(string $version, string $constraint): bool
     {
@@ -43,7 +43,7 @@ class VersionConstraint {
     }
 
     /**
-     * Eine einzelne Bedingung ohne || und ,.
+     * A single constraint without || and ,.
      */
     private static function single(string $version, string $part): bool
     {
@@ -111,7 +111,7 @@ class VersionConstraint {
     }
 
     /**
-     * 'v9.1' -> '9.1.0', '9.1.0-beta2' bleibt; null, wenn keine Version.
+     * 'v9.1' -> '9.1.0', '9.1.0-beta2' stays; null if no version.
      */
     public static function normalize(string $version): ?string
     {

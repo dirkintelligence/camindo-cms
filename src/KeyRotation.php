@@ -1,67 +1,67 @@
 <?php
 /**
- * Schlüsselrotation: .camindo.key wechseln, ohne Daten zu verlieren
- * (`php Core/cron/camindo.php key rotate|status|retire`, 16-sicherheit.md §19).
+ * Key rotation: change .camindo.key without losing data
+ * (`php Core/cron/camindo.php key rotate|status|retire`, developer docs, chapter 13 (Security: authentication)).
  *
- * WOFÜR DER SCHLÜSSEL STEHT
+ * WHAT THE KEY IS USED FOR
  * --------------------
- *     umkehrbar verschlüsselt   data_enc.data, record_cache (Werte "encrypted"),
+ *     reversibly encrypted      data_enc.data, record_cache (values "encrypted"),
  *                               admin.email/mobile/phone, admin.totp_secret,
  *                               user_second_factor.totp_secret,
  *                               message.body/html, scheduler.details.password,
- *                               var/audit (verschlüsselte Werte der Schnappschüsse)
- *                               -> werden neu verschlüsselt; die HMAC-Kette des
- *                               Audit-Logs wird nach Prüfung neu berechnet
- *     HMAC über bekannten Text  data_enc.hash (Suche), Signaturen der Klasse Integrity
+ *                               var/audit (encrypted values of the snapshots)
+ *                               -> re-encrypted; the HMAC chain of the audit log
+ *                               is recalculated after a check
+ *     HMAC over a known text    data_enc.hash (search), signatures of the class Integrity
  *                               (admin, group, rel_group_*, admin_session)
- *                               -> werden neu berechnet ("neu signieren")
- *     HMAC über geheimen Text   Wiederherstellungscodes, Gerätekennungen: der Klartext
- *                               ist unbekannt -> gelten über Crypt::hashAll() weiter,
- *                               solange der alte Schlüssel im Schlüsselbund ist
- *     Pfeffer der Passwörter    ohne Klartext nicht umrechenbar -> die Hashes behalten
- *                               die Kennung des alten Schlüssels und werden bei der
- *                               nächsten Anmeldung neu berechnet
- *     abgeleitet                CSRF-Tokens (Session), Ersatz-Hash -> neu
+ *                               -> recalculated ("re-sign")
+ *     HMAC over a secret text   recovery codes, device identifiers: the plain text
+ *                               is unknown -> remain valid via Crypt::hashAll()
+ *                               as long as the old key is in the key ring
+ *     password pepper           cannot be converted without the plain text -> the hashes keep
+ *                               the identifier of the old key and are recalculated at the
+ *                               next login
+ *     derived                   CSRF tokens (session), replacement hash -> new
  *
- * ABLAUF VON rotate()
+ * FLOW OF rotate()
  * --------------------
- *  1. Datenbanksicherung (Backup::beforeChange('key-rotate'))
- *  2. Wartungsmodus an (sofern nicht schon an)
- *  3. Passwort-Hashes ohne Kennung bekommen die des alten Schlüssels
- *  4. alter Schlüssel -> {key_file}.retired, neuer -> key_file (beide mit den Rechten
- *     der bisherigen key_file, ohne Datei permissions.key_file - keyFileMode()); ab hier
- *     entschlüsselt Crypt mit beiden, ein Abbruch verliert also nichts - rotate()
- *     lässt sich einfach erneut aufrufen (dann mit einem weiteren Schlüssel)
- *  5. alles Umkehrbare neu verschlüsseln, data_enc.hash neu
- *  6. Integrity::signAll() - alle Signaturen mit dem neuen Schlüssel, löscht alle
- *     Admin-Sessions; Gruppen-Cache neu
- *  7. mit $invalidatePasswords (Passwörter öffentlich aufgetaucht): alle Passwörter
- *     leer (Admins: `camindo.php admin password NAME`, User: "Passwort vergessen"),
- *     alle Sessions, Geräte und Wiederherstellungscodes weg, der alte Schlüssel
- *     wird sofort entfernt
- *  8. Wartungsmodus aus
+ *  1. database backup (Backup::beforeChange('key-rotate'))
+ *  2. maintenance mode on (unless already on)
+ *  3. password hashes without identifier get that of the old key
+ *  4. old key -> {key_file}.retired, new one -> key_file (both with the rights
+ *     of the previous key_file, without a file permissions.key_file - keyFileMode()); from here on
+ *     Crypt decrypts with both, so an abort loses nothing - rotate()
+ *     can simply be called again (then with another key)
+ *  5. re-encrypt everything reversible, renew data_enc.hash
+ *  6. Integrity::signAll() - all signatures with the new key, deletes all
+ *     admin sessions; group cache renewed
+ *  7. with $invalidatePasswords (passwords publicly exposed): all passwords
+ *     emptied (admins: `camindo.php admin password NAME`, users: "forgot password"),
+ *     all sessions, devices and recovery codes removed, the old key
+ *     is removed immediately
+ *  8. maintenance mode off
  *
- * Höchstens eine Rotation je 24 Stunden (MIN_INTERVAL): eine zweite so kurz danach
- * wäre ein Versehen und schöbe den gerade abgelösten Schlüssel zu schnell weiter.
- * Der Zeitpunkt steht als Zeile "# rotated {ISO 8601}" in {key_file}.retired - auch
- * nach -f, wenn der alte Schlüssel selbst schon entfernt ist.
+ * At most one rotation per 24 hours (MIN_INTERVAL): a second one so soon after
+ * would be a mistake and would push the just-retired key along too quickly.
+ * The time is stored as the line "# rotated {ISO 8601}" in {key_file}.retired - also
+ * after -f, when the old key itself has already been removed.
  *
- * Kommt der Schlüssel aus der Umgebung (CAMINDO_KEY, Crypt::keySource()), schreibt
- * rotate() den neuen trotzdem nach key_file - die Datei hat Vorrang. Die Variable
- * zieht der Betreiber von Hand nach; erst danach darf key_file wieder weg
+ * If the key comes from the environment (CAMINDO_KEY, Crypt::keySource()), rotate()
+ * still writes the new one to key_file - the file takes precedence. The operator
+ * updates the variable by hand; only after that may key_file be removed
  * (status(): env_key).
  *
- * Der alte Schlüssel bleibt danach im Schlüsselbund, bis retire() ihn entfernt -
- * status() zeigt, was noch an ihm hängt (Passwörter, die sich seitdem nicht
- * angemeldet haben; Wiederherstellungscodes von vorher). retire() entfernt ihn nur,
- * wenn nichts Verschlüsseltes mehr daran hängt; übrige Passwörter werden dabei
- * ungültig (mit $force).
+ * The old key stays in the key ring afterwards until retire() removes it -
+ * status() shows what still depends on it (passwords that have not logged in since
+ * then; recovery codes from before). retire() only removes it
+ * if nothing encrypted depends on it any more; remaining passwords become
+ * invalid in the process (with $force).
  */
 namespace Camindo\Core;
 
 class KeyRotation {
 
-    /** Mindestabstand zweier Rotationen in Sekunden */
+    /** Minimum interval between two rotations in seconds */
     public const MIN_INTERVAL = 86400;
 
     public function __construct(
@@ -83,14 +83,14 @@ class KeyRotation {
     // rehash
 
     /**
-     * Suchwerte verschlüsselter Felder (data_enc.hash) neu berechnen - ohne neuen
-     * Schlüssel: aus dem entschlüsselten Klartext mit der aktuellen Normalisierung
-     * (Cms::encryptedHash()). Nötig für Daten, die vor der Normalisierung gespeichert
-     * wurden (`php Core/cron/camindo.php key rehash`); danach findet die Suche sie
-     * auch in anderer Groß-/Kleinschreibung. Zeilen, die sich nicht entschlüsseln
-     * lassen, bleiben unverändert.
+     * Recalculate search values of encrypted fields (data_enc.hash) - without a new
+     * key: from the decrypted plain text with the current normalization
+     * (Cms::encryptedHash()). Needed for data that was stored before the normalization
+     * (`php Core/cron/camindo.php key rehash`); afterwards the search finds it
+     * in other upper/lower case as well. Rows that cannot be decrypted
+     * stay unchanged.
      *
-     * @return int  Anzahl geänderter Zeilen
+     * @return int  number of changed rows
      */
     public function rehashEncrypted(): int
     {
@@ -113,12 +113,12 @@ class KeyRotation {
     // rotate
 
     /**
-     * Neuen Schlüssel einführen (siehe Klassenkommentar).
+     * Introduce a new key (see class comment).
      *
-     * @param bool   $invalidatePasswords  alle Passwörter sofort ungültig
-     * @param bool   $backup               vorher sichern (false nur für Tests)
-     * @param callable|null $log           fn(string $line) für Fortschrittsmeldungen
-     * @return array  old, new (Schlüssel-Ids), counts je Bereich
+     * @param bool   $invalidatePasswords  all passwords invalid immediately
+     * @param bool   $backup               back up beforehand (false only for tests)
+     * @param callable|null $log           fn(string $line) for progress messages
+     * @return array  old, new (key ids), counts per area
      */
     public function rotate(bool $invalidatePasswords = false, bool $backup = true, ?callable $log = null): array
     {
@@ -142,12 +142,12 @@ class KeyRotation {
         try {
             $oldId = $this->crypt->currentKeyId();
 
-            // 3. Passwort-Hashes ohne Kennung: mit dem alten Schlüssel gepfeffert
+            // 3. Password hashes without identifier: peppered with the old key
             $counts['passwords tagged'] = $this->tagPasswords($oldId);
 
-            // 4. Schlüsselbund: alter -> .retired, neuer -> key_file
-            // (der aktuelle kann aus CAMINDO_KEY stammen - der neue landet in jedem
-            // Fall in key_file und hat damit Vorrang, bis die Variable nachgezogen ist)
+            // 4. Key ring: old -> .retired, new -> key_file
+            // (the current one may come from CAMINDO_KEY - the new one always ends up
+            // in key_file and thus takes precedence until the variable is updated)
             $oldKey = $this->crypt->currentKeyForRotation();
             $newKey = base64_encode(random_bytes(32));
             $mode = $this->keyFileMode();
@@ -158,10 +158,10 @@ class KeyRotation {
             $newId = $this->crypt->currentKeyId();
             $log("key: $oldId -> $newId");
 
-            // 5. neu verschlüsseln
+            // 5. re-encrypt
             $counts += $this->reencryptAll($log);
 
-            // 7. Passwörter öffentlich aufgetaucht: alles Geheime weg
+            // 7. Passwords publicly exposed: remove everything secret
             if ($invalidatePasswords) {
                 $counts += $this->invalidatePasswords();
                 $this->removeRetired($oldId);
@@ -169,7 +169,7 @@ class KeyRotation {
                 $log("old key $oldId removed");
             }
 
-            // 6. Signaturen (löscht alle Admin-Sessions), Caches
+            // 6. Signatures (deletes all admin sessions), caches
             foreach ($this->integrity->signAll() as $table => $count) {
                 $counts['signed ' . $table] = $count;
             }
@@ -184,8 +184,8 @@ class KeyRotation {
     }
 
     /**
-     * Passwort-Hashes ohne Schlüssel-Kennung mit $kid versehen (admin, data_pwd).
-     * admin.password steht in der Signatur - signAll() folgt in rotate().
+     * Tag password hashes without key identifier with $kid (admin, data_pwd).
+     * admin.password is part of the signature - signAll() follows in rotate().
      */
     private function tagPasswords(string $kid): int
     {
@@ -200,11 +200,11 @@ class KeyRotation {
     }
 
     /**
-     * Alle gespeicherten Passwort-Hashes (admin.password, data_pwd.data) mit ihrem
-     * Schlüssel. Einzeln statt per SQL: die Spalten sind latin1, eine Verkettung mit
-     * utf8mb4-Parametern scheitert an der Kollation.
+     * All stored password hashes (admin.password, data_pwd.data) with their
+     * key. Individually instead of via SQL: the columns are latin1, a concatenation with
+     * utf8mb4 parameters fails on the collation.
      *
-     * @return array  Liste aus table, value, key (Spalten => Werte des Primärschlüssels)
+     * @return array  list of table, value, key (columns => primary key values)
      */
     private function passwordRows(): array
     {
@@ -219,7 +219,7 @@ class KeyRotation {
         return $result;
     }
 
-    /** Passwort-Hash einer Zeile aus passwordRows() schreiben */
+    /** Write the password hash of a row from passwordRows() */
     private function setPassword(array $row, string $value): void
     {
         $column = $row['table'] === 'admin' ? 'password' : 'data';
@@ -229,18 +229,18 @@ class KeyRotation {
     }
 
     /**
-     * Alles Umkehrbare mit dem aktuellen Schlüssel neu verschlüsseln. Werte, die
-     * sich mit keinem Schlüssel entschlüsseln lassen, bleiben unverändert (und
-     * erscheinen in status()).
+     * Re-encrypt everything reversible with the current key. Values that
+     * cannot be decrypted with any key stay unchanged (and
+     * appear in status()).
      *
-     * @return array  Bereich => Anzahl geänderter Werte
+     * @return array  area => number of changed values
      */
     public function reencryptAll(?callable $log = null): array
     {
         $log ??= fn(string $line) => null;
         $counts = [];
 
-        // data_enc: Geheimtext + Suchhash des Klartexts
+        // data_enc: ciphertext + search hash of the plain text
         $n = 0;
         foreach ($this->rows("SELECT `language_id`, `record_id`, `fieldname_id`, `data` FROM `data_enc`") as $row) {
             $plain = $this->crypt->decrypt((string)$row['data'], '', true);
@@ -254,7 +254,7 @@ class KeyRotation {
         }
         $counts['data_enc'] = $n;
 
-        // record_cache: {"feld": ["encrypted", base64(Geheimtext)], …}
+        // record_cache: {"field": ["encrypted", base64(ciphertext)], …}
         $n = 0;
         foreach ($this->rows("SELECT `record_id`, `language_id`, `cache` FROM `record_cache` WHERE `cache` LIKE '%\"encrypted\"%'") as $row) {
             $cache = json_decode((string)$row['cache'], true);
@@ -275,7 +275,7 @@ class KeyRotation {
         }
         $counts['record_cache'] = $n;
 
-        // admin: Kontaktdaten (ohne AAD), TOTP-Secret (AAD totp|{id}, TotpFactor)
+        // admin: contact data (without AAD), TOTP secret (AAD totp|{id}, TotpFactor)
         $n = 0;
         foreach ($this->rows("SELECT `admin_id`, `email`, `mobile`, `phone`, `totp_secret` FROM `admin`") as $row) {
             $id = (int)$row['admin_id'];
@@ -290,7 +290,7 @@ class KeyRotation {
         }
         $counts['admin'] = $n;
 
-        // user_second_factor: TOTP-Secret der Frontend-User (AAD utotp|{record_id},
+        // user_second_factor: TOTP secret of the frontend users (AAD utotp|{record_id},
         // UserSecondFactor)
         $n = 0;
         foreach ($this->rows("SELECT `record_id`, `totp_secret` FROM `user_second_factor` WHERE `totp_secret` <> ''") as $row) {
@@ -301,7 +301,7 @@ class KeyRotation {
         }
         $counts['user_second_factor'] = $n;
 
-        // message: Text und HTML der internen Nachrichten
+        // message: text and HTML of the internal messages
         $n = 0;
         foreach ($this->rows("SELECT `message_id`, `body`, `html` FROM `message`") as $row) {
             $this->db->query("UPDATE `message` SET `body` = ?, `html` = ? WHERE `message_id` = ?",
@@ -310,7 +310,7 @@ class KeyRotation {
         }
         $counts['message'] = $n;
 
-        // scheduler: HTTP-Auth-Passwort in details (base64)
+        // scheduler: HTTP auth password in details (base64)
         $n = 0;
         foreach ($this->rows("SELECT `scheduler_id`, `details` FROM `scheduler` WHERE `details` LIKE '%\"password\"%'") as $row) {
             $details = json_decode((string)$row['details'], true);
@@ -322,9 +322,9 @@ class KeyRotation {
         }
         $counts['scheduler'] = $n;
 
-        // Audit-Log (var/audit, AuditStore): verschlüsselte Werte (t = encrypted) in
-        // v/b/a neu, HMAC in c neu - und die Kette mit dem neuen Schlüssel neu, nach
-        // Prüfung der alten (Kontrollpunkt 'rekey' mit "verified")
+        // Audit log (var/audit, AuditStore): encrypted values (t = encrypted) re-encrypted in
+        // v/b/a, HMAC in c recalculated - and the chain recalculated with the new key, after
+        // checking the old one (checkpoint 'rekey' with "verified")
         $recryptNode = function (&$node) use (&$recryptNode) {
             if (!is_array($node)) return;
             if (($node['t'] ?? '') === 'encrypted') {
@@ -355,7 +355,7 @@ class KeyRotation {
         return $counts;
     }
 
-    /** Einen Wert neu verschlüsseln; nicht entschlüsselbar -> unverändert */
+    /** Re-encrypt a value; not decryptable -> unchanged */
     private function recrypt(string $value, string $aad, bool $binary): string
     {
         if ($value === '') return '';
@@ -365,8 +365,8 @@ class KeyRotation {
     }
 
     /**
-     * Passwörter öffentlich aufgetaucht: alle Passwörter leer, alle Sessions (Admin
-     * und User), Geräte und Wiederherstellungscodes weg.
+     * Passwords publicly exposed: all passwords empty, all sessions (admin
+     * and user), devices and recovery codes removed.
      */
     private function invalidatePasswords(): array
     {
@@ -390,14 +390,14 @@ class KeyRotation {
     // status, retire
 
     /**
-     * Stand des Schlüsselbunds.
+     * Status of the key ring.
      *
      * @return array  current (kid), key_source ('file'|'env'), env_key
-     *                (Crypt::envKeyState()), key_file_mode (z. B. '0600', '' ohne Datei),
-     *                key_file_mode_config (permissions.key_file), retired (Liste aus
+     *                (Crypt::envKeyState()), key_file_mode (e.g. '0600', '' without file),
+     *                key_file_mode_config (permissions.key_file), retired (list of
      *                kid, retired_at, grace_until, passwords, recovery_codes), not_current
-     *                (Bereich => Anzahl Werte, die NICHT mit dem aktuellen Schlüssel
-     *                verschlüsselt sind), passwords (kid|'untagged' => Anzahl)
+     *                (area => number of values NOT encrypted with the current key),
+     *                passwords (kid|'untagged' => count)
      */
     public function status(): array
     {
@@ -443,9 +443,9 @@ class KeyRotation {
     }
 
     /**
-     * Verschlüsselte Werte, die (noch) nicht mit dem aktuellen Schlüssel
-     * verschlüsselt sind - nach einer abgebrochenen Rotation oder bei Werten, die
-     * sich mit keinem Schlüssel mehr entschlüsseln lassen.
+     * Encrypted values that are (still) not encrypted with the current key -
+     * after an aborted rotation or for values that can no longer be decrypted
+     * with any key.
      */
     private function countNotCurrent(): array
     {
@@ -474,13 +474,13 @@ class KeyRotation {
     }
 
     /**
-     * Abgelösten Schlüssel entfernen. Verweigert, solange Verschlüsseltes nicht mit dem
-     * aktuellen Schlüssel lesbar ist (erst `key rotate` fertig laufen lassen). Passwörter
-     * mit seiner Kennung (seit der Rotation nicht angemeldet) werden nur mit $force
-     * ungültig gemacht - Admins brauchen dann `admin password NAME`, User "Passwort
-     * vergessen". Wiederherstellungscodes von vor der Rotation gelten danach nicht mehr.
+     * Remove the retired key. Refused as long as encrypted data is not readable with the
+     * current key (let `key rotate` finish first). Passwords with its identifier
+     * (not logged in since the rotation) are only made invalid with $force -
+     * admins then need `admin password NAME`, users "forgot password".
+     * Recovery codes from before the rotation no longer apply afterwards.
      *
-     * @return array  removed (bool), passwords (Anzahl ungültig), error ('' = gut)
+     * @return array  removed (bool), passwords (number invalidated), error ('' = good)
      */
     public function retire(string $kid, bool $force = false): array
     {
@@ -521,9 +521,9 @@ class KeyRotation {
     }
 
     /**
-     * Rechte für key_file und .retired: die der bisherigen key_file (bewusst gesetzte
-     * Rechte bleiben erhalten, auch wo 0600 nicht umsetzbar ist), ohne Datei
-     * (Schlüssel aus CAMINDO_KEY) permissions.key_file.
+     * Rights for key_file and .retired: those of the previous key_file (deliberately set
+     * rights are kept, also where 0600 cannot be applied), without a file
+     * (key from CAMINDO_KEY) permissions.key_file.
      */
     private function keyFileMode(): int
     {
@@ -537,7 +537,7 @@ class KeyRotation {
         return (int)($this->config->get('permissions.key_file') ?: 0600) & 0777;
     }
 
-    /** Zeitpunkt der letzten Rotation (Zeile "# rotated …" in .retired), null = nie */
+    /** Time of the last rotation (line "# rotated …" in .retired), null = never */
     public function lastRotation(): ?int
     {
         $file = $this->keyFile() . '.retired';
@@ -585,7 +585,7 @@ class KeyRotation {
         @chmod($file, $mode);
     }
 
-    /** Alle Zeilen einer Abfrage (eigener Ergebnisstapel) */
+    /** All rows of a query (own result stack) */
     private function rows(string $sql): array
     {
         $this->db->pushResult();

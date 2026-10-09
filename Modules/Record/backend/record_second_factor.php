@@ -1,6 +1,6 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Zweiter Faktor eines Profil-Datensatzes anzeigen und zurücksetzen (UserSecondFactor)
+// Show and reset the second factor of a profile record (UserSecondFactor)
 use Camindo\Core\Modules\Record\RecordBackendInfo;
 
 $app->get(RecordBackendInfo::class)->secondFactor();

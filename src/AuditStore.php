@@ -1,59 +1,59 @@
 <?php
 /**
- * Inhalte des Audit-Logs im Dateisystem - je Objekt eine Datei, nur angehängt,
- * mit HMAC-Kette (developer_docs/16-sicherheit.md §20). Die Datenbank (`audit_log`)
- * hält nur die Metadaten für Listen und Recherche (AuditLog).
+ * Contents of the audit log in the file system - one file per object, append-only,
+ * with an HMAC chain. The database (`audit_log`) only holds the metadata for lists and
+ * search (AuditLog).
  *
- * ABLAGE
+ * STORAGE
  * --------------------
- *     var/audit/{object_type}/{bucket}/{object_id}.jsonl        Seite 1
- *     var/audit/{object_type}/{bucket}/{object_id}.{n}.jsonl    Seite n
- * bucket = object_id / 1000 (höchstens 1000 Dateien je Verzeichnis). Wird eine Seite
- * größer als audit.page_bytes (Vorgabe 1 MB), beginnt die nächste; die Kette läuft
- * über die Seiten weiter.
+ *     var/audit/{object_type}/{bucket}/{object_id}.jsonl        page 1
+ *     var/audit/{object_type}/{bucket}/{object_id}.{n}.jsonl    page n
+ * bucket = object_id / 1000 (at most 1000 files per directory). If a page
+ * grows beyond audit.page_bytes (default 1 MB), the next one begins; the chain continues
+ * across the pages.
  *
- * ZEILENFORMAT
+ * LINE FORMAT
  * --------------------
  *     {h}<TAB>{json}\n
- * json enthält id (audit_id), t (UTC mit ms), action, type, oid, actor, label, area,
- * instance, changes - dazu prev (h der vorigen Zeile, '' am Anfang) und k (Id des
- * Schlüssels, Crypt::currentKeyId()). h = HMAC über die json-Zeichenkette, so wie sie
- * in der Datei steht - geprüft wird byteweise, ohne erneutes Kodieren.
+ * json contains id (audit_id), t (UTC with ms), action, type, oid, actor, label, area,
+ * instance, changes - plus prev (h of the previous line, '' at the start) and k (id of the
+ * key, Crypt::currentKeyId()). h = HMAC over the json string, exactly as it
+ * stands in the file - checked byte by byte, without re-encoding.
  *
- * Kontrollpunkte (json mit "cp") beginnen eine Kette neu, wo Zeilen bewusst entfernt
- * oder umgeschrieben wurden:
- *     trim     Aufbewahrungsfrist - "anchor" ist das prev der ersten verbliebenen Zeile
- *     rekey    Schlüsselrotation - Werte neu verschlüsselt, Kette neu berechnet;
- *              "verified" sagt, ob die alte Kette vorher intakt war
- *     migrate  Übernahme aus der früheren Spalte audit_log.changes
- *     restore  Datenbanksicherung zurückgespielt - Einträge nach dem Stand der
- *              Sicherung (audit_id > "max_id") entfernt, siehe cutAfter()
- *     reseal   gebrochene Kette nach Prüfung neu verkettet (`camindo.php audit reseal`,
- *              reseal()) - die Einträge ab der Bruchstelle; "relinked" zählt sie,
- *              "reason" nennt den Anlass
- *     anonymize  IP-Adressen früherer Einträge gekürzt (anonymizeIps()) - Einträge
- *              auf ihren Seiten belassen, Kette neu berechnet; "entries" zählt sie
- *     privacy    Felder nach einer Lösch-Policy überschrieben (rewriteObject());
- *              "verified" sagt, ob die Kette vorher intakt war
- * Nach einem Kontrollpunkt erwartet die nächste Zeile prev = anchor bzw. h des
- * Kontrollpunkts.
+ * Checkpoints (json with "cp") begin a chain anew, where lines were deliberately removed
+ * or rewritten:
+ *     trim     retention period - "anchor" is the prev of the first remaining line
+ *     rekey    key rotation - values re-encrypted, chain recalculated;
+ *              "verified" says whether the old chain was intact before
+ *     migrate  takeover from the former column audit_log.changes
+ *     restore  database backup restored - entries after the state of the
+ *              backup (audit_id > "max_id") removed, see cutAfter()
+ *     reseal   broken chain re-linked after checking (`camindo.php audit reseal`,
+ *              reseal()) - the entries from the break point on; "relinked" counts them,
+ *              "reason" names the cause
+ *     anonymize  IP addresses of earlier entries truncated (anonymizeIps()) - entries
+ *              left on their pages, chain recalculated; "entries" counts them
+ *     privacy    fields overwritten after a deletion policy (rewriteObject());
+ *              "verified" says whether the chain was intact before
+ * After a checkpoint the next line expects prev = anchor or h of the
+ * checkpoint.
  *
- * WAS DAS SCHÜTZT
+ * WHAT THIS PROTECTS
  * --------------------
- * Wer nur die Datenbank erreicht, kann die Inhalte weder lesen noch ändern; gelöschte,
- * hinzugefügte oder geänderte Metazeilen fallen im Abgleich auf (AuditLog::verifyObject(),
- * verifyAll()). Eine in der Datei geänderte, entfernte
- * oder eingeschobene Zeile bricht die Kette - fälschen kann sie nur, wer den Schlüssel
- * hat. Das abgeschnittene Ende einer Datei erkennt der Abgleich mit der Datenbank.
+ * Whoever reaches only the database can neither read nor change the contents; deleted,
+ * added or changed meta lines show up in the comparison (AuditLog::verifyObject(),
+ * verifyAll()). A line changed, removed or inserted in the file breaks the chain - only
+ * someone with the key can forge it. The comparison with the database detects a
+ * truncated end of a file.
  *
- * Geschrieben wird nach dem Commit (Database::afterCommit(), AuditLog::write()) -
- * ein Rollback hinterlässt nichts. Parallele Schreiber serialisiert flock().
+ * Writing happens after the commit (Database::afterCommit(), AuditLog::write()) -
+ * a rollback leaves nothing behind. Parallel writers are serialized by flock().
  */
 namespace Camindo\Core;
 
 class AuditStore {
 
-    /** Vorgabe für audit.page_bytes */
+    /** Default for audit.page_bytes */
     public const PAGE_BYTES = 1048576;
 
     private const JSON = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE;
@@ -72,7 +72,7 @@ class AuditStore {
     }
 
     /**
-     * Datei einer Seite.
+     * File of a page.
      */
     public function path(string $type, int $objectId, int $page = 1): string
     {
@@ -81,7 +81,7 @@ class AuditStore {
         return $this->dir() . "/$type/$bucket/$objectId" . ($page > 1 ? ".$page" : '') . '.jsonl';
     }
 
-    /** Vorhandene Seiten eines Objekts, aufsteigend: [Seite => Pfad] */
+    /** Existing pages of an object, ascending: [page => path] */
     public function pages(string $type, int $objectId): array
     {
         $pages = [];
@@ -98,10 +98,10 @@ class AuditStore {
     // Schreiben
 
     /**
-     * Einen Eintrag anhängen (siehe Klassenkommentar).
+     * Append an entry (see class comment).
      *
      * @param array $entry  id, t, action, type, oid, actor, label, area, instance, changes
-     * @return int          Seite, in der der Eintrag steht
+     * @return int          page on which the entry is stored
      */
     public function append(array $entry): int
     {
@@ -118,7 +118,7 @@ class AuditStore {
             flock($handle, LOCK_EX);
             $size = (int)fstat($handle)['size'];
             $prev = $size > 0 ? $this->lastHash($handle, $size) : $this->previousPageHash($type, $objectId, $page);
-            // Seite voll: nächste beginnen (unter der Sperre der vollen Seite)
+            // Page full: start the next one (under the lock of the full page)
             if ($size >= $this->pageBytes()) {
                 flock($handle, LOCK_UN);
                 fclose($handle);
@@ -142,7 +142,7 @@ class AuditStore {
         return $page;
     }
 
-    /** Eine Zeile: h TAB json mit prev und k */
+    /** One line: h TAB json with prev and k */
     private function line(array $body, string $prev): string
     {
         $body['prev'] = $prev;
@@ -151,7 +151,7 @@ class AuditStore {
         return $this->crypt->hash($json) . "\t" . $json . "\n";
     }
 
-    /** h der letzten Zeile einer offenen Datei */
+    /** h of the last line of an open file */
     private function lastHash($handle, int $size): string
     {
         $chunk = min($size, 65536);
@@ -160,14 +160,14 @@ class AuditStore {
         $pos = strrpos($tail, "\n");
         $last = $pos === false ? $tail : substr($tail, $pos + 1);
         if (strlen($tail) === $chunk && $pos === false && $chunk < $size) {
-            // Zeile länger als der Ausschnitt: ganz lesen
+            // Line longer than the excerpt: read it completely
             $lines = $this->readLines(stream_get_meta_data($handle)['uri']);
             $last = (string)end($lines);
         }
         return (string)strstr($last, "\t", true);
     }
 
-    /** h der letzten Zeile der Seite davor ('' bei Seite 1) */
+    /** h of the last line of the previous page ('' for page 1) */
     private function previousPageHash(string $type, int $objectId, int $page): string
     {
         if ($page <= 1) return '';
@@ -176,12 +176,12 @@ class AuditStore {
     }
 
     // ====================
-    // Lesen und prüfen
+    // Reading and checking
 
     /**
-     * Einträge eines Objekts: audit_id => Eintrag (ohne Kontrollpunkte).
+     * Entries of an object: audit_id => entry (without checkpoints).
      *
-     * @param int|null $page  nur diese Seite
+     * @param int|null $page  only this page
      */
     public function entries(string $type, int $objectId, ?int $page = null): array
     {
@@ -199,11 +199,11 @@ class AuditStore {
     }
 
     /**
-     * Kette eines Objekts prüfen.
+     * Check the chain of an object.
      *
-     * @return array  ok (bool), lines, ids (Liste der audit_ids), entries (audit_id =>
-     *                Eintrag, nur Zeilen mit gültigem HMAC), errors (Liste aus page,
-     *                line, reason), keys (verwendete Schlüssel-Ids)
+     * @return array  ok (bool), lines, ids (list of audit_ids), entries (audit_id =>
+     *                entry, only lines with a valid HMAC), errors (list of page,
+     *                line, reason), keys (key ids used)
      */
     public function verify(string $type, int $objectId): array
     {
@@ -231,7 +231,7 @@ class AuditStore {
                 elseif (!hash_equals($check, $h)) { $error('hmac'); }
                 else $signed = true;
                 if (isset($body['cp'])) {
-                    // Kontrollpunkt: beginnt die Kette neu
+                    // Checkpoint: the chain begins anew
                     $expected = (string)($body['anchor'] ?? $h);
                     $first = false;
                     continue;
@@ -249,7 +249,7 @@ class AuditStore {
     }
 
     /**
-     * Alle Objekt-Dateien: Liste aus [type, object_id].
+     * All object files: list of [type, object_id].
      */
     public function objects(): array
     {
@@ -264,18 +264,18 @@ class AuditStore {
     // ====================
     // Aufbewahrung, Umschreiben
 
-    /** Alle Seiten eines Objekts löschen */
+    /** Delete all pages of an object */
     public function delete(string $type, int $objectId): void
     {
         foreach ($this->pages($type, $objectId) as $file) @unlink($file);
     }
 
     /**
-     * Einträge entfernen (Aufbewahrungsfrist): $remove(array $body): bool entscheidet je
-     * Eintrag. Seiten, die ganz wegfallen, werden gelöscht; verbleibt etwas, beginnt die
-     * erste verbliebene Seite mit einem Kontrollpunkt 'trim'.
+     * Remove entries (retention period): $remove(array $body): bool decides per
+     * entry. Pages that drop out entirely are deleted; if anything remains, the
+     * first remaining page begins with a checkpoint 'trim'.
      *
-     * @return int  entfernte Einträge
+     * @return int  removed entries
      */
     public function trim(string $type, int $objectId, callable $remove): int
     {
@@ -299,8 +299,8 @@ class AuditStore {
                         continue;
                     }
                     $started = true;
-                    // Nichts entfernt: die bisherigen Kontrollpunkte bleiben stehen,
-                    // sonst ersetzt sie ein neuer mit dem h der letzten entfernten Zeile
+                    // Nothing removed: the existing checkpoints stay in place,
+                    // otherwise a new one with the h of the last removed line would replace them
                     if ($removed === 0) {
                         array_push($keep, ...$pendingCheckpoints);
                     }
@@ -316,31 +316,31 @@ class AuditStore {
                 $this->writeFile($file, implode("\n", $keep) . "\n");
                 return $removed;
             }
-            // Seite ganz entfallen - weiter mit der nächsten
+            // Page dropped entirely - continue with the next
             @unlink($file);
         }
         return $removed;
     }
 
     /**
-     * Einträge mit einer audit_id über $maxId entfernen - nach dem Zurückspielen einer
-     * Datenbanksicherung (`camindo.php audit restore`, AuditLog::restoreToDatabase()):
-     * die Metazeilen dieser Einträge gibt es nicht mehr, und die Datenbank vergibt
-     * ihre Ids neu.
+     * Remove entries with an audit_id above $maxId - after restoring a
+     * database backup (`camindo.php audit restore`, AuditLog::restoreToDatabase()):
+     * the meta lines of these entries no longer exist, and the database assigns
+     * its ids anew.
      *
-     * Die Zeilen vor der ersten entfernten bleiben unverändert (die Kette bis dahin
-     * ist intakt); danach folgt ein Kontrollpunkt 'restore' und - selten, nur wenn
-     * Einträge nicht in Id-Reihenfolge angehängt wurden - die übrigen verbliebenen
-     * Einträge, neu verkettet. Bleibt kein Eintrag, entfällt die Datei.
+     * The lines before the first removed one stay unchanged (the chain up to there
+     * is intact); after that follows a checkpoint 'restore' and - rarely, only if
+     * entries were not appended in id order - the other remaining entries,
+     * re-chained. If no entry remains, the file is dropped.
      *
-     * @param string|null $archiveDir  Kopie der betroffenen Seiten vor dem Ändern
-     * @return int                     entfernte Einträge
+     * @param string|null $archiveDir  copy of the affected pages before changing
+     * @return int                     removed entries
      */
     public function cutAfter(string $type, int $objectId, int $maxId, ?string $archiveDir = null): int
     {
         $pages = $this->pages($type, $objectId);
-        $keep = [];          // [Seite => Zeilen] unverändert
-        $rest = [];          // nach der ersten entfernten Zeile verbliebene Einträge
+        $keep = [];          // [page => lines] unchanged
+        $rest = [];          // entries remaining after the first removed line
         $removed = 0;
         $entriesLeft = 0;
         $lastPage = 1;
@@ -358,7 +358,7 @@ class AuditStore {
                     if ($isEntry) $entriesLeft++;
                     continue;
                 }
-                // Kontrollpunkte hinter der Schnittstelle ersetzt der neue
+                // Checkpoints behind the cut are replaced by the new one
                 if ($isEntry) {
                     $rest[] = $body;
                     $entriesLeft++;
@@ -402,12 +402,12 @@ class AuditStore {
     }
 
     /**
-     * Alle Dateien neu schreiben - Schlüsselrotation (KeyRotation): vorher die alte
-     * Kette prüfen, dann jeden Eintrag durch $transform(array $body): array schicken
-     * (Werte neu verschlüsseln) und die Kette mit dem aktuellen Schlüssel neu
-     * berechnen, beginnend mit Kontrollpunkt 'rekey'.
+     * Rewrite all files - key rotation (KeyRotation): first check the old
+     * chain, then pass every entry through $transform(array $body): array
+     * (re-encrypt values) and recalculate the chain with the current key,
+     * beginning with checkpoint 'rekey'.
      *
-     * @return array  files, entries, broken (Dateien, deren alte Kette nicht intakt war)
+     * @return array  files, entries, broken (files whose old chain was not intact)
      */
     public function rewriteAll(callable $transform, string $reason = 'rekey'): array
     {
@@ -417,7 +417,7 @@ class AuditStore {
             $entries = $this->entries($type, $objectId);
             $pages = $this->pages($type, $objectId);
             if (!$check['ok']) $result['broken'][] = "$type:$objectId";
-            // Alles auf Seite 1 neu, übrige Seiten entfallen (Seitenwechsel beim Anhängen)
+            // Everything anew on page 1, other pages dropped (page change when appending)
             $file = $this->path($type, $objectId, 1);
             $checkpoint = ['cp' => $reason, 't' => gmdate('Y-m-d H:i:s'), 'verified' => $check['ok'],
                 'from' => $check['keys']];
@@ -439,31 +439,30 @@ class AuditStore {
     }
 
     /**
-     * Eine gebrochene Kette neu verketten (`camindo.php audit reseal TYP ID`).
+     * Re-chain a broken chain (`camindo.php audit reseal TYPE ID`).
      *
-     * Für den Fall, dass die Einträge selbst echt sind (jede Zeile trägt einen
-     * gültigen HMAC), die Verkettung aber nicht stimmt - etwa weil eine Datei
-     * zwischenzeitlich ersetzt oder aus einer Sicherung zurückgeholt wurde. Die Zeilen
-     * bis zur ersten Bruchstelle bleiben unverändert; danach folgt ein Kontrollpunkt
-     * 'reseal', und alle übrigen Einträge werden mit dem aktuellen Schlüssel neu
-     * verkettet (frühere Kontrollpunkte dahinter entfallen). Alles steht danach auf
-     * Seite 1.
+     * For the case that the entries themselves are genuine (every line carries a
+     * valid HMAC) but the chaining is wrong - e.g. because a file was replaced in the
+     * meantime or restored from a backup. The lines up to the first break point stay
+     * unchanged; after that follows a checkpoint 'reseal', and all remaining entries
+     * are re-chained with the current key (earlier checkpoints after it are dropped).
+     * Everything is on page 1 afterwards.
      *
-     * Hat eine Zeile keinen gültigen HMAC (Inhalt geändert, unbekannter Schlüssel,
-     * kaputtes Format), wird nur mit $force neu verkettet - dann ist ihr Inhalt nicht
-     * mehr belegt, und der Kontrollpunkt vermerkt das ("unverified"). Zeilen, die sich
-     * nicht lesen lassen, fallen weg.
+     * If a line has no valid HMAC (content changed, unknown key, broken format),
+     * re-chaining only happens with $force - then its content is no longer
+     * vouched for, and the checkpoint notes this ("unverified"). Lines that cannot
+     * be read are dropped.
      *
-     * Das ist ein Vertrauensakt dessen, der die Kommandozeile hat - wie
-     * `camindo.php admin sign`: danach gilt die Kette wieder als intakt.
+     * This is a trust act of whoever has the command line - like
+     * `camindo.php admin sign`: afterwards the chain counts as intact again.
      *
-     * @param string      $reason      Anlass (steht im Kontrollpunkt)
-     * @param bool        $force       auch Zeilen ohne gültigen HMAC übernehmen
-     * @param bool        $dryRun      nur prüfen
-     * @param string|null $archiveDir  Kopie der Seiten vor dem Ändern
+     * @param string      $reason      cause (appears in the checkpoint)
+     * @param bool        $force       also take over lines without a valid HMAC
+     * @param bool        $dryRun      check only
+     * @param string|null $archiveDir  copy of the pages before changing
      * @return array  status (intact | refused | resealed | would_reseal), relinked
-     *                (neu verkettete Einträge), unverified (Zeilen ohne gültigen HMAC),
-     *                errors (Befunde der Prüfung vorher)
+     *                (re-chained entries), unverified (lines without a valid HMAC),
+     *                errors (findings of the check beforehand)
      */
     public function reseal(string $type, int $objectId, string $reason = '', bool $force = false, bool $dryRun = false, ?string $archiveDir = null): array
     {
@@ -478,7 +477,7 @@ class AuditStore {
             return $result;
         }
 
-        // Zeilen aller Seiten der Reihe nach; Bruchstelle = erster Befund
+        // rows of all pages in order; break point = first finding
         $first = $check['errors'][0];
         $keep = [];
         $rest = [];
@@ -528,15 +527,15 @@ class AuditStore {
     }
 
     /**
-     * Die Einträge EINES Objekts umschreiben - Lösch-Policy (AuditLog::overwriteObject()):
-     * $transform(array $body): ?array je Eintrag - null entfernt ihn (Aufbewahrungsfrist
-     * der Anmeldungen, AuditLog::purge()). Die Einträge bleiben auf ihren Seiten,
-     * die Kette beginnt mit dem Kontrollpunkt $reason neu; "verified" sagt, ob sie
-     * vorher intakt war. Anders als anonymizeIps() wird auch eine gebrochene Kette
-     * umgeschrieben - personenbezogene Daten müssen weg, der Befund bleibt im
-     * Kontrollpunkt vermerkt.
+     * Rewrite the entries of ONE object - deletion policy (AuditLog::overwriteObject()):
+     * $transform(array $body): ?array per entry - null removes it (retention period
+     * of the logins, AuditLog::purge()). The entries stay on their pages,
+     * the chain begins anew with the checkpoint $reason; "verified" says whether they
+     * were intact before. Unlike anonymizeIps(), even a broken chain is rewritten -
+     * personal data must go; the finding stays noted in the
+     * checkpoint.
      *
-     * @return int  Einträge, die sich geändert haben
+     * @return int  entries that have changed
      */
     public function rewriteObject(string $type, int $objectId, callable $transform, string $reason = 'privacy'): int
     {
@@ -573,19 +572,19 @@ class AuditStore {
     }
 
     /**
-     * IP-Adressen in den Dateien kürzen (`camindo.php audit anonymize-ip`) - für
-     * Einträge aus der Zeit, bevor AuditLog::write() nur noch die gekürzte IP in die
-     * Datei schrieb. $anonymize(string $ip): string liefert die gekürzte Adresse.
+     * Truncate IP addresses in the files (`camindo.php audit anonymize-ip`) - for
+     * entries from the time before AuditLog::write() only wrote the truncated IP to the
+     * file. $anonymize(string $ip): string returns the truncated address.
      *
-     * Umgeschrieben wird nur eine Datei, in der wirklich eine IP zu kürzen ist, und
-     * nur, wenn ihre Kette intakt ist - sonst würde das Kürzen eine gebrochene Kette
-     * stillschweigend wieder gültig machen (dafür gibt es reseal()). Die Einträge
-     * bleiben auf ihren Seiten (audit_log.page stimmt weiter); die Kette beginnt mit
-     * dem Kontrollpunkt 'anonymize' neu, frühere Kontrollpunkte entfallen wie bei
-     * rewriteAll(). Eine Kopie der alten Dateien gibt es bewusst nicht.
+     * Only a file in which an IP really has to be truncated is rewritten, and only
+     * if its chain is intact - otherwise truncating would silently make a broken chain
+     * valid again (reseal() is there for that). The entries stay on their pages
+     * (audit_log.page remains correct); the chain begins anew with the checkpoint
+     * 'anonymize', earlier checkpoints are dropped as in rewriteAll(). A copy of the
+     * old files is deliberately not kept.
      *
-     * @return array  files (umgeschrieben), entries (gekürzte IPs), skipped
-     *                ("typ:id" mit gebrochener Kette - unverändert)
+     * @return array  files (rewritten), entries (truncated IPs), skipped
+     *                ("type:id" with a broken chain - unchanged)
      */
     public function anonymizeIps(callable $anonymize, bool $dryRun = false): array
     {
@@ -638,8 +637,8 @@ class AuditStore {
     }
 
     /**
-     * Einträge unter einem Kontrollpunkt neu anlegen (Übernahme aus der Datenbank,
-     * AuditLog::migrateToFiles()) - hängt an vorhandene Dateien an.
+     * Create entries under a checkpoint anew (takeover from the database,
+     * AuditLog::migrateToFiles()) - appends to existing files.
      */
     public function appendCheckpoint(string $type, int $objectId, string $reason): void
     {
@@ -651,7 +650,7 @@ class AuditStore {
 
     // ====================
 
-    /** Zeilen einer Datei (ohne Zeilenende, ohne Leerzeilen) */
+    /** Lines of a file (without line ending, without empty lines) */
     private function readLines(string $file): array
     {
         if (!is_file($file)) return [];

@@ -8,12 +8,12 @@ return [
 'description' => '#record.module_description',
 'icon' => 'draft',
 'listed' => true,
-// Scripte, die andere Module ohne Modulzugriff als Lookup aufrufen dürfen (Access::script())
+// Scripts that other modules may call as a lookup without module access (Access::script())
 'shared' => ['record_list.php', 'record_search.php', 'ajax_ext_lookup.php'],
-// Zusatzrechte (Backend-Benutzergruppen): interner Name => Snippet der Beschriftung.
-// Durchgesetzt werden sie in den Backend-Klassen des Moduls (Access::moduleRight()).
-// XML-Import/-Export (Backup-Format, auch global) bleiben dem Superuser vorbehalten.
-// API-Klassen (Camindo\Core\Api\Api, relativ zum Modul-Namespace)
+// Additional rights (backend user groups): internal name => snippet of the label.
+// They are enforced in the backend classes of the module (Access::moduleRight()).
+// XML import/export (backup format, also global) stays reserved for the superuser.
+// API classes (Camindo\Core\Api\Api, relative to the module namespace)
 'api' => ['RecordApi'],
 'access' => [
     'import_csv' => 'record.access_import_csv',
@@ -22,7 +22,7 @@ return [
     'import_docx' => 'record.access_import_docx',
     'export_docx' => 'record.access_export_docx',
     'batch' => 'record.access_batch',
-    // Datenexport personenbezogener Daten: Modul Privacy, Zusatzrecht 'export'
+    // Export of personal data: module Privacy, additional right 'export'
 ],
 
 ];

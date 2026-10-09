@@ -2,9 +2,9 @@
 /**
  * maintenance on [--reason=…] | off | status
  *
- * Setzt oder entfernt var/maintenance.lock (SystemState). Bei gesetztem Lock
- * antwortet das Frontend mit 503, das Backend lässt nur Superuser weiter und die
- * Hintergrundjobs beenden sich (14 §7).
+ * Sets or removes var/maintenance.lock (SystemState). When the lock is set,
+ * the frontend responds with 503, the backend only lets superusers through and the
+ * background jobs end themselves (developer docs, chapter 09 (Installation and update)).
  */
 namespace Camindo\Core\Cli;
 

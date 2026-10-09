@@ -2,16 +2,16 @@
 /**
  * refresh [components|snippets|html]
  *
- * components (Vorgabe): Verzeichnisse mit der Tabelle `component` abgleichen und die
- * Laufzeitlisten var/config/components/*.php neu schreiben (ComponentManager::refresh()).
- * Installiert und migriert nichts; Teil von `upgrade`, hier einzeln.
+ * components (default): compare directories with the table `component` and the
+ * rewrite the runtime lists var/config/components/*.php (ComponentManager::refresh()).
+ * Installs and migrates nothing; part of `upgrade`, here individually.
  *
- * snippets: Snippet-Cache neu bauen - wie Tools > Developer > Snippets
- * (Modules/Tools/backend/tool_snippets.php): lang/-Dateien, Übersetzungspakete
- * var/translation/translated, languages.php, Vorlagen var/translation/blueprint;
- * vorher Snippet-Sets der Instanzen im früheren PHP-Format nach .ini umwandeln.
- * html: HTML-Vorlagen-Cache neu bauen - wie Tools > Developer > HTML (tool_html.php).
- * Beide wie `cache snippets|html` (CacheCommand), auch mit --prefix=NAME.
+ * snippets: rebuild the snippet cache - like Tools > Developer > Snippets
+ * (Modules/Tools/backend/tool_snippets.php): lang/ files, translation packages
+ * var/translation/translated, languages.php, templates var/translation/blueprint;
+ * beforehand convert snippet sets of the instances in the earlier PHP format to .ini.
+ * html: rebuild the HTML template cache - like Tools > Developer > HTML (tool_html.php).
+ * Both like `cache snippets|html` (CacheCommand), also with --prefix=NAME.
  */
 namespace Camindo\Core\Cli;
 

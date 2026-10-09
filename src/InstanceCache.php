@@ -1,138 +1,137 @@
 <?php
 /**
- * Dateicache der Instanzen und ihrer Sprachen: var/cache/instances.php und
+ * File cache of the instances and their languages: var/cache/instances.php and
  * var/cache/instance-{id}.php.
  *
- * WOZU EIN DATEICACHE
+ * WHY A FILE CACHE
  * --------------------
- * Jeder Frontend-Aufruf muss zuerst wissen, zu welcher Website (Instance) er gehört
- * und welche Sprachen dort gelten - noch bevor der erste Inhalt geladen wird. Bisher
- * kostete das je Request vier Abfragen (Page::resolveInstance()). Die Angaben ändern
- * sich aber praktisch nie, deshalb liegen sie jetzt als PHP-Arrays im Dateisystem und
- * werden per include geladen; der Opcache hält sie danach im Speicher.
+ * Every frontend call must first know which website (instance) it belongs to
+ * and which languages apply there - even before the first content is loaded. Until now
+ * this cost four queries per request (Page::resolveInstance()). The data hardly ever
+ * changes, so it now lives as PHP arrays in the file system
+ * and is loaded via include; the opcache then keeps it in memory.
  *
- * DIE DATEIEN
+ * THE FILES
  * --------------------
- *     instances.php        Domain-Zuordnungen ALLER Instanzen (Haupt-Domains als
- *                          Nachschlagetabelle, Zusatz-Domains als geordnete Liste,
- *                          weil dort auch reguläre Ausdrücke stehen können) sowie
- *                          die Hauptsprache jeder Instanz, ALLE Inhaltsbereiche
- *                          (area_id => name/type/instance_id, siehe unten), die
- *                          Ids der Benutzergruppen, Kürzel und Kollation je Sprache
- *                          (languageCode(), collation(), siehe Camindo\Core\Collation)
- *     instance-{id}.php    alle Angaben EINER Instanz: die Spalten der Tabelle
- *                          `instance`, die Sprachen in der Reihenfolge Hauptsprache
- *                          zuerst (mit code/label/endonym aus `language`), die
- *                          lesbaren Instanzen, die Zusatz-Domains und ihre
- *                          Inhaltsbereiche (area_id => name/type/instance_id)
- *     group-{id}.php       die Sicht EINER Benutzergruppe auf das Backend: die ihr
- *                          zugewiesenen Instanzen, ihre lesbaren Bereiche und alle
- *                          weiteren Rechte (Module, Bereichs-Flags, Sprachen) -
- *                          siehe "Gruppendateien" unten und Camindo\Core\Access
+ *     instances.php        domain assignments of ALL instances (primary domains as
+ *                          a lookup table, additional domains as an ordered list,
+ *                          because regular expressions can appear there too), as well as
+ *                          the primary language of each instance, ALL content areas
+ *                          (area_id => name/type/instance_id, see below), the
+ *                          ids of the user groups, code and collation per language
+ *                          (languageCode(), collation(), see Camindo\Core\Collation)
+ *     instance-{id}.php    all data of ONE instance: the columns of the table
+ *                          `instance`, the languages in the order primary language
+ *                          first (with code/label/endonym from `language`), the
+ *                          readable instances, the additional domains and their
+ *                          content areas (area_id => name/type/instance_id)
+ *     group-{id}.php       the view of ONE user group on the backend: the instances
+ *                          assigned to it, its readable areas and all further
+ *                          rights (modules, area flags, languages) -
+ *                          see "group files" below and Camindo\Core\Access
  *
- * Die Dateien werden komplett neu geschrieben, sobald sich in den Modulen Instance,
- * Language, Area oder an den Benutzergruppen etwas ändert (rebuild(), aufgerufen
- * aus deren Hooks). Fehlt eine
- * Datei - etwa weil der Cache geleert wurde -, erzeugt der erste Zugriff sie sofort
- * neu. Damit nicht mehrere gleichzeitige Requests dasselbe tun, läuft der Neuaufbau
- * unter einer Sperrdatei (flock); wer die Sperre bekommt, prüft danach noch einmal,
- * ob ein anderer die Datei inzwischen geschrieben hat.
+ * The files are rewritten completely as soon as something changes in the modules Instance,
+ * Language, Area or in the user groups (rebuild(), called from their hooks). If a
+ * file is missing - e.g. because the cache was emptied - the first access creates it
+ * immediately. So that several concurrent requests do not do the same thing, the rebuild
+ * runs under a lock file (flock); whoever gets the lock checks afterwards once more
+ * whether someone else has meanwhile written the file.
  *
- * Geschrieben wird immer erst in eine temporäre Datei, die dann per rename() an ihren
- * Platz kommt: ein include sieht so nie eine halb geschriebene Datei.
+ * Writing always goes first to a temporary file, which then comes to its
+ * place via rename(): an include thus never sees a half-written file.
  *
- * SPRACHEN EINER INSTANZ
+ * LANGUAGES OF AN INSTANCE
  * --------------------
- * languages() liefert die Sprachen einer Instanz als Array language_id => Zeile, die
- * Hauptsprache an erster Stelle. Diese Reihenfolge ist überall die maßgebliche:
- * für die data_*-Zeilen je Sprache, für `record_cache`, für die Reiter der
- * Eingabemaske und für den Sprachumschalter im Frontend.
+ * languages() returns the languages of an instance as an array language_id => row, with
+ * the primary language first. This order is authoritative everywhere:
+ * for the data_* rows per language, for `record_cache`, for the tabs of the
+ * input mask and for the language switcher in the frontend.
  *
- * INHALTSBEREICHE
+ * CONTENT AREAS
  * --------------------
- * Templates sprechen einen Bereich über seinen Namen an (CMS:SELECT mit
- * filter[area]=artikel bzw. sort=area), die Datenbank kennt nur `record`.`area_id`.
- * Statt je Abfrage eine Unterabfrage auf `area` zu stellen, liegen die Bereiche im
- * Cache: instance-{id}.php führt die der Instanz in Baumreihenfolge (lft),
- * instances.php die aller Instanzen - für Abfragen ohne Instanzbeschränkung
- * (Backend). Je Bereich stehen `name`, `type` und `instance_id` darin:
+ * Templates address an area by its name (CMS:SELECT with
+ * filter[area]=artikel or sort=area), the database only knows `record`.`area_id`.
+ * Instead of a subquery on `area` for each query, the areas are kept in the
+ * cache: instance-{id}.php holds those of the instance in tree order (lft),
+ * instances.php those of all instances - for queries without an instance restriction
+ * (backend). Each area has `name`, `type` and `instance_id` in it:
  *
  *     'areas' => [ 131 => ['name' => 'article', 'type' => 'record', 'instance_id' => 1], ... ]
  *
- * Hat ein Bereich Trigger-Templates (`rel_area_trigger`), stehen deren Ids in ihrer
- * Reihenfolge zusätzlich darin ('trigger_template_ids') - Record fragt sie bei jedem
- * Laden und Speichern ab (TriggerTemplates), der Cache erspart dabei die Abfrage.
- * Ebenso der Slug-Präfix eines Inhaltsbereichs (`details`.slug_prefix), aufgelöst
- * je Sprache der Instanz: 'slug_prefix' => [language_id => 'farben', ...] - CMS:URL
- * und Page brauchen ihn bei jedem Link bzw. Aufruf (slugPrefix()).
+ * If an area has trigger templates (`rel_area_trigger`), their ids are additionally
+ * stored in their order ('trigger_template_ids') - Record queries them on every
+ * load and save (TriggerTemplates), the cache saves that query.
+ * Likewise the slug prefix of a content area (`details`.slug_prefix), resolved
+ * per language of the instance: 'slug_prefix' => [language_id => 'farben', ...] - CMS:URL
+ * and Page need it for every link or call (slugPrefix()).
  *
- * Cms::select() übersetzt damit den Namen in die Id bzw. baut aus den nach Namen
- * sortierten Ids ein ORDER BY FIELD(); die Dataset-Klassen holen sich Instanz und
- * Typ eines Bereichs von hier statt aus `area` (areaInstanceId(), areaType()).
- * areas()/allAreas()/areasOf() liefern weiterhin nur area_id => name.
+ * Cms::select() thus translates the name into the id, or builds an ORDER BY FIELD() from the
+ * ids sorted by name; the dataset classes get the instance and type of an
+ * area from here instead of from `area` (areaInstanceId(), areaType()).
+ * areas()/allAreas()/areasOf() continue to return only area_id => name.
  *
- * Auch als "gelöscht" markierte Bereiche stehen darin: ihre Datensätze tragen
- * dieselbe Markierung und tauchen in select() ohnehin nicht auf, und die Hooks vor
- * dem Soft-Delete bzw. Restore sähen noch den alten Stand. Erst das endgültige
- * Löschen (Area::hookOnDeleted()) nimmt einen Bereich aus dem Cache. Wer `deleted`
- * oder andere Spalten braucht (label, lft, details ...), fragt weiterhin `area`.
+ * Areas marked as "deleted" are also included: their records carry
+ * the same marking and do not appear in select() anyway, and the hooks before the
+ * soft delete or restore would still see the old state. Only the final
+ * deletion (Area::hookOnDeleted()) removes an area from the cache. Whoever needs `deleted`
+ * or other columns (label, lft, details ...) still queries `area`.
  *
- * GRUPPENDATEIEN (group-{group_id}.php)
+ * GROUP FILES (group-{group_id}.php)
  * --------------------
- * Das Backend zeigt einem Admin nur die Instanzen und Bereiche, auf die seine
- * Benutzergruppe Zugriff hat (docs/developers/12-group-rights.md). Damit das ohne
- * Abfragen je Request geht, liegt je Gruppe eine Datei mit ihrer Sicht:
+ * The backend shows an admin only the instances and areas to which their
+ * user group has access (developer docs, chapter 11 (Permissions)). So that this works without
+ * queries per request, each group has a file with its view:
  *
  *     'group_id'           group_id
- *     'superuser'          true für Gruppe 1 - sie darf alles; die Datei enthält
- *                          dann alle Instanzen, Bereiche, Module und Sprachen,
- *                          damit der Ladepfad überall derselbe ist
+ *     'superuser'          true for group 1 - it may do everything; the file then
+ *                          contains all instances, areas, modules and languages,
+ *                          so that the loading path is the same everywhere
  *     'label'              `group`.`label`
- *     'instance_ids'       zugewiesene Instanzen (rel_group_instance), Reihenfolge
- *                          wie instances.php
- *     'primary_languages'  instance_id => primary_language_id dieser Instanzen
- *     'areas'              lesbare Bereiche (rel_group_area) in diesen Instanzen,
- *                          Format wie oben; Ordner haben keine Rechte und fehlen
- *     'modules'            Modulname => gewährte Zusatzrechte (`group`.`details`)
- *     'interfaces'         Oberflächen, über die sich Admins der Gruppe anmelden
- *                          dürfen (`group`.`details`.`interfaces`, Access::INTERFACES)
+ *     'instance_ids'       assigned instances (rel_group_instance), order
+ *                          as in instances.php
+ *     'primary_languages'  instance_id => primary_language_id of these instances
+ *     'areas'              readable areas (rel_group_area) in these instances,
+ *                          format as above; folders have no rights and are missing
+ *     'modules'            module name => granted additional rights (`group`.`details`)
+ *     'interfaces'         interfaces via which admins of the group may sign in
+ *                          (`group`.`details`.`interfaces`, Access::INTERFACES)
  *     'rights' => [
  *         'areas'     => [area_id => [group_write, group_delete, other_write,
  *                                     other_delete, set_owner] (bool)]
- *         'languages' => [language_id => can_write (bool)]   Zeile = Leserecht
- *         'statuses'  => [status_id, ...]   Status, die die Gruppe setzen darf
- *                        (rel_group_status); lesen darf jede Gruppe alle
+ *         'languages' => [language_id => can_write (bool)]   row = read right
+ *         'statuses'  => [status_id, ...]   statuses the group may set
+ *                        (rel_group_status); every group may read all
  *     ]
  *
- * Session lädt die Datei der angemeldeten Gruppe in Camindo\Core\Access; alle
- * Rechteprüfungen sind danach reine Array-Zugriffe. Neu geschrieben werden die
- * Gruppendateien mit allen anderen (writeAll()) - auch aus den Hooks von Group.
+ * Session loads the file of the signed-in group into Camindo\Core\Access; all
+ * permission checks are then pure array accesses. The group files are rewritten
+ * together with all others (writeAll()) - also from the hooks of Group.
  *
- * @see Camindo\Core\Page                          Domain -> Instanz -> Sprache
- * @see Camindo\Core\Modules\Instance\Instance     ruft rebuild() aus den Hooks
+ * @see Camindo\Core\Page                          domain -> instance -> language
+ * @see Camindo\Core\Modules\Instance\Instance     calls rebuild() from the hooks
  * @see Camindo\Core\Modules\Language\Language     dito
- * @see Camindo\Core\Modules\Area\Area             dito (Bereiche)
- * @see Camindo\Core\Modules\Admin\Group           dito (Gruppendateien)
- * @see Camindo\Core\Access                          liest die Gruppendatei
- * @see Camindo\Core\Cms::areaMap()                 Bereichsnamen im Zugriffsbereich
+ * @see Camindo\Core\Modules\Area\Area             dito (areas)
+ * @see Camindo\Core\Modules\Admin\Group           dito (group files)
+ * @see Camindo\Core\Access                        reads the group file
+ * @see Camindo\Core\Cms::areaMap()                area names in the access area
  */
 namespace Camindo\Core;
 
 class InstanceCache {
 
-    /** Name der Sammeldatei */
+    /** Name of the collective file */
     private const FILE_ALL = 'instances.php';
-    /** Sperrdatei für den Neuaufbau */
+    /** Lock file for the rebuild */
     private const FILE_LOCK = 'instances.lock';
 
-    /** Superuser-Gruppe: darf alles, ihre Datei enthält alles */
+    /** Superuser group: may do everything, its file contains everything */
     public const SUPERUSER_GROUP_ID = 1;
 
-    /** Bereits geladene Dateien je Request: instance_id => Daten */
+    /** Files already loaded per request: instance_id => data */
     private array $instances = [];
-    /** Bereits geladene Gruppendateien je Request: group_id => Daten */
+    /** Group files already loaded per request: group_id => data */
     private array $groups = [];
-    /** Inhalt von instances.php, wenn bereits geladen */
+    /** Content of instances.php, if already loaded */
     private ?array $all = null;
 
     public function __construct(
@@ -148,11 +147,11 @@ class InstanceCache {
     // ====================
 
     /**
-     * Inhalt von instances.php: Domain-Zuordnungen und Hauptsprachen aller Instanzen.
+     * Content of instances.php: domain assignments and primary languages of all instances.
      *
-     * Fehlt die Datei, wird sie neu erzeugt.
+     * If the file is missing, it is recreated.
      *
-     * @return array  siehe buildAll()
+     * @return array  see buildAll()
      */
     public function all(): array
     {
@@ -169,13 +168,13 @@ class InstanceCache {
     }
 
     /**
-     * Angaben einer Instanz aus instance-{id}.php.
+     * Data of an instance from instance-{id}.php.
      *
-     * Fehlt die Datei, wird der Cache neu erzeugt. Gibt es die Instanz auch danach
-     * nicht, liefert die Methode null.
+     * If the file is missing, the cache is recreated. If the instance does not exist
+     * even then, the method returns null.
      *
      * @param int $instanceId
-     * @return array|null  siehe buildInstance()
+     * @return array|null  see buildInstance()
      */
     public function instance(int $instanceId): ?array
     {
@@ -195,13 +194,13 @@ class InstanceCache {
     }
 
     /**
-     * Sicht einer Benutzergruppe aus group-{id}.php (siehe Klassenkommentar).
+     * View of a user group from group-{id}.php (see class comment).
      *
-     * Fehlt die Datei, wird der Cache neu erzeugt. Gibt es die Gruppe auch danach
-     * nicht, liefert die Methode null.
+     * If the file is missing, the cache is recreated. If the group does not exist
+     * even then, the method returns null.
      *
      * @param int $groupId
-     * @return array|null  siehe buildGroups()
+     * @return array|null  see buildGroups()
      */
     public function group(int $groupId): ?array
     {
@@ -221,11 +220,11 @@ class InstanceCache {
     }
 
     /**
-     * Sprachen einer Instanz, Hauptsprache zuerst.
+     * Languages of an instance, primary language first.
      *
      * @param int $instanceId
      * @return array  language_id => ['language_id', 'code', 'backend_code', 'label',
-     *                'endonym', 'timezone']. Leer, wenn die Instanz unbekannt ist.
+     *                'endonym', 'timezone']. Empty if the instance is unknown.
      */
     public function languages(int $instanceId): array
     {
@@ -233,12 +232,12 @@ class InstanceCache {
     }
 
     /**
-     * Sprachen mehrerer zusammengeschalteter Instanzen (eigene Instanz + lesbare):
-     * die der ersten Instanz in ihrer Reihenfolge, danach die der übrigen, soweit
-     * noch nicht enthalten. Das ist die Sprachliste eines Frontend-Requests -
-     * jede dieser Sprachen ist über /{lang}/ erreichbar und im Sprachumschalter.
+     * Languages of several interconnected instances (own instance + readable ones):
+     * those of the first instance in its order, then those of the others, insofar as
+     * not already included. This is the language list of a frontend request -
+     * each of these languages is reachable via /{lang}/ and in the language switcher.
      *
-     * @param int[] $instanceIds  eigene Instanz zuerst
+     * @param int[] $instanceIds  own instance first
      * @return array  language_id => ['language_id', 'code', 'label', 'endonym']
      */
     public function languagesOf(array $instanceIds): array
@@ -253,7 +252,7 @@ class InstanceCache {
     }
 
     /**
-     * Ids der Sprachen einer Instanz, Hauptsprache zuerst.
+     * Ids of the languages of an instance, primary language first.
      *
      * @param int $instanceId
      * @return int[]
@@ -264,10 +263,10 @@ class InstanceCache {
     }
 
     /**
-     * Hauptsprache einer Instanz.
+     * Primary language of an instance.
      *
      * @param int $instanceId
-     * @return int  language_id; 0, wenn die Instanz unbekannt ist
+     * @return int  language_id; 0 if the instance is unknown
      */
     public function primaryLanguageId(int $instanceId): int
     {
@@ -275,7 +274,7 @@ class InstanceCache {
     }
 
     /**
-     * Hauptsprachen ALLER Instanzen - für Abfragen ohne Sprachkontext (Backend).
+     * Primary languages of ALL instances - for queries without a language context (backend).
      *
      * @return array  instance_id => primary_language_id
      */
@@ -285,11 +284,11 @@ class InstanceCache {
     }
 
     /**
-     * Kollation für Textvergleiche und Sortierung in einer Sprache (Collation).
+     * Collation for text comparison and sorting in a language (Collation).
      *
      * @param int $languageId
-     * @return string  Name der Kollation; '' = die der Textspalten (neutral), dann
-     *                 braucht eine Abfrage kein COLLATE
+     * @return string  name of the collation; '' = that of the text columns (neutral), then
+     *                 a query needs no COLLATE
      */
     public function collation(int $languageId): string
     {
@@ -297,8 +296,8 @@ class InstanceCache {
     }
 
     /**
-     * Kürzel einer Sprache (`language`.`code`) - auch für Sprachen, die keiner
-     * Instanz zugeordnet sind.
+     * Code of a language (`language`.`code`) - also for languages that are not
+     * assigned to any instance.
      */
     public function languageCode(int $languageId): string
     {
@@ -306,11 +305,11 @@ class InstanceCache {
     }
 
     /**
-     * Alle Instanzen als instance_id => Label, in der Reihenfolge des Backends
-     * (`position`, die Standard-Instance am Ende - Instance::orderSql()). Für die Mandanten-Ebene der
-     * Bereichsbäume (RecordBackendFolderList, AreaBackend::list()).
+     * All instances as instance_id => label, in the order of the backend
+     * (`position`, the default instance at the end - Instance::orderSql()). For the client level of the
+     * area trees (RecordBackendFolderList, AreaBackend::list()).
      *
-     * @return array  instance_id => label (Snippet-Verweise unaufgelöst)
+     * @return array  instance_id => label (snippet references unresolved)
      */
     public function instanceLabels(): array
     {
@@ -322,8 +321,8 @@ class InstanceCache {
     }
 
     /**
-     * Sind Mandanten eingerichtet - gibt es außer der Standard-Instance noch eine?
-     * Erst dann bekommen die Bereichsbäume je Instanz einen Hauptordner.
+     * Are multiple clients set up - is there another instance besides the default one?
+     * Only then do the area trees get a main folder per instance.
      */
     public function hasMultipleInstances(): bool
     {
@@ -331,10 +330,10 @@ class InstanceCache {
     }
 
     /**
-     * Inhaltsbereiche einer Instanz in Baumreihenfolge.
+     * Content areas of an instance in tree order.
      *
      * @param int $instanceId
-     * @return array  area_id => name. Leer, wenn die Instanz unbekannt ist.
+     * @return array  area_id => name. Empty if the instance is unknown.
      */
     public function areas(int $instanceId): array
     {
@@ -342,8 +341,8 @@ class InstanceCache {
     }
 
     /**
-     * Inhaltsbereiche ALLER Instanzen - für Abfragen ohne Instanzbeschränkung
-     * (Backend). Reihenfolge: Instanzen nach position, darin Baumreihenfolge.
+     * Content areas of ALL instances - for queries without an instance restriction
+     * (backend). Order: instances by position, within them tree order.
      *
      * @return array  area_id => name
      */
@@ -353,14 +352,14 @@ class InstanceCache {
     }
 
     /**
-     * Angaben zu EINEM Bereich: name, type, instance_id - oder null, wenn es ihn
-     * nicht gibt. Ersetzt die Abfrage "SELECT instance_id, type FROM area" in den
-     * Dataset-Klassen; `deleted` und die übrigen Spalten stehen nicht hier.
+     * Data for ONE area: name, type, instance_id - or null if it does not exist.
+     * Replaces the query "SELECT instance_id, type FROM area" in the
+     * dataset classes; `deleted` and the other columns are not here.
      *
      * @param int $areaId
      * @return array|null  ['name' => string, 'type' => string, 'instance_id' => int,
-     *                      'trigger_template_ids' => int[] (Reihenfolge der Ausführung),
-     *                      'overview_template_id' => int (0 = keins)]
+     *                      'trigger_template_ids' => int[] (order of execution),
+     *                      'overview_template_id' => int (0 = none)]
      */
     public function areaInfo(int $areaId): ?array
     {
@@ -377,7 +376,7 @@ class InstanceCache {
     }
 
     /**
-     * Typ eines Bereichs (record, profile, ugc, template, folder); '' = unbekannt.
+     * Type of an area (record, profile, ugc, template, folder); '' = unknown.
      */
     public function areaType(int $areaId): string
     {
@@ -385,7 +384,7 @@ class InstanceCache {
     }
 
     /**
-     * Instanz eines Bereichs; 0 = unbekannt.
+     * Instance of an area; 0 = unknown.
      */
     public function areaInstanceId(int $areaId): int
     {
@@ -393,11 +392,11 @@ class InstanceCache {
     }
 
     /**
-     * Bereiche bestimmter Typen, wahlweise nur bestimmter Instanzen (leer = alle),
-     * in der Reihenfolge von areasOf().
+     * Areas of certain types, optionally only of certain instances (empty = all),
+     * in the order of areasOf().
      *
-     * @param string[] $types        z. B. Area::CONTENT_TYPES; leer = alle Typen
-     * @param int[]    $instanceIds  leer = alle Instanzen
+     * @param string[] $types        e.g. Area::CONTENT_TYPES; empty = all types
+     * @param int[]    $instanceIds  empty = all instances
      * @return array   area_id => ['name', 'type', 'instance_id']
      */
     public function areasOfType(array $types, array $instanceIds = []): array
@@ -422,16 +421,16 @@ class InstanceCache {
     }
 
     /**
-     * Slug-Präfix eines Bereichs in einer Sprache (`area`.`details`.slug_prefix).
+     * Slug prefix of an area in a language (`area`.`details`.slug_prefix).
      *
-     * Ein Inhaltsbereich kann seinen Datensätzen einen Präfix voranstellen: aus dem
-     * Slug "blau" im Bereich mit dem Präfix "farben" wird die URL /farben/blau
-     * (Cms::recordUrl(), Cms::recordIdsBySlugPath()). Der Präfix ist mehrsprachig
-     * mit Fallback auf die Hauptsprache der Instanz des Bereichs; im Cache steht er
-     * bereits aufgelöst für jede ihrer Sprachen. Eine Sprache, die die Instanz nicht
-     * führt, liest - wie die Datensätze selbst - die Hauptsprache.
+     * A content area can prepend a prefix to its records: from the slug "blau" in the area
+     * with the prefix "farben" the URL becomes /farben/blau
+     * (Cms::recordUrl(), Cms::recordIdsBySlugPath()). The prefix is multilingual
+     * with a fallback to the primary language of the instance of the area; in the cache it is
+     * already resolved for each of its languages. A language that the instance does not
+     * carry reads - like the records themselves - the primary language.
      *
-     * @return string  Präfix ohne Slash, '' = keiner (auch Ordner, Template-Bereiche)
+     * @return string  prefix without slash, '' = none (also folders, template areas)
      */
     public function slugPrefix(int $areaId, int $languageId): string
     {
@@ -444,8 +443,8 @@ class InstanceCache {
     }
 
     /**
-     * Alle Slug-Präfixe eines Bereichs: language_id => Präfix (nur Sprachen mit
-     * Präfix, Fallback bereits aufgelöst - siehe slugPrefix()).
+     * All slug prefixes of an area: language_id => prefix (only languages with
+     * a prefix, fallback already resolved - see slugPrefix()).
      */
     public function slugPrefixes(int $areaId): array
     {
@@ -453,10 +452,10 @@ class InstanceCache {
     }
 
     /**
-     * Bereiche mit Slug-Präfix in den angegebenen Instanzen (leer = alle).
+     * Areas with a slug prefix in the given instances (empty = all).
      *
      * @param int[] $instanceIds
-     * @return array  area_id => [language_id => Präfix]
+     * @return array  area_id => [language_id => prefix]
      */
     public function slugPrefixAreas(array $instanceIds = []): array
     {
@@ -470,13 +469,13 @@ class InstanceCache {
     }
 
     /**
-     * Rohwerte eines Slug-Präfixes (language_id => Eingabe) für die Sprachen einer
-     * Instanz auflösen: leere Sprachen erhalten den Präfix der Hauptsprache.
+     * Resolve the raw values of a slug prefix (language_id => input) for the languages of an
+     * instance: empty languages get the prefix of the primary language.
      *
-     * @param array $raw          language_id => Präfix (wie in details.slug_prefix)
-     * @param int[] $languageIds  Sprachen der Instanz
-     * @param int   $primaryId    ihre Hauptsprache
-     * @return array  language_id => Präfix, nur nicht leere
+     * @param array $raw          language_id => prefix (as in details.slug_prefix)
+     * @param int[] $languageIds  languages of the instance
+     * @param int   $primaryId    its primary language
+     * @return array  language_id => prefix, only non-empty ones
      */
     public static function resolveSlugPrefixes(array $raw, array $languageIds, int $primaryId): array
     {
@@ -492,7 +491,7 @@ class InstanceCache {
     }
 
     /**
-     * Ids aller Benutzergruppen (Reihenfolge: group_id), aus instances.php.
+     * Ids of all user groups (order: group_id), from instances.php.
      *
      * @return int[]
      */
@@ -502,7 +501,7 @@ class InstanceCache {
     }
 
     /**
-     * area_id => name aus einer Bereichsliste des Caches.
+     * area_id => name from an area list of the cache.
      */
     private function names(array $areas): array
     {
@@ -514,8 +513,8 @@ class InstanceCache {
     }
 
     /**
-     * Inhaltsbereiche mehrerer Instanzen (eigene Instanz + lesbare), in der
-     * Reihenfolge der übergebenen Instanzen; leere Liste = alle Instanzen.
+     * Content areas of several instances (own instance + readable ones), in the
+     * order of the passed instances; empty list = all instances.
      *
      * @param int[] $instanceIds
      * @return array  area_id => name
@@ -533,24 +532,24 @@ class InstanceCache {
     }
 
     /**
-     * Instanzen, innerhalb derer ein `unique`-Wert einmalig sein muss.
+     * Instances within which a `unique` value must be unique.
      *
-     * Ein Frontend-Aufruf sieht die eigene Instanz und deren lesbare Instanzen
-     * (`readable_instances`, siehe Page::resolveInstance()). Ein Wert, der dort
-     * doppelt vorkäme, wäre für den Aufruf nicht mehr eindeutig - etwa ein Slug.
-     * Deshalb zählen für die Eindeutigkeit eines Datensatzes der Instanz X:
+     * A frontend call sees its own instance and its readable instances
+     * (`readable_instances`, see Page::resolveInstance()). A value that occurred twice
+     * there would no longer be unambiguous for the call - e.g. a slug.
+     * Therefore for the uniqueness of a record of instance X the following count:
      *
-     *     X selbst
-     *     die Instanzen, die X lesen darf         (aus X heraus sichtbar)
-     *     die Instanzen, die X lesen dürfen       (X ist aus ihnen heraus sichtbar)
+     *     X itself
+     *     the instances that X may read          (visible from X)
+     *     the instances that may read X          (X is visible from them)
      *
-     * Nicht transitiv: liest A die Instanz B und B die Instanz C, sieht A von C
-     * nichts - C und A müssen sich also nicht ausschließen.
+     * Not transitive: if A reads instance B and B reads instance C, A sees nothing
+     * of C - so C and A do not have to exclude each other.
      *
      * @param int $instanceId
-     * @return int[]  instance_ids, die eigene zuerst; [$instanceId] bei unbekannter Instanz
-     * @see Camindo\Core\Dataset::validateValue()   Metafelder mit 'unique'
-     * @see Camindo\Core\Dataset::uniqueVirtualOk() virtuelle Felder mit 'unique'
+     * @return int[]  instance_ids, own one first; [$instanceId] for an unknown instance
+     * @see Camindo\Core\Dataset::validateValue()   meta fields with 'unique'
+     * @see Camindo\Core\Dataset::uniqueVirtualOk() virtual fields with 'unique'
      */
     public function uniqueScope(int $instanceId): array
     {
@@ -571,14 +570,14 @@ class InstanceCache {
     }
 
     /**
-     * Sprache zu einem Sprachkürzel innerhalb einer Instanz.
+     * Language for a language code within an instance.
      *
-     * Verglichen wird ohne Rücksicht auf Groß-/Kleinschreibung und mit '-' und '_'
-     * als gleichwertigen Trennzeichen ("de-AT" findet "de_at").
+     * The comparison ignores case and treats '-' and '_' as equivalent
+     * separators ("de-AT" finds "de_at").
      *
      * @param int    $instanceId
-     * @param string $code       Sprachkürzel aus der URL
-     * @return array|null        Sprachzeile oder null, wenn die Instanz sie nicht führt
+     * @param string $code       language code from the URL
+     * @return array|null        language row, or null if the instance does not carry it
      */
     public function languageByCode(int $instanceId, string $code): ?array
     {
@@ -586,9 +585,9 @@ class InstanceCache {
     }
 
     /**
-     * Sprache zu einem Kürzel in einer gegebenen Sprachliste (languagesOf()).
+     * Language for a code in a given language list (languagesOf()).
      *
-     * @param array  $languages  language_id => Sprachzeile
+     * @param array  $languages  language_id => language row
      * @param string $code
      * @return array|null
      */
@@ -596,15 +595,15 @@ class InstanceCache {
     {
         $needle = $this->normalizeCode($code);
         if ($needle === '') return null;
-        // 1. exakte Übereinstimmung ("de-at" = "de_AT")
+        // 1. exact match ("de-at" = "de_AT")
         foreach ($languages as $language) {
             if ($this->normalizeCode((string)($language['code'] ?? '')) === $needle) {
                 return $language;
             }
         }
-        // 2. Grundsprache: "/de/" findet "de_DE", "/de-ch/" findet "de" - die erste
-        //    passende Sprache in der Reihenfolge des Auftritts. Bei canonical = 1
-        //    leitet Page danach auf das genaue Kürzel um.
+        // 2. base language: "/de/" finds "de_DE", "/de-ch/" finds "de" - the first
+        //    matching language in the order of the presence. With canonical = 1
+        //    Page then redirects to the exact code.
         $needleBase = explode('-', $needle)[0];
         foreach ($languages as $language) {
             $langCode = $this->normalizeCode((string)($language['code'] ?? ''));
@@ -616,15 +615,14 @@ class InstanceCache {
     }
 
     /**
-     * Passendste Sprache einer Instanz zum Accept-Language-Header des Browsers.
+     * Best matching language of an instance for the browser's Accept-Language header.
      *
-     * Der Header wird nach Gewichtung (q) durchgegangen. Je Eintrag zählt zuerst
-     * eine exakte Übereinstimmung ("de-at" = "de_AT"), dann eine Übereinstimmung
-     * der Grundsprache ("de-at" trifft "de" oder "de_DE"). Passt nichts, bleibt es
-     * bei der Hauptsprache.
+     * The header is processed by weight (q). For each entry an exact match counts first
+     * ("de-at" = "de_AT"), then a match of the base language ("de-at" hits "de" or "de_DE"). If nothing
+     * matches, it stays with the primary language.
      *
      * @param int    $instanceId
-     * @param string $acceptLanguage  Inhalt von $_SERVER['HTTP_ACCEPT_LANGUAGE']
+     * @param string $acceptLanguage  content of $_SERVER['HTTP_ACCEPT_LANGUAGE']
      * @return int                    language_id
      */
     public function negotiateLanguage(int $instanceId, string $acceptLanguage): int
@@ -633,18 +631,18 @@ class InstanceCache {
     }
 
     /**
-     * Wie negotiateLanguage(), aber über eine gegebene Sprachliste (languagesOf()).
+     * Like negotiateLanguage(), but via a given language list (languagesOf()).
      *
-     * @param array  $languages       language_id => Sprachzeile, Hauptsprache zuerst
-     * @param int    $primaryId       Rückfall, wenn nichts passt
-     * @param string $acceptLanguage  Inhalt von $_SERVER['HTTP_ACCEPT_LANGUAGE']
+     * @param array  $languages       language_id => language row, primary language first
+     * @param int    $primaryId       fallback if nothing matches
+     * @param string $acceptLanguage  content of $_SERVER['HTTP_ACCEPT_LANGUAGE']
      * @return int                    language_id
      */
     public function negotiate(array $languages, int $primaryId, string $acceptLanguage): int
     {
         if (count($languages) < 2 || trim($acceptLanguage) === '') return $primaryId;
 
-        // Header zerlegen: "de-AT,de;q=0.9,en;q=0.8" -> [['de-at', 1.0], ['de', 0.9], ...]
+        // Split the header: "de-AT,de;q=0.9,en;q=0.8" -> [['de-at', 1.0], ['de', 0.9], ...]
         $wanted = [];
         foreach (explode(',', $acceptLanguage) as $i => $part) {
             $pieces = explode(';', trim($part));
@@ -655,12 +653,12 @@ class InstanceCache {
                 if (preg_match('/^\s*q\s*=\s*([0-9.]+)/i', $param, $m)) $q = (float)$m[1];
             }
             if ($q <= 0) continue;
-            // Reihenfolge im Header als Nachrang, damit die Sortierung stabil bleibt
+            // Order in the header as a tie-breaker, so that the sorting stays stable
             $wanted[] = [$tag, $q, $i];
         }
         usort($wanted, fn($a, $b) => ($b[1] <=> $a[1]) ?: ($a[2] <=> $b[2]));
 
-        // Kürzel der Instanz-Sprachen vorbereiten: exakt und Grundsprache
+        // Prepare the codes of the instance languages: exact and base language
         $exact = [];
         $base  = [];
         foreach ($languages as $languageId => $language) {
@@ -668,7 +666,7 @@ class InstanceCache {
             if ($code === '') continue;
             $exact[$code] = (int)$languageId;
             $baseCode = explode('-', $code)[0];
-            // Erste Sprache je Grundsprache gewinnt (Reihenfolge der Instanz)
+            // First language per base language wins (order of the instance)
             if (!isset($base[$baseCode])) $base[$baseCode] = (int)$languageId;
         }
 
@@ -681,15 +679,15 @@ class InstanceCache {
     }
 
     /**
-     * Instanz zu einer Domain ermitteln.
+     * Determine the instance for a domain.
      *
-     * Reihenfolge - der erste Treffer gewinnt:
+     * Order - the first match wins:
      *     1. `instance`.`primary_domain`
-     *     2. `rel_instance_domain` - wörtlich, oder als regulärer Ausdruck, wenn dort
-     *        `regex` = 1 steht; in der Reihenfolge instance.position, rel.position
-     *     3. die Standard-Instance
+     *     2. `rel_instance_domain` - literal, or as a regular expression if there
+     *        `regex` = 1; in the order instance.position, rel.position
+     *     3. the default instance
      *
-     * @param string $host  Hostname ohne Port, kleingeschrieben
+     * @param string $host  host name without port, lower case
      * @return int          instance_id
      */
     public function resolveDomain(string $host): int
@@ -701,8 +699,8 @@ class InstanceCache {
     }
 
     /**
-     * Wie resolveDomain(), aber ohne Rückfall auf die Standard-Instanz:
-     * 0 = die Domain gehört keiner Instanz (z. B. die feste Backend-Domain).
+     * Like resolveDomain(), but without a fallback to the default instance:
+     * 0 = the domain belongs to no instance (e.g. the fixed backend domain).
      */
     public function matchDomain(string $host): int
     {
@@ -710,19 +708,19 @@ class InstanceCache {
         $host = mb_strtolower(trim($host));
         if ($host === '') return 0;
 
-        // 1. Haupt-Domain
+        // 1. Primary domain
         $primaryId = (int)($all['primary_domains'][$host] ?? 0);
         if ($primaryId > 0) return $primaryId;
 
-        // 2. Zusatz-Domains
+        // 2. Additional domains
         foreach ((array)($all['additional_domains'] ?? []) as $row) {
             $domain = (string)($row['domain'] ?? '');
             if (empty($row['regex'])) {
                 if ($domain === $host) return (int)$row['instance_id'];
                 continue;
             }
-            // Regulärer Ausdruck aus dem Backend: ein ungültiges Muster darf den
-            // Request nicht abbrechen, es zählt einfach nicht als Treffer.
+            // Regular expression from the backend: an invalid pattern must not
+            // abort the request, it simply does not count as a match.
             $pattern = '~^(?:' . str_replace('~', '\\~', $domain) . ')$~ui';
             if (@preg_match($pattern, $host) === 1) return (int)$row['instance_id'];
         }
@@ -734,12 +732,12 @@ class InstanceCache {
     // ====================
 
     /**
-     * Alle Cache-Dateien neu schreiben.
+     * Rewrite all cache files.
      *
-     * Aufzurufen, wenn sich Instanzen, deren Relation-Tabellen, Sprachen oder
-     * Inhaltsbereiche geändert haben (Hooks der Module Instance, Language und Area).
-     * Läuft unter der Sperre, damit
-     * nicht zwei Schreiber gleichzeitig am Werk sind.
+     * To be called when instances, their relation tables, languages or
+     * content areas have changed (hooks of the modules Instance, Language and Area).
+     * Runs under the lock, so that
+     * two writers are not at work at the same time.
      */
     public function rebuild(): void
     {
@@ -753,11 +751,11 @@ class InstanceCache {
     }
 
     /**
-     * Cache nur dann neu erzeugen, wenn die Sammeldatei fehlt (oder eine Einzeldatei
-     * zu einer Instanz, die es laut Sammeldatei gibt).
+     * Recreate the cache only if the collective file is missing (or an individual file
+     * for an instance that exists according to the collective file).
      *
-     * Wird von den Lesemethoden gerufen. Unter der Sperre wird noch einmal geprüft:
-     * ein anderer Request kann die Dateien inzwischen geschrieben haben.
+     * Called by the read methods. Under the lock it is checked once more:
+     * another request may have written the files in the meantime.
      */
     private function rebuildMissing(): void
     {
@@ -771,9 +769,9 @@ class InstanceCache {
     }
 
     /**
-     * Sind alle Dateien vorhanden, die es laut Sammeldatei geben muss?
-     * (Eine Sammeldatei ohne 'group_ids', 'collations' oder 'language_codes' stammt
-     * aus einer früheren Version und gilt als unvollständig.)
+     * Are all files present that must exist according to the collective file?
+     * (A collective file without 'group_ids', 'collations' or 'language_codes' stems
+     * from an earlier version and counts as incomplete.)
      */
     private function isComplete(): bool
     {
@@ -789,11 +787,11 @@ class InstanceCache {
     }
 
     /**
-     * Kollation je Sprache (Collation::forLocale()); '' wo sie der Kollation der
-     * Textspalten entspricht - dort bleibt ein Index auf `data` nutzbar.
+     * Collation per language (Collation::forLocale()); '' where it matches the collation
+     * of the text columns - there an index on `data` remains usable.
      *
      * @param array $languages  language_id => ['code' => …]
-     * @return array            language_id => Kollation oder ''
+     * @return array            language_id => collation or ''
      */
     private function languageCollations(array $languages): array
     {
@@ -810,17 +808,17 @@ class InstanceCache {
     }
 
     /**
-     * Die Dateien aus der Datenbank aufbauen und schreiben.
-     * Nur innerhalb von withLock() aufrufen.
+     * Build the files from the database and write them.
+     * Call only inside withLock().
      */
     private function writeAll(): void
     {
         $this->db->pushResult();
         try {
-            // Sprachen
+            // Languages
             $languages = [];
-            // (backend_code und timezone: Snippet-Sprache und Zeitzone, die
-            //  Cms::setLanguage() im Frontend zu dieser Inhaltssprache einstellt)
+            // (backend_code and timezone: snippet language and time zone that
+            //  Cms::setLanguage() sets in the frontend for this content language)
             $this->db->query("SELECT `language_id`, `code`, `backend_code`, `label`, `endonym`, `timezone`, `position` FROM `language` ORDER BY `position` ASC");
             while ($row = $this->db->fetch()) {
                 $languages[(int)$row['language_id']] = [
@@ -849,7 +847,7 @@ class InstanceCache {
                     'canonical'            => (int)$row['canonical'],
                     'record_id'            => (int)($row['record_id'] ?? 0),
                     'template_id'          => (int)($row['template_id'] ?? 0),
-                    // Zusatzangaben: Script-Policy (SecurityHeaders)
+                    // Additional data: script policy (SecurityHeaders)
                     'details'              => json_decode((string)($row['details'] ?? ''), true) ?: [],
                     'additional_languages' => [],
                     'languages'            => [],
@@ -859,12 +857,12 @@ class InstanceCache {
                 ];
             }
 
-            // Inhaltsbereiche (alle Typen, auch als gelöscht markierte - siehe
-            // Klassenkommentar). Baumreihenfolge je Instanz; für die Sammeldatei
-            // zusätzlich nach Instanz-Position, daher der JOIN.
+            // Content areas (all types, also those marked as deleted - see
+            // class comment). Tree order per instance; for the collective file
+            // additionally by instance position, hence the JOIN.
             $allAreas = [];
-            $rawSlugPrefixes = []; // area_id => details.slug_prefix (roh, je language_id)
-            // Trigger-Templates je Bereich in ihrer Reihenfolge (TriggerTemplates)
+            $rawSlugPrefixes = []; // area_id => details.slug_prefix (raw, per language_id)
+            // Trigger templates per area in their order (TriggerTemplates)
             $triggers = [];
             $this->db->query("SELECT `area_id`, `template_id` FROM `rel_area_trigger` ORDER BY `area_id`, `position`, `template_id`");
             while ($row = $this->db->fetchNum()) {
@@ -884,16 +882,16 @@ class InstanceCache {
                     'type'        => (string)$row['type'],
                     'instance_id' => $id,
                 ];
-                // nur wenn gesetzt - hält die Cachedateien klein (TriggerTemplates)
+                // only if set - keeps the cache files small (TriggerTemplates)
                 if (isset($triggers[$areaId])) {
                     $info['trigger_template_ids'] = $triggers[$areaId];
                 }
-                // Übersichts-Template der Präfix-Adresse (Page::resolveRequest())
+                // Overview template of the prefix address (Page::resolveRequest())
                 if (!empty($row['overview_template_id'])) {
                     $info['overview_template_id'] = (int)$row['overview_template_id'];
                 }
-                // Slug-Präfix (nur Inhaltsbereiche, nicht gelöschte) - aufgelöst
-                // wird er unten, wenn die Sprachen der Instanz feststehen
+                // Slug prefix (only content areas, not deleted ones) - resolved
+                // below, once the languages of the instance are fixed
                 if (empty($row['deleted']) && in_array($info['type'], ['record', 'profile', 'ugc'], true)) {
                     $details = json_decode((string)($row['details'] ?? ''), true);
                     if (is_array($details) && !empty($details['slug_prefix']) && is_array($details['slug_prefix'])) {
@@ -904,7 +902,7 @@ class InstanceCache {
                 $allAreas[$areaId] = $info;
             }
 
-            // Weitere Sprachen (eigene Reihenfolge je Instanz)
+            // Additional languages (own order per instance)
             $this->db->query("SELECT `instance_id`, `language_id` FROM `rel_instance_language` ORDER BY `instance_id` ASC, `position` ASC");
             while ($row = $this->db->fetch()) {
                 $id = (int)$row['instance_id'];
@@ -912,7 +910,7 @@ class InstanceCache {
                 $instances[$id]['additional_languages'][] = (int)$row['language_id'];
             }
 
-            // Zusatz-Domains
+            // Additional domains
             $additionalDomains = [];
             $sql = "SELECT `r`.`instance_id`, `r`.`domain`, `r`.`regex`"
                  . " FROM `rel_instance_domain` `r`"
@@ -931,7 +929,7 @@ class InstanceCache {
                 $instances[$id]['additional_domains'][] = ['domain' => $entry['domain'], 'regex' => $entry['regex']];
             }
 
-            // Lesbare Instanzen (Reihenfolge der Instanzen selbst)
+            // Readable instances (order of the instances themselves)
             $sql = "SELECT `r`.`instance_id`, `r`.`readable_id` FROM `rel_instance_instance` `r`"
                  . " LEFT JOIN `instance` `i` ON `i`.`instance_id` = `r`.`readable_id`"
                  . " ORDER BY " . \Camindo\Core\Modules\Instance\Instance::orderSql('i');
@@ -944,7 +942,7 @@ class InstanceCache {
                     $instances[$id]['readable_instances'][] = $readableId;
                 }
             }
-            // Benutzergruppen und ihre Rechte (siehe buildGroups())
+            // User groups and their rights (see buildGroups())
             $groupRows = $this->readGroups();
             $this->db->query("SELECT `status_id` FROM `status` ORDER BY `position` ASC");
             $statusIds = array_map('intval', $this->db->fetchColumn());
@@ -952,8 +950,8 @@ class InstanceCache {
             $this->db->popResult();
         }
 
-        // Sprachliste je Instanz: Hauptsprache zuerst, dann die weiteren in ihrer
-        // Reihenfolge. Sprachen, die es nicht (mehr) gibt, fallen heraus.
+        // Language list per instance: primary language first, then the others in their
+        // order. Languages that no longer exist drop out.
         $primaryLanguages = [];
         $primaryDomains   = [];
         foreach ($instances as $id => &$instance) {
@@ -971,14 +969,14 @@ class InstanceCache {
             $instance['additional_languages'] = array_values(array_diff(array_keys($list), [$primaryId]));
             $primaryLanguages[$id] = $primaryId;
             if ($instance['primary_domain'] !== '') {
-                // Erste Instanz gewinnt, falls dieselbe Domain doppelt eingetragen ist
+                // First instance wins if the same domain is entered twice
                 $primaryDomains[$instance['primary_domain']] ??= $id;
             }
         }
         unset($instance);
 
-        // Slug-Präfixe je Sprache der Instanz, mit Fallback auf die Hauptsprache
-        // (siehe slugPrefix()); Bereiche ohne Präfix bekommen keinen Eintrag
+        // Slug prefixes per language of the instance, with fallback to the primary language
+        // (see slugPrefix()); areas without a prefix get no entry
         foreach ($rawSlugPrefixes as $areaId => $raw) {
             $id = (int)$allAreas[$areaId]['instance_id'];
             $resolved = self::resolveSlugPrefixes(
@@ -1008,17 +1006,17 @@ class InstanceCache {
         $dir = $this->cacheDir();
         $this->system->createDir($this->config->get('paths.var_dir'), 'cache');
 
-        // Einzeldateien
+        // Individual files
         foreach ($instances as $id => $instance) {
             $this->writeFile($this->instanceFile($id), $instance);
         }
         foreach ($groups as $id => $group) {
             $this->writeFile($this->groupFile($id), $group);
         }
-        // Sammeldatei zuletzt: sie ist das Signal, dass der Bestand vollständig ist
+        // Collective file last: it is the signal that the stock is complete
         $this->writeFile($dir . '/' . self::FILE_ALL, $all);
 
-        // Dateien gelöschter Instanzen und Gruppen entfernen
+        // Remove files of deleted instances and groups
         foreach ((array)glob($dir . '/instance-*.php') as $file) {
             if (!preg_match('/instance-(\d+)\.php$/', $file, $m)) continue;
             if (isset($instances[(int)$m[1]])) continue;
@@ -1032,19 +1030,19 @@ class InstanceCache {
     }
 
     /**
-     * Gruppen und ihre Rechte-Tabellen lesen. Nur innerhalb von writeAll()
-     * (unter pushResult()) aufrufen.
+     * Read the groups and their rights tables. Call only inside writeAll()
+     * (under pushResult()).
      *
-     * @return array  group_id => ['label', 'details' (Array), 'instance_ids',
-     *                'areas' (area_id => Flags), 'languages' (language_id => can_write),
+     * @return array  group_id => ['label', 'details' (array), 'instance_ids',
+     *                'areas' (area_id => flags), 'languages' (language_id => can_write),
      *                'statuses' (status_ids)]
      */
     private function readGroups(): array
     {
-        // Signaturen (Integrity): eine Zeile ohne gültige Signatur zählt nicht -
-        // bei `group` fallen die details (Module) weg, bei den Relation-Tabellen die
-        // Zeile. Die Superuser-Gruppe braucht keine: ihre Rechte stehen nicht in der
-        // Datenbank (buildGroups()).
+        // Signatures (Integrity): a row without a valid signature does not count -
+        // for `group` the details (modules) are dropped, for the relation tables the
+        // row. The superuser group needs none: its rights are not in the
+        // database (buildGroups()).
         $groups = [];
         $this->db->query("SELECT `group_id`, `label`, `details`, `sig` FROM `group` ORDER BY `group_id` ASC");
         while ($row = $this->db->fetch()) {
@@ -1094,28 +1092,27 @@ class InstanceCache {
     }
 
     /**
-     * Inhalt der Gruppendateien zusammenstellen (Format siehe Klassenkommentar).
+     * Assemble the content of the group files (format see class comment).
      *
-     * Die Superuser-Gruppe bekommt alles: alle Instanzen, alle Bereiche (auch
-     * Ordner), alle Module mit allen Zusatzrechten, alle Sprachen mit Schreibrecht,
-     * alle Status.
-     * Bei den übrigen Gruppen zählen nur Bereiche zugewiesener Instanzen; Rechte
-     * auf Bereiche, deren Instanz der Gruppe nicht (mehr) zugewiesen ist, fallen
-     * weg.
+     * The superuser group gets everything: all instances, all areas (including
+     * folders), all modules with all additional rights, all languages with write right,
+     * all statuses.
+     * For the other groups only areas of assigned instances count; rights
+     * on areas whose instance is no longer assigned to the group are dropped.
      *
      * @param array $groupRows          readGroups()
-     * @param int[] $instanceIds        alle Instanzen in Backend-Reihenfolge
+     * @param int[] $instanceIds        all instances in backend order
      * @param array $primaryLanguages   instance_id => primary_language_id
      * @param array $allAreas           area_id => ['name', 'type', 'instance_id']
-     * @param int[] $languageIds        alle Sprachen
-     * @param int[] $statusIds          alle Status (Reihenfolge wie `position`)
-     * @return array  group_id => Datei-Inhalt
+     * @param int[] $languageIds        all languages
+     * @param int[] $statusIds          all statuses (order as `position`)
+     * @return array  group_id => file content
      */
     private function buildGroups(array $groupRows, array $instanceIds, array $primaryLanguages, array $allAreas, array $languageIds, array $statusIds = []): array
     {
-        // Module aus var/config/components/modules.php - Cms hält sie; der Container
-        // liefert dieselbe Instanz, ein Zirkelbezug entsteht nicht (Cms braucht
-        // InstanceCache nur zur Laufzeit)
+        // Modules from var/config/components/modules.php - Cms holds them; the container
+        // returns the same instance, no circular reference arises (Cms only needs
+        // InstanceCache at runtime)
         $modules = [];
         $app = $GLOBALS['app'] ?? null;
         if ($app instanceof ContainerInterface) {
@@ -1160,13 +1157,13 @@ class InstanceCache {
                 continue;
             }
 
-            // Instanzen in Backend-Reihenfolge
+            // Instances in backend order
             $assigned = array_values(array_intersect($instanceIds, $row['instance_ids']));
             $file['instance_ids'] = $assigned;
             foreach ($assigned as $instanceId) {
                 $file['primary_languages'][$instanceId] = (int)($primaryLanguages[$instanceId] ?? 0);
             }
-            // Lesbare Bereiche (Reihenfolge wie allAreas) und ihre Flags
+            // Readable areas (order as allAreas) and their flags
             foreach ($allAreas as $areaId => $info) {
                 if (!isset($row['areas'][$areaId])) continue;
                 if (!in_array($info['instance_id'], $assigned, true)) continue;
@@ -1174,17 +1171,17 @@ class InstanceCache {
                 $file['areas'][$areaId] = $info;
                 $file['rights']['areas'][$areaId] = $row['areas'][$areaId];
             }
-            // Module: nur bekannte, Zusatzrechte nur definierte
+            // Modules: only known ones, additional rights only defined ones
             foreach ((array)($row['details']['modules'] ?? []) as $name => $rights) {
                 if (!isset($modules[$name])) continue;
                 $file['modules'][$name] = array_values(array_intersect($modules[$name], array_map('strval', (array)$rights)));
             }
-            // Sprachen: nur vorhandene
+            // Languages: only existing ones
             foreach ($row['languages'] as $languageId => $canWrite) {
                 if (!in_array($languageId, $languageIds, true)) continue;
                 $file['rights']['languages'][$languageId] = (bool)$canWrite;
             }
-            // Setzbare Status: nur vorhandene, Reihenfolge wie `position`
+            // Settable statuses: only existing ones, order as `position`
             $file['rights']['statuses'] = array_values(array_intersect($statusIds, $row['statuses']));
             $groups[$groupId] = $file;
         }
@@ -1211,9 +1208,9 @@ class InstanceCache {
     }
 
     /**
-     * Cache-Datei einbinden.
+     * Include a cache file.
      *
-     * @return array|null  null, wenn die Datei fehlt oder kein Array liefert
+     * @return array|null  null if the file is missing or does not return an array
      */
     private function includeFile(string $file): ?array
     {
@@ -1223,7 +1220,7 @@ class InstanceCache {
     }
 
     /**
-     * Array als PHP-Datei schreiben - erst temporär, dann per rename() an den Platz.
+     * Write an array as a PHP file - first temporarily, then to its place via rename().
      */
     private function writeFile(string $file, array $data): void
     {
@@ -1244,7 +1241,7 @@ class InstanceCache {
     }
 
     /**
-     * Aufgabe unter der Sperrdatei ausführen (blockierend).
+     * Run a task under the lock file (blocking).
      */
     private function withLock(callable $task): void
     {
@@ -1252,7 +1249,7 @@ class InstanceCache {
         $lockFile = $this->cacheDir() . '/' . self::FILE_LOCK;
         $handle = @fopen($lockFile, 'c');
         if ($handle === false) {
-            // Ohne Sperrdatei trotzdem arbeiten - besser ein doppelter Aufbau als keiner
+            // Work anyway without a lock file - a double build is better than none
             $task();
             return;
         }
@@ -1266,7 +1263,7 @@ class InstanceCache {
     }
 
     /**
-     * Sprachkürzel vergleichbar machen: klein, '_' -> '-'.
+     * Make language codes comparable: lower case, '_' -> '-'.
      */
     private function normalizeCode(string $code): string
     {

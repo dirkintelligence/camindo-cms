@@ -1,6 +1,6 @@
 /*
- * cApp.ctxMenu – Kontextmenü-Logik
- * Linksklick und Rechtsklick auf .c9-ctx-row
+ * cApp.ctxMenu – Context menu logic
+ * Left click and right click on .c9-ctx-row
  */
 (function (cApp) {
     'use strict';
@@ -16,7 +16,7 @@
         },
 
         /**
-         * Linksklick auf Tabellenzeile → Layer öffnen
+         * Left click on table row → open layer
          */
         _bindRowClick() {
             $(document).on('click', '.c9-ctx-row:not(.c9-click-disabled) td:not(.c9-click-disabled)', function (e) {
@@ -31,17 +31,17 @@
         },
 
         /**
-         * Rechtsklick → Kontextmenü positionieren und einblenden
+         * Right click → position and show the context menu
          */
         _bindRowContextMenu() {
             $(document).on('contextmenu', '.c9-ctx-row', function (e) {
-                // Prüfen, ob die Zeile deaktiviert ist
+                // Check whether the row is disabled
                 if ($(this).hasClass('c9-ctx-disabled')) {
-                    e.preventDefault(); // Verhindert das Standard-Browser-Menü
-                    return;             // Bricht ab, das eigene Menü wird nicht geladen
+                    e.preventDefault(); // Prevents the default browser menu
+                    return;             // Aborts, our own menu is not loaded
                 }
 
-                // Prüft, ob die Zelle - über der die Maus ist - (oder ein Element darin) deaktiviert ist
+                // Checks whether the cell under the mouse (or an element inside it) is disabled
                 if ($(e.target).closest('.c9-ctx-disabled').length > 0) {
                     e.preventDefault();
                     return;
@@ -52,17 +52,17 @@
                 const $menu = $(this).closest('.container').find('.c9-ctx-menu');
                 $menu.data('current-id', $(this).data('id'));
 
-                // Einträge, die für DIESE Zeile nicht gelten (data-ctx-hide="copy,delete"
-                // an der Zeile, data-ctx="..." am Eintrag) - z. B. fehlende Rechte
+                // Entries that do not apply to THIS row (data-ctx-hide="copy,delete"
+                // on the row, data-ctx="..." on the entry) - e.g. missing permissions
                 const hide = String($(this).data('ctx-hide') || '').split(',').filter(Boolean);
                 $menu.find('[data-ctx]').each(function () {
                     $(this).toggle(!hide.includes(String($(this).data('ctx'))));
                 });
 
-                // Alle anderen Menüs schließen
+                // Close all other menus
                 $('.c9-ctx-menu').not($menu).fadeOut(100);
 
-                // Menü neben dem Mauszeiger, bei dir="rtl" links davon
+                // Menu next to the mouse pointer, with dir="rtl" to the left of it
                 $menu.show();
                 const left = (document.documentElement.dir === 'rtl')
                     ? Math.max(0, e.pageX - $menu.outerWidth()) : e.pageX;
@@ -71,7 +71,7 @@
         },
 
         /**
-         * Menüs bei Klick außerhalb schließen
+         * Close menus on click outside
          */
         _bindDismiss() {
             $(document).on('click', function (e) {
@@ -82,11 +82,11 @@
         },
 
         /**
-         * Klick auf ein Menü-Item → Aktion ausführen
+         * Click on a menu item → execute the action
          *
-         * data-method="post" am Eintrag schickt die Aktion per POST - Pflicht für
-         * alles mit Seiteneffekt (17-csrf.md §2.7). Ohne die Angabe bleibt es beim
-         * GET, das ist der Normalfall (eine Maske öffnen).
+         * data-method="post" on the entry sends the action via POST - mandatory for
+         * everything with side effects (developer docs, chapter 14 (Security: web)). Without it the
+         * request stays a GET, which is the normal case (opening a mask).
          */
         _bindMenuItemClick() {
             $(document).on('click', '.c9-ctx-menu .dropdown-item', function (e) {
@@ -114,11 +114,11 @@
         },
 
         /**
-         * Rechts auf Element → kein Menü anzeigen
+         * Right click on element → show no menu
          */
         _bindNoMenu() {
             $(document).on('contextmenu', '.c9-no-ctx', function (e) {
-                e.preventDefault(); // Verhindert das Standard-Browser-Menü
+                e.preventDefault(); // Prevents the default browser menu
                 return;
             });
         }

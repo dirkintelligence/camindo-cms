@@ -4,15 +4,15 @@ namespace Camindo\Core\Modules\Area;
 class FieldCreateBackend extends FieldBackend {
 
     /**
-     * Schritt 1 beim Anlegen: Feldtyp auswählen (backend/field_create.php).
+     * Step 1 when creating: select field type (backend/field_create.php).
      *
-     * Ein eigener Schritt, weil der Typ das gesamte Formular bestimmt und sich später
-     * nicht mehr ändern lässt. Jeder Eintrag der Auswahl ist ein Link, der den Layer
-     * durch field_edit.php mit function=create und dem gewählten Typ ersetzt.
+     * A separate step, because the type determines the entire form and cannot be changed later.
+     * Each entry of the selection is a link that replaces the layer
+     * with field_edit.php with function=create and the selected type.
      *
-     * Ist der Bereich noch leer, hängt der Link zusätzlich data[default_field]=1 an -
-     * das erste Feld eines Bereichs wird ungefragt zum Titelfeld. Sonst hätte der
-     * Bereich zunächst keins, und die Datensatzliste zeigte nur record_ids.
+     * If the area is still empty, the link additionally appends data[default_field]=1 -
+     * the first field of an area becomes the title field without asking. Otherwise the
+     * area would initially have none, and the record list would only show record_ids.
      *
      * Request: area_id
      */
@@ -30,7 +30,7 @@ class FieldCreateBackend extends FieldBackend {
 
         // Bereich laden
         if (!$this->areaData = $this->area->load($this->areaId)) {
-            // Nicht gefunden
+            // Not found
             echo $this->backend->template('alert_danger', [
                 '{text}' => '{#area.error_area_not_found}'
             ]);
@@ -46,7 +46,7 @@ class FieldCreateBackend extends FieldBackend {
         // Formular
         $linkPrefix = "cApp.layers.replace('Area/field_edit.php?area_id={$this->areaId}&function=create";
         $linkSuffix = "');";
-        // Wenn der Bereich noch kein Eingabefeld besitzt: default_field setzen
+        // If the area does not yet have an input field: set default_field
         if ($this->area->fieldsNumber($this->areaId) < 1) {
             $linkPrefix .= '&data[default_field]=1';
         }

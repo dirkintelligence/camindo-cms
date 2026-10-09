@@ -1,41 +1,41 @@
 <?php
 /**
- * Backend-Oberfläche für die Redaktions-Zustände (Tabelle `status`).
+ * Backend UI for the editorial states (table `status`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     status_list.php  -> list()   Statusliste
- *     status_info.php  -> info()   Detailansicht
- *     status_edit.php  -> edit()   anlegen / kopieren / ändern / löschen
+ *     status_list.php  -> list()   status list
+ *     status_info.php  -> info()   detail view
+ *     status_edit.php  -> edit()   create / copy / change / delete
  *
- * Aufbau wie LanguageBackend: kurze Liste ohne Paginierung und Suche, Sortierung über
- * ein Vorgänger-Auswahlfeld, beim Löschen die Wahl eines Ersatz-Status.
+ * Structure as in LanguageBackend: short list without pagination and search, sorting via
+ * a predecessor select field, when deleting the choice of a replacement status.
  *
- * DIE ERSTEN BEIDEN STATUS SIND GESCHÜTZT
+ * THE FIRST TWO STATUSES ARE PROTECTED
  * --------------------
- * status_id 0 ("enabled") und 1 ("disabled") gehören zum Auslieferungsstand und werden
- * an vielen Stellen fest vorausgesetzt. edit() bricht deshalb gleich zu Anfang mit
- * exit ab, wenn eine Id <= 1 kopiert oder gelöscht werden soll - ein harter Riegel,
- * noch vor jeder Ausgabe. Bearbeiten lässt sich bei ihnen nur die Zuordnung der
- * Benutzergruppen (group_ids) - und die nur von einem Superuser.
+ * status_id 0 ("enabled") and 1 ("disabled") belong to the delivered state and are
+ * presupposed in many places. edit() therefore aborts right at the start with
+ * exit if an id <= 1 is to be copied or deleted - a hard barrier,
+ * before any output. For them, only the assignment of the
+ * user groups (group_ids) can be edited - and only by a superuser.
  *
- * BENUTZERGRUPPEN (flacher Workflow)
+ * USER GROUPS (flat workflow)
  * --------------------
- * Das Feld group_ids (Mehrfachauswahl) legt fest, welche Gruppen den Status setzen
- * dürfen - die andere Sicht auf das Feld "Status" im Formular einer Gruppe. Es
- * erscheint nur für Superuser (wer Rechte vergibt, muss alles sehen dürfen, siehe
- * GroupBackend); Status::hookOnSave() weist die Angabe sonst ab.
+ * The field group_ids (multiple selection) defines which groups may set the status -
+ * the other view of the field "Status" in the form of a group. It
+ * appears only for superusers (whoever grants permissions must be allowed to see everything, see
+ * GroupBackend); otherwise Status::hookOnSave() rejects the specification.
  *
- * ERSATZ-STATUS BEIM LÖSCHEN
+ * REPLACEMENT STATUS WHEN DELETING
  * --------------------
- * Datensätze dürfen nicht auf eine verschwundene status_id zeigen. Das Löschformular
- * lässt einen Ersatz wählen, _editDeleteConfirm() gibt ihn über
- * Status::setReplacementId() weiter, Status::hookOnDelete() stellt die Datensätze um.
- * `replacement_id` ist kein Datenbankfeld - die Felddefinition dafür wird von
- * `status_id` geborgt und nur neu beschriftet.
+ * Records must not point to a vanished status_id. The delete form
+ * lets a replacement be chosen, _editDeleteConfirm() passes it on via
+ * Status::setReplacementId(), Status::hookOnDelete() switches the records.
+ * `replacement_id` is not a database field - the field definition for it is borrowed from
+ * `status_id` and only relabeled.
  *
  * @see Camindo\Core\Modules\Status\Status              Dataset/Model
- * @see Camindo\Core\Modules\Language\LanguageBackend   gleich aufgebaute Schwesterklasse
+ * @see Camindo\Core\Modules\Language\LanguageBackend   identically structured sister class
  */
 namespace Camindo\Core\Modules\Status;
 
@@ -50,7 +50,7 @@ class StatusBackend {
     protected int $id = 0;
     protected ?array $data = [];
     protected string $function = '';
-    /** neuer Status (status_id 0 ist zugleich der Grundstatus "enabled") */
+    /** new status (status_id 0 is at the same time the basic status "enabled") */
     protected bool $isNew = false;
 
     public function __construct(
@@ -63,17 +63,17 @@ class StatusBackend {
     {}
 
     /**
-     * Statusliste (backend/status_list.php).
+     * Status list (backend/status_list.php).
      *
-     * Ohne Paginierung und Suche - die Liste bleibt naturgemäß kurz. Sortiert nach
-     * `position`, das ist die Reihenfolge in den Auswahllisten der Datensätze.
+     * Without pagination and search - the list naturally stays short. Sorted by
+     * `position`, this is the order in the select lists of the records.
      */
     public function list()
     {
-        // Seitenelemente
+        // Page elements
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#status.module_label');
         
         // Container header
@@ -88,7 +88,7 @@ class StatusBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Status-Liste
+        // Status list
         // --------------------
         $f = $this->cms->select([
             'request' => 'all',
@@ -107,7 +107,7 @@ class StatusBackend {
             $tplTableRow = $this->backend->template('status.table_row');
             $tableRows = '';
 
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+            // Fetch results (Dataset::fetch: with post-processing)
             while ($data = $this->status->fetch()) {
                 // status Icon + Label
                 $iconHtml = $this->backend->template('status.icon_status', [
@@ -142,25 +142,25 @@ class StatusBackend {
     }
 
     /**
-     * Detailansicht eines Status (backend/status_info.php).
+     * Detail view of a status (backend/status_info.php).
      *
-     * Die Überschrift baut _editHeadline(); damit deren Fallunterscheidung greift, wird
-     * $this->function vorher auf 'info' gesetzt.
+     * The headline is built by _editHeadline(); so that its case distinction applies,
+     * $this->function is set to 'info' beforehand.
      */
     public function info()
     {
         $id = (int)($_REQUEST['id'] ?? 0);
 
-        // Seitenelemente
+        // Page elements
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
 
         // Container header
         echo $this->backend->template('container_header');
 
-        // Status-Data
+        // Status data
         // ---------------  
         // Load Status Data
         if (!$data = $this->status->load($id)) {
@@ -191,7 +191,7 @@ class StatusBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log, Backend::infoAuditTabs())
+        // Tabs: Info | Changes (audit log, Backend::infoAuditTabs())
         if ($this->backend->infoAuditTabs("Status/status_info.php?id={$id}", 'status', $id)) return;
 
         // Data
@@ -199,7 +199,7 @@ class StatusBackend {
         $this->backend->infoAdd($this->status, 'label', $data['label'], ['primary']);
         $this->backend->infoAdd($this->status, 'icon', $data['icon']);
         $this->backend->infoAdd($this->status, 'color_class', $data['color_class']);
-        // Gruppen, die den Status setzen dürfen (Superuser immer)
+        // Groups that may set the status (superuser always)
         $groups = $this->_groupOptions();
         $items = [$this->cms->textOrSnippet((string)$this->_superuserLabel())];
         foreach ((array)$data['group_ids'] as $groupId) {
@@ -212,31 +212,31 @@ class StatusBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/status_edit.php).
+     * Create / copy / change / delete (backend/status_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md).
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)).
      *
-     * Vorweg der Schutz der beiden festen Status: alles außer 'create' bricht bei einer
-     * Id <= 1 sofort mit exit ab - noch bevor irgendetwas ausgegeben wird.
+     * First, the protection of the two fixed statuses: everything except 'create' aborts
+     * with exit immediately for an id <= 1 - before anything is output.
      */
     public function edit(): void
     {
-        // Seiten-Parameter
+        // Page parameters
         $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->function = (string)($_REQUEST['function'] ?? '');
         if ($this->function == '') $this->function = 'edit';
         $this->data = (array)($_REQUEST['data'] ?? []);
         $this->data['status_id'] = $this->id;
-        // Neu: Anlegen bzw. das Hiddenfeld 'new' des Formulars - die Id 0 allein
-        // unterscheidet nicht zwischen neuem Status und Grundstatus "enabled"
+        // New: create, or the hidden field 'new' of the form - the id 0 alone
+        // does not distinguish between a new status and the basic status "enabled"
         $this->isNew = ($this->function === 'create') || !empty($_REQUEST['new']);
 
-        // status "enabled", "disabled": nur die Gruppenzuordnung (Superuser)
+        // status "enabled", "disabled": only the group assignment (superuser)
         if (!$this->isNew && $this->id <= 1
             && !(in_array($this->function, ['edit', 'save', 'errors'], true) && $this->backend->isSuperuser())) exit;
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_' . $this->function);
 
         // Container header
@@ -283,7 +283,7 @@ class StatusBackend {
     }
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     private function _editCreate(): void
     {
@@ -295,10 +295,10 @@ class StatusBackend {
     {
         $this->data = $this->status->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the id now
         if ($this->function == 'copy') {
             $this->id = 0;
             $this->isNew = true;
@@ -307,8 +307,8 @@ class StatusBackend {
     }
 
     /**
-     * Überschrift für Formular und Detailansicht. Beim Löschen und in der
-     * Detailansicht steht der Status selbst darüber - mit seinem Icon in seiner Farbe.
+     * Headline for form and detail view. When deleting and in the
+     * detail view, the status itself is shown above it - with its icon in its color.
      */
     private function _editHeadline() {
         if (in_array($this->function, ['delete', 'info'])) {
@@ -328,12 +328,12 @@ class StatusBackend {
     }
 
     /**
-     * function=save: speichern. $fields leer = alle Schema-Felder aus $data.
+     * function=save: save. $fields empty = all schema fields from $data.
      */
     private function _editSave(): void
     {
-        // Prüfe Daten und speichere - die Mehrfachauswahl schickt ohne Auswahl nichts
-        // (= keine Gruppe); bei den beiden Grundstatus nur die Gruppen
+        // Check data and save - the multiple selection sends nothing without a selection
+        // (= no group); for the two basic statuses only the groups
         if ($this->backend->isSuperuser()) $this->data['group_ids'] = (array)($this->data['group_ids'] ?? []);
         $saved = (!$this->isNew && $this->id <= 1)
             ? $this->status->saveGroups($this->id, (array)($this->data['group_ids'] ?? []))
@@ -343,7 +343,7 @@ class StatusBackend {
             $msg = $this->cms->snippet('status.message_status_saved');
             $this->backend->balloon('success', $msg);
 
-            // Referer aktualisieren und Fenster schließen
+            // Refresh referer and close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -355,24 +355,24 @@ class StatusBackend {
     }
 
     /**
-     * function=delete_confirm: löschen.
+     * function=delete_confirm: delete.
      *
-     * Der Ersatz-Status muss VOR delete() gesetzt werden - Status::hookOnDelete() läuft
-     * innerhalb von delete() und holt den Wert dort ab.
+     * The replacement status must be set BEFORE delete() - Status::hookOnDelete() runs
+     * inside delete() and fetches the value there.
      */
     private function _editDeleteConfirm(): void
     {
-        // Ersatzstatus für Tabelle record festlegen
+        // Set replacement status for table record
         $replacementId = (int)($_REQUEST['data']['replacement_id'] ?? 1);
         $this->status->setReplacementId($replacementId);
 
-        // Status löschen, die Ersetzung in `record` übernimmt ein Hook
+        // Delete status, the replacement in `record` is handled by a hook
         if ($this->status->delete($this->id)) {
             // Balloon Message
             $msg = $this->cms->snippet('status.message_status_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -384,7 +384,7 @@ class StatusBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -396,13 +396,13 @@ class StatusBackend {
     /**
      * Das Eingabeformular.
      *
-     * Bearbeitbar sind nur `label` und `icon`. `color_class` steht zwar im Schema, hat
-     * hier aber kein Eingabefeld - ein neu angelegter Status bekommt also keine Farbe.
+     * Only `label` and `icon` can be edited. `color_class` is in the schema, but
+     * has no input field here - so a newly created status gets no color.
      *
-     * Bei der Position wählt der Redakteur den VORGÄNGER; der Optionsschlüssel ist
-     * dessen position + 1, also die Zielposition. Der Eintrag "an den Anfang" trägt den
-     * Schlüssel 5, weil die Positionen 1 bis 4 den mitgelieferten Status vorbehalten
-     * sind - aus demselben Grund führt die Abfrage nur Einträge ab status_id 4 auf.
+     * For the position, the editor chooses the PREDECESSOR; the option key is
+     * its position + 1, i.e. the target position. The entry "at the beginning" has the
+     * key 5, because positions 1 to 4 are reserved for the bundled statuses - for the same
+     * reason the query only lists entries from status_id 4 on.
      */
     private function _editForm(): void
     {
@@ -413,7 +413,7 @@ class StatusBackend {
         // Load Form
         $this->backend->formInit('status.edit_form');
 
-        // Grundstatus (0, 1): nur die Gruppen
+        // Basic statuses (0, 1): only the groups
         $basic = (!$this->isNew && $this->id <= 1);
         if ($basic) {
             $this->backend->formReplace('{data_label}', '');
@@ -426,7 +426,7 @@ class StatusBackend {
             $this->backend->formField($this->status, ['name' => 'icon', 'value' => $this->data['icon'] ?? '', 'id' => $this->id]);
         }
 
-        // Benutzergruppen, die den Status setzen dürfen (nur Superuser)
+        // User groups that may set the status (superuser only)
         if ($this->backend->isSuperuser()) {
             $this->backend->formField($this->status, [
                 'id' => $this->id,
@@ -478,7 +478,7 @@ class StatusBackend {
     }
 
     /**
-     * Benutzergruppen für die Zuordnung: group_id => Bezeichnung (ohne Superuser).
+     * User groups for the assignment: group_id => label (without superuser).
      */
     private function _groupOptions(): array
     {
@@ -494,7 +494,7 @@ class StatusBackend {
         return $options;
     }
 
-    /** Bezeichnung der Superuser-Gruppe (sie darf jeden Status setzen) */
+    /** Label of the superuser group (it may set every status) */
     private function _superuserLabel(): string
     {
         $this->db->pushResult();
@@ -505,13 +505,13 @@ class StatusBackend {
     }
 
     /**
-     * function=delete: Löschbestätigung mit Auswahl des Ersatz-Status.
+     * function=delete: deletion confirmation with selection of the replacement status.
      *
-     * `replacement_id` ist kein Feld der Tabelle. Die Felddefinition wird von
-     * `status_id` geborgt (gleicher Typ, gleiche Prüfungen) und nur neu beschriftet.
+     * `replacement_id` is not a field of the table. The field definition is borrowed from
+     * `status_id` (same type, same checks) and only relabeled.
      *
-     * Database::fetchPairs() liefert die zweispaltige Abfrage direkt als
-     * id => label-Array, das array_map() löst darin noch #-Snippets auf.
+     * Database::fetchPairs() returns the two-column query directly as an
+     * id => label array, in which array_map() still resolves #-snippets.
      */
     private function _editDeleteForm(): void
     {

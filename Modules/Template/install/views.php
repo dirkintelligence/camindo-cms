@@ -1,8 +1,8 @@
 <?php
-// Ansichten des Moduls, die ein Werkzeug öffnen darf (Core\BackendViews, z. B. der
-// Assistent des Moduls Ai mit ui__open): Script => Beschreibung (englisch, für das
-// Sprachmodell) und erlaubte Parameter ('int', 'string' oder Liste erlaubter Werte).
-// Nur Scripte, die beim Öffnen nichts ändern - keine Aktionen, keine ajax-Scripte.
+// Views of the module that may open a tool (Core\BackendViews, e.g. the
+// assistant of the module Ai with ui__open): script => description (English, for the
+// language model) and allowed parameters ('int', 'string' or list of allowed values).
+// Only scripts that change nothing when opened - no actions, no ajax scripts.
 return [
     'template_areas.php' => [
         'description' => 'Templates: tree of the template areas per instance (page templates, includes, e-mails, trigger templates …).',

@@ -1,128 +1,126 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `admin` - die Backend-Benutzer.
+ * Dataset subclass for the table `admin` - the backend users.
  *
- * "Administrator" heißt in camindo jeder Benutzer mit Anmelderecht am Backend, unabhängig
- * von seinen Berechtigungen. Nicht zu verwechseln mit "User": das sind die Besucher des
- * Frontends (siehe Camindo\Core\Modules\Record\RecordUser).
+ * In camindo, "admin" means any user with the right to log in to the backend, regardless
+ * of their permissions. Not to be confused with "frontend user": those are the visitors of
+ * the frontend (see Camindo\Core\Modules\Record\RecordUser).
  *
- * Neben den üblichen Dataset-Aufgaben enthält die Klasse die Anmeldung selbst -
- * loginByName() und, für die Zwei-Faktor-Anmeldung, loginByCode().
+ * Besides the usual dataset tasks, the class contains the login itself -
+ * loginByName() and, for two-factor login, loginByCode().
  *
- * SCHUTZ DER GESPEICHERTEN DATEN
+ * PROTECTION OF STORED DATA
  * --------------------
- *     password              Feldtyp 'password' -> Crypt::passwordHash(), 64 Zeichen mit
- *                           eingebettetem Salt. Nicht umkehrbar; nur passwordVerify()
- *                           kann vergleichen.
- *     sig                   Signatur über admin_id, name, password, group_id,
- *                           status_id und second_factor (Camindo\Core\Integrity).
- *                           hookOnSaved() schreibt sie nach jedem Speichern; die
- *                           Anmeldung und jeder Backend-
- *                           Request (Session::load()) prüfen sie. Eine per SQL
- *                           veränderte Zeile ist damit wertlos.
- *     email, mobile, phone  Feldtyp 'encrypted' -> Crypt::encrypt(), varbinary-Spalten.
- *                           Umkehrbar, aber nur exakt durchsuchbar (data_enc-Prinzip).
- *     uid                   Zufallsschlüssel für die Zwei-Faktor-Anmeldung.
- *     second_factor,        Authenticator-App (TotpFactor): nicht im Schema, save()
- *     totp_*                schreibt sie nie, hookOnLoaded() nimmt Secret und Schritt
- *                           aus load() heraus. Secret verschlüsselt an die Zeile
- *                           gebunden, second_factor in der Signatur; dazu die Tabelle
- *                           admin_recovery_code (gehashte Wiederherstellungscodes).
- *     ft                    Volltextspalte, gespeist aus name, displayname, primename
- *                           und sortname (siehe source_fields im Schema).
+ *     password              Field type 'password' -> Crypt::passwordHash(), 64 characters
+ *                           with embedded salt. Not reversible; only passwordVerify()
+ *                           can compare.
+ *     sig                   Signature over admin_id, name, password, group_id,
+ *                           status_id and second_factor (Camindo\Core\Integrity).
+ *                           hookOnSaved() writes it after every save; the login and every
+ *                           backend request (Session::load()) check it. A row changed
+ *                           by SQL is therefore worthless.
+ *     email, mobile, phone  Field type 'encrypted' -> Crypt::encrypt(), varbinary columns.
+ *                           Reversible, but only searchable as an exact match (data_enc principle).
+ *     uid                   Random key for the two-factor login.
+ *     second_factor,        Authenticator app (TotpFactor): not in the schema, save()
+ *     totp_*                never writes them, hookOnLoaded() takes the secret and time step
+ *                           out of load(). The secret is encrypted and bound to the row,
+ *                           second_factor is in the signature; plus the table
+ *                           admin_recovery_code (hashed recovery codes).
+ *     ft                    Full-text column, fed from name, displayname, primename
+ *                           and sortname (see source_fields in the schema).
  *
- * BERECHTIGUNGEN
+ * PERMISSIONS
  * --------------------
- * Über group_id, Gruppe 1 ist der Superuser. Die Gruppen selbst liest derzeit
- * Backend::getGroups() mit direktem SQL - die Klasse Group ist noch ein leeres Gerüst.
+ * Via group_id; group 1 is the superuser. Backend::getGroups() currently reads the
+ * groups with direct SQL - the class Group is still an empty skeleton.
  *
- * PERSÖNLICHE EINSTELLUNGEN (`settings`, JSON)
+ * PERSONAL SETTINGS (`settings`, JSON)
  * --------------------
- *     language_id    bevorzugte Sprachversion: der Reiter, den die Eingabemaske eines
- *                    Datensatzes zuerst öffnet (area.details.tabs); '' = Hauptsprache
- *     backend_code   Backend-Sprache der Snippets (Cms::backendLanguages())
- *     locale         ICU-Locale der Datums-, Zeit- und Zahlenformate (Cms::userLocale)
- *     timezone       Zeitzone für Datums- und Zeitangaben (Cms::userTZ)
- *     fed            Frontend-Editing: 0 aus, 1 bis Browser-Ende/Logout, 2 dauerhaft
- *                    (Cookie 'fed', siehe Cms::fedActive())
- *     widgets        Widgets der Startseite als Liste
- *                    [['module' => 'Logfiles', 'position' => 2], …] - in einen Platz
- *                    passen mehrere, Platz 1 sind die Modulkacheln
+ *     language_id    Preferred language version: the tab that the input mask of a
+ *                    record opens first (area.details.tabs); '' = main language
+ *     backend_code   Backend language of the snippets (Cms::backendLanguages())
+ *     locale         ICU locale of the date, time and number formats (Cms::userLocale)
+ *     timezone       Time zone for date and time values (Cms::userTZ)
+ *     fed            Frontend editing: 0 off, 1 until the browser closes/logout, 2 permanent
+ *                    (cookie 'fed', see Cms::fedActive())
+ *     widgets        Widgets of the start page as a list
+ *                    [['module' => 'Logfiles', 'position' => 2], …] - several may fit
+ *                    into one slot; slot 1 is the module tiles
  *                    (Camindo\Core\Widgets)
- *     reports        abonnierte Berichte des Zeitplaners (scheduler_ids)
- *     message_digest Zusammenfassung der internen Nachrichten per E-Mail: 0 aus,
- *                    1 täglich (Zeitplaner-Aufgabe messagedigest, MessageDigest)
- * Gepflegt über AdminBackend::settings() (rechts oben im Backend bzw. als Reiter in
- * der Detailansicht - dort stellt ein Superuser sie für andere Admins ein) und über
- * das Anmeldeformular (Backend-Sprache, Locale, Zeitzone). Die Werte liegen in den
- * Session-Details und gelten ab Session::load() für jeden Request
- * (Cms::applyAdminSettings()); hookOnSaved() schreibt sie in laufende Sessions nach.
+ *     reports        Subscribed reports of the scheduler (scheduler_ids)
+ *     message_digest Summary of the internal messages by email: 0 off,
+ *                    1 daily (scheduler task messagedigest, MessageDigest)
+ * Maintained via AdminBackend::settings() (top right in the backend, or as a tab in the
+ * detail view - there a superuser sets them for other admins) and via the login form
+ * (backend language, locale, time zone). The values are kept in the session details and
+ * apply from Session::load() on for every request (Cms::applyAdminSettings());
+ * hookOnSaved() writes them into running sessions.
  *
- * SCHUTZ GEGEN DURCHPROBIEREN
+ * PROTECTION AGAINST BRUTE FORCE
  * --------------------
- * loginByName() fragt vor jeder Prüfung LoginGuard, ob der eingegebene Name gerade
- * gesperrt ist, und meldet jeden Fehlversuch dorthin zurück. Gezählt wird der
- * eingegebene Name - auch einer, den es gar nicht gibt: sonst verriete das Verhalten
- * der Anmeldung, welche Konten existieren. Einstellungen: admin.bruteforce_max,
+ * loginByName() asks LoginGuard before every check whether the entered name is currently
+ * blocked, and reports every failed attempt back there. The counter is kept per entered
+ * name - including one that does not exist at all: otherwise the behavior of the login
+ * would reveal which accounts exist. Settings: admin.bruteforce_max,
  * admin.bruteforce_delay, admin.bruteforce_ip.
  *
- * Bei genau bruteforce_max Fehlversuchen ist noch ein letzter Versuch frei, und die
- * Meldung sagt das auch. Erst darüber wird gesperrt.
+ * At exactly bruteforce_max failed attempts, one last attempt is still allowed, and the
+ * message says so. Only beyond that is the account blocked.
  *
- * Bekanntes Gerät (Geräte-Cookie, LoginDevices): Fehlversuche zählen dann auf einen
- * eigenen Schlüssel je Konto und Gerät (guardKey()), nicht auf den Namen. Wer den
- * Namen von außen absichtlich sperrt, sperrt damit nicht den Inhaber an seinem
- * eigenen Rechner aus; ein kopiertes Cookie bekommt ebenfalls nur bruteforce_max
- * Versuche. Die Drosselung je IP (admin.throttle.login_ip) gilt für alle.
+ * Known device (device cookie, LoginDevices): failed attempts then count against a
+ * separate key per account and device (guardKey()), not against the name. Someone who
+ * deliberately locks the name from outside does not lock out the owner on their own
+ * computer; a copied cookie likewise gets only bruteforce_max attempts. The throttling
+ * per IP (admin.throttle.login_ip) applies to everyone.
  *
- * ZWEI-FAKTOR-ANMELDUNG
+ * TWO-FACTOR LOGIN
  * --------------------
- * loginByName() legt nach dem richtigen Passwort eine uid an und startet den zweiten
- * Faktor des Admins (secondFactor(), SecondFactorInterface), ohne schon eine Session
- * zu erzeugen; loginByCode() prüft den eingegebenen Code und meldet erst dann an.
+ * After the correct password, loginByName() creates a uid and starts the second factor
+ * of the admin (secondFactor(), SecondFactorInterface), without creating a session yet;
+ * loginByCode() checks the entered code and only then logs in.
  *
- *     TotpFactor   Authenticator-App (RFC 6238) oder Wiederherstellungscode - wenn
- *                  der Admin TOTP eingerichtet hat und security.admin_2fa nicht
- *                  'email' ist
- *     EmailFactor  fünfstelliger Code per E-Mail - sonst, wenn admin.2_factor an ist
+ *     TotpFactor   Authenticator app (RFC 6238) or recovery code - if
+ *                  the admin has set up TOTP and security.admin_2fa is not
+ *                  'email'
+ *     EmailFactor  five-digit code by email - otherwise, if admin.2_factor is on
  *
- * Das Zeitfenster steht in admin.2_factor_expiration. Jede uid ist genau einen
- * Bestätigungsversuch wert - danach wird sie neu gewürfelt, gleich ob der Code
- * stimmte. Ein falscher Code zählt zusätzlich im LoginGuard auf den Namen des
- * Kontos, und ein richtiges Passwort setzt den Zähler nicht mehr zurück - erst die
- * vollständige Anmeldung. Sonst ließe sich ein sechsstelliger Code mit Passwort und
- * Code im Wechsel beliebig oft raten.
+ * The time window is set in admin.2_factor_expiration. Each uid is good for exactly one
+ * confirmation attempt - afterwards it is re-randomized, whether or not the code was
+ * correct. A wrong code also counts in LoginGuard against the name of the account, and a
+ * correct password does not reset the counter - only a complete login does. Otherwise a
+ * six-digit code could be guessed arbitrarily often by alternating password and code.
  *
- * Mit security.admin_2fa = totp_required müssen Superuser TOTP haben. Fehlt es,
- * endet die Anmeldung nicht mit einer Session, sondern mit dem Einrichten im
- * Anmeldedialog (_loginComplete() -> 'totp_setup', loginByTotpSetup()).
+ * With security.admin_2fa = totp_required, superusers must have TOTP. If it is missing,
+ * the login does not end with a session but with the setup in the login dialog
+ * (_loginComplete() -> 'totp_setup', loginByTotpSetup()).
  *
- * Unabhängig von admin.2_factor kann ein Admin den E-Mail-Code für sich selbst
- * wählen (admin.second_factor = 'email', eingerichtet in AdminBackend::totp()) -
- * auch als Rückweg von der Authenticator-App.
+ * Independent of admin.2_factor, an admin can choose the email code for themselves
+ * (admin.second_factor = 'email', set up in AdminBackend::totp()) -
+ * also as a way back from the authenticator app.
  *
- * PASSWORT ÄNDERN MÜSSEN
+ * MUST CHANGE PASSWORD
  * --------------------
- * Vor der Session prüft _loginComplete(), ob das Passwort erneuert werden muss:
+ * Before the session, _loginComplete() checks whether the password must be renewed:
  *
- *     password_change = 1        ein anderer Admin hat es gesetzt (Anlegen,
- *                                Zurücksetzen durch den Superuser) - hookOnSaved()
- *     password_changed_at alt    älter als admin.password_retention_days
+ *     password_change = 1        another admin set it (creation,
+ *                                reset by the superuser) - hookOnSaved()
+ *     password_changed_at old    older than admin.password_retention_days
  *
- * Dann gibt es statt der Session eine frische uid und 'password_renew'; der
- * Anmeldedialog fragt das neue Passwort ab (loginByPasswordChange()). Es muss der
- * Richtlinie genügen und sich vom bisherigen unterscheiden. Erst danach folgen -
- * falls nötig - die Pflicht-Einrichtung von TOTP und die Session.
+ * Then, instead of the session, there is a fresh uid and 'password_renew'; the
+ * login dialog asks for the new password (loginByPasswordChange()). It must meet the
+ * policy and differ from the previous one. Only after that follow - if needed - the
+ * mandatory setup of TOTP and the session.
  *
- * ANMELDEGERÄTE
+ * LOGIN DEVICES
  * --------------------
- * Nach jeder vollständigen Anmeldung (mit Session) verbucht LoginDevices das Gerät;
- * ein unbekanntes Gerät eines Kontos, das schon Geräte hat, löst eine E-Mail aus
- * (security.device_notify, security.login_notifier). Die Zwei-Faktor-Stufe bleibt
- * auch auf bekannten Geräten.
+ * After every complete login (with session), LoginDevices records the device;
+ * an unknown device of an account that already has devices triggers an email
+ * (security.device_notify, security.login_notifier). The two-factor step remains
+ * in place even on known devices.
  *
- * @see Camindo\Core\Modules\Admin\AdminBackend  Backend-Oberfläche
- * @see Camindo\Core\Session                     Sitzungsverwaltung
+ * @see Camindo\Core\Modules\Admin\AdminBackend  Backend interface
+ * @see Camindo\Core\Session                     Session management
  * @see Camindo\Core\Dataset
  */
 namespace Camindo\Core\Modules\Admin;
@@ -138,20 +136,20 @@ use Camindo\Core\RateLimiter;
 use Camindo\Core\Widgets;
 
 /**
- * @property-read EmailFactor $emailFactor  Nachgeladen, siehe $lazyServices
- * @property-read TotpFactor $totpFactor    Nachgeladen, siehe $lazyServices
- * @property-read WebAuthnFactor $webAuthnFactor  Nachgeladen, siehe $lazyServices
- * @property-read LoginGuard $loginGuard  Nachgeladen, siehe $lazyServices
- * @property-read Integrity $integrity    Nachgeladen, siehe $lazyServices
- * @property-read Widgets $widgets        Nachgeladen, siehe $lazyServices
- * @property-read LoginDevices $loginDevices  Nachgeladen, siehe $lazyServices
- * @property-read RateLimiter $rateLimiter  Nachgeladen, siehe $lazyServices
- * @property-read ClientIp $clientIp      Nachgeladen, siehe $lazyServices
+ * @property-read EmailFactor $emailFactor  Loaded on demand, see $lazyServices
+ * @property-read TotpFactor $totpFactor    Loaded on demand, see $lazyServices
+ * @property-read WebAuthnFactor $webAuthnFactor  Loaded on demand, see $lazyServices
+ * @property-read LoginGuard $loginGuard  Loaded on demand, see $lazyServices
+ * @property-read Integrity $integrity    Loaded on demand, see $lazyServices
+ * @property-read Widgets $widgets        Loaded on demand, see $lazyServices
+ * @property-read LoginDevices $loginDevices  Loaded on demand, see $lazyServices
+ * @property-read RateLimiter $rateLimiter  Loaded on demand, see $lazyServices
+ * @property-read ClientIp $clientIp      Loaded on demand, see $lazyServices
  */
 class Admin extends Dataset {
 
-    // Nur bei der Anmeldung bzw. beim Speichern gebraucht - deshalb nicht im
-    // Konstruktor, sondern erst beim ersten Zugriff aus dem Container geholt.
+    // Only needed at login and on save - so not fetched in the constructor,
+    // but on first access from the container.
     // @see Camindo\Core\LazyServicesTrait
     protected array $lazyServices = [
         'emailFactor' => EmailFactor::class,
@@ -165,12 +163,12 @@ class Admin extends Dataset {
         'clientIp' => ClientIp::class,
     ];
 
-    // Audit-Log: Anmeldecode und -zeitpunkt, Signatur und persönliche Oberflächen-
-    // Einstellungen gehören nicht ins Protokoll (Passwort: nur "geändert")
+    // Audit log: login code and time, signature and personal interface
+    // settings do not belong in the log (password: only "changed")
     protected array $auditIgnore = ['uid', 'uid_date', 'code', 'login_date', 'settings'];
 
-    // changePassword(): der Admin setzt sein eigenes Passwort (auch im Anmeldedialog,
-    // wo es noch keine Session gibt) - kein erneuter Änderungszwang
+    // changePassword(): the admin sets their own password (also in the login dialog,
+    // where there is no session yet) - no renewed obligation to change
     private bool $passwordChangedBySelf = false;
 
     protected function hookDefinition(): void
@@ -200,8 +198,8 @@ class Admin extends Dataset {
                 'type'  => 'password',
                 'label' => '#admin.field_admin_password',
                 'display_type' => 'password',
-                // Länge der Eingabe; die eigentlichen Anforderungen stellt die
-                // Extension Password (security.password_policy, auch serverseitig)
+                // Length of the input; the actual requirements are set by the
+                // Password extension (security.password_policy, also server-side)
                 'min'   => 8,
                 'max'   => 128,
                 'flags' => ['not_empty'],
@@ -265,8 +263,8 @@ class Admin extends Dataset {
                 'label' => '#admin.field_admin_ft',
                 'source_fields' => ['name', 'display_name', 'primename', 'sortname']
             ],
-            // Persönliche Einstellungen - siehe Klassenkommentar. Die Subfelder werden
-            // nur geprüft, wenn 'settings' in $fields steht (AdminBackend::settings()).
+            // Personal settings - see class comment. The subfields are only checked
+            // if 'settings' is in $fields (AdminBackend::settings()).
             'settings' => [
                 'type'  => 'json',
                 'label' => '#admin.field_admin_settings',
@@ -319,14 +317,14 @@ class Admin extends Dataset {
                 'type'  => 'json',
                 'label' => '#admin.field_admin_settings_widgets',
             ],
-            // abonnierte Berichte des Zeitplaners (scheduler_ids)
+            // subscribed reports of the scheduler (scheduler_ids)
             'settings.reports' => [
                 'type'  => 'json',
                 'display_type' => 'checkbox',
                 'label' => '#admin.field_admin_settings_reports',
                 'tooltip' => '#admin.tooltip_settings_reports',
             ],
-            // Zusammenfassung der internen Nachrichten per E-Mail (MessageDigest)
+            // Summary of the internal messages by email (MessageDigest)
             'settings.message_digest' => [
                 'type'  => 'integer',
                 'display_type' => 'radio',
@@ -348,29 +346,28 @@ class Admin extends Dataset {
      * 
      * @param string   $name         Column `name`
      * @param string   $password     Column `password` unhashed
-     * @param string   $interface    Oberfläche der Session: backend | php
-     *                               (Access::INTERFACES) - die Gruppe muss sie
-     *                               benutzen dürfen
-     * @param int|null $maxLifetime  php: Höchstlaufzeit der Session (Session::create())
-     * @return array|null            Rückgabewerte bei Erfolg: Admin-Data, ansonsten null
-     *                               Bei aktiver Zwei-Faktor-Anmeldung ist noch KEINE Session
-     *                               erzeugt - dann fehlt 'sessid' im Ergebnis und es muss
-     *                               loginByCode() folgen.
+     * @param string   $interface    Session interface: backend | php
+     *                               (Access::INTERFACES) - the group must be
+     *                               allowed to use it
+     * @param int|null $maxLifetime  php: maximum session lifetime (Session::create())
+     * @return array|null            Return values on success: admin data, otherwise null.
+     *                               With two-factor login active, NO session is
+     *                               created yet - then 'sessid' is missing from the result and
+     *                               loginByCode() must follow.
      *
-     * Fehlermeldungen landen in Cms::$errors, der Aufrufer holt sie mit errorMsg() ab.
-     * Ob der Benutzername oder das Passwort falsch war, wird bewusst nicht unterschieden.
-     * Jeder Fehlschlag wandert in den LoginGuard; ist der Name dort gesperrt, wird gar
-     * nicht mehr geprüft.
+     * Error messages end up in Cms::$errors; the caller retrieves them with errorMsg().
+     * Whether the user name or the password was wrong is deliberately not distinguished.
+     * Every failure goes into LoginGuard; if the name is blocked there, no further check is made.
      */
     public function loginByName(string $name, string $password, string $interface = 'backend', ?int $maxLifetime = null): ?array
     {
-        // Steuerzeichen raus: kein Name enthält sie, und guardKey() trennt damit den
-        // Gerätezähler vom Namen - ein eingegebener Name kann ihn so nicht treffen
+        // Strip control characters: no name contains them, and guardKey() thereby separates
+        // the device counter from the name - an entered name cannot hit it this way
         $trimmedName = trim((string)preg_replace('/[\x00-\x1F\x7F]/u', '', $name));
         $guardKey = $this->guardKey($trimmedName);
 
-        // Gesperrt? Dann ohne weitere Prüfung abweisen - eine Sperre soll gerade nicht
-        // davon abhängen, ob die Zugangsdaten diesmal stimmen.
+        // Blocked? Then reject without further checks - a block should not
+        // depend on whether the credentials are correct this time.
         if ($blockedSeconds = $this->loginGuard->blockedFor($guardKey)) {
             $this->cms->errorsReset();
             $this->cms->error($this->cms->snippet('admin.error_login_blocked', [
@@ -378,9 +375,9 @@ class Admin extends Dataset {
             ]));
             return null;
         }
-        // Fehlversuche je Herkunft über alle Namen (Password-Spraying: viele Namen
-        // mit je einem Passwort - die Sperre je Name greift dann nie).
-        // admin.throttle.login_ip, gezählt in _loginFailedMessage()
+        // Failed attempts per origin across all names (password spraying: many names
+        // with one password each - the per-name block then never triggers).
+        // admin.throttle.login_ip, counted in _loginFailedMessage()
         if (!$this->rateLimiter->allows('admin_login_ip', $this->clientIp->rateKey())) {
             $this->cms->errorsReset();
             $this->cms->error($this->cms->snippet('admin.error_login_blocked', [
@@ -390,12 +387,12 @@ class Admin extends Dataset {
         }
 
         if (!$data = $this->load($trimmedName, 'name')) {
-            // Admin nicht gefunden
-            // Sicherheit: Hinweis allgemein halten (unklar belassen ob Username oder Passwort falsch ist)
+            // Admin not found
+            // Security: keep the message generic (leave it unclear whether the username or password was wrong)
             //
-            // Auch ohne Treffer wird geprüft. Sonst antwortet ein erfundener Name
-            // messbar schneller als ein vorhandener, und die gleiche Fehlermeldung
-            // nützt nichts mehr - die Laufzeit verriete das Konto.
+            // The check also runs without a match. Otherwise a made-up name responds
+            // measurably faster than an existing one, and the same error message
+            // would be useless - the running time would reveal the account.
             $this->crypt->passwordVerify($password, '');
 
             $this->cms->errorsReset();
@@ -406,24 +403,24 @@ class Admin extends Dataset {
         // Admin found
         $adminId = (int)$data['admin_id'];
 
-        // Passwort prüfen (Salt steckt im gespeicherten Wert, Vergleich in
-        // konstanter Zeit - siehe Crypt)
+        // Check the password (the salt is part of the stored value, comparison in
+        // constant time - see Crypt)
         if (!$this->crypt->passwordVerify($password, (string)$data['password'])) {
-            // Passwort passt nicht
+            // Password does not match
             $this->cms->error($this->_loginFailedMessage($guardKey));
             return null;
         }
 
-        // Signatur der Zeile: eine per SQL geänderte Gruppe, ein getauschter Name
-        // oder Hash fällt hier auf (Integrity). Die Meldung bleibt die allgemeine.
+        // Row signature: a group changed by SQL, or a swapped name
+        // or hash, is detected here (Integrity). The message stays the generic one.
         if ($this->integrity->verifyAdmin($adminId) === null) {
             $this->cms->error($this->_loginFailedMessage($guardKey));
             return null;
         }
 
-        // Hash im früheren Format oder mit alten Parametern: jetzt, wo das Passwort
-        // bekannt ist, neu berechnen (Crypt::passwordNeedsRehash()) - direkt, ohne
-        // save(): die Richtlinie gilt für neue Passwörter, nicht für bestehende
+        // Hash in the earlier format or with old parameters: now that the password is
+        // known, recompute it (Crypt::passwordNeedsRehash()) - directly, without
+        // save(): the policy applies to new passwords, not to existing ones
         if ($this->crypt->passwordNeedsRehash((string)$data['password'])) {
             $this->db->query(
                 "UPDATE `admin` SET `password` = ? WHERE `admin_id` = ?",
@@ -435,36 +432,36 @@ class Admin extends Dataset {
         // Status blocked
         if ($data['status_id'] > 0) {
             // Benutzer gesperrt.
-            // Kein Fehlversuch: die Zugangsdaten waren richtig, der Zähler soll dem
-            // rechtmässigen Inhaber eines deaktivierten Kontos nicht zulasten fallen.
+            // Not a failed attempt: the credentials were correct, and the counter should not
+            // count against the legitimate owner of a deactivated account.
             $errorMsg = $this->cms->snippet('admin.error_account_disabled');
             $this->cms->error($errorMsg);
             return null;
         }
 
-        // Oberfläche: darf die Gruppe sie benutzen? (Access, "Oberflächen") - vor
-        // dem zweiten Faktor, damit kein Code für eine unzulässige Anmeldung
-        // verschickt wird. Kein Fehlversuch, wie beim gesperrten Konto.
+        // Interface: may the group use it? (Access, "Interfaces") - before
+        // the second factor, so that no code is sent for an impermissible login.
+        // Not a failed attempt, as with a blocked account.
         if (!$this->_interfaceAllowed($data, $interface)) return null;
 
-        // Zweiter Faktor dieses Admins (E-Mail, TOTP oder keiner)
+        // Second factor of this admin (email, TOTP or none)
         $factor = $this->secondFactor($data);
 
         if ($factor === null) {
-            // Direkte Anmeldung (ohne zweiten Faktor) - das Passwort war alles
+            // Direct login (without second factor) - the password was everything
             $this->loginGuard->clear($guardKey);
             return $this->_loginComplete($data, $interface, $maxLifetime);
         }
 
         // Zwei-Faktor-Anmeldung
         // --------------------
-        // Der Zähler des LoginGuard bleibt hier stehen: Fehlversuche bei der
-        // Code-Eingabe zählen auf denselben Namen (loginByCode()), und ein richtiges
-        // Passwort darf sie nicht löschen - sonst ließe sich ein sechsstelliger
-        // TOTP-Code mit Passwort + Code im Wechsel beliebig oft raten.
+        // The LoginGuard counter stays as it is here: failed attempts at entering the
+        // code count against the same name (loginByCode()), and a correct
+        // password must not clear them - otherwise a six-digit TOTP code could be
+        // guessed arbitrarily often by alternating password and code.
         //
-        // uid anlegen; der Code (E-Mail) kommt vom Faktor. Erst speichern, dann
-        // verschicken: schlägt das Speichern fehl, wäre der Code in der Mail wertlos.
+        // Create uid; the code (email) comes from the factor. Save first, then
+        // send: if saving fails, the code in the email would be worthless.
         $updateData = [
             'admin_id' => $adminId,
             'uid' => $this->crypt->randomKey(32),
@@ -479,41 +476,41 @@ class Admin extends Dataset {
             return null;
         }
         $data['factor'] = $factor->name();
-        // Passkey: Optionen für navigator.credentials.get() (Challenge aus der uid)
+        // Passkey: options for navigator.credentials.get() (challenge from the uid)
         if ($factor instanceof WebAuthnFactor) {
             $data['webauthn'] = $factor->loginOptions($data);
             $data['totp_active'] = $factor->totpActive($adminId);
         }
 
-        // Liefere Admin-Daten zurück - ohne 'sessid': es folgt loginByCode()
+        // Return admin data - without 'sessid': loginByCode() follows
         return $data;
     }
 
     /**
-     * Der zweite Faktor eines Admins (SecondFactorInterface).
+     * The second factor of an admin (SecondFactorInterface).
      *
-     *     Passkey  wenn der Admin Passkeys hat bzw. second_factor = 'webauthn'
+     *     Passkey  if the admin has passkeys, or second_factor = 'webauthn'
      *              (WebAuthnFactor::applies())
-     *     TOTP     wenn der Admin es eingerichtet hat und security.admin_2fa nicht
-     *              'email' ist - unabhängig von admin.2_factor: die eigene Wahl des
-     *              Admins ist der stärkere Faktor und wird nicht abgeschaltet
-     *     E-Mail   sonst, wenn admin.2_factor an ist
-     *     keiner   sonst (null)
+     *     TOTP     if the admin has set it up and security.admin_2fa is not
+     *              'email' - independent of admin.2_factor: the admin's own choice
+     *              is the stronger factor and is not switched off
+     *     Email    otherwise, if admin.2_factor is on
+     *     none     otherwise (null)
      *
      * @param array $data  Admin::load()
      */
     public function secondFactor(array $data): ?SecondFactorInterface
     {
         $adminId = (int)($data['admin_id'] ?? 0);
-        // Passkeys zuerst: nur Passkeys (second_factor 'webauthn') oder Passkeys neben
-        // TOTP - das Formular nimmt dann beides (WebAuthnFactor)
+        // Passkeys first: only passkeys (second_factor 'webauthn') or passkeys alongside
+        // TOTP - the form then accepts both (WebAuthnFactor)
         if ($this->webAuthnFactor->applies($data)) {
             return $this->webAuthnFactor;
         }
         if ($this->totpFactor->available() && $this->totpFactor->isActive($adminId)) {
             return $this->totpFactor;
         }
-        // E-Mail-Code: für alle (admin.2_factor) oder als eigene Wahl des Admins
+        // Email code: for everyone (admin.2_factor) or as the admin's own choice
         if ($this->config->get('admin.2_factor') || $this->emailFactorChosen($adminId)) {
             return $this->emailFactor;
         }
@@ -521,9 +518,9 @@ class Admin extends Dataset {
     }
 
     /**
-     * Hat der Admin den E-Mail-Code selbst gewählt (admin.second_factor = 'email')?
-     * Gelesen wird die signierte Zeile - eine per SQL gesetzte Wahl gälte nicht,
-     * aber ein per SQL entferntes 'totp' auch nicht (Integrity::verifyAdmin()).
+     * Has the admin chosen the email code themselves (admin.second_factor = 'email')?
+     * The signed row is read - a choice set by SQL would not count,
+     * but neither would a 'totp' removed by SQL (Integrity::verifyAdmin()).
      */
     public function emailFactorChosen(int $adminId): bool
     {
@@ -532,9 +529,9 @@ class Admin extends Dataset {
     }
 
     /**
-     * Den E-Mail-Code als eigenen zweiten Faktor ein- bzw. ausschalten
-     * (AdminBackend::totp(); TOTP schaltet TotpFactor::disable() ab).
-     * second_factor steht in der Signatur - danach neu signieren.
+     * Enable or disable the email code as its own second factor
+     * (AdminBackend::totp(); TOTP switches off via TotpFactor::disable()).
+     * second_factor is part of the signature - re-sign afterwards.
      */
     public function setEmailFactor(int $adminId, bool $on): void
     {
@@ -546,11 +543,11 @@ class Admin extends Dataset {
     }
 
     /**
-     * Muss der Admin sein Passwort erneuern, bevor er eine Session bekommt?
-     * (siehe Klassenkommentar "Passwort ändern müssen")
+     * Must the admin renew their password before getting a session?
+     * (see class comment "Must change password")
      *
-     * @return string  '' nein, 'initial' Passwort eines anderen Admins,
-     *                 'expired' älter als admin.password_retention_days
+     * @return string  '' no, 'initial' password set by another admin,
+     *                 'expired' older than admin.password_retention_days
      */
     public function passwordChangeReason(int $adminId): string
     {
@@ -565,7 +562,7 @@ class Admin extends Dataset {
         finally {
             $this->db->popResult();
         }
-        // Ohne Passwort (nur per CLI/SQL angelegt) gibt es nichts zu erneuern
+        // Without a password (created only via CLI/SQL) there is nothing to renew
         if ($row === null || (string)$row['password'] === '') return '';
         if ((int)$row['password_change'] === 1) return 'initial';
         $days = (int)$this->config->get('admin.password_retention_days');
@@ -577,40 +574,40 @@ class Admin extends Dataset {
     }
 
     /**
-     * Muss dieser Admin TOTP erst noch einrichten, bevor er eine Session bekommt?
-     * (security.admin_2fa = totp_required, Superuser ohne TOTP)
+     * Must this admin still set up TOTP before getting a session?
+     * (security.admin_2fa = totp_required, superuser without TOTP)
      */
     public function totpSetupRequired(array $data): bool
     {
         $adminId = (int)($data['admin_id'] ?? 0);
-        // Ein Passkey erfüllt die Pflicht ebenso (der stärkere Faktor)
+        // A passkey fulfills the requirement as well (the stronger factor)
         return $this->totpFactor->requiredFor((int)($data['group_id'] ?? 0))
             && !$this->totpFactor->isActive($adminId)
             && !$this->webAuthnFactor->hasPasskeys($adminId);
     }
 
     /**
-     * Letzter Schritt jeder erfolgreichen Anmeldung: Session anlegen - oder, wenn
-     * TOTP Pflicht ist und noch fehlt, statt der Session eine frische uid für das
-     * Einrichten im Anmeldedialog (loginByTotpSetup()).
+     * Last step of every successful login: create a session - or, if
+     * TOTP is required and still missing, a fresh uid instead of the session for the
+     * setup in the login dialog (loginByTotpSetup()).
      *
      * @param array $data  Admin::load()
-     * @return array|null  $data mit 'sessid' bzw. mit 'uid' + 'totp_setup' (Token,
-     *                     otpauth-URI und Secret, siehe TotpFactor::newSetup())
+     * @return array|null  $data with 'sessid', or with 'uid' + 'totp_setup' (token,
+     *                     otpauth URI and secret, see TotpFactor::newSetup())
      */
     private function _loginComplete(array $data, string $interface = 'backend', ?int $maxLifetime = null): ?array
     {
         $adminId = (int)$data['admin_id'];
         if (!$this->_interfaceAllowed($data, $interface)) return null;
 
-        // Passwort erneuern oder TOTP einrichten geht nur im Anmeldedialog des Backends
+        // Renewing the password or setting up TOTP is only possible in the backend login dialog
         if ($interface !== 'backend'
             && ($this->passwordChangeReason($adminId) !== '' || $this->totpSetupRequired($data))) {
             $this->cms->error($this->cms->snippet('admin.error_login_backend_first'));
             return null;
         }
 
-        // Passwort erneuern (Startpasswort, abgelaufen): vor allem anderen
+        // Renew password (initial password, expired): before anything else
         $reason = $this->passwordChangeReason($adminId);
         if ($reason !== '') {
             $data['uid'] = $this->_newUid($adminId);
@@ -624,19 +621,19 @@ class Admin extends Dataset {
             return $data;
         }
 
-        // Letzte Anmeldung nur als Tag (Datenschutz: keine Arbeitszeiten); das
-        // Zeitfenster der Zwei-Faktor-Anmeldung schließen - uid_date sagt sonst, wann
-        // die Anmeldung begann. Direkt per SQL: login_date steht nicht im Schema.
+        // Last login only as a day (privacy: no working hours); close the
+        // time window of the two-factor login - otherwise uid_date would show when
+        // the login began. Directly via SQL: login_date is not in the schema.
         $this->db->query("UPDATE `admin` SET `login_date` = UTC_DATE(), `uid_date` = '1000-01-01 00:00:00' WHERE `admin_id` = ?",
             'i', [$adminId]);
 
-        // Session Starten. Der Aufrufer setzt damit das Cookie.
+        // Start session. The caller thereby sets the cookie.
         $data['sessid'] = $this->session->create($adminId, $interface, $maxLifetime);
-        // Gerät wiedererkennen, bei einem neuen Hinweis per E-Mail (LoginDevices),
-        // und die Session an das Gerät hängen - Entfernen des Geräts beendet sie
-        // (AdminBackend::devices(), Fremdschlüssel admin_session.device_id).
-        // Nur im Backend: ein Programm hat kein Geräte-Cookie und wäre bei jeder
-        // Anmeldung ein "neues Gerät".
+        // Recognize the device, with a new email notice on a new device (LoginDevices),
+        // and attach the session to the device - removing the device ends it
+        // (AdminBackend::devices(), foreign key admin_session.device_id).
+        // Backend only: a program has no device cookie and would be a "new device"
+        // at every login.
         if ($interface === 'backend') {
             $device = $this->loginDevices->register('admin', $adminId, $data);
             if (!empty($device['device_id'])) {
@@ -647,7 +644,7 @@ class Admin extends Dataset {
     }
 
     /**
-     * Darf die Gruppe des Admins die Oberfläche benutzen? Sonst Meldung in Cms::errors.
+     * May the admin's group use the interface? Otherwise a message in Cms::errors.
      *
      * @param array  $data       Admin::load()
      * @param string $interface  Access::INTERFACES
@@ -660,8 +657,8 @@ class Admin extends Dataset {
     }
 
     /**
-     * Frische uid für einen weiteren Schritt im Anmeldedialog (Passwort erneuern,
-     * TOTP einrichten) - gültig admin.2_factor_expiration Sekunden, ein Versuch.
+     * Fresh uid for a further step in the login dialog (renew password,
+     * set up TOTP) - valid for admin.2_factor_expiration seconds, one attempt.
      */
     private function _newUid(int $adminId): string
     {
@@ -674,17 +671,17 @@ class Admin extends Dataset {
     }
 
     /**
-     * Anmeldung mit neuem Passwort abschließen (siehe Klassenkommentar "Passwort
-     * ändern müssen"): uid einlösen, neues Passwort prüfen (Richtlinie, Wiederholung,
-     * nicht das bisherige) und speichern, dann weiter wie jede Anmeldung
-     * (_loginComplete() - dort ggf. noch das Einrichten von TOTP).
+     * Complete the login with a new password (see class comment "Must change
+     * password"): redeem the uid, check the new password (policy, repetition,
+     * not the previous one) and save it, then continue like every login
+     * (_loginComplete() - there, if needed, setting up TOTP).
      *
-     * Ein abgelehntes Passwort ist kein Fehlversuch im LoginGuard: Name, Passwort
-     * und zweiter Faktor waren bereits richtig.
+     * A rejected password is not a failed attempt in the LoginGuard: name, password
+     * and second factor were already correct.
      *
-     * @return array|null  wie _loginComplete(); bei abgelehntem Passwort
+     * @return array|null  as _loginComplete(); for a rejected password
      *                     ['retry' => true, 'uid' => …, 'password_renew' => …]
-     *                     (Fehler in Cms::errors); null = uid ungültig/abgelaufen
+     *                     (errors in Cms::errors); null = uid invalid/expired
      */
     public function loginByPasswordChange(string $uid, string $password, string $repeat): ?array
     {
@@ -697,7 +694,7 @@ class Admin extends Dataset {
         $adminId = (int)$data['admin_id'];
         $reason = $this->passwordChangeReason($adminId);
         if ($reason === '') {
-            // Inzwischen nicht mehr nötig (anderes Fenster) - einfach weiter
+            // No longer needed (another window) - just continue
             return $this->_loginComplete($data);
         }
 
@@ -708,11 +705,11 @@ class Admin extends Dataset {
     }
 
     /**
-     * Eigenes Passwort erneuern (Anmeldedialog und AdminBackend::password()): gleich
-     * wiederholt, nicht das bisherige, Richtlinie (Dataset::validateValue()).
-     * Das bisherige Passwort prüft der Aufrufer.
+     * Renew own password (login dialog and AdminBackend::password()): repeated
+     * identically, not the previous one, policy (Dataset::validateValue()).
+     * The caller checks the previous password.
      *
-     * @return bool  false: Fehler in Cms::errors
+     * @return bool  false: error in Cms::errors
      */
     public function changePassword(int $adminId, string $password, string $repeat): bool
     {
@@ -730,7 +727,7 @@ class Admin extends Dataset {
             return false;
         }
         $data = ['admin_id' => $adminId, 'password' => $password];
-        // hookOnSaved() setzt password_changed_at und nimmt password_change zurück
+        // hookOnSaved() sets password_changed_at and resets password_change
         $this->passwordChangedBySelf = true;
         try {
             return $this->save(['password'], $data) !== null;
@@ -741,17 +738,17 @@ class Admin extends Dataset {
     }
 
     /**
-     * Schlüssel im LoginGuard für eine Anmeldung an diesem Konto: der Name - oder,
-     * wenn der Browser ein bekanntes Gerät des Kontos ist (LoginDevices), ein
-     * eigener Zähler je Konto und Gerät. So sperrt ein Angreifer, der den Namen
-     * durchprobiert, den Inhaber nicht an dessen eigenem Gerät aus (siehe
-     * Klassenkommentar "Schutz gegen Durchprobieren").
+     * Key in the LoginGuard for a login to this account: the name - or,
+     * if the browser is a known device of the account (LoginDevices), a
+     * separate counter per account and device. Thus an attacker who tries
+     * the name cannot lock out the owner on the owner's own device (see
+     * class comment "Protection against brute force").
      *
-     * Der Gerätezähler beginnt mit einem Steuerzeichen, das loginByName() aus jeder
-     * Eingabe entfernt - ein eingegebener Name trifft ihn nie.
+     * The device counter starts with a control character that loginByName() removes from
+     * every input - an entered name never matches it.
      *
-     * @param string $name     Anmeldename (eingegeben bzw. aus der Zeile)
-     * @param int    $adminId  0 = über den Namen suchen
+     * @param string $name     Login name (entered, or from the row)
+     * @param int    $adminId  0 = search by name
      */
     public function guardKey(string $name, int $adminId = 0): string
     {
@@ -772,23 +769,23 @@ class Admin extends Dataset {
         return $deviceId > 0 ? "\x1Fdevice " . $deviceId . ': ' . $name : $name;
     }
 
-    /** guardKey() für eine Zeile aus _claimUid() (admin_id, name) */
+    /** guardKey() for a row from _claimUid() (admin_id, name) */
     private function _rowGuardKey(array $row): string
     {
         return $this->guardKey((string)$row['name'], (int)$row['admin_id']);
     }
 
     /**
-     * Fehlversuch verbuchen und die passende Meldung dazu liefern.
+     * Record a failed attempt and return the matching message.
      *
-     * Die Meldung bleibt in jedem Fall dieselbe allgemeine - ergänzt nur um den
-     * Hinweis, dass der nächste Versuch der letzte ist. Dieser Hinweis erscheint bei
-     * genau bruteforce_max Fehlversuchen; ab dem nächsten greift die Sperre in
-     * blockedFor(). Er verrät nichts über das Konto: gezählt wird der eingegebene
-     * Name, ob es ihn gibt oder nicht.
+     * The message always stays the same generic one - only supplemented by the
+     * note that the next attempt is the last one. This note appears at
+     * exactly bruteforce_max failed attempts; from the next one on, the block in
+     * blockedFor() applies. It reveals nothing about the account: the entered
+     * name is counted, whether or not it exists.
      *
-     * @param string $name  Schlüssel im LoginGuard (guardKey())
-     * @return string       Fertiger Meldungstext
+     * @param string $name  Key in the LoginGuard (guardKey())
+     * @return string       Finished message text
      */
     private function _loginFailedMessage(string $name): string
     {
@@ -797,16 +794,16 @@ class Admin extends Dataset {
         $max = (int)$this->config->get('admin.bruteforce_max');
         $minutes = (int)ceil((int)$this->config->get('admin.bruteforce_delay') / 60);
 
-        // Dieser Fehlversuch war einer zu viel: ab jetzt greift die Sperre, und der
-        // naechste Aufruf kommt gar nicht mehr bis zur Passwortpruefung. Dann ist der
-        // Hinweis auf die Angaben gegenstandslos - es zaehlt nur noch die Wartezeit.
+        // This failed attempt was one too many: from now on the block applies, and the
+        // next call does not even reach the password check. Then the
+        // hint about the details is moot - only the waiting time counts.
         if ($max > 0 && $attempts > $max) {
             return $this->cms->snippet('admin.error_login_blocked', ['minutes' => $minutes]);
         }
 
         $message = $this->cms->snippet('admin.error_login_failed');
 
-        // Genau bruteforce_max: ein Versuch ist noch frei, und das wird auch gesagt.
+        // Exactly bruteforce_max: one attempt is still free, and this is said as well.
         if ($max > 0 && $attempts == $max) {
             $message .= ' ' . $this->cms->snippet('admin.error_login_last_try', [
                 'minutes' => $minutes
@@ -817,23 +814,23 @@ class Admin extends Dataset {
     }
 
     /**
-     * Login Admin - 2-Faktor-Auth Step 2
+     * Log in admin - 2-factor auth step 2
      *
-     * Der Faktor (E-Mail-Code, TOTP-Code oder Wiederherstellungscode) prüft
-     * SecondFactorInterface::verify(); hier liegt, was für alle gleich ist: uid im
-     * Zeitfenster, ein Versuch je uid, LoginGuard und Signatur.
+     * The factor (email code, TOTP code or recovery code) is checked by
+     * SecondFactorInterface::verify(); what is the same for all lives here: uid within the
+     * time window, one attempt per uid, LoginGuard and signature.
      *
-     * @param string $uid    Wert in Spalte `uid`, per Hidden-Feld im Formular aus Step 1
-     * @param string $code   Eingabe (Code aus E-Mail oder App, Wiederherstellungscode)
-     * @return array|null    Rückgabewerte bei Erfolg: Admin-Data, ansonsten null.
-     *                       Mit 'totp_setup' statt 'sessid': TOTP ist Pflicht und muss
-     *                       noch eingerichtet werden (loginByTotpSetup()).
+     * @param string $uid    Value in column `uid`, from the hidden field in the form, step 1
+     * @param string $code   Input (code from email or app, recovery code)
+     * @return array|null    Return values on success: admin data, otherwise null.
+     *                       With 'totp_setup' instead of 'sessid': TOTP is required and still
+     *                       has to be set up (loginByTotpSetup()).
      */
     public function loginByCode(string $uid, string $code, string $interface = 'backend', ?int $maxLifetime = null): ?array
     {
         $trimmedCode = trim($code);
 
-        // uid einlösen: gültig, im Zeitfenster und genau einmal (siehe _claimUid())
+        // Redeem uid: valid, within the time window and exactly once (see _claimUid())
         if ($trimmedCode === '' || !($row = $this->_claimUid($uid))) {
             $this->cms->error($this->cms->snippet('admin.error_login_code_failed'));
             return null;
@@ -842,8 +839,8 @@ class Admin extends Dataset {
         if ($data === null) return null;
 
         $factor = $this->secondFactor($data);
-        // Kein Faktor mehr (Konfiguration inzwischen geändert) oder falscher Code
-        // uid: Challenge der Passkey-Anmeldung (WebAuthnFactor::challengeFor())
+        // No factor anymore (configuration has changed in the meantime) or wrong code
+        // uid: challenge of the passkey login (WebAuthnFactor::challengeFor())
         if ($factor === null || !$factor->verify(array_replace($data, ['code' => (string)$row['code'], 'uid' => trim($uid)]), $trimmedCode)) {
             $this->cms->error($this->_codeFailedMessage($this->_rowGuardKey($row)));
             return null;
@@ -854,17 +851,17 @@ class Admin extends Dataset {
     }
 
     /**
-     * Anmeldung mit Pflicht-Einrichtung von TOTP abschließen (security.admin_2fa =
-     * totp_required, Superuser ohne TOTP): Code aus der App zum Secret im
-     * Setup-Token prüfen, TOTP einschalten, Session anlegen.
+     * Complete the login with the mandatory TOTP setup (security.admin_2fa =
+     * totp_required, superuser without TOTP): check the code from the app against the secret in the
+     * setup token, enable TOTP, create the session.
      *
-     * Anders als loginByCode() führt ein falscher Code nicht zurück zum Anfang - er
-     * zählt im LoginGuard, und das Ergebnis trägt eine neue uid und dasselbe
-     * Setup-Token, damit der QR-Code nicht erneut gescannt werden muss.
+     * Unlike loginByCode(), a wrong code does not lead back to the start - it
+     * counts in the LoginGuard, and the result carries a new uid and the same
+     * setup token, so the QR code does not have to be scanned again.
      *
-     * @return array|null  bei Erfolg $data mit 'sessid' und 'recovery_codes';
-     *                     bei falschem Code ['retry' => true, 'uid' => …,
-     *                     'totp_setup' => …] (Fehler in Cms::errors); sonst null
+     * @return array|null  on success $data with 'sessid' and 'recovery_codes';
+     *                     on a wrong code ['retry' => true, 'uid' => …,
+     *                     'totp_setup' => …] (errors in Cms::errors); otherwise null
      */
     public function loginByTotpSetup(string $uid, string $token, string $code): ?array
     {
@@ -883,7 +880,7 @@ class Admin extends Dataset {
 
         $codes = $this->totpFactor->enable($data, $token, $code);
         if ($codes === null) {
-            // "Code falsch" ohne "bitte erneut anmelden" - es geht im selben Formular weiter
+            // "Wrong code" without "please log in again" - it continues in the same form
             $this->cms->error($this->_codeFailedMessage($this->_rowGuardKey($row), 'admin.error_totp_code'));
             if ($this->loginGuard->blockedFor($this->_rowGuardKey($row))) return null;
             $newUid = $this->crypt->randomKey(32);
@@ -901,21 +898,21 @@ class Admin extends Dataset {
     }
 
     /**
-     * uid einlösen: Zeile im Zeitfenster suchen und die uid sofort neu würfeln.
-     * Nur wer das UPDATE gewinnt, bekommt die Zeile - zwei gleichzeitige Versuche
-     * mit derselben uid ergeben genau einen.
+     * Redeem uid: find the row within the time window and re-randomize the uid immediately.
+     * Only whoever wins the UPDATE gets the row - two simultaneous attempts
+     * with the same uid yield exactly one.
      *
-     * @return array|null  admin_id, name, code (Stand vor dem Entwerten)
+     * @return array|null  admin_id, name, code (state before invalidation)
      */
     private function _claimUid(string $uid): ?array
     {
         $uid = trim($uid);
-        // Ohne uid gar nicht erst suchen: ein leerer Wert passt auf nichts Sinnvolles
+        // Do not search at all without a uid: an empty value matches nothing sensible
         if ($uid === '') return null;
 
-        // Sekunden, die maximal zwischen Login und Bestätigung des Codes vergehen dürfen.
-        // Der Default steht in Config; ohne ihn waere das Zeitfenster 0 Sekunden gross
-        // und keine Anmeldung koennte je gelingen.
+        // Seconds that may pass at most between login and confirmation of the code.
+        // The default is set in Config; without it the time window would be 0 seconds
+        // and no login could ever succeed.
         $seconds = (int)$this->config->get('admin.2_factor_expiration');
         $this->db->query(
             "SELECT `admin_id`, `name`, `code` FROM `admin` WHERE `uid` = ?"
@@ -926,20 +923,20 @@ class Admin extends Dataset {
         );
         $row = $this->db->num_rows > 0 ? $this->db->fetch() : null;
 
-        // uid in jedem Fall neu wuerfeln, auch beim Fehlversuch. Damit ist jede uid
-        // genau einen Bestaetigungsversuch wert.
+        // Re-randomize the uid in any case, also on a failed attempt. This way every uid
+        // is good for exactly one confirmation attempt.
         $this->invalidateLoginCode($uid);
         if ($row === null || $this->db->affected_rows !== 1) return null;
         return $row;
     }
 
     /**
-     * Nach dem Einlösen der uid: Sperre des LoginGuard und Signatur prüfen, Datensatz
-     * laden. Fehler in Cms::errors.
+     * After redeeming the uid: check the LoginGuard block and the signature, load the
+     * record. Errors in Cms::errors.
      */
     private function _checkClaimed(array $row): ?array
     {
-        // Gesperrt? Dann gar nicht erst prüfen - wie in loginByName()
+        // Blocked? Then do not check at all - as in loginByName()
         if ($blockedSeconds = $this->loginGuard->blockedFor($this->_rowGuardKey($row))) {
             $this->cms->error($this->cms->snippet('admin.error_login_blocked', [
                 'minutes' => (int)ceil($blockedSeconds / 60)
@@ -947,20 +944,20 @@ class Admin extends Dataset {
             return null;
         }
         $adminId = (int)$row['admin_id'];
-        // Signatur der Zeile (siehe loginByName())
+        // Row signature (see loginByName())
         if ($this->integrity->verifyAdmin($adminId) === null) {
             $this->cms->error($this->cms->snippet('admin.error_login_code_failed'));
             return null;
         }
-        // Vollstaendigen Datensatz ueber load() holen statt die Rohzeile weiterzureichen:
-        // load() entschluesselt email/mobile/phone und durchlaeuft die Hooks, so dass
-        // hier dasselbe Array entsteht wie bei loginByName().
+        // Fetch the complete record via load() instead of passing on the raw row:
+        // load() decrypts email/mobile/phone and runs the hooks, so that
+        // the same array results here as with loginByName().
         return $this->load($adminId);
     }
 
     /**
-     * Falscher Code: Fehlversuch im LoginGuard verbuchen (derselbe Zähler wie das
-     * Passwort, admin.bruteforce_max) und die Meldung dazu liefern.
+     * Wrong code: record a failed attempt in the LoginGuard (same counter as the
+     * password, admin.bruteforce_max) and return the message for it.
      */
     private function _codeFailedMessage(string $name, string $snippet = 'admin.error_login_code_failed'): string
     {
@@ -978,15 +975,15 @@ class Admin extends Dataset {
     }
 
     /**
-     * uid neu wuerfeln und den Code loeschen - der bisherige Link ist damit verbraucht.
+     * Re-randomize the uid and delete the code - the previous link is thereby used up.
      *
-     * Wird nach jedem Bestaetigungsversuch aufgerufen, auch nach einem fehlgeschlagenen.
-     * Die uid bleibt dabei ein Zufallswert und wird nicht geleert: ein leeres Feld
-     * wuerde bei der naechsten Abfrage auf alle Konten ohne laufende Anmeldung passen.
+     * Called after every confirmation attempt, including a failed one.
+     * The uid stays a random value and is not cleared: an empty field
+     * would match all accounts without a running login at the next query.
      *
-     * Geht absichtlich direkt ueber SQL statt ueber save(): der Treffer wird ueber die
-     * alte uid gesucht, nicht ueber die admin_id, damit auch ein Fehlversuch die
-     * betroffene uid entwertet, ohne dass wir wissen, zu wem sie gehoert.
+     * Deliberately goes directly via SQL instead of save(): the match is found via the
+     * old uid, not via the admin_id, so that even a failed attempt invalidates the
+     * affected uid without us needing to know to whom it belongs.
      */
     private function invalidateLoginCode(string $uid): void
     {
@@ -998,29 +995,29 @@ class Admin extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: Felder der Zwei-Faktor-Anmeldung vorbelegen.
+     * Before creating: pre-fill the fields of the two-factor login.
      *
-     * Die uid wird gleich mit einem Zufallswert besetzt statt leer zu bleiben - ein
-     * leerer Wert wäre für jeden erratbar und würde beim Abgleich auf alle noch nicht
-     * konfigurierten Konten passen.
+     * The uid is filled with a random value right away instead of staying empty - an empty
+     * value would be guessable for anyone and would match all accounts not yet
+     * configured at the comparison.
      */
     protected function hookOnCreate(array &$data): void
     {
-        // Initialisiere 2_factor-Auth Felder
+        // Initialize 2_factor auth fields
         $data['uid'] = $this->crypt->randomKey(32);
         $data['uid_date'] = '1000-01-01';
     }
 
     /**
-     * Vor dem Speichern: die persönlichen Einstellungen gegen die tatsächlichen
-     * Möglichkeiten prüfen. Eine Auswahlliste schützt nicht vor einem manipulierten
-     * Formular, und Zeitzone wie Sprachkürzel gehen später ungeprüft an
-     * date_default_timezone_set() bzw. an den Snippet-Cache.
+     * Before saving: check the personal settings against the actual
+     * options. A selection list does not protect against a manipulated
+     * form, and time zone as well as language codes later go unchecked to
+     * date_default_timezone_set() and to the snippet cache.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
-        // Benutzernamen admin_* sind für anonymisierte Konten reserviert (Modul
-        // Privacy) - ein bestehender Name bleibt erlaubt
+        // User names admin_* are reserved for anonymized accounts (module
+        // Privacy) - an existing name remains allowed
         if ((empty($fields) || in_array('name', $fields, true)) && array_key_exists('name', $data)) {
             $name = (string)$data['name'];
             if (preg_match('/^admin_/i', $name) && $name !== (string)($previousData['name'] ?? '')) {
@@ -1029,7 +1026,7 @@ class Admin extends Dataset {
             }
         }
 
-        // Benutzername scheduler kann nicht geändert werden
+        // User name scheduler cannot be changed
         $previousName = (string)($previousData['name'] ?? '');
         if ($previousName === 'scheduler') {
             $data['name'] = 'scheduler';
@@ -1040,7 +1037,7 @@ class Admin extends Dataset {
         $schema = $this->schema;
 
         $code = trim((string)($settings['backend_code'] ?? ''));
-        // Frühere zweistellige Kürzel ("de") auf das heutige ("de_DE") heben
+        // Upgrade earlier two-letter codes ("de") to today's ("de_DE")
         if (preg_match('/^[a-z]{2,3}$/', $code)) {
             $code = Cms::matchLanguage($code, $this->cms->backendLanguages()) ?? $code;
             $data['settings']['backend_code'] = $code;
@@ -1059,7 +1056,7 @@ class Admin extends Dataset {
             $this->createFieldError('error_invalid_format', 'settings.timezone', $schema['settings.timezone']['label']);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
-        // Bevorzugte Sprachversion: '' oder eine vorhandene Sprache
+        // Preferred language version: '' or an existing language
         $languageId = trim((string)($settings['language_id'] ?? ''));
         if ($languageId !== '') {
             $this->db->query("SELECT 1 FROM `language` WHERE `language_id` = ?", 'i', [(int)$languageId]);
@@ -1068,13 +1065,13 @@ class Admin extends Dataset {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
-        // Widgets der Startseite: eine Liste aus Modulname + Platz, jedes Modul
-        // höchstens einmal. Geprüft wird nur die FORM - ob es das Modul noch gibt
-        // und ob der betroffene Admin es darf, entscheidet Widgets::render() beim
-        // Anzeigen (ein deinstalliertes Modul darf das Speichern der übrigen
-        // Einstellungen nicht blockieren).
-        // Berichte: Liste von scheduler_ids (welche die Gruppe abonnieren darf, prüft
-        // AdminBackend::settings(); der Versand prüft die Gruppe ohnehin erneut)
+        // Start page widgets: a list of module name + slot, each module
+        // at most once. Only the FORM is checked - whether the module still exists
+        // and whether the admin concerned may use it is decided by Widgets::render() when
+        // displayed (an uninstalled module must not block saving the other
+        // settings).
+        // Reports: list of scheduler_ids (which the group may subscribe to, checked by
+        // AdminBackend::settings(); the dispatch checks the group again anyway)
         if (array_key_exists('reports', $settings)) {
             $data['settings']['reports'] = $this->system->sanitizeIds((array)$settings['reports'], true);
         }
@@ -1086,29 +1083,29 @@ class Admin extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: geänderte Einstellungen in die laufenden Sessions des Admins
-     * schreiben - für den Admin selbst gelten sie damit sofort, für einen Redakteur,
-     * dem ein Superuser sie einstellt, mit seinem nächsten Request.
+     * After saving: write changed settings into the admin's running sessions -
+     * for the admin themselves they apply immediately; for an editor
+     * whom a superuser sets them for, with their next request.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
         $adminId = (int)($data['admin_id'] ?? 0);
-        // Neues Passwort: Zeitpunkt merken; hat es ein anderer Admin gesetzt
-        // (Anlegen, Zurücksetzen), muss es bei der ersten Anmeldung geändert werden.
-        // Die CLI (admin password, kein Session-Admin) und der Admin selbst setzen
-        // ein endgültiges Passwort. Andere Sitzungen des Kontos enden.
+        // New password: remember the time; if another admin set it
+        // (creation, reset), it must be changed at the first login.
+        // The CLI (admin password, no session admin) and the admin themselves set
+        // a final password. Other sessions of the account end.
         if ((empty($fields) || in_array('password', $fields, true)) && (string)($data['password'] ?? '') !== '') {
             $actorId = (int)$this->session->get('admin_id');
             $bySomeoneElse = !$this->passwordChangedBySelf && $actorId > 0 && $actorId !== $adminId;
             $this->db->query(
-                // nur der Tag (Datenminimierung) - für die Frist admin.password_retention_days genügt er
+                // only the day (data minimization) - it is enough for the admin.password_retention_days period
                 "UPDATE `admin` SET `password_changed_at` = UTC_DATE(), `password_change` = ? WHERE `admin_id` = ?",
                 'ii', [$bySomeoneElse ? 1 : 0, $adminId]
             );
             $this->session->closeAllOf($adminId, keepCurrent: true);
         }
-        // Signatur nachziehen, sobald eine signierte Spalte dabei war (leeres
-        // $fields = alle Spalten). Läuft in der Transaktion von save().
+        // Update the signature as soon as a signed column was involved (empty
+        // $fields = all columns). Runs in the transaction of save().
         if (empty($fields) || array_intersect($fields, ['name', 'password', 'group_id', 'status_id'])) {
             $this->integrity->signAdmin($adminId);
         }
@@ -1117,21 +1114,21 @@ class Admin extends Dataset {
     }
 
     /**
-     * Einzelne Einstellungen eines Admins ändern, die übrigen bleiben - für das
-     * Anmeldeformular (Backend-Sprache, Locale, Zeitzone) und AdminBackend::settings().
+     * Change individual settings of an admin, the others remain - for the
+     * login form (backend language, locale, time zone) and AdminBackend::settings().
      *
      * @param int   $adminId
-     * @param array $settings  zu ändernde Schlüssel (language_id, backend_code,
+     * @param array $settings  keys to change (language_id, backend_code,
      *                         locale, timezone, fed)
-     * @return bool            false: Fehler in Cms::errors
+     * @return bool            false: error in Cms::errors
      */
     public function saveSettings(int $adminId, array $settings): bool
     {
         if ($adminId < 1) return false;
         if (!$data = $this->load($adminId)) return false;
         $current = (array)($data['settings'] ?? []);
-        // Fehlende Angaben mit den Schema-Vorgaben füllen (ein Admin aus der Zeit vor
-        // den Einstellungen hat noch keine)
+        // Fill missing values with the schema defaults (an admin from the time before
+        // the settings does not have any yet)
         $defaults = (array)($this->init()['settings'] ?? []);
         $merged = array_replace($defaults, $current, $settings);
         $data = [
@@ -1142,9 +1139,9 @@ class Admin extends Dataset {
     }
 
     /**
-     * Nach dem Laden: Secret und Zeitschritt der Authenticator-App entfernen. load()
-     * liest die ganze Zeile; das Secret (binär, verschlüsselt) gehört in kein
-     * weitergereichtes Array - es liest nur TotpFactor selbst.
+     * After loading: remove the secret and time step of the authenticator app. load()
+     * reads the whole row; the secret (binary, encrypted) does not belong in any
+     * array that is passed on - only TotpFactor reads it itself.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -1156,11 +1153,11 @@ class Admin extends Dataset {
     }
 
     /**
-     * Beim Löschen (Soft-Delete): alles entfernen, womit das Konto sich noch anmelden
-     * oder wiedererkannt werden könnte - Sessions, gespeicherte Geräte, Passkeys,
-     * Wiederherstellungscodes - und den Verlauf "zuletzt bearbeitet" (history). Das
-     * Audit-Log bleibt; anonymisiert wird es erst auf Wunsch (Modul Privacy,
-     * AdminAnonymizer). Das eigene Konto lässt sich nicht löschen.
+     * On deletion (soft delete): remove everything by which the account could still log in
+     * or be recognized - sessions, stored devices, passkeys,
+     * recovery codes - and the "last edited" history (history). The
+     * audit log stays; it is only anonymized on request (module Privacy,
+     * AdminAnonymizer). One's own account cannot be deleted.
      */
     protected function hookOnSoftDelete(array $data): void
     {
@@ -1174,8 +1171,8 @@ class Admin extends Dataset {
     }
 
     /**
-     * Sessions, Geräte, Passkeys, Wiederherstellungscodes und Verlauf eines Kontos
-     * entfernen (Löschen, Anonymisieren).
+     * Remove sessions, devices, passkeys, recovery codes and history of an account
+     * (delete, anonymize).
      */
     public function removeCredentials(int $adminId): void
     {

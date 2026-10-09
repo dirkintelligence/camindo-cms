@@ -1,11 +1,11 @@
 <?php
-// Refresh-Knopf der Template-Listen: erst var/templates mit der Datenbank abgleichen
-// (TemplateFiles::sync()), danach lädt das Javascript die Ansicht neu.
+// Refresh button of the template lists: first reconcile var/templates with the database
+// (TemplateFiles::sync()), then the JavaScript reloads the view.
 // @var Camindo\Core\ContainerInterface $app
 use Camindo\Core\Modules\Template\TemplateFiles;
 
-// Abgleich aller Template-Bereiche - nur für Superuser (12-group-rights.md).
-// sync() schreibt, also nur per POST (17-csrf.md §2.7).
+// Reconcile all template areas - superuser only (developer docs, chapter 11 (Permissions)).
+// sync() writes, so only via POST (developer docs, chapter 14 (Security: web)).
 $backend = $app->get(\Camindo\Core\Backend::class);
 if (!$backend->isSuperuser() || !$backend->requirePost()) {
     header('Content-Type: application/json');

@@ -8,9 +8,9 @@ return [
 'description' => '#messaging.module_description',
 'icon' => 'mail',
 'listed' => false,
-// Zusätzliche Modulrechte:
-// keine
-// Jeder Admin hat nur Zugriff auf seine In- und Outbox
+ // Additional module rights:
+ // none
+ // Each admin only has access to their own inbox and outbox
 'access' => [
 ]
 

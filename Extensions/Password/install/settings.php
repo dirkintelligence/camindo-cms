@@ -1,10 +1,10 @@
 <?php
-// Core-Extension Password: Passwort-Richtlinie als Sprechblase und Stärke-Balken
-// (rot/orange/grün) unter einem Passwort-Feld. Die Regeln kommen aus
-// security.password_policy, je Feld überschreibbar; geprüft wird zusätzlich auf dem
-// Server (Camindo\Core\PasswordPolicy, developer_docs/16-sicherheit.md §12).
-// password.ext.js/.css laufen auch ohne Backend - im Frontend-Template inline
-// eingefügt (docs/templateprogrammers).
+// Core extension Password: password policy as a tooltip and strength bar
+// (red/orange/green) below a password field. The rules come from
+// security.password_policy, can be overridden per field; additionally checked on the
+// server (Camindo\Core\PasswordPolicy, developer docs, chapter 13 (Security: authentication)).
+// password.ext.js/.css also run without the backend - inlined in the frontend template
+// (see the manual for template programmers).
 return [
     'version'          => '9.0.0',
     'type'             => 'validator',

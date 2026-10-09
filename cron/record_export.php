@@ -1,20 +1,20 @@
 <?php
 /**
- * record_export.php - Export von Datensätzen im Hintergrund
+ * record_export.php - export of records in the background
  *
- * Wird NICHT per Cronjob aufgerufen, sondern von RecordExport::start(), wenn ein
- * Export mehr Datensätze umfasst als admin.export_background_threshold - oder der
- * Redakteur den Hintergrund gewählt hat.
+ * NOT called by a cron job, but by RecordExport::start() when an
+ * export covers more records than admin.export_background_threshold - or the
+ * editor chose the background.
  *
- * Das Skript ruft exakt dieselbe Methode auf wie der Web-Request:
- * RecordExport::run(). Der Auftrag liegt als JSON-Datei in var/tmp
- * (RecordExport::start()), sie wird beim Lesen entfernt. Am Ende schickt
- * RecordExport::report() dem auslösenden Admin eine interne Nachricht mit dem
- * Download-Link (Modul Messaging) und dem Hinweis, wie lange er gilt.
+ * The script calls exactly the same method as the web request:
+ * RecordExport::run(). The job lies as a JSON file in var/tmp
+ * (RecordExport::start()); it is removed when read. At the end
+ * RecordExport::report() sends the triggering admin an internal message with the
+ * download link (module Messaging) and the note how long it is valid.
  *
- * Argumente:
- *     --job=/pfad/var/tmp/export-{token}.json   Auftragsdatei (Pflicht)
- *     --token=...                               Token des bgproc-Eintrags
+ * Arguments:
+ *     --job=/path/var/tmp/export-{token}.json   job file (required)
+ *     --token=...                               token of the bgproc entry
  */
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Session;
@@ -23,7 +23,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Modules\Admin\Admin;
 use Camindo\Core\Modules\Record\RecordExport;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -37,11 +37,11 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 // --------------------
-// Argumente einlesen (--name=wert)
+// Read arguments (--name=value)
 
 $args = [];
 foreach (array_slice($argv, 1) as $argument) {
@@ -54,7 +54,7 @@ if ($jobFile === '') {
     exit("usage: record_export.php --job=/path/to/export-{token}.json --token=...\n");
 }
 
-// Container bereitstellen
+// Provide the container
 $app = $GLOBALS['app'];
 $system = $app->get(System::class);
 $bgproc = $app->get(BackgroundProcess::class);
@@ -66,10 +66,10 @@ try {
     if ($job === null) {
         throw new \RuntimeException("job file not readable: {$jobFile}");
     }
-    // Auslösenden Administrator hinterlegen: Name im XML-Header, Empfänger der
-    // Nachricht - und seine Backend-Sprache/Zeitzone für die Texte der Nachricht
+    // Store the triggering administrator: name in the XML header, recipient of the
+    // message - and their backend language/time zone for the texts of the message
     $adminId = (int)($job['admin_id'] ?? 0);
-    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // Rechte des auslösenden Admins
+    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // rights of the triggering admin
     if ($adminData = $app->get(Admin::class)->load($adminId)) {
         $app->get(Cms::class)->applyAdminSettings((array)($adminData['settings'] ?? []));
     }

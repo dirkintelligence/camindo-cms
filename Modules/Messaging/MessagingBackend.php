@@ -1,52 +1,52 @@
 <?php
 /**
- * Backend-Oberfläche für die CMS-internen Nachrichten (Tabelle `message`).
+ * Backend UI for the CMS-internal messages (table `message`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     message_list.php    -> list()    Posteingang (tab=outbox: Postausgang) des
- *                                      angemeldeten Admins
- *     message_info.php    -> info()    Nachricht lesen (markiert sie als gelesen)
- *     message_edit.php    -> edit()    neu / bearbeiten / weiterleiten / löschen
- *     message_action.php  -> action()  gelesen / ungelesen (Ajax, ohne Seite)
- *     ajax_unread.php     -> unread()  Zähler für das Abzeichen im Backend-Kopf
+ *     message_list.php    -> list()    inbox (tab=outbox: outbox) of the
+ *                                      logged-in admin
+ *     message_info.php    -> info()    read message (marks it as read)
+ *     message_edit.php    -> edit()    new / edit / forward / delete
+ *     message_action.php  -> action()  read / unread (Ajax, without a page)
+ *     ajax_unread.php     -> unread()  counter for the badge in the backend header
  *
- * Erreichbar über das Brief-Symbol rechts oben (cApp.mail.open()); das Abzeichen
- * darauf zeigt die ungelesenen Nachrichten (höchstens "99"), gesetzt beim Laden des
- * Backends (index.php), nach jeder Aktion hier und alle 30 Sekunden vom Timer
+ * Reachable via the envelope symbol at the top right (cApp.mail.open()); the badge
+ * on it shows the unread messages (at most "99"), set when the backend is loaded
+ * (index.php), after each action here and every 30 seconds by the timer
  * (cApp.polling -> cApp.mail.refreshBadge() -> ajax_unread.php).
  *
- * Liste und Nachricht liegen als Layer übereinander wie in jedem anderen Modul -
- * kein zweispaltiges Mailprogramm. Die Liste zeigt die Nachrichten AN den
- * angemeldeten Admin (Eingang) bzw. VON ihm (Ausgang); die Bedingung kommt als 'sql'
- * in select(), nicht als Filter, damit sie nicht im Filtertext auftaucht und nicht
- * über den Request zu ändern ist. Das Brief-Symbol öffnet die Liste nicht ein
- * zweites Mal, solange sie oben liegt (cApp.layers.addOnce()).
+ * List and message lie on top of each other as layers, as in every other module -
+ * not a two-column mail program. The list shows the messages TO the
+ * logged-in admin (inbox) resp. FROM them (outbox); the condition comes as 'sql'
+ * in select(), not as a filter, so that it does not appear in the filter text and
+ * cannot be changed via the request. The envelope symbol does not open the list
+ * a second time while it is on top (cApp.layers.addOnce()).
  *
- * EMPFÄNGER
+ * RECIPIENT
  * --------------------
- * Das Feld "An" ist ein Lookup-Feld auf die Admin-Liste (Vorlage
- * edit_form_lookup_foreign_table): AdminBackend::list() mit src_field=to_admin_id
- * zeigt die Checkbox-Spalte, AdminBackend::lookupPreviewCreate() liefert den
- * Vorschaublock mit dem versteckten Feld data[to_admin_id]. Geschrieben wird erst
- * beim Speichern des Formulars.
+ * The field "To" is a lookup field on the admin list (template
+ * edit_form_lookup_foreign_table): AdminBackend::list() with src_field=to_admin_id
+ * shows the checkbox column, AdminBackend::lookupPreviewCreate() returns the
+ * preview block with the hidden field data[to_admin_id]. Writing happens only
+ * when the form is saved.
  *
- * WEITERLEITEN
+ * FORWARDING
  * --------------------
- * function=forward lädt die Nachricht wie zum Bearbeiten, verwirft aber Id und
- * Empfänger und stellt "FWD: " vor den Betreff. Text, HTML-Teil und Datensatzbezug
- * bleiben - gespeichert wird eine NEUE Nachricht mit dem Weiterleitenden als Absender.
+ * function=forward loads the message as for editing, but discards ID and
+ * recipient and puts "FWD: " in front of the subject. Text, HTML part and record reference
+ * remain - a NEW message is saved with the forwarder as sender.
  *
- * DATENSATZBEZUG
+ * RECORD REFERENCE
  * --------------------
- * Der Mail-Button auf der Info-Seite eines Datensatzes (RecordBackendInfo) ruft
- * message_edit.php?function=create&record_id={id}. Im Formular steht der Datensatz
- * als unverlinkter Teaser unter dem Text, gespeichert wird nur seine Id
- * (Message::record_id). Der Empfänger sieht denselben Teaser verlinkt und kommt
- * damit auf die Info-Seite des Datensatzes - der Titel ist dabei immer der aktuelle.
+ * The mail button on the info page of a record (RecordBackendInfo) calls
+ * message_edit.php?function=create&record_id={id}. In the form the record stands
+ * as an unlinked teaser below the text; only its ID is saved
+ * (Message::record_id). The recipient sees the same teaser linked and thus
+ * reaches the info page of the record - the title is always the current one.
  *
  * @see Camindo\Core\Modules\Messaging\Message  Dataset/Model
- * @see Camindo\Core\Modules\Admin\AdminBackend  Lookup-Ziel für den Empfänger
+ * @see Camindo\Core\Modules\Admin\AdminBackend  lookup target for the recipient
  * @see Camindo\Core\Backend
  */
 namespace Camindo\Core\Modules\Messaging;
@@ -60,7 +60,7 @@ use Camindo\Core\Modules\Messaging\Message;
 
 class MessagingBackend {
 
-    /** Höchster Wert, den das Abzeichen im Backend-Kopf anzeigt */
+    /** Highest value the badge in the backend header shows */
     public const BADGE_MAX = 99;
 
     protected string $iconMessage = '';
@@ -68,7 +68,7 @@ class MessagingBackend {
     protected int $id = 0;
     protected ?array $data = [];
     protected string $function = '';
-    /** admin_id aus der Session - Empfänger der gelisteten, Absender neuer Nachrichten */
+    /** admin_id from the session - recipient of the listed, sender of new messages */
     protected int $adminId = 0;
 
     public function __construct(
@@ -85,15 +85,15 @@ class MessagingBackend {
     }
 
     /**
-     * Posteingang / Postausgang (backend/message_list.php).
+     * Inbox / outbox (backend/message_list.php).
      *
-     * Zwei Reiter auf derselben Liste: ohne tab die empfangenen Nachrichten
-     * (to_admin_id = Session-Admin, Spalte "Von"), mit tab=outbox die gesendeten
-     * (created_by = Session-Admin, Spalte "An"). Ungelesene Zeilen sind im Eingang
-     * fett; das Symbol zeigt in beiden Reitern, ob der Empfänger gelesen hat.
-     * Sortierung und Blättern kommen aus dem Request; die Bedingung des Reiters ist
-     * fest (siehe Klassenkommentar). Das Kontextmenü führt Gelesen/Ungelesen nur im
-     * Eingang.
+     * Two tabs on the same list: without tab the received messages
+     * (to_admin_id = session admin, column "From"), with tab=outbox the sent ones
+     * (created_by = session admin, column "To"). Unread rows are bold in the inbox;
+     * the symbol shows in both tabs whether the recipient has read it.
+     * Sorting and paging come from the request; the condition of the tab is
+     * fixed (see class comment). The context menu offers Read/Unread only in the
+     * inbox.
      *
      * Request: tab ('' | outbox), sort, order, skip
      */
@@ -124,7 +124,7 @@ class MessagingBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Liste
+        // List
         // --------------------
         $f = $this->cms->select([
             'request' => 'skip,limit,sort,order',
@@ -136,14 +136,14 @@ class MessagingBackend {
                 : "`message`.`created_by` = {$this->adminId} AND `message`.`sender_deleted` = 0",
         ], $this->message);
 
-        // Geänderte Sortierung als lesbarer Text
+        // Changed sorting as readable text
         echo $this->backend->filterText($f);
 
-        // Pagination top (zeigt bei 0 Treffern "Keine Nachrichten")
+        // Pagination top (shows "No messages" for 0 hits)
         echo $this->backend->paginationTop('messaging.listed_records');
 
         if ($this->db->num_rows > 0) {
-            // Table head: Von (Eingang) bzw. An (Ausgang)
+            // Table head: From (inbox) resp. To (outbox)
             $schema = $this->message->getSchema();
             $partnerField = $isInbox ? 'created_by' : 'to_admin_id';
             $headColumns = $this->backend->template('messaging.message_table_head_columns', [
@@ -152,7 +152,7 @@ class MessagingBackend {
                 '{label_subject}' => $this->backend->tableHeadColumn($schema['subject'], $f, 'subject'),
             ]);
 
-            // Table rows (Zeilenklick öffnet die Nachricht in dieser Sicht)
+            // Table rows (clicking a row opens the message in this view)
             $tplTableRow = $this->backend->template('messaging.message_table_row', [
                 '{box}' => $isInbox ? 'inbox' : 'outbox',
             ]);
@@ -177,8 +177,8 @@ class MessagingBackend {
                 '{box}' => $isInbox ? 'inbox' : 'outbox',
             ]);
 
-            // Context menu (samt Zielcontainer für die Ajax-Aktionen gelesen/ungelesen);
-            // Löschen nennt die Sicht - es nimmt die Nachricht nur aus DIESER Liste
+            // Context menu (incl. target container for the Ajax actions read/unread);
+            // Delete names the view - it removes the message only from THIS list
             echo $this->backend->template('messaging.message_context_menu', [
                 '{read_items}' => $isInbox ? $this->backend->template('messaging.message_context_menu_read') : '',
                 '{box}' => $isInbox ? 'inbox' : 'outbox',
@@ -188,7 +188,7 @@ class MessagingBackend {
             echo $this->backend->paginationBottom();
         }
 
-        // Abzeichen mitziehen: die Liste ist der Ort, an dem der Zähler stimmen muss
+        // Carry the badge along: the list is the place where the counter must match
         echo $this->_badgeScript();
 
         // Container Footer
@@ -196,18 +196,18 @@ class MessagingBackend {
     }
 
     /**
-     * Nachricht lesen (backend/message_info.php).
+     * Read message (backend/message_info.php).
      *
-     * Öffnet der Empfänger die Nachricht, gilt sie als gelesen (Message::markRead()).
-     * Der Text ist Klartext und wird als solcher ausgegeben (htmlspecialchars + nl2br);
-     * der vom CMS erzeugte HTML-Teil steht roh darunter, der Datensatzbezug als
-     * verlinkter Teaser.
+     * If the recipient opens the message, it counts as read (Message::markRead()).
+     * The text is plain text and is output as such (htmlspecialchars + nl2br);
+     * the HTML part generated by the CMS stands raw below it, the record reference as
+     * a linked teaser.
      */
     public function info(): void
     {
         $this->id = (int)($_REQUEST['id'] ?? 0);
-        // Sicht: aus der Liste mitgegeben; noread=1 nach "Ungelesen markieren" - die
-        // Seite erscheint erneut, ohne die Nachricht gleich wieder zu lesen
+        // View: passed on from the list; noread=1 after "Mark as unread" - the
+        // page appears again without reading the message right away
         $box = (string)($_REQUEST['box'] ?? '');
         $noRead = !empty($_REQUEST['noread']);
 
@@ -229,7 +229,7 @@ class MessagingBackend {
         $isImportant = (int)($data['is_important'] ?? 0) === 1;
         $listChanged = false;
 
-        // Empfänger liest: als gelesen markieren - die Liste darunter zieht nach
+        // Recipient reads: mark as read - the list below follows
         if ($isRecipient && !$isRead && !$noRead) {
             $this->message->markRead($this->id, true);
             $data['is_read'] = 1;
@@ -237,7 +237,7 @@ class MessagingBackend {
             $listChanged = true;
         }
 
-        // H1: Briefumschlag (geschlossen/geöffnet, ggf. mit Warnung) + Betreff
+        // H1: envelope (closed/open, with warning if applicable) + subject
         echo $this->backend->headline($this->_stateIcons($data) . ' ' . htmlspecialchars((string)$data['subject']));
 
         // Buttons
@@ -245,8 +245,8 @@ class MessagingBackend {
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_edit_primary', "cApp.layers.replace('Messaging/message_edit.php?id={$this->id}{$boxParam}');");
         if ($isRecipient) {
-            // Markieren: Pulldown - die Seite erscheint danach erneut (message_action
-            // mit back=info), nur das Symbol vor dem Betreff wechselt
+            // Mark: pulldown - the page appears again afterwards (message_action
+            // with back=info), only the symbol before the subject changes
             $actionUrl = "Messaging/message_action.php?id={$this->id}&back=info{$boxParam}";
             $this->backend->buttonAdd('messaging.button_mark_dropdown', '', '');
             $this->backend->buttonBarReplace('{item_read}', $this->backend->template('messaging.button_mark_item', [
@@ -270,8 +270,8 @@ class MessagingBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Kopfdaten (grau) und Nachricht (weiß): Betreff, Klartext, HTML-Teil,
-        // Datensatz (verlinkt)
+        // Header data (gray) and message (white): subject, plain text, HTML part,
+        // record (linked)
         $schema = $this->message->getSchema();
         echo $this->backend->template('messaging.message_view', [
             '{from}' => $this->backend->teaser('admin', (int)$data['created_by']) ?: $this->backend->emptyPlaceholder,
@@ -286,7 +286,7 @@ class MessagingBackend {
             ),
         ]);
 
-        // Abzeichen mitziehen und - wurde soeben gelesen - die Liste im Layer darunter
+        // Carry the badge along and - if just read - the list in the layer below
         if ($listChanged) $this->backend->script("cApp.mail.refreshList();");
         echo $this->_badgeScript();
 
@@ -294,8 +294,8 @@ class MessagingBackend {
     }
 
     /**
-     * Symbole zum Zustand einer Nachricht: geschlossener (ungelesen) oder geöffneter
-     * (gelesen) Briefumschlag, bei wichtigen Nachrichten daneben ein Warn-Symbol.
+     * Symbols for the state of a message: closed (unread) or open (read)
+     * envelope; for important messages a warning symbol next to it.
      */
     private function _stateIcons(array $data): string
     {
@@ -308,22 +308,22 @@ class MessagingBackend {
     }
 
     /**
-     * Markieren (backend/message_action.php) - Ajax, liefert nur Javascript.
+     * Mark (backend/message_action.php) - Ajax, returns only JavaScript.
      *
      *     function = read | unread | important | unimportant
      *
-     * Aus dem Kontextmenü der Liste geladen in den versteckten Container
-     * #c9-message-action (data-target): danach wird die Liste neu geladen. Aus der
-     * Detailansicht per layers.replace() mit back=info: danach erscheint die
-     * Detailansicht erneut (nach "ungelesen" mit noread=1, sonst läse sie die
-     * Nachricht gleich wieder) - nur das Symbol vor dem Betreff wechselt; die Liste
-     * im Layer darunter zieht nach (cApp.mail.refreshList()).
+     * Loaded from the context menu of the list into the hidden container
+     * #c9-message-action (data-target): afterwards the list is reloaded. From the
+     * detail view via layers.replace() with back=info: afterwards the detail
+     * view appears again (after "unread" with noread=1, otherwise it would read the
+     * message right away again) - only the symbol before the subject changes; the list
+     * in the layer below follows (cApp.mail.refreshList()).
      *
      * Request: id, function, back = info (optional), box (optional)
      */
     public function action(): void
     {
-        // Setzt Kennzeichen der Nachricht - nur per POST (17-csrf.md §2.7)
+        // Sets flags of the message - only via POST (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
@@ -337,7 +337,7 @@ class MessagingBackend {
             $this->_editErrors();
             return;
         }
-        // Markieren darf nur der Empfänger - die Kennzeichen sind seine
+        // Only the recipient may mark - the flags are theirs
         $isRecipient = ((int)$data['to_admin_id'] === $this->adminId);
         if ($isRecipient) {
             match ($function) {
@@ -361,8 +361,8 @@ class MessagingBackend {
     }
 
     /**
-     * Zähler für das Abzeichen (backend/ajax_unread.php) - nur Javascript, vom Timer
-     * alle 30 Sekunden geholt (cApp.mail.refreshBadge()). Muss klein bleiben.
+     * Counter for the badge (backend/ajax_unread.php) - only JavaScript, fetched by the timer
+     * every 30 seconds (cApp.mail.refreshBadge()). Must stay small.
      */
     public function unread(): void
     {
@@ -370,8 +370,8 @@ class MessagingBackend {
     }
 
     /**
-     * Anzahl ungelesener Nachrichten des angemeldeten Admins, gedeckelt auf
-     * BADGE_MAX - mehr passt nicht ins Abzeichen.
+     * Number of unread messages of the logged-in admin, capped at
+     * BADGE_MAX - more does not fit into the badge.
      */
     public function badgeCount(): int
     {
@@ -379,7 +379,7 @@ class MessagingBackend {
     }
 
     /**
-     * Javascript, das das Abzeichen setzt (ohne <script>-Klammer)
+     * JavaScript that sets the badge (without <script> brackets)
      */
     private function _badgeJs(): string
     {
@@ -387,7 +387,7 @@ class MessagingBackend {
     }
 
     /**
-     * <script>-Block, der das Abzeichen setzt - ans Ende einer Seite gehängt
+     * <script> block that sets the badge - appended at the end of a page
      */
     private function _badgeScript(): string
     {
@@ -395,8 +395,8 @@ class MessagingBackend {
     }
 
     /**
-     * Nachricht laden und Zugriff prüfen (Empfänger oder Absender).
-     * Fehlermeldung in Cms::errors, Rückgabe null bei Misserfolg.
+     * Load message and check access (recipient or sender).
+     * Error message in Cms::errors, return null on failure.
      */
     private function _loadAccessible(int $id): ?array
     {
@@ -409,13 +409,13 @@ class MessagingBackend {
     }
 
     /**
-     * Den Nachrichtenkörper rendern: Klartext, darunter der HTML-Teil, darunter der
-     * Datensatz-Teaser.
+     * Render the message body: plain text, below it the HTML part, below that the
+     * record teaser.
      *
-     * @param string $body      Klartext
-     * @param string $html      vom CMS erzeugter HTML-Code ('' = keiner)
-     * @param int    $recordId  Datensatzbezug (0 = keiner)
-     * @param bool   $linked    Teaser verlinkt (Info-Seite) oder nicht (Formular)
+     * @param string $body      plain text
+     * @param string $html      HTML code generated by the CMS ('' = none)
+     * @param int    $recordId  record reference (0 = none)
+     * @param bool   $linked    teaser linked (info page) or not (form)
      */
     private function _bodyHtml(string $body, string $html, int $recordId, bool $linked): string
     {
@@ -434,12 +434,12 @@ class MessagingBackend {
     }
 
     /**
-     * Neu / bearbeiten / weiterleiten / löschen (backend/message_edit.php).
+     * New / edit / forward / delete (backend/message_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in AdminBackend::edit()
-     * (docs/developers/03-backend-entwicklung.md); zusätzlich 'forward'.
+     * State machine via $_REQUEST['function'] as in AdminBackend::edit()
+     * (developer docs, chapter 05 (Backend development)); additionally 'forward'.
      *
-     * Request: id, function, data[...], record_id (nur create: Datensatzbezug)
+     * Request: id, function, data[...], record_id (only create: record reference)
      */
     public function edit(): void
     {
@@ -499,11 +499,11 @@ class MessagingBackend {
 
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     /**
-     * function=create: leeres Formular. Ein record_id im Request (Mail-Button auf der
-     * Info-Seite eines Datensatzes) wird als Datensatzbezug übernommen.
+     * function=create: empty form. A record_id in the request (mail button on the
+     * info page of a record) is taken over as record reference.
      */
     private function _editCreate(): void
     {
@@ -513,10 +513,10 @@ class MessagingBackend {
     }
 
     /**
-     * function=edit|forward|delete: Nachricht laden (nur Empfänger oder Absender).
+     * function=edit|forward|delete: load message (only recipient or sender).
      *
-     * Weiterleiten: Id und Empfänger fallen weg, der Betreff bekommt den Präfix
-     * "FWD: " (nur einmal) - gespeichert wird eine neue Nachricht.
+     * Forward: ID and recipient fall away, the subject gets the prefix
+     * "FWD: " (only once) - a new message is saved.
      */
     private function _editLoad(): void
     {
@@ -537,7 +537,7 @@ class MessagingBackend {
     }
 
     /**
-     * Überschrift des Formulars: beim Löschen der Betreff, sonst je nach Funktion.
+     * Heading of the form: when deleting the subject, otherwise depending on the function.
      */
     private function _editHeadline(): string
     {
@@ -556,16 +556,16 @@ class MessagingBackend {
     }
 
     /**
-     * function=save: speichern.
+     * function=save: save.
      *
-     * Feldliste ausdrücklich: Empfänger, Betreff, Text - Datensatzbezug und HTML-Teil
-     * nur, wenn das Formular sie mitbringt (versteckte Felder; der HTML-Teil nur bei
-     * der Weiterleitung). Nicht übermittelte Spalten bleiben beim Ändern unverändert.
-     * Absender und Datum setzt Dataset::save() (created_by/created_at) beim Anlegen.
+     * Explicit field list: recipient, subject, text - record reference and HTML part
+     * only if the form carries them (hidden fields; the HTML part only with
+     * forwarding). Columns not transmitted stay unchanged when editing.
+     * Sender and date are set by Dataset::save() (created_by/created_at) when creating.
      */
     private function _editSave(): void
     {
-        // Bestehende Nachricht: nur Empfänger oder Absender
+        // Existing message: only recipient or sender
         if ($this->id > 0 && !$this->_loadAccessible($this->id)) {
             $this->function = 'errors';
             return;
@@ -591,13 +591,13 @@ class MessagingBackend {
     }
 
     /**
-     * function=delete_confirm: aus der eigenen Sicht löschen - endgültig, sobald beide
-     * Seiten gelöscht haben (Message::deleteFor(), kein Papierkorb).
+     * function=delete_confirm: remove from own view - finally, as soon as both
+     * sides have deleted (Message::deleteFor(), no trash).
      */
     private function _editDeleteConfirm(): void
     {
-        // Nur aus der eigenen Sicht (Ein- oder Ausgang) entfernen - die andere Seite
-        // behält die Nachricht (Message::deleteFor())
+        // Remove only from own view (inbox or outbox) - the other side
+        // keeps the message (Message::deleteFor())
         $box = preg_replace('/[^a-z]/', '', (string)($_REQUEST['box'] ?? ''));
         $data = $this->_loadAccessible($this->id);
         $box = $data ? $this->message->boxOf($data, $this->adminId, $box) : '';
@@ -616,7 +616,7 @@ class MessagingBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -626,9 +626,9 @@ class MessagingBackend {
     }
 
     /**
-     * Das Eingabeformular: Empfänger (Lookup), Betreff, Text; darunter - falls
-     * vorhanden - HTML-Teil und Datensatz als unverlinkter Teaser (beides nur zur
-     * Ansicht, mitgeführt in versteckten Feldern).
+     * The input form: recipient (lookup), subject, text; below - if
+     * present - HTML part and record as unlinked teaser (both only for
+     * display, carried along in hidden fields).
      */
     private function _editForm(): void
     {
@@ -637,7 +637,7 @@ class MessagingBackend {
 
         $this->backend->formInit('messaging.message_edit_form');
 
-        // to_admin_id - Lookup auf die Admin-Liste
+        // to_admin_id - lookup on the admin list
         // --------------------
         $toAdminId = (int)($this->data['to_admin_id'] ?? 0);
         $this->backend->formField($this->message, [
@@ -645,8 +645,8 @@ class MessagingBackend {
             'value' => $toAdminId,
             'id' => $this->id,
             'template' => 'edit_form_lookup_foreign_table',
-            // Das Kontextmenü hinter einem Lookup-Feld gehört zu den Verknüpfungs-
-            // feldern der Datensätze (field_id) - hier gibt es keins.
+            // The context menu behind a lookup field belongs to the link
+            // fields of the records (field_id) - there are none here.
             'contextMenu' => '',
         ]);
         $this->backend->formReplace('{src_id}', (string)$this->id);
@@ -670,7 +670,7 @@ class MessagingBackend {
             ]);
         }
 
-        // HTML-Teil und Datensatzbezug (Ansicht + versteckte Felder)
+        // HTML part and record reference (display + hidden fields)
         // --------------------
         $html = (string)($this->data['html'] ?? '');
         $recordId = (int)($this->data['record_id'] ?? 0);
@@ -692,13 +692,13 @@ class MessagingBackend {
         // Print form
         echo $this->backend->form('form_save_cancel_note', [], removePlaceholders: true);
 
-        // JavaScript Anweisung für growing textarea, nach Ajax-Load
+        // JavaScript statement for growing textarea, after Ajax load
         $this->backend->script("cApp.ui._initTextareaGrow(\$('.c9-layer:last'));");
         echo '</form>';
     }
 
     /**
-     * Wirklich löschen? Formular
+     * Really delete? Form
      */
     private function _editDeleteForm(): void
     {

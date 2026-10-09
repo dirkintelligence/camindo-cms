@@ -1,60 +1,59 @@
 <?php
 /**
- * Dateiauslieferung und Dateibrowser des Backends.
+ * File delivery and file browser of the backend.
  *
- * Einstiegspunkte:
+ * Entry points:
  *
- *     public/backend/file.php       -> filePreview()        Datei ausliefern
- *     backend/server_file.php       -> serverFileSelect()   Serververzeichnis anzeigen
+ *     public/backend/file.php       -> filePreview()        deliver a file
+ *     backend/server_file.php       -> serverFileSelect()   show the server directory
  *
- * WARUM MEDIENDATEIEN NICHT DIREKT VERLINKT WERDEN
+ * WHY MEDIA FILES ARE NOT LINKED DIRECTLY
  * --------------------
- * Eine Datei kann an drei verschiedenen Stellen liegen, je nachdem, wo im
- * Bearbeitungsvorgang sie gerade steckt:
+ * A file can be in three different places, depending on where it is
+ * in the editing process:
  *
- *     am produktiven Datensatz            {media_dir}/{instance_id}/{field_id}/{record_id}.{ext}
- *     an der Arbeitskopie (frisch hochgeladen, noch nicht gespeichert)
- *                                         dieselbe Ablage, aber unter der tmp-Id
- *     gar nicht mehr (als gelöscht markiert, Eintrag nur noch für den checkIn)
+ *     on the productive record            {media_dir}/{instance_id}/{field_id}/{record_id}.{ext}
+ *     on the working copy (freshly uploaded, not yet saved)
+ *                                         the same storage, but under the tmp id
+ *     no longer at all (marked as deleted, entry only kept for the checkIn)
  *
- * Ein fester Link aus der Eingabemaske könnte das nicht abbilden. filePreview() ist
- * deshalb die eine Stelle, die entscheidet, welche Datei gemeint ist, und sie
- * ausliefert. Sie ersetzt zugleich den direkten Zugriff auf das Medienverzeichnis -
- * das Backend verlinkt NIE direkt dorthin (Backend::backendValue(),
- * RecordBackendEdit::_editFileReplacements()); geliefert wird nur nach Anmeldung
- * und nur, was Record::load() dem Benutzer zeigen würde.
+ * A fixed link from the input mask could not represent this. filePreview() is
+ * therefore the one place that decides which file is meant, and delivers it.
+ * At the same time it replaces direct access to the media directory -
+ * the backend NEVER links there directly (Backend::backendValue(),
+ * RecordBackendEdit::_editFileReplacements()); delivery happens only after sign-in
+ * and only for what Record::load() would show the user.
  *
- * UMLEITEN ODER LESEN
+ * REDIRECT OR READ
  * --------------------
- * Das Medienverzeichnis ist zweifach gesperrt (Camindo\Core\MediaAccess): je
- * Instanz auf ihre Domains, je Feld mit user_auth vollständig. Das Backend läuft
- * oft unter einer anderen Domain als die Instanz des Datensatzes - ein Verweis ins
- * Medienverzeichnis liefe dann in ein 403. filePreview() leitet deshalb nur um
- * (header Location), wenn alle vier Bedingungen erfüllt sind:
+ * The media directory is locked twice (Camindo\Core\MediaAccess): per
+ * instance to its domains, per field with user_auth completely. The backend often runs
+ * under a different domain than the instance of the record - a link into the
+ * media directory would then end in a 403. filePreview() therefore only redirects
+ * (header Location) if all four conditions are met:
  *
- *     - die Datei hängt am produktiven Datensatz (keine Arbeitskopie: deren
- *       Dateien werden beim Check-in umbenannt, und ihr Name soll nicht im
- *       Browser-Cache bleiben)
- *     - das Feld ist nicht mit user_auth gesperrt
- *     - der Host dieses Requests darf laut Domain-Sperre der Instanz zugreifen
- *       (MediaAccess::hostAllowed())
- *     - es ist ein browsertaugliches Bild (Backend::$webImageFormats): alles
- *       andere soll als Download kommen und nicht im Backend-Kontext gerendert
- *       werden
+ *     - the file is attached to the productive record (not a working copy: its
+ *       files are renamed at check-in, and their name should not remain in the
+ *       browser cache)
+ *     - the field is not locked with user_auth
+ *     - the host of this request may access according to the domain lock of the
+ *       instance (MediaAccess::hostAllowed())
+ *     - it is a browser-compatible image (Backend::$webImageFormats): everything
+ *       else should come as a download and not be rendered in the backend context
  *
- * Sonst liest das Script die Datei selbst (readfile) - langsamer, aber immer
- * richtig. Der Verweis trägt `version` bzw. einen Zufallswert als Cache-Brecher.
+ * Otherwise the script reads the file itself (readfile) - slower, but always
+ * correct. The link carries `version` or a random value as cache breaker.
  *
- * ERBT NICHT VON RecordBackend
+ * DOES NOT INHERIT FROM RecordBackend
  * --------------------
- * Wie RecordBackendFolderList bringt die Klasse einen eigenen, kürzeren Konstruktor
- * mit. Das passt hier besonders: filePreview() läuft über ein eigenes Einstiegsscript
- * (public/backend/file.php) und darf nichts ausgeben außer der Datei selbst - der
- * ganze Seitenapparat der Basisklasse wäre hier hinderlich.
+ * Like RecordBackendFolderList, the class has its own, shorter constructor.
+ * This fits particularly well here: filePreview() runs via its own entry script
+ * (public/backend/file.php) and may output nothing except the file itself - the
+ * entire page machinery of the base class would be in the way.
  *
- * @see Camindo\Core\Modules\Record\RecordBackendUpload  übernimmt die gewählte Datei
- * @see Camindo\Core\TemporaryTrait                       Arbeitskopien
- * @see Camindo\Core\VirtualFieldsTrait                   Ablageschema der Dateien
+ * @see Camindo\Core\Modules\Record\RecordBackendUpload  takes over the selected file
+ * @see Camindo\Core\TemporaryTrait                       working copies
+ * @see Camindo\Core\VirtualFieldsTrait                   storage scheme of the files
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -69,7 +68,7 @@ use Camindo\Core\Modules\Record\Record;
 
 class RecordBackendServerFile {
 
-    /** gewünschte Dateiendungen des Dateibrowsers (Request 'ext'), leer = alle */
+    /** requested file extensions of the file browser (request 'ext'), empty = all */
     private array $extensions = [];
 
     public function __construct(
@@ -85,45 +84,45 @@ class RecordBackendServerFile {
     {}
 
     /**
-     * Eine Mediendatei ausliefern (public/backend/file.php).
+     * Deliver a media file (public/backend/file.php).
      *
-     * Der Parameter file hat die Form "{field_id}/{record_id}" - keine Dateinamen, kein
-     * Pfad. Endung und Mime-Type stammen aus dem `data_fil`-Eintrag, die Datei selbst
-     * wird daraus zusammengesetzt. Ein Verzeichniswechsel über den Parameter ist damit
-     * ausgeschlossen.
+     * The parameter file has the form "{field_id}/{record_id}" - no file names, no
+     * path. Extension and MIME type come from the `data_fil` entry, the file itself
+     * is assembled from them. A change of directory via the parameter is thus
+     * ruled out.
      *
-     * PRÜFUNGEN, IN DIESER REIHENFOLGE
-     *  1. angemeldet? sonst Abbruch
-     *  2. Datensatz über Record::load() holen - das ist zugleich die
-     *     Zugriffsprüfung; wer den Datensatz nicht sehen darf, bekommt 404
-     *  3. Feld muss existieren
-     *  4. als gelöscht markierte Datei -> 404 (der Eintrag besteht nur noch für den
-     *     checkIn, siehe RecordBackendUpload)
+     * CHECKS, IN THIS ORDER
+     *  1. signed in? otherwise abort
+     *  2. fetch the record via Record::load() - this is at the same time the
+     *     access check; whoever may not see the record gets 404
+     *  3. the field must exist
+     *  4. file marked as deleted -> 404 (the entry only remains for the
+     *     checkIn, see RecordBackendUpload)
      *
-     * WO DIE DATEI LIEGT
-     * Der entscheidende Fall: Wird eine Arbeitskopie angezeigt, deren Datei aber noch
-     * am Original hängt (sie wurde in dieser Bearbeitung nicht angefasst), muss unter
-     * der origin_id gesucht werden. Das Kennzeichen 'temporary' im Cache-Eintrag sagt,
-     * welcher der beiden Fälle vorliegt.
+     * WHERE THE FILE LIES
+     * The decisive case: if a working copy is shown whose file is still attached
+     * to the original (it was not touched in this edit), the search must use the
+     * origin_id. The flag 'temporary' in the cache entry says
+     * which of the two cases applies.
      *
-     * AUSLIEFERUNG
-     * Entweder Umleitung ins Medienverzeichnis (siehe Klassenkommentar "Umleiten
-     * oder lesen") oder readfile(). Beim Lesen wird der Ausgabepuffer vorher
-     * geleert - ein einzelnes Leerzeichen aus einer anderen Datei würde die
-     * Binärdaten beschädigen. Bilder in browsertauglichen Formaten gehen als
-     * 'inline' heraus, alles andere als 'attachment' (Download); ein PDF oder eine
-     * HTML-Datei soll nicht im Kontext des Backends gerendert werden.
+     * DELIVERY
+     * Either a redirect into the media directory (see class comment "Redirect
+     * or read") or readfile(). When reading, the output buffer is cleared
+     * beforehand - a single space from another file would corrupt the
+     * binary data. Images in browser-compatible formats are sent as
+     * 'inline', everything else as 'attachment' (download); a PDF or an
+     * HTML file must not be rendered in the context of the backend.
      *
-     * Ausgeliefert wird mit MediaDelivery::sendFile() unter dem ursprünglichen
-     * Dateinamen (mit Endung) und `Cache-Control: private, no-store` - der Browser
-     * zeigt also keine zwischengespeicherte Fassung. (Früher hing eine Zufallsfolge
-     * hinter der Endung; heruntergeladene Dateien hatten dann keinen Typ mehr.)
+     * Delivery happens with MediaDelivery::sendFile() under the original
+     * file name (with extension) and `Cache-Control: private, no-store` - so the browser
+     * does not show a cached version. (Previously a random sequence hung
+     * behind the extension; downloaded files then had no type anymore.)
      *
-     * Request: file = "{field_id}/{record_id}[/{language_id}]" - die Sprache bei
-     * mehrsprachigen Datei-Feldern (sonst die Sprache des Datensatzes, siehe
-     * Cms::recordLanguageId()). Der Eintrag der Sprache kommt bei einer Arbeitskopie
-     * aus dem Arbeitsstand (eigene Datei der Sprache, sonst die der Hauptsprache), sonst aus
-     * `record_cache`; file_language_id sagt, welche Datei das ist.
+     * Request: file = "{field_id}/{record_id}[/{language_id}]" - the language for
+     * multilingual file fields (otherwise the language of the record, see
+     * Cms::recordLanguageId()). For a working copy, the entry of the language comes
+     * from the working state (own file of the language, otherwise that of the primary language), otherwise from
+     * `record_cache`; file_language_id says which file it is.
      */
     public function filePreview()
     {
@@ -141,13 +140,13 @@ class RecordBackendServerFile {
             return;
         }
         
-        // record->load nutzen -> prüft Zugriffsberechtigung
+        // use record->load -> checks access rights
         if (!$data = $this->record->load($recordId)) {
             $this->system->error404();
             return;
         }
         $areaId = (int)$data['area_id'];
-        // Leserecht der Gruppe auf den Bereich (12-group-rights.md)
+        // read right of the group on the area (developer docs, chapter 11 (Permissions))
         if (!$this->backend->access()->areaRead($areaId)) {
             $this->system->error404();
             return;
@@ -166,7 +165,7 @@ class RecordBackendServerFile {
             ? (int)$langPart
             : $this->cms->recordLanguageId((int)($data['instance_id'] ?? 0));
 
-        // Ermitteln wo die Datei liegt
+        // determine where the file lies
         $fileData = (array)($data[$name] ?? []);
         if ($this->cms->isMultilingualField($fieldData)) {
             if ($tmp === 1) {
@@ -184,18 +183,18 @@ class RecordBackendServerFile {
         $isTemporary = (bool)($fileData['temporary'] ?? false);
         $isDeleted = (bool)($fileData['deleted'] ?? false);
         if ($isDeleted) {
-            // Datei wurde als enfernt markiert,
-            // Eintrag besteht nur noch für checkIn-Prozess
+            // File was marked as removed,
+            // the entry only remains for the checkIn process
             $this->system->error404();
             return;
         }
         if ($tmp === 1 && !$isTemporary) {
-            // Record ist temporär - aber die Datei ist dem produktiven Datensatz zugeordnet
+            // record is temporary - but the file is assigned to the productive record
             $storageId = $originId;
         }
         else {
-            // Die Datei ist dem angegebenen Datensatz selbst zugeordnet.
-            // (Angegebener Datensatz kann temporär oder produktiv sein sein.)
+            // The file is assigned to the given record itself.
+            // (The given record can be temporary or productive.)
             $storageId = $recordId;
         }
 
@@ -204,15 +203,15 @@ class RecordBackendServerFile {
         $mediaDir = $this->config->get('paths.media_dir');
         $file = "$mediaDir/$relativePath";
         if (!file_exists($file)) {
-            // Datei ist nicht da wo sie sein sollte
+            // file is not where it should be
             $this->system->error404();
             return;
         }
 
-        // Standard-MIME-Type, falls keiner in der DB hinterlegt ist
+        // default MIME type, if none is stored in the DB
         $mimeType = $fileData['mime_type'] ?? 'application/octet-stream';
 
-        // Umleiten statt lesen? (siehe Klassenkommentar)
+        // Redirect instead of reading? (see class comment)
         // --------------------
         $details = json_decode((string)($fieldData['details'] ?? ''), true) ?: [];
         $isProductiveFile = ($tmp === 0);
@@ -228,10 +227,10 @@ class RecordBackendServerFile {
             return;
         }
         
-        // Ausliefern wie im Frontend (MediaDelivery::sendFile()): Dateiname maskiert
-        // (filename*), aktive Inhalte wie SVG nur als Download in der Sandbox.
-        // Der ursprüngliche Name behält seine Endung - ohne sie erkennt z. B. macOS
-        // den Dateityp nicht; fehlt sie im gespeicherten Namen, kommt die der Datei dazu.
+        // Deliver as in the frontend (MediaDelivery::sendFile()): file name escaped
+        // (filename*), active content such as SVG only as a download in the sandbox.
+        // The original name keeps its extension - without it, macOS for example does not
+        // recognize the file type; if it is missing from the stored name, the file's extension is added.
         $filename = (string)($fileData['filename'] ?? '') ?: 'file';
         $extension = strtolower((string)($fileData['extension'] ?? ''));
         if ($extension !== '' && strtolower(pathinfo($filename, PATHINFO_EXTENSION)) !== $extension) {
@@ -242,32 +241,31 @@ class RecordBackendServerFile {
     }
 
     /**
-     * Dateibrowser für das Upload-Verzeichnis (backend/server_file.php).
+     * File browser for the upload directory (backend/server_file.php).
      *
-     * Zeigt den Inhalt des paths.upload_dir als Baum. Gedacht für Dateien, die per FTP
-     * oder aus einem anderen Vorgang auf dem Server gelandet sind und in ein
-     * Upload-Feld übernommen werden sollen, ohne sie erneut hochzuladen. Ein Klick
-     * geht an RecordBackendUpload::fileServerSelect().
+     * Shows the contents of paths.upload_dir as a tree. Intended for files that have
+     * landed on the server via FTP or from another process and should be taken over into an
+     * upload field without uploading them again. A click
+     * goes to RecordBackendUpload::fileServerSelect().
      *
-     * Unterverzeichnisse werden angezeigt, aber der Einstieg IN ein Unterverzeichnis
-     * ist noch nicht umgesetzt ($relativePath) - der Baum wird ohnehin vollständig
-     * ausgegeben.
+     * Subdirectories are shown, but entering a subdirectory is
+     * not yet implemented ($relativePath) - the tree is output completely anyway.
      *
-     * Der Pfad einer Datei geht doppelt maskiert in die Vorlage: json_encode für das
-     * Javascript, htmlspecialchars für das Attribut, in dem der Aufruf steht.
+     * The path of a file goes into the template escaped twice: json_encode for the
+     * JavaScript, htmlspecialchars for the attribute in which the call stands.
      *
-     * @param string $relativePath  relativer Pfad zu paths.upload_dir (noch ohne Wirkung)
+     * @param string $relativePath  relative path to paths.upload_dir (no effect yet)
      */
     public function serverFileSelect($relativePath = ''): void
     {
         $srcField = (int)($_REQUEST['src_field'] ?? 0);
-        // Arbeitskopie, zu der das Upload-Feld gehört (0: unbekannt) - unterscheidet
-        // gleiche Felder mehrerer eingebetteter Inhalte (cApp.ui.selectUploadFile())
+        // working copy to which the upload field belongs (0: unknown) - distinguishes
+        // identical fields of several embedded contents (cApp.ui.selectUploadFile())
         $srcId = (int)($_REQUEST['src_id'] ?? 0);
-        // Sprache des Upload-Feldes (mehrsprachig), '' bei einsprachigen Feldern
+        // language of the upload field (multilingual), '' for single-language fields
         $lang = preg_replace('/[^0-9]/', '', (string)($_REQUEST['lang'] ?? ''));
-        // ext: nur Dateien mit diesen Endungen zeigen (Kommaliste, z. B. der Import:
-        // zip,xml,csv,docx), Groß-/Kleinschreibung egal; leer = alle
+        // ext: show only files with these extensions (comma list, e.g. for the import:
+        // zip,xml,csv,docx), case-insensitive; empty = all
         $this->extensions = array_values(array_filter(array_map(
             fn($e) => strtolower(trim($e)),
             explode(',', (string)($_REQUEST['ext'] ?? ''))
@@ -278,12 +276,12 @@ class RecordBackendServerFile {
 
         echo $this->backend->template('container_header');
 
-        // Container Header
+        // container header
         echo $this->backend->template('headline1', [
             '{text}' => '{#record.server_files}'
         ]);
 
-        $uploadDir = $this->config->get('paths.upload_dir'); // (endet immer ohne Slash)
+        $uploadDir = $this->config->get('paths.upload_dir'); // (always ends without slash)
         $currentDir = $uploadDir . DIRECTORY_SEPARATOR . $relativePath;
 
         if (!empty($relativePath)) {
@@ -307,14 +305,14 @@ class RecordBackendServerFile {
 
         $items = [];
         foreach ($files as $file) {
-            // sicher für javascript verpacken
+            // wrap safely for javascript
             $pathFile = $file['path'] . DIRECTORY_SEPARATOR . $file['file'];
             $pathFileEncoded = htmlspecialchars(
                 json_encode($pathFile, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)
             );
-            // sicher für Anzeige
+            // safe for display
             $fileNameEncoded = htmlspecialchars($file['file']);
-            // Template-Ersetzungen
+            // template replacements
             $replacements = [
                 '{file}' => $fileNameEncoded,
                 '{path_file}' => $pathFileEncoded,
@@ -331,7 +329,7 @@ class RecordBackendServerFile {
             }
             // else: unknown type
         }
-        // ---- Ende ----
+        // ---- end ----
         echo $this->backend->template('record.upload_tree', [
             '{list_items}' => implode("\n", $items)
         ]);
@@ -340,42 +338,42 @@ class RecordBackendServerFile {
     }
 
     /**
-     * Scannt ein Verzeichnis rekursiv und liefert eine flache Liste 
-     * in der richtigen Baum-Reihenfolge zur Darstellung zurück.
-     * Schließt versteckte Dateien und Ordner (die mit einem Punkt beginnen) aus.
+     * Scans a directory recursively and returns a flat list
+     * in the correct tree order for display.
+     * Excludes hidden files and folders (starting with a dot).
      *
-     * Flach und nicht verschachtelt, weil die Ausgabe eine Liste mit Einrückung ist:
-     * die Rekursion hängt die Kinder unmittelbar hinter ihren Ordner und erhöht dabei
-     * nur die Einrückungsebene. Die Sortierung setzt Ordner vor Dateien und vergleicht
-     * innerhalb der Gruppen natürlich ("bild10" nach "bild9").
+     * Flat and not nested, because the output is a list with indentation:
+     * the recursion attaches the children directly behind their folder and only
+     * increases the indentation level. The sorting puts folders before files and compares
+     * within the groups naturally ("bild10" after "bild9").
      *
-     * Punkt-Einträge fallen heraus - .htaccess und Ähnliches gehören nicht in ein
-     * Auswahlfenster.
+     * Dot entries are dropped - .htaccess and the like do not belong in a
+     * selection window.
      *
-     * @param string $dir Aktuelles absolutes Zielverzeichnis
-     * @param string $currentRelativePath Der bisherige relative Pfad zum Basisverzeichnis
-     * @param int $indent Aktuelle Einrückungsebene (intern genutzt)
+     * @param string $dir Current absolute target directory
+     * @param string $currentRelativePath The relative path so far to the base directory
+     * @param int $indent Current indentation level (used internally)
      * @return array
      */
     private function buildDirectoryTree(string $dir, string $currentRelativePath = '', int $indent = 0): array
     {
         $tree = [];
 
-        // Sicherstellen, dass das Verzeichnis existiert und lesbar ist
+        // ensure that the directory exists and is readable
         if (!is_dir($dir) || !is_readable($dir)) {
             return $tree;
         }
 
-        // Pfad bereinigen (am Ende kein Trailing Slash)
+        // clean up the path (no trailing slash at the end)
         $dir = rtrim($dir, '/\\');
 
-        // Dateien und Ordner einlesen und alle Dotfiles (beginnend mit '.') filtern
+        // read files and folders and filter all dotfiles (starting with '.')
         $items = array_filter(scandir($dir), function ($item) {
             return !str_starts_with($item, '.');
-            // Für PHP-Versionen < 8.0 stattdessen: return $item[0] !== '.';
+            // For PHP versions < 8.0 instead: return $item[0] !== '.';
         });
 
-        // Sortierung: Ordner zuerst, dann Dateien (jeweils alphabetisch)
+        // sorting: folders first, then files (each alphabetically)
         usort($items, function ($a, $b) use ($dir) {
             $pathA = $dir . '/' . $a;
             $pathB = $dir . '/' . $b;
@@ -394,15 +392,15 @@ class RecordBackendServerFile {
             $fullPath = $dir . '/' . $item;
             $isDir = is_dir($fullPath);
 
-            // Dateien außerhalb der gewünschten Endungen übergehen
+            // skip files outside the requested extensions
             if (!$isDir && !empty($this->extensions)
                 && !in_array(strtolower((string)pathinfo($item, PATHINFO_EXTENSION)), $this->extensions, true)
             ) {
                 continue;
             }
 
-            // Eintrag für das aktuelle Element.
-            // $currentRelativePath ist hier exakt das gewünschte "subdir/subsubdir"
+            // entry for the current element.
+            // $currentRelativePath here is exactly the wanted "subdir/subsubdir"
             $entry = [
                 'path'   => $currentRelativePath,
                 'file'   => $item,
@@ -414,15 +412,15 @@ class RecordBackendServerFile {
                 continue;
             }
 
-            // Ordner: rekursiv dessen Inhalt verarbeiten
-            // Den relativen Pfad für die Kinder dieses Ordners erweitern
+            // folder: process its contents recursively
+            // extend the relative path for the children of this folder
             $nextRelativePath = $currentRelativePath !== ''
                 ? $currentRelativePath . '/' . $item
                 : $item;
             $subItems = $this->buildDirectoryTree($fullPath, $nextRelativePath, $indent + 1);
-            // Mit Endungsfilter bleiben Ordner ohne passende Datei weg - ein leerer
-            // Ordner über einer Datei der Ebene darunter sah aus, als läge die
-            // Datei darin
+            // With an extension filter, folders without a matching file are left out - an empty
+            // folder above a file of the level below looked as if the
+            // file lay inside it
             if (!empty($this->extensions) && !in_array('file', array_column($subItems, 'type'), true)) {
                 continue;
             }

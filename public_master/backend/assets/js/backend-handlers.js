@@ -1,46 +1,46 @@
 /*
- * camindo Backend – Event-Handler unter der Script-Policy (developer_docs/19-csp.md)
+ * camindo backend – event handlers under the script policy (developer docs, chapter 14 (Security: web))
  *
- * Die Content-Security-Policy des Backends lässt nur Scripts aus eigenen Dateien und
- * mit der Nonce der Seite zu - Handler-Attribute (onclick="…") und javascript:-Links
- * führt der Browser nicht aus. Backend::template() und Backend::on() schreiben sie
- * deshalb als data-c9h-{nonce}-{event}="…". Dieses Script macht daraus Listener:
- * es sammelt den Code der markierten Attribute, führt ihn als ein Script mit der Nonce
- * aus (kein eval, kein 'unsafe-eval') und hängt die entstandenen Funktionen an ihre
- * Elemente.
+ * The content security policy of the backend only allows scripts from our own files and
+ * with the nonce of the page - handler attributes (onclick="…") and javascript: links
+ * are not executed by the browser. Backend::template() and Backend::on() therefore write
+ * them as data-c9h-{nonce}-{event}="…". This script turns them into listeners:
+ * it collects the code of the marked attributes, executes it as one script with the nonce
+ * (no eval, no 'unsafe-eval') and attaches the resulting functions to their
+ * elements.
  *
- * Nur Attribute mit der Nonce im Namen werden zu Code. Die Nonce ist je Seite neu
- * und steht nur im Code des Servers - ein onclick, das mit Inhalten aus der Datenbank
- * hereinkommt, trägt sie nicht und bleibt wirkungslos.
+ * Only attributes with the nonce in their name become code. The nonce is new per page
+ * and only exists in the server's code - an onclick that comes in with content from the
+ * database does not carry it and has no effect.
  *
- * Erfasst wird jedes HTML, gleich wie es ins Dokument kommt (cLoadContent, .html(),
- * .append(), geklonte Zeilen): ein MutationObserver prüft alle eingefügten Knoten.
- * cLoadContent ruft scan() zusätzlich sofort auf, damit ein Callback die Handler
- * schon vorfindet. Das Attribut bleibt stehen - eine Kopie des Elements (clone())
- * bekommt so ihre eigenen Listener.
+ * Any HTML is covered, no matter how it gets into the document (cLoadContent, .html(),
+ * .append(), cloned rows): a MutationObserver checks all inserted nodes.
+ * cLoadContent additionally calls scan() immediately, so that a callback already finds
+ * the handlers. The attribute stays in place - a copy of the element (clone())
+ * thus gets its own listeners.
  *
- * Außerdem hier: die Nonce geht mit jedem jQuery-Request als X-Camindo-Nonce an den
- * Server (für nachgeladene Stücke), und Verstöße gegen die Policy landen in
- * var/log/{Datum}_csp.log (Start/csp_report.php).
+ * Also here: the nonce goes to the server with every jQuery request as X-Camindo-Nonce
+ * (for content loaded later), and violations of the policy end up in
+ * var/log/{date}_csp.log (Start/csp_report.php).
  */
 (function ($) {
     'use strict';
 
     const nonce = (window.cConfig && window.cConfig.nonce) || '';
 
-    // Nonce an jeden eigenen Ajax-Request - der Server markiert damit die Handler
-    // des nachgeladenen HTML (SecurityHeaders::nonce())
+    // Nonce with every own Ajax request - the server uses it to mark the handlers
+    // of the HTML loaded later (SecurityHeaders::nonce())
     $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
         if (!options.crossDomain && nonce) jqXHR.setRequestHeader('X-Camindo-Nonce', nonce);
     });
 
     const prefix = 'data-c9h-' + nonce + '-';
-    const bound = new WeakMap();   // Element -> Set der gebundenen Ereignisse
-    const registry = {};           // laufende Nummer -> Funktion (nur während bind())
+    const bound = new WeakMap();   // Element -> set of bound events
+    const registry = {};           // sequence number -> function (only during bind())
     let seq = 0;
 
     /**
-     * Code als Script mit der Nonce ausführen.
+     * Execute code as a script with the nonce.
      * @param {string} source
      */
     function run(source) {
@@ -52,8 +52,8 @@
     }
 
     /**
-     * Markierte Attribute in root (einschließlich root) sammeln, die noch nicht
-     * gebunden sind.
+     * Collect marked attributes in root (including root) that are not yet
+     * bound.
      * @param {Element} root
      * @returns {Array<{el: Element, event: string, code: string}>}
      */
@@ -78,10 +78,10 @@
     }
 
     /**
-     * Gesammelte Handler übersetzen und anhängen. Ein Script für alle; hat es einen
-     * Syntaxfehler, jeder Handler einzeln - dann fehlt nur der fehlerhafte (wie bei
-     * einem onclick-Attribut).
-     * @param {Array} items  aus collect()
+     * Compile and attach the collected handlers. One script for all; if it has a
+     * syntax error, each handler individually - then only the faulty one is missing (as with
+     * an onclick attribute).
+     * @param {Array} items  from collect()
      */
     function bind(items) {
         if (items.length === 0) return;
@@ -105,11 +105,11 @@
                 console.error('camindo: handler not compiled', item.event, item.code);
                 return;
             }
-            // 'js' = ehemals href="javascript:…": Klick, Standardaktion (#) nie ausführen
+            // 'js' = formerly href="javascript:…": click, never execute the default action (#)
             const isLink = item.event === 'js';
             item.el.addEventListener(isLink ? 'click' : item.event, function (event) {
                 if (isLink) event.preventDefault();
-                // return false wie bei einem Handler-Attribut: Standardaktion verhindern
+                // return false as with a handler attribute: prevent the default action
                 if (fn.call(this, event) === false) event.preventDefault();
             });
         });
@@ -120,7 +120,7 @@
         _r: registry,
 
         /**
-         * Markierte Handler in root binden (Standard: das ganze Dokument).
+         * Bind marked handlers in root (default: the whole document).
          * @param {Element} [root]
          */
         scan(root) {
@@ -131,7 +131,7 @@
 
     if (!nonce) return;
 
-    // Alles, was später ins Dokument kommt
+    // Everything that comes into the document later
     new MutationObserver(function (mutations) {
         const items = [];
         mutations.forEach(function (m) {
@@ -142,12 +142,12 @@
         bind(items);
     }).observe(document.documentElement, { childList: true, subtree: true });
 
-    // Was schon da ist (backend/index.php)
+    // What is already there (backend/index.php)
     window.cApp.handlers.scan();
 
-    // Verstöße gegen die Policy protokollieren - im Modus 'report' die Stellen, die
-    // noch umzustellen sind; im Modus 'enforce' abgewiesene Scripts. Je Seite jede
-    // Stelle einmal, nur mit Anmeldung (POST braucht das CSRF-Token).
+    // Log violations of the policy - in mode 'report' the places that still
+    // have to be converted; in mode 'enforce' rejected scripts. Each place once
+    // per page, only when logged in (POST needs the CSRF token).
     const reported = new Set();
     document.addEventListener('securitypolicyviolation', function (e) {
         const key = [e.effectiveDirective, e.blockedURI, e.sourceFile, e.lineNumber, e.sample].join('|');

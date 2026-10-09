@@ -1,25 +1,25 @@
 <?php
 /**
- * Datensätze für Listen aufbereiten - dieselbe Darstellung im Backend
- * (RecordBackendList, Lookup-Vorschau, "Zuletzt geändert") und in der API
- * (RecordApi::search(), dort ohne HTML).
+ * Prepare records for lists - the same display in the backend
+ * (RecordBackendList, lookup preview, "Last changed") and in the API
+ * (RecordApi::search(), there without HTML).
  *
- * WELCHE SPALTEN
+ * WHICH COLUMNS
  * --------------------
- * field.visibility_list entscheidet (listFields()); status_id steht immer vorn.
- * Ohne sichtbares Feld bleibt die record_id.
+ * field.visibility_list decides (listFields()); status_id is always first.
+ * Without a visible field, the record_id remains.
  *
- * WIE EIN WERT AUSSIEHT
+ * WHAT A VALUE LOOKS LIKE
  * --------------------
- * listValue(): status_id als Symbol (mit Gegenlese-Hinweis), template_id,
- * parent_id und position (= der vorangehende Datensatz) als Klartext, alles andere
- * über Backend::backendValue() in der Kurzform der Liste. Ergebnis ist HTML.
+ * listValue(): status_id as a symbol (with a read-back hint), template_id,
+ * parent_id and position (= the preceding record) as plain text, everything else
+ * via Backend::backendValue() in the short form of the list. The result is HTML.
  *
- * Dazu kann je Bereich ein Frontend-Template die letzte Spalte liefern
+ * In addition, each area can have a frontend template supply the last column
  * (`area`.`list_template_id`, listTemplateHtml()).
  *
- * Der Aufrufer klammert jede Zeile mit Database::pushResult()/popResult():
- * teaser(), previousId() und backendValue() setzen selbst Abfragen ab.
+ * The caller brackets each row with Database::pushResult()/popResult():
+ * teaser(), previousId() and backendValue() run queries themselves.
  *
  * @see Camindo\Core\Backend::backendValue()
  */
@@ -39,12 +39,12 @@ class RecordPresenter
     }
 
     /**
-     * Felder eines Bereichs, die in der Datensatzliste stehen (visibility_list = 1) -
-     * status_id immer vorn (Schnellfilter im Spaltenkopf). Ohne sichtbares Feld
-     * bleibt die record_id, die dazu ins Schema eingetragen wird.
+     * Fields of an area that appear in the record list (visibility_list = 1) -
+     * status_id always first (quick filter in the column header). Without a visible
+     * field, the record_id remains; it is added to the schema for this purpose.
      *
-     * @param array &$schemaVirtual  Schema des Bereichs (Record::virtualSchema())
-     * @return string[]              Feldnamen in Listenreihenfolge
+     * @param array &$schemaVirtual  Schema of the area (Record::virtualSchema())
+     * @return string[]              Field names in list order
      */
     public function listFields(array &$schemaVirtual): array
     {
@@ -65,11 +65,11 @@ class RecordPresenter
     }
 
     /**
-     * Wert eines Feldes für die Datensatzliste aufbereiten (siehe Klassenkommentar).
+     * Prepare the value of a field for the record list (see class comment).
      *
-     * @param string $name           Feldname
-     * @param array  $row            Datensatz (Cms::fetch())
-     * @param array  $schemaVirtual  Schema des Bereichs
+     * @param string $name           Field name
+     * @param array  $row            Record (Cms::fetch())
+     * @param array  $schemaVirtual  Schema of the area
      * @return string                HTML
      */
     public function listValue(string $name, array $row, array $schemaVirtual): string
@@ -93,7 +93,7 @@ class RecordPresenter
             return $this->backend->teaser('record', (int)($row['parent_id'] ?? 0), linked:false, icon:false);
         }
         if ($name === 'position') {
-            // vorangehenden Datensatz listen
+            // list the preceding record
             if ($previousId = $this->previousId($row, isset($schemaVirtual['parent_id']))) {
                 return $this->backend->teaser('record', $previousId, linked:false, icon:false);
             }
@@ -103,12 +103,12 @@ class RecordPresenter
     }
 
     /**
-     * Listen-Template des Bereichs (`area`.`list_template_id`) für einen Datensatz
-     * ausführen - '' wenn der Bereich keins gewählt hat. Das Template darf eigene
-     * Abfragen absetzen (CMS:SELECT) - der Aufrufer klammert.
+     * Run the list template of the area (`area`.`list_template_id`) for a record -
+     * '' if the area has not selected one. The template may run its own queries
+     * (CMS:SELECT) - the caller brackets them.
      *
-     * @param int   $areaId  Bereich des Datensatzes
-     * @param array $row     Datensatz (Cms::fetch())
+     * @param int   $areaId  Area of the record
+     * @param array $row     Record (Cms::fetch())
      */
     public function listTemplateHtml(int $areaId, array $row): string
     {
@@ -118,12 +118,12 @@ class RecordPresenter
     }
 
     /**
-     * Id des vorangehenden Datensatzes - im Baum nach `lft` unter demselben
-     * Vaterdatensatz, sonst nach `position` im Bereich.
+     * Id of the preceding record - in the tree by `lft` under the same
+     * parent record, otherwise by `position` in the area.
      *
-     * @param array $data  Datensatz (Record::load() / Cms::fetch())
-     * @param bool  $tree  Bereich mit Eingabefeld parent_id (Baum)
-     * @return int|null    record_id oder null (erster)
+     * @param array $data  Record (Record::load() / Cms::fetch())
+     * @param bool  $tree  Area with input field parent_id (tree)
+     * @return int|null    record_id or null (first)
      */
     public function previousId(array $data, bool $tree): ?int
     {

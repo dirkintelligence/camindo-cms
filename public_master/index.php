@@ -8,7 +8,7 @@ use Camindo\Core\SystemState;
     // Bootstrap laden
     require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
-    // Wartungsmodus / Datenbank nicht auf dem Stand der Dateien: 503, ohne DB-Zugriff
+    // Maintenance mode / database not at the state of the files: 503, without DB access
     $app->get(SystemState::class)->guardFrontend();
 
     $page = $app->get(Page::class);

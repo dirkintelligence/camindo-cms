@@ -6,8 +6,8 @@ class FieldInfoBackend extends FieldBackend {
     /**
      * Detailansicht eines Feldes (backend/field_info.php).
      *
-     * Zeigt nur, was für den jeweiligen Typ Sinn ergibt - dieselbe Fallunterscheidung
-     * wie im Formular, nur ohne Eingabemöglichkeit.
+     * Shows only what makes sense for the respective type - the same case distinction
+     * as in the form, only without input options.
      */
     public function info()
     {
@@ -32,8 +32,8 @@ class FieldInfoBackend extends FieldBackend {
         }
         $type = (string) ($data['type'] ?? 'text');
 
-        // Zugehörigen Bereich laden
-        // (gibt Bereichsname aus)
+        // Load the associated area
+        // (outputs the area name)
         $this->areaId = (int)($data['area_id'] ?? 0);
         echo $this->_loadArea();
 
@@ -45,7 +45,7 @@ class FieldInfoBackend extends FieldBackend {
         $this->backend->buttonAdd('button_edit_primary', "cApp.layers.replace('Area/field_edit.php?id={$id}');");
         $this->backend->buttonAdd('button_copy', "cApp.layers.replace('Area/field_edit.php?id={$id}&function=copy');");
         $this->backend->buttonAdd('button_delete', "cApp.layers.replace('Area/field_edit.php?id={$id}&function=delete');");
-        // Typ ändern - nur, wenn es für den Typ überhaupt ein Ziel gibt
+        // Change type - only if there is a target for the type at all
         if (!empty($this->field->conversionTargets($data))) {
             $this->backend->buttonAdd('area.button_change_type', "cApp.layers.add('Area/field_convert.php?id={$id}');");
         }
@@ -57,7 +57,7 @@ class FieldInfoBackend extends FieldBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log, Backend::infoAuditTabs())
+        // Tabs: Info | Changes (audit log, Backend::infoAuditTabs())
         if ($this->backend->infoAuditTabs("Area/field_info.php?id={$id}", 'field', $id)) return;
 
         // switch values
@@ -88,7 +88,7 @@ class FieldInfoBackend extends FieldBackend {
         $displayTypeLabel = $this->cms->snippet("area.label_display_type_{$displayType}");
         $this->backend->infoAdd($this->field, 'display_type', $displayTypeLabel);
 
-        // Extension mit ihren Optionen (13 §3.3)
+        // Extension with its options (developer docs, chapter 08 (Components and extensions))
         $details = is_array($data['details'] ?? null) ? $data['details'] : (json_decode((string)($data['details'] ?? ''), true) ?: []);
         $extension = (string)($details['extension'] ?? '');
         if ($extension !== '') {
@@ -103,7 +103,7 @@ class FieldInfoBackend extends FieldBackend {
         // default_field_id
         $this->backend->infoAdd($this->field, 'default_field', $data['default_field'] ? $yes : '', ['html', 'ifnotempty']);
 
-        // custom_order ('link' ist immer handsortiert - nichts zu zeigen)
+        // custom_order ('link' is always hand-sorted - nothing to show)
         if (in_array($type, $this->cms->relationTypes, true) && !in_array($type, $this->cms->dependentTypes, true)) {
             $this->backend->infoAdd($this->field, 'custom_order', $data['custom_order'] ? $yes : $no, ['html']);
         }
@@ -189,7 +189,7 @@ class FieldInfoBackend extends FieldBackend {
         if (in_array($type, $this->cms->multiAreaTypes, true)) {
 
             // rel_area_ids (pointer, link)
-            // Verknüpfte Zielbereiche listen
+            // List linked target areas
             $sql = "SELECT `a`.`area_id` FROM `rel_field_area` `r` LEFT JOIN `area` `a`"
             ." ON `r`.`area_id` = `a`.`area_id`"
             ." WHERE `r`.`field_id` =? ORDER BY `a`.`position` ASC";
@@ -247,7 +247,7 @@ class FieldInfoBackend extends FieldBackend {
                 }
                 $this->backend->infoAdd($this->field, 'parent_field_id', $parentFieldHtml, $flags);
 
-                // converter_ids (in ihrer Reihenfolge, hookOnLoaded() aus rel_field_converter)
+                // converter_ids (in their order, hookOnLoaded() from rel_field_converter)
                 $converters = [];
                 foreach ($this->system->sanitizeIds((array)($data['converter_ids'] ?? []), true) as $converterId) {
                     $converters[] = $this->backend->teaser('converter', $converterId);
@@ -255,7 +255,7 @@ class FieldInfoBackend extends FieldBackend {
                 $this->backend->infoAdd($this->field, 'converter_ids', implode('<br>', $converters), ['html']);
             }
 
-            // user_auth / profile_area_ids (Upload und Thumbnail)
+            // user_auth / profile_area_ids (upload and thumbnail)
             $userAuth = !empty($details['user_auth']);
             $this->backend->infoAdd($this->field, 'details.user_auth',
                 $userAuth ? $this->backend->template('icon_checked') : $this->backend->emptyPlaceholder,
@@ -280,7 +280,7 @@ class FieldInfoBackend extends FieldBackend {
     }
 
     /**
-     * Optionen auf der Infoseite: {Extension}/backend/info.php, sonst Schlüssel: Wert.
+     * Options on the info page: {Extension}/backend/info.php, otherwise key: value.
      */
     private function _extensionInfoHtml(string $extension, array $options): string
     {

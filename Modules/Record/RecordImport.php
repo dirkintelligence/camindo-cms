@@ -1,193 +1,192 @@
 <?php
 /**
- * Import von Datensätzen und Strukturen - das Pendant zu RecordExport: XML
- * (Backup-Format), CSV, DOCX (Übersetzung).
+ * Import of records and structures - the counterpart to RecordExport: XML
+ * (backup format), CSV, DOCX (translation).
  *
- * Das ist die ARBEIT; die Masken sind RecordBackendImport (record_import.php),
- * erreichbar über das Menü rechts in der Datensatzliste (ein Bereich) und auf der
- * Startseite des Moduls (global). Im Request oder als Hintergrundprozess
- * (Core/cron/record_import.php) läuft EXAKT DERSELBE Code: run().
+ * This is the WORK; the masks are RecordBackendImport (record_import.php),
+ * reachable via the menu on the right in the record list (one area) and on the
+ * start page of the module (global). In the request or as a background process
+ * (Core/cron/record_import.php) EXACTLY THE SAME code runs: run().
  *
- * DREI SCHRITTE
+ * THREE STEPS
  * --------------------
- *     prepare()   Importdatei (Upload oder aus var/upload) nach var/tmp/import-{token}/
- *                 bringen, eine Zip-Datei dort entpacken, die Kandidaten (xml, csv,
- *                 docx) suchen - mehrere: der Redakteur wählt
- *     analyze*()  die gewählte Datei ansehen: XML-Header (Herkunft, Version, Bereiche,
- *                 Sprachen), CSV-Spalten mit Vorschlag der Zielfelder, DOCX-Tabellen
- *     run()       importieren, Protokoll
+ *     prepare()   bring the import file (upload or from var/upload) to var/tmp/import-{token}/,
+ *                 unpack a zip file there, search for the candidates (xml, csv,
+ *                 docx) - several: the editor chooses
+ *     analyze*()  look at the chosen file: XML header (origin, version, areas,
+ *                 languages), CSV columns with a suggestion of the target fields, DOCX tables
+ *     run()       import, log
  *
- * DER AUFTRAG (JOB)
+ * THE JOB
  * --------------------
  *     type        'xml' | 'csv' | 'docx'
- *     area_id     Bereich, aus dessen Liste der Import aufgerufen wurde (0 = global)
- *     dir         Name des Importverzeichnisses in var/tmp (import-{token})
- *     file        Pfad der Importdatei relativ zum Importverzeichnis
- *     mode        Modus der Datensätze (MODES; docx: immer update)
- *     skip        so viele Datensätze (csv: Zeilen) am Anfang überspringen
- *     limit       höchstens so viele Datensätze importieren (0 = alle)
- *     force       Bearbeitungssperren anderer Admins übergehen
- *     parent_id   Vaterdatensatz neuer Datensätze (Bereich mit Baum; 0 = Wurzel) -
- *                 gilt, wenn die Datei keinen nennt (siehe EINFÜGEPOSITION)
- *     previous_id Datensatz, HINTER dem die neuen eingefügt werden (0 = an den
- *                 Anfang); fehlt der Schlüssel: hinter dem letzten vorhandenen
- *     source_area_id  xml (ein Bereich): area_id der Datei, deren Datensätze nach
- *                 area_id importiert werden (0 = alle)
+ *     area_id     area from whose list the import was called (0 = global)
+ *     dir         name of the import directory in var/tmp (import-{token})
+ *     file        path of the import file relative to the import directory
+ *     mode        mode of the records (MODES; docx: always update)
+ *     skip        skip this many records (csv: lines) at the beginning
+ *     limit       import at most this many records (0 = all)
+ *     force       ignore edit locks of other admins
+ *     parent_id   parent record of new records (area with tree; 0 = root) -
+ *                 applies if the file names none (see INSERTION POSITION)
+ *     previous_id record AFTER which the new ones are inserted (0 = at the
+ *                 beginning); if the key is missing: after the last existing one
+ *     source_area_id  xml (one area): area_id of the file whose records are imported into
+ *                 area_id (0 = all)
  *     csv         csv: ['separator', 'enclosure', 'eol', 'stored' => bool]
- *     mapping     csv: Spaltenindex => Zielschlüssel (siehe csvTargets())
+ *     mapping     csv: column index => target key (see csvTargets())
  *     docx        docx: ['punct' => bool, 'space' => bool, 'rtl' => 'unicode'|'html'|'none']
  *     global      xml (global): true
- *     folder_id   xml (global): Zielebene - Ordner, unter dem neue Bereiche entstehen
- *     instance_id xml (global): Mandant neuer Bereiche (0 = aus der Datei bzw. Zielebene)
- *     areas       xml (global): area_id der Datei => [
- *                     'name'      => abweichender Bereichsname (Maske),
- *                     'structure' => Modus (GLOBAL_MODES), 'structure_by' => 'name'|'area_id',
- *                     'records'   => Modus, 'records_by' => 'slug'|'record_id',
- *                     'templates' => Modus, 'templates_by' => 'name'|'template_id' ]
- *     converters  xml (global): converter_id der Datei => Entscheidung der Maske:
- *                 'new' (anlegen), 'ignore' oder die converter_id eines vorhandenen
- *                 Konverters; fehlt der Schlüssel: automatisch (siehe KONVERTER)
- *     same_db     (von run() gesetzt) Datei stammt aus dieser Datenbank: created_by/owner_id
- *                 wird wiederhergestellt, sonst dem Session-Admin zugewiesen; changed_by
- *                 ist immer der Session-Admin
- *     token       Hintergrund: Token des bgproc-Eintrags (start())
- *     admin_id    Hintergrund: auslösender Admin (Empfänger der Nachricht)
+ *     folder_id   xml (global): target level - folder under which new areas arise
+ *     instance_id xml (global): instance of new areas (0 = from the file resp. target level)
+ *     areas       xml (global): area_id of the file => [
+ *                     'name'      => deviating area name (mask),
+ *                     'structure' => mode (GLOBAL_MODES), 'structure_by' => 'name'|'area_id',
+ *                     'records'   => mode, 'records_by' => 'slug'|'record_id',
+ *                     'templates' => mode, 'templates_by' => 'name'|'template_id' ]
+ *     converters  xml (global): converter_id of the file => decision of the mask:
+ *                 'new' (create), 'ignore' or the converter_id of an existing
+ *                 converter; if the key is missing: automatic (see CONVERTERS)
+ *     same_db     (set by run()) file comes from this database: created_by/owner_id
+ *                 is restored, otherwise assigned to the session admin; changed_by
+ *                 is always the session admin
+ *     token       background: token of the bgproc entry (start())
+ *     admin_id    background: triggering admin (recipient of the message)
  *
- * MODUS
+ * MODES
  * --------------------
- *     insert             immer ein neuer Datensatz; bringt die Datei eine record_id mit
- *                        und ist die frei (oder von einer Arbeitskopie / einem gelöschten
- *                        Datensatz belegt - der wird entfernt), bekommt er diese Id
- *     update_or_insert   vorhanden: nur die Felder der Datei schreiben, alle anderen
- *                        bleiben; sonst wie insert
- *     update             wie update_or_insert, aber nicht vorhandene übergehen
- *     replace_or_insert  vorhanden: alle Felder - was die Datei nicht nennt, wird
- *                        geleert (Verknüpfungen entfernt, Dateien gelöscht); sonst insert
- *     replace            wie replace_or_insert, aber nicht vorhandene übergehen
- *     ignore             (nur global) nicht importieren
+ *     insert             always a new record; if the file carries a record_id and it is
+ *                        free (or occupied by a working copy / a deleted
+ *                        record - which is removed), the record gets this id
+ *     update_or_insert   exists: write only the fields of the file, all others
+ *                        remain; otherwise like insert
+ *     update             like update_or_insert, but skip those that do not exist
+ *     replace_or_insert  exists: all fields - what the file does not name is
+ *                        emptied (links removed, files deleted); otherwise insert
+ *     replace            like replace_or_insert, but skip those that do not exist
+ *     ignore             (global only) do not import
  *
- * ZWEI DURCHLÄUFE (XML)
+ * TWO PASSES (XML)
  * --------------------
- * Die Ids der Datei sind nicht die Ids der Zieldatenbank. Deshalb sammelt der
- * Import Zuordnungstabellen (Id der Datei => tatsächliche Id) für Bereiche, Felder,
- * Templates und Datensätze ($this->map) und arbeitet in Stufen:
+ * The ids of the file are not the ids of the target database. Therefore the
+ * import collects mapping tables (id of the file => actual id) for areas, fields,
+ * templates and records ($this->map) and works in stages:
  *
- *     1. Struktur    Bereiche (Eltern vor Kindern, neue unter der Zielebene), die
- *                    Konverter der Thumbnail-Felder (KONVERTER), dann die Felder
- *                    (einfache Typen, Thumbnails, Relationen mit ihrem Gegenfeld,
- *                    Pointer, Volltext), zuletzt je Bereich Default-/Sortierfeld,
- *                    Default-Template und Template-Zuweisungen
- *     2. Templates   je Template-Bereich
- *     3. Datensätze  erster Durchlauf: Arbeitskopie anlegen bzw. auschecken, Felder,
- *                    Dateien und Passwörter prüfen und einchecken - die record_id
- *                    steht damit fest.
- *                    Zweiter Durchlauf, Datensatz für Datensatz: erneut auschecken,
- *                    Verknüpfungen, Vaterdatensatz, Template und Besitzer mit den
- *                    zugeordneten Ids setzen, einchecken. Nacheinander und nicht in
- *                    einem Rutsch: eine Arbeitskopie kopiert auch die eingehenden
- *                    Verknüpfungen ihres Originals hin und zurück - wären alle
- *                    Datensätze zugleich ausgecheckt, verwürfe der Check-in eines
- *                    Zieldatensatzes die gerade geschriebenen Verknüpfungen seiner
- *                    Quellen.
+ *     1. structure   areas (parents before children, new ones under the target level), the
+ *                    converters of the thumbnail fields (CONVERTERS), then the fields
+ *                    (simple types, thumbnails, relations with their counter field,
+ *                    pointers, fulltext), finally per area default/sort field,
+ *                    default template and template assignments
+ *     2. templates   per template area
+ *     3. records     first pass: create resp. check out the working copy, check fields,
+ *                    files and passwords and check in - the record_id
+ *                    is thereby fixed.
+ *                    Second pass, record by record: check out again,
+ *                    set links, parent record, template and owner with the
+ *                    assigned ids, check in. One after the other and not all at once:
+ *                    a working copy also copies the incoming links of its
+ *                    original back and forth - if all records were checked out at the same time,
+ *                    the check-in of a target record would discard the just-written links of its
+ *                    sources.
  *
- * JE DATENSATZ DERSELBE WEG WIE VON HAND
+ * PER RECORD THE SAME WAY AS BY HAND
  * --------------------
- * tmpInit() (neu, ggf. mit erzwungener Id) bzw. load() -> Sperre -> checkOut(), dann
- * Record::importSave(): Eingabeprüfung nach den Felddefinitionen des Zielbereichs,
- * checkIn, Cache, Volltext, Thumbnails - alles wie in der Eingabemaske. Werte aus
- * dem XML liegen im Datenbankformat vor (storedFormatFields), Passwörter als Hash
- * (prehashedFields), verschlüsselte Inhalte werden entschlüsselt übergeben und von
- * save() neu verschlüsselt. Dateien kommen aus dem Importverzeichnis
- * ($data[feld]['importfile']). Bereiche, Felder und Templates gehen durch
- * Area::save(), Field::save(), Template::save() - mit allen Hooks (Gegenfelder,
- * fieldname, rel_field_area, Template-Kompilierung).
+ * tmpInit() (new, possibly with a forced id) resp. load() -> lock -> checkOut(), then
+ * Record::importSave(): input check according to the field definitions of the target area,
+ * checkIn, cache, fulltext, thumbnails - everything as in the input mask. Values from
+ * the XML are in database format (storedFormatFields), passwords as hash
+ * (prehashedFields), encrypted contents are passed decrypted and re-encrypted by
+ * save(). Files come from the import directory
+ * ($data[field]['importfile']). Areas, fields and templates go through
+ * Area::save(), Field::save(), Template::save() - with all hooks (counter fields,
+ * fieldname, rel_field_area, template compilation).
  *
- * EINFÜGEPOSITION
+ * INSERTION POSITION
  * --------------------
- * In Bereichen mit Baum (Eingabefeld `parent_id`) oder Handsortierung (Eingabefeld
- * `position`) landen neue Datensätze in der Reihenfolge der Datei hinter dem
- * Datensatz previous_id des Auftrags - einmal gewählt, danach je hinter dem zuletzt
- * eingefügten (insertAfter). Ohne Angabe hinter dem letzten vorhandenen: ohne
- * previous_id setzte createInTree() jeden neuen Datensatz an den ANFANG seiner
- * Ebene, die Datei käme rückwärts an. Nennt die Datei einen Vaterdatensatz
- * (XML, CSV-Spalte parent_id), wird der Datensatz im zweiten Durchlauf dorthin
- * gehängt - ans Ende der dortigen Geschwister, ebenfalls in Dateireihenfolge.
- * Der Export sortiert nach `lft` bzw. `position` (RecordExport::exportSort()),
- * die Reihenfolge überlebt also den Weg durch die Datei.
+ * In areas with a tree (input field `parent_id`) or manual sorting (input field
+ * `position`) new records land in the order of the file after the
+ * record previous_id of the job - once chosen, afterwards each after the most recently
+ * inserted one (insertAfter). Without specification after the last existing one: without
+ * previous_id createInTree() would place every new record at the BEGINNING of its
+ * level, the file would arrive backwards. If the file names a parent record
+ * (XML, CSV column parent_id), the record is attached there in the second pass -
+ * at the end of the siblings there, likewise in file order.
+ * The export sorts by `lft` resp. `position` (RecordExport::exportSort()),
+ * so the order survives the way through the file.
  *
- * EINGEBETTETE INHALTE (Felder vom Typ link; CSV und DOCX)
+ * EMBEDDED CONTENTS (fields of type link; CSV and DOCX)
  * --------------------
- * Die Zieldatensätze eines link-Feldes gehören dem Datensatz (LinkTrait) und werden
- * mit ihm als Einheit importiert - wie in der Eingabemaske: im ersten Durchlauf
- * werden sie an der Arbeitskopie des Datensatzes ausgecheckt bzw. neu angelegt
- * (_importLinks()), ihre Werte geprüft in den Arbeitsstand geschrieben, und
- * LinkTrait::checkInDependents() checkt sie in derselben Transaktion wie den
- * Datensatz ein (verwaiste löscht der Check-in). Scheitert ein Inhalt, scheitert
- * der Datensatz. Der zweite Durchlauf lässt die link-Felder dann aus.
+ * The target records of a link field belong to the record (LinkTrait) and are
+ * imported with it as a unit - as in the input mask: in the first pass
+ * they are checked out at the working copy of the record resp. newly created
+ * (_importLinks()), their values checked and written into the working state, and
+ * LinkTrait::checkInDependents() checks them in within the same transaction as the
+ * record (the check-in deletes orphans). If one content fails, the
+ * record fails. The second pass then leaves out the link fields.
  *
- *     csv   Spalten "{link}.record_id", "{link}.area_id", "{link}.{feld}[.{code}]"
- *           (csvTargets(); RecordExport schreibt sie) - je Inhalt ein Wert, mit
- *           " | " getrennt (_csvLinks()). Die Liste ist verbindlich: vorhandene
- *           Inhalte werden über ihre Id bzw. Stelle zugeordnet und geändert, neue
- *           angelegt, nicht mehr genannte entfernt, die Reihenfolge übernommen.
- *           Thumbnails entstehen neu. Ohne Spalten zum link-Feld bleibt es, wie es
- *           ist - bei replace werden seine Inhalte entfernt.
- *     docx  Zeilen "field={link}.{feld} | record_id={id}": nur die genannten
- *           Inhalte werden übersetzt (partial).
+ *     csv   columns "{link}.record_id", "{link}.area_id", "{link}.{field}[.{code}]"
+ *           (csvTargets(); RecordExport writes them) - one value per content, separated
+ *           by " | " (_csvLinks()). The list is binding: existing
+ *           contents are matched and changed via their id resp. position, new ones
+ *           created, ones no longer named removed, the order adopted.
+ *           Thumbnails are created anew. Without columns for the link field it remains as
+ *           it is - with replace its contents are removed.
+ *     docx  lines "field={link}.{field} | record_id={id}": only the named
+ *           contents are translated (partial).
  *
- * Die XML-Importe verknüpfen link-Felder weiter im zweiten Durchlauf über die
- * zugeordneten Ids (die Inhalte stehen dort als eigene Datensätze in der Datei).
+ * The XML imports further link link fields in the second pass via the
+ * assigned ids (the contents are there as separate records in the file).
  *
- * KONVERTER (Thumbnail-Felder)
+ * CONVERTERS (thumbnail fields)
  * --------------------
- * Ein Thumbnail-Feld verweist über `rel_field_converter` (sortiert) auf Konverter -
- * in der Datei je Feld <converter_ids>, ältere Dateien führen sie in
- * details.converter_ids. Die Ids der Datei bedeuten in einer fremden Datenbank
- * nichts, deshalb führt der Export die
- * Konverter der Thumbnail-Felder mit (<converters>, je Konverter der Hash seiner
- * Einstellungen - Converter::settingsHash()). Der Import ordnet jeden Konverter der
- * Datei zu (converterPlan()):
+ * A thumbnail field refers via `rel_field_converter` (sorted) to converters -
+ * in the file per field <converter_ids>, older files carry them in
+ * details.converter_ids. The ids of the file mean nothing in a foreign database,
+ * therefore the export carries the
+ * converters of the thumbnail fields along (<converters>, per converter the hash of its
+ * settings - Converter::settingsHash()). The import assigns each converter of the
+ * file (converterPlan()):
  *
- *     aus derselben Datenbank   die converter_id, wenn es sie noch gibt
- *     sonst                     ein vorhandener Konverter mit demselben Hash
- *     kein Treffer              der Konverter wird neu angelegt - wenn sein Prozessor
- *                               installiert ist; sonst wird er ignoriert
+ *     from the same database    the converter_id, if it still exists
+ *     otherwise                 an existing converter with the same hash
+ *     no match                  the converter is created anew - if its processor
+ *                               is installed; otherwise it is ignored
  *
- * Die globale Maske zeigt das Ergebnis und lässt den Redakteur je Konverter
- * entscheiden (Job 'converters'): neu anlegen, einen vorhandenen Konverter wählen
- * oder ignorieren. _importConverters() führt das vor den Feldern aus und füllt
- * $this->map['converter']; _saveField() setzt die zugeordneten Ids ein. Bleibt für
- * ein Thumbnail-Feld kein Konverter übrig, wird das Feld übergangen (ein Thumbnail
- * ohne Konverter gibt es nicht - Field::hookOnSave()). Dateien ohne <converters>
- * (ältere Exporte): aus derselben Datenbank gelten die Ids, sonst fällt jeder
- * Konverter weg.
+ * The global mask shows the result and lets the editor decide per converter
+ * (job 'converters'): create new, choose an existing converter or ignore.
+ * _importConverters() executes this before the fields and fills
+ * $this->map['converter']; _saveField() inserts the assigned ids. If no converter
+ * remains for a thumbnail field, the field is skipped (a thumbnail
+ * without converter does not exist - Field::hookOnSave()). Files without <converters>
+ * (older exports): from the same database the ids apply, otherwise every
+ * converter drops away.
  *
- * CUSTOM-SNIPPETS UND SLUG-PREFIX (XML)
+ * CUSTOM SNIPPETS AND SLUG PREFIX (XML)
  * --------------------
- * Beschriftungen von Bereichen und Feldern verweisen oft auf das Snippet-Set ihrer
- * Instanz (#custom.{instance_id}.{key}, Modul Snippets). Der Export führt die Texte
- * dieser Snippets mit (<snippets>); der Import legt fehlende Schlüssel im Set der
- * ZIELinstanz an (Snippets::merge() - Vorhandenes bleibt) und schreibt die Verweise
- * auf deren Präfix um (_mapSnippetRefs(), _importSnippets()). Ebenso die Snippets, die
- * importierte Templates ansprechen (custom.{key}, _queueTemplateSnippets()). Aus derselben
- * Datenbank dient das Set der Quellinstanz als Ersatz, wenn die Datei (ältere
- * Exporte) keine <snippets> führt.
- * Der Slug-Prefix eines Bereichs (details.slug_prefix, je language_id) wird über die
- * Sprachkürzel des Headers auf die Sprachen der Zielinstanz umgesetzt; ist er dort
- * nicht zulässig (Area::slugPrefixErrors(), z. B. schon vergeben), entfällt er mit
- * einem Hinweis im Protokoll.
+ * Labels of areas and fields often refer to the snippet set of their
+ * instance (#custom.{instance_id}.{key}, module Snippets). The export carries the texts
+ * of these snippets along (<snippets>); the import adds missing keys to the set of the
+ * TARGET instance (Snippets::merge() - existing ones remain) and rewrites the references
+ * to its prefix (_mapSnippetRefs(), _importSnippets()). Likewise the snippets that
+ * imported templates address (custom.{key}, _queueTemplateSnippets()). From the same
+ * database the set of the source instance serves as replacement if the file (older
+ * exports) carries no <snippets>.
+ * The slug prefix of an area (details.slug_prefix, per language_id) is converted via the
+ * language codes of the header to the languages of the target instance; if it is not
+ * permitted there (Area::slugPrefixErrors(), e.g. already assigned), it is dropped
+ * with a note in the log.
  *
- * ANALYSE (analyze())
+ * ANALYSIS (analyze())
  * --------------------
- * Vor dem Import zeigt die Maske, was der Auftrag tun würde - ohne etwas zu
- * schreiben: je Bereich der Datei, ob er angelegt oder geändert wird, welche Felder
- * hinzukommen, geändert oder entfernt werden, wie viele Templates und Datensätze
- * hinzugefügt, geändert, ersetzt oder übergangen würden ("erweitert": jeder Datensatz
- * einzeln). Die Eingabeprüfung der Feldwerte läuft erst beim Import - ob ein
- * Datensatz tatsächlich durchgeht, steht vorher nicht fest.
+ * Before the import the mask shows what the job would do - without writing
+ * anything: per area of the file whether it is created or changed, which fields
+ * are added, changed or removed, how many templates and records would be
+ * added, changed, replaced or skipped ("extended": every record
+ * individually). The input check of the field values only runs during import - whether a
+ * record actually passes is not known beforehand.
  *
- * @see Camindo\Core\Modules\Record\RecordBackendImport  die Masken
- * @see Camindo\Core\Modules\Record\RecordExport         das Gegenstück
+ * @see Camindo\Core\Modules\Record\RecordBackendImport  the masks
+ * @see Camindo\Core\Modules\Record\RecordExport         the counterpart
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -211,73 +210,73 @@ class RecordImport {
 
     public const TYPES = ['xml', 'csv', 'docx'];
     public const MODES = ['insert', 'update_or_insert', 'update', 'replace_or_insert', 'replace'];
-    /** Modi der globalen Maske (je Bereich): dazu 'ignore' */
+    /** modes of the global mask (per area): plus 'ignore' */
     public const GLOBAL_MODES = ['insert', 'update_or_insert', 'update', 'replace_or_insert', 'replace', 'ignore'];
 
-    /** Typkennung des Hintergrundprozesses (Tabelle `bgproc`) */
+    /** type identifier of the background process (table `bgproc`) */
     public const BGPROC_TYPE = 'import';
 
-    /** Präfix der Importverzeichnisse in var/tmp */
+    /** prefix of the import directories in var/tmp */
     public const DIR_PREFIX = 'import-';
 
-    /** Meta-Spalten von `record`, die eine Importdatei setzen darf */
+    /** meta columns of `record` that an import file may set */
     public const META_FIELDS = ['status_id', 'online_at', 'offline_at', 'template_id', 'parent_id', 'needs_review', 'user_id'];
 
     /**
-     * Herkunftsspalten: Admin-Ids, die nur für NEUE Datensätze aus der Datei
-     * übernommen werden (_restoreCreated()) - aus derselben Datenbank (XML) bzw.
-     * aus CSV als angegebene Admin-Id; unbekannte Ids bleiben beim Session-Admin
+     * Origin columns: admin ids that are only taken over from the file for NEW records
+     * (_restoreCreated()) - from the same database (XML) resp.
+     * from CSV as the specified admin id; unknown ids remain with the session admin
      */
     public const ORIGIN_FIELDS = ['created_by', 'owner_id'];
 
-    /** Bereichstypen mit Datensätzen */
+    /** area types with records */
     public const CONTENT_TYPES = ['record', 'profile', 'ugc'];
 
-    /** Sprachen mit ideografischen Satzzeichen (Vorgabe der DOCX-Optionen) */
+    /** languages with ideographic punctuation (default of the DOCX options) */
     private const IDEOGRAPHIC_LANGUAGES = ['zh', 'ja'];
 
-    /** Spalten von `field`, die der Strukturimport übernimmt (ohne Schlüssel) */
+    /** columns of `field` that the structure import takes over (without keys) */
     private const FIELD_COLUMNS = ['type', 'name', 'label', 'display_type', 'note', 'tooltip', 'height', 'min', 'min_op', 'max', 'max_op', 'pattern', 'prefix', 'suffix', 'position', 'custom_order', 'flags', 'default', 'visibility_input', 'visibility_search', 'visibility_list', 'default_field', 'meta', 'multilingual', 'details'];
 
-    /** Zielschema des laufenden Imports je Bereich */
+    /** target schema of the running import per area */
     private array $schemaMemo = [];
 
-    /** Zuordnung Id der Datei => tatsächliche Id: 'area', 'field', 'template', 'record', 'converter' (0: ignoriert) */
+    /** mapping of id of the file => actual id: 'area', 'field', 'template', 'record', 'converter' (0: ignored) */
     private array $map = ['area' => [], 'field' => [], 'template' => [], 'record' => [], 'converter' => []];
 
-    /** zuletzt angelegter Bereich je Vater (Reihenfolge neuer Bereiche) */
+    /** most recently created area per parent (order of new areas) */
     private array $lastSibling = [];
-    /** Einfügeposition neuer Datensätze: area_id => parent_id => record_id des Vorgängers (EINFÜGEPOSITION) */
+    /** insertion position of new records: area_id => parent_id => record_id of the predecessor (INSERTION POSITION) */
     private array $insertAfter = [];
 
-    /** Templates der Datei: template_id => ['name', 'area_id' (Datei)] - Zuordnung nach Name, wenn sie nicht importiert werden */
+    /** templates of the file: template_id => ['name', 'area_id' (file)] - assignment by name if they are not imported */
     private array $fileTemplates = [];
 
-    /** geschriebene Templates: template_id => Daten der Datei (für die Id-Ersetzungen im Code) */
+    /** written templates: template_id => data of the file (for the id replacements in the code) */
     private array $savedTemplates = [];
 
     /**
-     * Trigger-Templates der Bereiche: area_id => [template_id (Datei), ...] in ihrer
-     * Reihenfolge - gesetzt erst
-     * nach dem Import (_applyTriggerTemplates()): die Datensätze der Datei tragen
-     * die berechneten Werte schon, und der Code der Templates ist erst nach
-     * _rewriteTemplateCodes() lauffähig (CMS:REPLACE-Markierungen)
+     * Trigger templates of the areas: area_id => [template_id (file), ...] in their
+     * order - set only
+     * after the import (_applyTriggerTemplates()): the records of the file already carry
+     * the computed values, and the code of the templates is executable only after
+     * _rewriteTemplateCodes() (CMS:REPLACE markers)
      */
     private array $pendingTriggers = [];
 
-    /** Bereiche der Datei: area_id => ['name', 'type'] (Zuordnung der Herkunftsbereiche) */
+    /** areas of the file: area_id => ['name', 'type'] (assignment of the origin areas) */
     private array $fileAreas = [];
 
-    /** Datei stammt aus dieser Datenbank (Job 'same_db', für die Konverter-Zuordnung in den Feldern) */
+    /** file comes from this database (job 'same_db', for the converter assignment in the fields) */
     private bool $sameDb = false;
 
-    /** Custom-Snippets der Datei (<snippets>): instance_id der Datei => [schlüssel => [lang => text]] */
+    /** custom snippets of the file (<snippets>): instance_id of the file => [key => [lang => text]] */
     private array $fileSnippets = [];
 
-    /** Sprachen der Datei: language_id der Datei => Kürzel (Header, für details.slug_prefix) */
+    /** languages of the file: language_id of the file => code (header, for details.slug_prefix) */
     private array $fileLanguages = [];
 
-    /** zu übernehmende Custom-Snippets: Zielinstanz => [schlüssel => [lang => text]] (_mapSnippetRefs()) */
+    /** custom snippets to be taken over: target instance => [key => [lang => text]] (_mapSnippetRefs()) */
     private array $pendingSnippets = [];
 
     public function __construct(
@@ -304,22 +303,22 @@ class RecordImport {
     }
 
     // ====================
-    // Modi
+    // Modes
 
-    /** Legt der Modus nicht vorhandene Datensätze an? */
+    /** Does the mode create records that do not exist? */
     public static function modeCreates(string $mode): bool
     {
         return in_array($mode, ['insert', 'update_or_insert', 'replace_or_insert'], true);
     }
 
-    /** Leert der Modus, was die Datei nicht nennt? */
+    /** Does the mode empty what the file does not name? */
     public static function modeReplaces(string $mode): bool
     {
         return str_starts_with($mode, 'replace');
     }
 
     // ====================
-    // Schwellwert
+    // Threshold
 
     public function needsBackground(int $count): bool
     {
@@ -333,15 +332,15 @@ class RecordImport {
     }
 
     // ====================
-    // Schritt 1a: Datei bereitstellen
+    // Step 1a: provide the file
 
     /**
-     * Importdatei nach var/tmp/import-{token}/ bringen und die Kandidaten suchen.
+     * Bring the import file to var/tmp/import-{token}/ and search for the candidates.
      *
-     * @param string $source        Pfad der Datei (Upload-Tmpfile oder Datei in var/upload)
-     * @param string $originalName  ursprünglicher Dateiname (Endung!)
-     * @param bool   $isUpload      true: $source ist ein PHP-Upload (move_uploaded_file)
-     * @return array  ['dir' => 'import-…', 'files' => ['export.xml', …]] oder ['error' => …]
+     * @param string $source        path of the file (upload tmpfile or file in var/upload)
+     * @param string $originalName  original file name (extension!)
+     * @param bool   $isUpload      true: $source is a PHP upload (move_uploaded_file)
+     * @return array  ['dir' => 'import-…', 'files' => ['export.xml', …]] or ['error' => …]
      */
     public function prepare(string $source, string $originalName, bool $isUpload): array
     {
@@ -378,8 +377,8 @@ class RecordImport {
     }
 
     /**
-     * Zip-Datei entpacken - Einträge mit Pfadsprüngen (Zip-Slip) werden abgelehnt.
-     * @return string  '' oder Fehlermeldung
+     * Extract the zip file - entries with path traversal (zip slip) are rejected.
+     * @return string  '' or error message
      */
     private function _extractZip(string $zipPath, string $dir): string
     {
@@ -401,8 +400,8 @@ class RecordImport {
     }
 
     /**
-     * Absoluter Pfad eines Importverzeichnisses, null bei ungültigem Namen oder
-     * fehlendem Verzeichnis.
+     * Absolute path of an import directory, null for an invalid name or
+     * missing directory.
      */
     public function importDir(string $dirName): ?string
     {
@@ -412,7 +411,7 @@ class RecordImport {
     }
 
     /**
-     * Importverzeichnis samt Inhalt entfernen.
+     * Remove the import directory including its contents.
      */
     public function removeDir(string $dirName): void
     {
@@ -429,8 +428,8 @@ class RecordImport {
     }
 
     /**
-     * Importdateien (xml, csv, docx) im Verzeichnis, relative Pfade; das
-     * media-Verzeichnis eines Exports bleibt außen vor.
+     * Import files (xml, csv, docx) in the directory, relative paths; the
+     * media directory of an export is left out.
      *
      * @return string[]
      */
@@ -453,7 +452,7 @@ class RecordImport {
     }
 
     /**
-     * Importer-Typ einer Datei anhand der Endung ('' = keine Importdatei).
+     * Importer type of a file by its extension ('' = not an import file).
      */
     public function typeOf(string $file): string
     {
@@ -462,7 +461,7 @@ class RecordImport {
     }
 
     /**
-     * Pfad einer Importdatei innerhalb des Verzeichnisses (gegen Pfadsprünge geprüft).
+     * Path of an import file within the directory (checked against path traversal).
      */
     public function filePath(string $dirName, string $file): ?string
     {
@@ -474,7 +473,7 @@ class RecordImport {
     }
 
     /**
-     * Importfähige Dateien in var/upload (Auswahl statt Upload), relative Pfade.
+     * Importable files in var/upload (selection instead of upload), relative paths.
      *
      * @return string[]
      */
@@ -497,22 +496,22 @@ class RecordImport {
     }
 
     // ====================
-    // Schritt 1b: Analyse
+    // Step 1b: analysis
 
     /**
-     * XML: Header lesen, Bereiche, Datensätze und Templates zählen.
+     * XML: read the header, count areas, records and templates.
      *
      * @return array [
-     *     'ok'        => bool      Datei ist eine camindo-Exportdatei
-     *     'errors'    => string[]  harte Fehler (kein Import möglich)
-     *     'warnings'  => string[]  Version / Datenbank / Format
+     *     'ok'        => bool      file is a camindo export file
+     *     'errors'    => string[]  hard errors (no import possible)
+     *     'warnings'  => string[]  version / database / format
      *     'header'    => array     database, cms_version, admin, exported_at, area, languages (id => code), structure, content
-     *     'count'     => int       Datensätze
-     *     'templates' => int       Templates
-     *     'areas'     => array     Bereiche MIT Datensätzen: area_id (Herkunft) => ['name', 'label', 'count', 'target_area_id']
-     *     'structure' => array     alle Bereiche der Datei (Format 2, Baumreihenfolge): area_id => [
+     *     'count'     => int       records
+     *     'templates' => int       templates
+     *     'areas'     => array     areas WITH records: area_id (origin) => ['name', 'label', 'count', 'target_area_id']
+     *     'structure' => array     all areas of the file (format 2, tree order): area_id => [
      *                              'name', 'label', 'type', 'parent_id', 'fields', 'records', 'templates',
-     *                              'target_by_name', 'target_by_id' (0 = nicht vorhanden)]
+     *                              'target_by_name', 'target_by_id' (0 = not present)]
      * ]
      */
     public function analyzeXml(string $path, int $areaId): array
@@ -592,7 +591,7 @@ class RecordImport {
             $result['errors'][] = $this->cms->snippet('record.error_import_not_camindo');
             return $result;
         }
-        // Format 1: der eine Bereich steht nur im Header
+        // format 1: the one area is only in the header
         if (empty($structure) && (int)($header['area']['area_id'] ?? 0) > 0) {
             $structure[(int)$header['area']['area_id']] = [
                 'name' => (string)$header['area']['name'], 'label' => (string)$header['area']['label'],
@@ -604,7 +603,7 @@ class RecordImport {
         $result['templates'] = array_sum($templates);
         if ($count < 1 && empty($structure)) $result['errors'][] = $this->cms->snippet('record.error_import_empty');
 
-        // Herkunft
+        // origin
         $ownDb = (string)($this->config->get('db.name') ?? '');
         if ($header['database'] !== '' && $ownDb !== '' && $header['database'] !== $ownDb) {
             $result['warnings'][] = str_replace('{database}', $header['database'], $this->cms->snippet('record.warning_import_database'));
@@ -617,7 +616,7 @@ class RecordImport {
             $result['warnings'][] = $this->cms->snippet('record.warning_import_no_languages');
         }
 
-        // Struktur: je Bereich der Datei die Treffer in der Zieldatenbank
+        // structure: per area of the file the matches in the target database
         foreach ($structure as $fileAreaId => &$info) {
             $info['records'] = (int)($areas[$fileAreaId] ?? 0);
             $info['templates'] = (int)($templates[$fileAreaId] ?? 0);
@@ -627,11 +626,11 @@ class RecordImport {
         unset($info);
         $result['structure'] = $structure;
 
-        // Konverter der Thumbnail-Felder: Treffer in der Zieldatenbank (KONVERTER)
+        // converters of the thumbnail fields: matches in the target database (CONVERTERS)
         $sameDb = $header['database'] !== '' && $header['database'] === $ownDb;
         $result['converters'] = $this->converterMatches($converters, $sameDb);
 
-        // Bereiche mit Datensätzen: Herkunft -> Ziel (gleiche Id, sonst gleicher Name)
+        // areas with records: origin -> target (same id, otherwise same name)
         foreach ($areas as $originAreaId => $areaCount) {
             $info = $structure[$originAreaId] ?? ['name' => '', 'label' => ''];
             $target = $this->_resolveArea($originAreaId, (string)($info['name'] ?? ''));
@@ -679,7 +678,7 @@ class RecordImport {
             ],
             'languages' => $languages,
             'primary_language_id' => $primary,
-            // Hauptsprache je Instanz der Datei (Format 2)
+            // primary language per instance of the file (format 2)
             'primary_by_instance' => $languageInstances,
             'fields' => $fields,
             'files' => (int)($node->files ?? 0),
@@ -687,9 +686,9 @@ class RecordImport {
     }
 
     /**
-     * Das aktuelle Element des XMLReaders als SimpleXMLElement (expand() liefert
-     * einen Knoten ohne Dokument - erst in ein DOMDocument übernommen lässt er
-     * sich in SimpleXML wandeln).
+     * The current element of the XMLReader as SimpleXMLElement (expand() returns
+     * a node without a document - only after being adopted into a DOMDocument
+     * can it be converted to SimpleXML).
      */
     private function _readerNode(\XMLReader $reader): \SimpleXMLElement
     {
@@ -707,9 +706,9 @@ class RecordImport {
     }
 
     /**
-     * Zielbereich zu einem Herkunftsbereich: gleiche Id (nicht gelöscht), sonst
-     * gleicher Name, sonst 0. $type schränkt auf einen Bereichstyp ein ('' = die
-     * Inhaltsbereiche).
+     * Target area for an origin area: same id (not deleted), otherwise
+     * same name, otherwise 0. $type restricts to an area type ('' = the
+     * content areas).
      */
     private function _resolveArea(int $originAreaId, string $name, string $type = ''): int
     {
@@ -730,16 +729,16 @@ class RecordImport {
     }
 
     /**
-     * CSV: Spalten der ersten Zeile, Zeilenzahl, Vorschlag für die Zuordnung.
+     * CSV: columns of the first line, line count, suggestion for the assignment.
      *
      * @param array $settings  separator, enclosure, eol
      * @return array [
-     *     'columns'  => string[]   Werte der ersten Zeile
-     *     'rows'     => int        Zeilen insgesamt (inkl. Kopfzeile)
-     *     'header'   => bool       erste Zeile enthält bekannte Feldnamen
-     *     'suggest'  => array      Spaltenindex => Zielschlüssel ('' = ignorieren)
-     *     'stored'   => bool       Spaltennamen sehen nach dem CSV-Export aus (Datenbankformat)
-     *     'example'  => string[]   zweite Zeile (Beispielwerte für die Zuordnung)
+     *     'columns'  => string[]   values of the first line
+     *     'rows'     => int        lines in total (incl. header line)
+     *     'header'   => bool       first line contains known field names
+     *     'suggest'  => array      column index => target key ('' = ignore)
+     *     'stored'   => bool       column names look as after the CSV export (database format)
+     *     'example'  => string[]   second line (example values for the assignment)
      *     'errors'   => string[]
      * ]
      */
@@ -770,14 +769,14 @@ class RecordImport {
     }
 
     /**
-     * Zielschlüssel zu einem Spaltennamen (Format des CSV-Exports):
-     * "{name}", "{name}.{code}", "{name}.record_id"; Unterfelder von Datei-Feldern
-     * und Thumbnails werden ignoriert.
+     * Target key for a column name (format of the CSV export):
+     * "{name}", "{name}.{code}", "{name}.record_id"; subfields of file fields
+     * and thumbnails are ignored.
      *
-     * Verknüpfungsfeld: "{name}.record_id" hat Vorrang; fehlt diese Spalte in der
-     * Datei, gilt auch die Spalte "{name}" als Liste der Ids.
+     * Link field: "{name}.record_id" takes precedence; if this column is missing in the
+     * file, the column "{name}" also counts as a list of ids.
      *
-     * @param string[] $columnNames  alle Spaltennamen der Datei
+     * @param string[] $columnNames  all column names of the file
      */
     private function _csvSuggest(string $column, array $targets, int $areaId, array $columnNames = []): string
     {
@@ -789,16 +788,16 @@ class RecordImport {
                 return "$column.record_id";
             }
         }
-        // "{name}.{code}" mit Sprachkürzel, "{name}.record_id" bzw. "{name}.{sub}.{code}"
+        // "{name}.{code}" with language code, "{name}.record_id" resp. "{name}.{sub}.{code}"
         $parts = explode('.', $column);
         while (count($parts) > 1) {
             array_pop($parts);
             $candidate = implode('.', $parts);
             if (isset($targets[$candidate])) {
-                // Sprachzusatz passt? (Zielschlüssel "{candidate}.{code}")
+                // does the language suffix fit? (target key "{candidate}.{code}")
                 $code = substr($column, strlen($candidate) + 1);
                 if (isset($targets["$candidate.$code"])) return "$candidate.$code";
-                // Datei-Unterfelder (bild.width) / Ziel-Felder einer Verknüpfung: nicht importierbar
+                // file subfields (image.width) / target fields of a link: not importable
                 $schema = $this->_schemaOf($areaId);
                 $type = (string)($schema[$parts[0]]['type'] ?? '');
                 if ($type === 'file' || in_array($type, $this->cms->relationTypes, true)) return '';
@@ -809,17 +808,17 @@ class RecordImport {
     }
 
     /**
-     * Zielschlüssel des CSV-Imports: Schlüssel => Beschriftung.
+     * Target keys of the CSV import: key => label.
      *
-     *     {name}            Feld (mehrsprachig: Hauptsprache), Meta-Felder, record_id
-     *     {name}.{code}     mehrsprachiges Feld in dieser Sprache
-     *     {name}.record_id  Verknüpfung: Ids der Zieldatensätze (mit " | " getrennt)
-     *     {name}            Datei-Feld: Pfad der Datei in der Zip-Datei (media/…)
-     *     {link}.area_id, {link}.{feld}[.{code}]
-     *                       Feld vom Typ link: Bereich und Felder der eingebetteten
-     *                       Inhalte (EINGEBETTETE INHALTE)
+     *     {name}            field (multilingual: primary language), meta fields, record_id
+     *     {name}.{code}     multilingual field in this language
+     *     {name}.record_id  link: ids of the target records (separated by " | ")
+     *     {name}            file field: path of the file in the zip file (media/…)
+     *     {link}.area_id, {link}.{field}[.{code}]
+     *                       field of type link: area and fields of the embedded
+     *                       contents (EMBEDDED CONTENTS)
      *
-     * Thumbnails und Volltext sind nicht dabei.
+     * Thumbnails and fulltext are not included.
      */
     public function csvTargets(int $areaId): array
     {
@@ -835,8 +834,8 @@ class RecordImport {
             if ($type === 'file' && !empty($colDef['parent_field_id'])) continue;
             $label = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name));
             if (in_array($type, $this->cms->dependentTypes, true)) {
-                // eingebettete Inhalte (EINGEBETTETE INHALTE): Ids, Bereich und die
-                // Felder der Zielbereiche - ohne Thumbnails (sie entstehen neu)
+                // embedded contents (EMBEDDED CONTENTS): ids, area and the
+                // fields of the target areas - without thumbnails (they arise anew)
                 $targets["$name.record_id"] = "$label.record_id ($name)";
                 $targets["$name.area_id"] = "$label.area_id ($name)";
                 foreach ($this->record->linkTargetFields($colDef) as $sub => $targetDef) {
@@ -877,7 +876,7 @@ class RecordImport {
     }
 
     /**
-     * DOCX: Tabellen lesen, Datensätze zählen, Zielsprache prüfen.
+     * DOCX: read tables, count records, check the target language.
      *
      * @return array ['ok', 'errors', 'records' => int, 'language_id' => int,
      *                'source_language_id' => int, 'fields' => string[]]
@@ -923,7 +922,7 @@ class RecordImport {
         foreach ($result['fields'] as $name) {
             $colDef = $schema[$name] ?? null;
             if (str_contains($name, '.')) {
-                // Feld eines eingebetteten Inhalts: {link}.{feld}
+                // field of an embedded content: {link}.{field}
                 [$linkName, $sub] = explode('.', $name, 2);
                 $linkDef = $schema[$linkName] ?? null;
                 $colDef = ($linkDef !== null && in_array((string)($linkDef['type'] ?? ''), $this->cms->dependentTypes, true))
@@ -938,7 +937,7 @@ class RecordImport {
     }
 
     /**
-     * Ist die Zielsprache eine mit ideografischen Satzzeichen (Vorgabe der Optionen)?
+     * Is the target language one with ideographic punctuation (default of the options)?
      */
     public function isIdeographicLanguage(int $languageId, int $instanceId): bool
     {
@@ -950,25 +949,25 @@ class RecordImport {
     }
 
     // ====================
-    // Schritt 2: Ausführen
+    // Step 2: execute
 
     /**
-     * Auftrag ausführen - Vordergrund wie Hintergrund.
+     * Execute the job - foreground as well as background.
      *
-     * @param array         $job       siehe Klassenkommentar
+     * @param array         $job       see class comment
      * @param callable|null $progress  fn(int $done, int $total)
      * @return array [
      *     'total' => int, 'done' => int, 'failed' => int, 'skipped' => int,
      *     'inserted' => int, 'updated' => int, 'replaced' => int,
      *     'items' => [['kind' => area|field|template|record, 'id' => int, 'label' => string,
      *                  'status' => string, 'messages' => string[]], …]
-     *     'error' => string  (nur wenn gar nichts lief)
+     *     'error' => string  (only if nothing ran at all)
      * ]
      */
     public function run(array $job, ?callable $progress = null): array
     {
-        // Audit-Log: Änderungen dieses Laufs als 'import' kennzeichnen (gilt für den Rest
-        // des Prozesses - ein Lauf ist immer das Letzte, was ein Request tut)
+        // audit log: mark the changes of this run as 'import' (applies to the rest
+        // of the process - a run is always the last thing a request does)
         $this->auditLog->setContext('import');
         $result = ['total' => 0, 'done' => 0, 'failed' => 0, 'skipped' => 0, 'inserted' => 0, 'updated' => 0, 'replaced' => 0, 'items' => []];
         $type = (string)($job['type'] ?? '');
@@ -996,14 +995,14 @@ class RecordImport {
         }
         $this->sameDb = !empty($job['same_db']);
 
-        // Struktur und Templates (nur XML)
+        // structure and templates (XML only)
         // --------------------
         if ($type === 'xml') {
             $job['structure_result'] = $this->_importStructure($path, $job, $result);
             if ($progress !== null) $progress(0, max(1, (int)($job['count'] ?? 0)));
         }
 
-        // Datensätze
+        // records
         // --------------------
         $skip = max(0, (int)($job['skip'] ?? 0));
         $limit = max(0, (int)($job['limit'] ?? 0));
@@ -1050,7 +1049,7 @@ class RecordImport {
             if ($progress !== null) $progress($index, max($total, $index));
         }
 
-        // Zweiter Durchlauf: Verknüpfungen und Bezüge mit den zugeordneten Ids
+        // second pass: links and references with the assigned ids
         // --------------------
         foreach ($prepared as $item) {
             $this->cms->errorsReset();
@@ -1066,13 +1065,13 @@ class RecordImport {
             $this->_addItem($result, $item);
         }
 
-        // Experten-Funktion: Ids im Template-Code auf die zugeordneten umschreiben -
-        // erst jetzt stehen auch die Datensatz-Ids fest
+        // expert function: rewrite the ids in the template code to the assigned ones -
+        // only now are the record ids also fixed
         // --------------------
         if ($type === 'xml' && !empty($this->savedTemplates)) {
             $this->_rewriteTemplateCodes($result);
         }
-        // Trigger-Templates erst jetzt (siehe $pendingTriggers)
+        // trigger templates only now (see $pendingTriggers)
         // --------------------
         $this->_applyTriggerTemplates($result);
         $this->cms->errorsReset();
@@ -1083,21 +1082,21 @@ class RecordImport {
     }
 
     /**
-     * Analyse eines Auftrags ohne zu schreiben (siehe Klassenkommentar). $job wie
-     * bei run(). Struktur und Templates werden wie in _importStructure() zugeordnet,
-     * die Datensätze wie in _importPrepare() - nur die Entscheidung, nicht die Tat.
+     * Analysis of a job without writing (see class comment). $job as in
+     * run(). Structure and templates are assigned as in _importStructure(),
+     * the records as in _importPrepare() - only the decision, not the act.
      *
-     * @param bool $extended  jeden Datensatz einzeln aufführen ('items')
+     * @param bool $extended  list every record individually ('items')
      * @return array [
-     *     'areas' => [Schlüssel (global: area_id der Datei, sonst area_id) => [
-     *         'label', 'name', 'type', 'target_id' (0 = wird angelegt),
+     *     'areas' => [key (global: area_id of the file, otherwise area_id) => [
+     *         'label', 'name', 'type', 'target_id' (0 = will be created),
      *         'action'    => inserted | updated | replaced | ignore | skipped (Struktur),
      *         'fields'    => ['added' => [Namen], 'updated' => [], 'removed' => [], 'failed' => []],
      *         'templates' => ['inserted' => n, 'updated' => n, 'replaced' => n, 'skipped' => n, 'failed' => n],
      *         'records'   => dito,
-     *         'items'     => [['id' => Datei-Id, 'record_id' => Ziel-Id, 'label', 'status', 'messages' => []], …] ]],
-     *     'skipped' => n (Option "Überspringen"), 'total' => n (geprüfte Datensätze),
-     *     'error' => string (nur wenn die Datei nicht lesbar ist)
+     *         'items'     => [['id' => file id, 'record_id' => target id, 'label', 'status', 'messages' => []], …] ]],
+     *     'skipped' => n (option "skip"), 'total' => n (checked records),
+     *     'error' => string (only if the file is not readable)
      * ]
      */
     public function analyze(array $job, bool $extended = false): array
@@ -1129,15 +1128,15 @@ class RecordImport {
             'fields' => ['added' => [], 'updated' => [], 'removed' => [], 'failed' => [], 'skipped' => []],
             'templates' => $counts(), 'records' => $counts(), 'items' => [],
         ];
-        $analysis['converters'] = []; // converter_id der Datei => Plan (KONVERTER), nur die gebrauchten
-        $newAreas = []; // Datei-area_id => Modus der Datensätze: Bereich entsteht erst beim Import
+        $analysis['converters'] = []; // converter_id of the file => plan (CONVERTERS), only the ones used
+        $newAreas = []; // file area_id => mode of the records: area arises only at import
 
-        // Struktur und Templates (global)
+        // structure and templates (global)
         // --------------------
         if ($isGlobal) {
             [$areas, $templates, $converters] = $this->_xmlStructure($path);
             $settings = (array)($job['areas'] ?? []);
-            $writtenAreas = []; // Datei-area_id der Bereiche, deren Felder geschrieben würden
+            $writtenAreas = []; // file area_id of the areas whose fields would be written
             foreach ($templates as $template) {
                 $this->fileTemplates[(int)$template['template_id']] = ['name' => (string)$template['name'], 'area_id' => (int)$template['area_id']];
             }
@@ -1147,8 +1146,8 @@ class RecordImport {
                 $this->fileAreas[$fileAreaId] = ['name' => (string)$area['name'], 'type' => (string)$area['type'], 'default_field' => $this->_fileFieldName($area, (int)($area['default_field_id'] ?? 0))];
             }
             unset($area);
-            // Konverter: Plan für alle Konverter der Datei, Zuordnung wie beim Import
-            // (angelegt wird hier nichts - 'create' zählt als vorhanden)
+            // converters: plan for all converters of the file, assignment as at import
+            // (nothing is created here - 'create' counts as existing)
             $plan = $this->converterPlan($converters, $job);
             foreach ($plan as $fileConverterId => $converter) {
                 $this->map['converter'][$fileConverterId] = $converter['action'] === 'link' ? (int)$converter['converter_id'] : ($converter['action'] === 'create' ? -1 : 0);
@@ -1183,7 +1182,7 @@ class RecordImport {
                         else {
                             $newAreas[$fileAreaId] = true;
                         }
-                        // Felder: nach Name gegen den Zielbereich
+                        // fields: by name against the target area
                         if (in_array($areaType, self::CONTENT_TYPES, true)) {
                             $writtenAreas[] = $fileAreaId;
                             $existingFields = [];
@@ -1197,8 +1196,8 @@ class RecordImport {
                             foreach ((array)$area['fields'] as $field) {
                                 $name = (string)$field['name'];
                                 $fileNames[] = $name;
-                                // Thumbnail ohne Konverter: wird übergangen (der Plan
-                                // steht unten - $this->map['converter'] ist schon gefüllt)
+                                // thumbnail without converter: skipped (the plan
+                                // is below - $this->map['converter'] is already filled)
                                 if ($this->_isThumbnail($field) && empty($this->_mapConverterIds($field, $this->sameDb))) {
                                     $entry['fields']['skipped'][] = $name;
                                     continue;
@@ -1244,7 +1243,7 @@ class RecordImport {
             $analysis['areas'][$areaId] = $areaEntry($this->_areaLabel($areaId), (string)$areaRow['name'], (string)$areaRow['type'], $areaId, 'ignore');
         }
 
-        // Datensätze
+        // records
         // --------------------
         $skip = max(0, (int)($job['skip'] ?? 0));
         $limit = max(0, (int)($job['limit'] ?? 0));
@@ -1271,7 +1270,7 @@ class RecordImport {
             $item = ['id' => (int)($entry['id'] ?? 0), 'record_id' => 0, 'label' => (string)($entry['label'] ?? ''), 'status' => 'failed', 'messages' => []];
             if (!empty($entry['error'])) {
                 if ($isGlobal && isset($newAreas[$key])) {
-                    // der Bereich entsteht erst beim Import: dort gibt es noch nichts
+                    // the area only arises at import: there is nothing yet
                     $item['status'] = self::modeCreates($entryMode) ? 'inserted' : 'skipped';
                     if ($item['status'] === 'skipped') $item['messages'][] = $this->cms->snippet('record.note_import_not_found');
                 }
@@ -1310,7 +1309,7 @@ class RecordImport {
     }
 
     /**
-     * Name eines Feldes der Datei (Bereich aus _xmlStructure()) zu seiner field_id.
+     * Name of a field of the file (area from _xmlStructure()) for its field_id.
      */
     private function _fileFieldName(array $area, int $fileFieldId): string
     {
@@ -1319,7 +1318,7 @@ class RecordImport {
     }
 
     /**
-     * Stammt die XML-Datei aus dieser Datenbank (Header)?
+     * Does the XML file come from this database (header)?
      */
     public function isSameDatabase(string $path): bool
     {
@@ -1341,7 +1340,7 @@ class RecordImport {
     }
 
     /**
-     * Ergebnis eines Eintrags in die Zähler und die Liste übernehmen.
+     * Take the result of an entry into the counters and the list.
      */
     private function _addItem(array &$result, array $item): void
     {
@@ -1358,7 +1357,7 @@ class RecordImport {
     }
 
     /**
-     * Die Meldungen aus Cms::errors als Klartext-Zeilen ("Label: Text")
+     * The messages from Cms::errors as plain-text lines ("Label: Text")
      * @return string[]
      */
     private function _errorTexts(): array
@@ -1376,38 +1375,38 @@ class RecordImport {
     }
 
     // ====================
-    // Einen Datensatz importieren (zwei Durchläufe)
+    // Import one record (two passes)
 
     /**
-     * Erster Durchlauf: Datensatz anlegen bzw. auschecken, Feldwerte, Dateien,
-     * Passwörter und die einfachen Meta-Spalten prüfen und einchecken. Verknüpfungen und Bezüge auf andere Datensätze
-     * (parent_id, template_id, user_id) folgen im zweiten Durchlauf (_importFinish()),
-     * wenn alle Ids feststehen. $entry['data'] ist die vom Importer aufbereitete Form:
+     * First pass: create resp. check out the record, check field values, files,
+     * passwords and the simple meta columns and check in. Links and references to other records
+     * (parent_id, template_id, user_id) follow in the second pass (_importFinish()),
+     * once all ids are fixed. $entry['data'] is the form prepared by the importer:
      *
-     *     values    feld => Wert (mehrsprachig: language_id => Wert, Zielsprachen)
-     *     stored    Felder im Datenbankformat
-     *     prehashed Passwort-Felder mit Hash
-     *     relations feld => [dest_id, …] (Ids der Datei - zugeordnet im zweiten Durchlauf)
-     *     files     feld => [langKey ('' oder language_id) => ['importfile' => Pfad, 'filename' => Name] | null]
-     *               (null = Datei genannt, aber nicht enthalten -> Fehler)
-     *     meta      Meta-Spalte => Wert (Datenbankformat; template_id, parent_id, user_id
-     *               sind Ids der Datei)
-     *     area_id   Zielbereich
+     *     values    field => value (multilingual: language_id => value, target languages)
+     *     stored    fields in database format
+     *     prehashed password fields with hash
+     *     relations field => [dest_id, …] (ids of the file - assigned in the second pass)
+     *     files     field => [langKey ('' or language_id) => ['importfile' => path, 'filename' => name] | null]
+     *               (null = file named, but not contained -> error)
+     *     meta      meta column => value (database format; template_id, parent_id, user_id
+     *               are ids of the file)
+     *     area_id   target area
      *
-     * Der Eintrag bringt seinen Modus mit ($entry['mode'], sonst $job['mode']) und
-     * sein Update-Kriterium ($entry['by']: 'record_id' | 'slug').
+     * The entry carries its mode ($entry['mode'], otherwise $job['mode']) and
+     * its update criterion ($entry['by']: 'record_id' | 'slug').
      *
-     * @return array  $item mit 'status', 'id' und - wenn ein zweiter Durchlauf nötig
-     *                ist - 'prepared' (für _importFinish())
+     * @return array  $item with 'status', 'id' and - if a second pass is needed -
+     *                'prepared' (for _importFinish())
      */
     /**
-     * Vorhandener Datensatz zu einem Eintrag (nach Kriterium $entry['by']). Ids einer
-     * fremden Datenbank sind Zufall: dort zählt nur der Slug, und neue Datensätze
-     * bekommen neue Ids (force_id 0).
+     * Existing record for an entry (by criterion $entry['by']). Ids of a
+     * foreign database are random: there only the slug counts, and new records
+     * get new ids (force_id 0).
      *
-     * @return array ['record_id' => gefundene bzw. Datei-Id, 'productive' => bool,
-     *                'update' => bool (vorhanden, im Zielbereich, Modus schreibt),
-     *                'force_id' => Datei-Id, die ein neuer Datensatz bekommen soll (0 = keine)]
+     * @return array ['record_id' => found resp. file id, 'productive' => bool,
+     *                'update' => bool (exists, in the target area, mode writes),
+     *                'force_id' => file id that a new record should get (0 = none)]
      */
     private function _lookupExisting(array $entry, array $job, string $mode, int $areaId, int $primaryLanguageId): array
     {
@@ -1452,7 +1451,7 @@ class RecordImport {
         $langCtx = $this->_languagesOf($areaId);
         $fileId = (int)($entry['id'] ?? 0);
 
-        // Vorhandener Datensatz? (nach Kriterium)
+        // existing record? (by criterion)
         // --------------------
         $lookup = $this->_lookupExisting($entry, $job, $mode, $areaId, $langCtx['primary_id']);
         $recordId = $lookup['record_id'];
@@ -1460,7 +1459,7 @@ class RecordImport {
         $updateExisting = $lookup['update'];
         $fileIdForce = $lookup['force_id'];
         if (!$updateExisting && !self::modeCreates($mode)) {
-            // update / replace ohne vorhandenen Datensatz: übergehen
+            // update / replace without an existing record: skip
             $item['status'] = 'skipped';
             $item['messages'][] = $this->cms->snippet('record.note_import_not_found');
             return $item;
@@ -1469,7 +1468,7 @@ class RecordImport {
         $tmpId = 0;
         $prodData = null;
         if ($updateExisting) {
-            // Arbeitskopie des Originals
+            // working copy of the original
             if (!$prodData = $this->record->load($recordId)) return $item;
             if (!$force && ($lock = $this->service->lockInfo($prodData))) {
                 $this->cms->error($this->service->lockMessage($lock));
@@ -1478,7 +1477,7 @@ class RecordImport {
             if (!$tmpId = $this->record->checkOut($prodData)) return $item;
         }
         else {
-            // neu - mit der Id der Datei, wenn sie frei ist oder frei gemacht werden kann
+            // new - with the id of the file, if it is free or can be made free
             $forceId = 0;
             if ($fileIdForce > 0) {
                 if ($isProductive && $recordId === $fileId) {
@@ -1506,20 +1505,20 @@ class RecordImport {
             $languageIds = $langCtx['language_ids'];
             $replace = self::modeReplaces($mode);
 
-            // Feldwerte und Dateien
+            // field values and files
             // --------------------
             $this->_fieldValues($schema, $data, $languageIds, $replace, $updateExisting, $tmpId, $saveData, $fields);
 
-            // Eingebettete Inhalte (Felder vom Typ link, nur CSV/DOCX - EINGEBETTETE
-            // INHALTE): auschecken bzw. anlegen, Werte in ihren Arbeitsstand; der
-            // Check-in folgt mit dem Datensatz
+            // embedded contents (fields of type link, only CSV/DOCX - EMBEDDED
+            // CONTENTS): check out resp. create, values into their working state; the
+            // check-in follows with the record
             // --------------------
             $withLinks = array_key_exists('links', $data) && !empty($this->record->linkFields($schema));
             if ($withLinks) {
                 $this->_importLinks($tmpId, $schema, (array)$data['links'], $replace, $updateExisting, $job, $item);
             }
 
-            // Einfache Meta-Spalten (Bezüge auf andere Datensätze im zweiten Durchlauf)
+            // simple meta columns (references to other records in the second pass)
             // --------------------
             $meta = (array)($data['meta'] ?? []);
             $laterMeta = [];
@@ -1534,9 +1533,9 @@ class RecordImport {
                 if (!in_array($name, $stored, true)) $stored[] = $name;
             }
 
-            // Einfügeposition eines neuen Datensatzes (EINFÜGEPOSITION): Vater des
-            // Auftrags, hinter dem Vorgänger - nennt die Datei einen Vater, hängt ihn
-            // der zweite Durchlauf um
+            // insertion position of a new record (INSERTION POSITION): parent of the
+            // job, after the predecessor - if the file names a parent, the second
+            // pass attaches it
             $placementParent = null;
             if (!$updateExisting) {
                 $placement = $this->_insertPlacement($areaId, $schema, $job);
@@ -1551,17 +1550,17 @@ class RecordImport {
                 }
             }
 
-            // Prüfen und einchecken
+            // check and check in
             // --------------------
-            // Verknüpfungsfelder werden hier nicht geprüft (not_empty / min): die
-            // Verknüpfungen kommen im zweiten Durchlauf, der erneut mit Prüfung speichert
+            // link fields are not checked here (not_empty / min): the
+            // links come in the second pass, which saves again with a check
             $fields = array_values(array_unique($fields));
             $hasRelationFields = false;
             foreach ($schema as $colDef) {
                 if (in_array((string)($colDef['type'] ?? ''), $this->cms->relationTypes, true)) { $hasRelationFields = true; break; }
             }
-            // mit eingebetteten Inhalten: deren Check-in und der des Datensatzes in
-            // einer Transaktion - scheitert eines, bleibt alles, wie es war
+            // with embedded contents: their check-in and that of the record in
+            // one transaction - if one fails, everything stays as it was
             $this->db->beginTransaction();
             try {
                 if ($withLinks && !$this->record->checkInDependents($tmpId, $updateExisting ? $recordId : 0)) {
@@ -1581,17 +1580,17 @@ class RecordImport {
             $item['status'] = $updateExisting ? ($replace ? 'replaced' : 'updated') : 'inserted';
             if ($placementParent !== null) $this->insertAfter[$areaId][$placementParent] = (int)$newId;
             if (!$updateExisting) {
-                // Herkunft wiederherstellen: created_at aus der Datei; created_by und
-                // owner_id nur aus derselben Datenbank bzw. aus CSV (dort ist die
-                // Admin-Id eine ausdrückliche Angabe) - save() setzt sie sonst auf
-                // jetzt / Session-Admin
+                // restore origin: created_at from the file; created_by and
+                // owner_id only from the same database resp. from CSV (there the
+                // admin id is an explicit specification) - save() otherwise sets them to
+                // now / session admin
                 $restoreAdmins = !empty($job['same_db']) || (string)($job['type'] ?? '') === 'csv';
                 $this->_restoreCreated('record', 'record_id', (int)$newId, $meta, $restoreAdmins);
             }
-            // Zuordnung Id der Datei => tatsächliche Id (für Verknüpfungen)
+            // mapping of id of the file => actual id (for links)
             if ($fileId > 0) $this->map['record'][$fileId] = (int)$item['id'];
-            // Zweiter Durchlauf nötig? Verknüpfungsfelder im Bereich (dort auch die
-            // zurückgestellte Prüfung) oder Bezüge
+            // second pass needed? link fields in the area (there also the
+            // deferred check) or references
             $relations = (array)($data['relations'] ?? []);
             if ($hasRelationFields || !empty($laterMeta)) {
                 $item['prepared'] = [
@@ -1615,13 +1614,13 @@ class RecordImport {
     }
 
     /**
-     * Feldwerte und Dateien eines Eintrags in $saveData/$fields übernehmen (erster
-     * Durchlauf) - für den Datensatz wie für seine eingebetteten Inhalte. Ohne
-     * Verknüpfungen, Volltext und Meta-Spalten. Mehrsprachige Felder nennen alle
-     * Sprachen der Instanz (bei replace wird Fehlendes geleert: Fallback); nicht
-     * genannte Dateien werden bei replace eines vorhandenen Datensatzes gelöscht.
+     * Take the field values and files of an entry into $saveData/$fields (first
+     * pass) - for the record as well as for its embedded contents. Without
+     * links, fulltext and meta columns. Multilingual fields name all
+     * languages of the instance (with replace, what is missing is emptied: fallback);
+     * files not named are deleted with replace of an existing record.
      *
-     * @param array $data  'values' und 'files' (siehe _importPrepare())
+     * @param array $data  'values' and 'files' (see _importPrepare())
      */
     private function _fieldValues(array $schema, array $data, array $languageIds, bool $replace, bool $updateExisting, int $tmpId, array &$saveData, array &$fields): void
     {
@@ -1629,12 +1628,12 @@ class RecordImport {
         foreach ($schema as $name => $colDef) {
             $type = (string)($colDef['type'] ?? '');
             if ($type === 'fulltext' || $type === 'file' || in_array($type, $this->cms->relationTypes, true)) continue;
-            if (!empty($colDef['meta'])) continue; // Meta-Spalten im zweiten Durchlauf
+            if (!empty($colDef['meta'])) continue; // meta columns in the second pass
             $given = array_key_exists($name, $values);
             if (!$given && !$replace) continue;
             $value = $given ? $values[$name] : ($type === 'json' ? [] : '');
             if ($this->cms->isMultilingualField($colDef) && count($languageIds) > 0) {
-                // alle Sprachen der Instanz nennen: was fehlt, wird geleert (Fallback)
+                // name all languages of the instance: what is missing is emptied (fallback)
                 $givenLangs = is_array($value) ? $value : [$languageIds[0] => $value];
                 $value = [];
                 foreach ($languageIds as $languageId) {
@@ -1676,7 +1675,7 @@ class RecordImport {
                 }
             }
             elseif ($replace && $updateExisting) {
-                // nicht genannt: vorhandene Dateien löschen
+                // not named: delete existing files
                 $tmpCache ??= $this->record->loadTmpData($tmpId);
                 $entryCache = (array)($tmpCache[$name] ?? []);
                 foreach ($this->record->fileEntries($entryCache) as $langKey => $fileData) {
@@ -1688,21 +1687,21 @@ class RecordImport {
     }
 
     /**
-     * Eingebettete Inhalte der link-Felder eines Eintrags (EINGEBETTETE INHALTE) an
-     * der Arbeitskopie $tmpId des Datensatzes: vorhandene Inhalte auschecken (die
-     * Kante zeigt danach auf ihre Arbeitskopie), neue anlegen (embedInsert()), ihre
-     * Werte geprüft in den Arbeitsstand schreiben (stayTemporary), nicht mehr
-     * genannte abhängen und die Reihenfolge der Datei setzen. Eingecheckt wird alles
-     * mit dem Datensatz (LinkTrait::checkInDependents() in _importPrepare()) -
-     * verwaiste Inhalte löscht der Check-in.
+     * Embedded contents of the link fields of an entry (EMBEDDED CONTENTS) at the
+     * working copy $tmpId of the record: check out existing contents (the
+     * edge then points to their working copy), create new ones (embedInsert()), write their
+     * checked values into the working state (stayTemporary), detach those no longer
+     * named and set the order of the file. Everything is checked in
+     * with the record (LinkTrait::checkInDependents() in _importPrepare()) -
+     * the check-in deletes orphaned contents.
      *
-     * Zuordnung eines Eintrags zu einem vorhandenen Inhalt: über seine Id (CSV-Spalte
-     * {link}.record_id, DOCX), sonst über die Stelle. 'partial' (DOCX): nur die
-     * genannten Inhalte ändern - nichts anlegen, entfernen oder umsortieren.
-     * Ohne Angaben zu einem link-Feld: bei replace werden alle Inhalte entfernt.
+     * Assignment of an entry to an existing content: via its id (CSV column
+     * {link}.record_id, DOCX), otherwise via the position. 'partial' (DOCX): change only the
+     * named contents - create, remove or re-sort nothing.
+     * Without specifications for a link field: with replace all contents are removed.
      *
-     * @param array $links  link-Feld => ['entries' => [...], 'partial' => bool]
-     * @throws \RuntimeException  bei Fehlern (Meldungen in Cms::errors)
+     * @param array $links  link field => ['entries' => [...], 'partial' => bool]
+     * @throws \RuntimeException  on errors (messages in Cms::errors)
      */
     private function _importLinks(int $tmpId, array $schema, array $links, bool $replace, bool $updateExisting, array $job, array &$item): void
     {
@@ -1715,7 +1714,7 @@ class RecordImport {
             $partial = !empty($link['partial']);
             $linkLabel = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name));
 
-            // bisherige Inhalte (produktiv, in ihrer Reihenfolge)
+            // existing contents (productive, in their order)
             $current = [];
             foreach ($this->record->linkDestIds($tmpId, $fieldId) as $destId) {
                 $this->db->pushResult();
@@ -1741,7 +1740,7 @@ class RecordImport {
                     continue;
                 }
                 if ($destId > 0) {
-                    // vorhandener Inhalt: auschecken, Kante auf die Arbeitskopie
+                    // existing content: check out, edge to the working copy
                     $used[$destId] = true;
                     if (!$destData = $this->record->load($destId)) throw new \RuntimeException('#load embedded');
                     if (!$force && ($lock = $this->service->lockInfo($destData))) {
@@ -1754,13 +1753,13 @@ class RecordImport {
                     $isNew = false;
                 }
                 else {
-                    // neuer Inhalt: Arbeitskopie ohne Original im Zielbereich
+                    // new content: working copy without original in the target area
                     $destAreaId = (int)($entry['area_id'] ?? 0);
                     if (!in_array($destAreaId, $targetAreaIds, true)) $destAreaId = (int)($targetAreaIds[0] ?? 0);
                     if (!$destTmpId = $this->record->embedInsert($colDef, $tmpId, $destAreaId, 0, false)) throw new \RuntimeException('#embed insert');
                     $isNew = true;
                 }
-                // Werte geprüft in den Arbeitsstand (wie die eingebettete Maske)
+                // values checked into the working state (as the embedded mask)
                 $destSchema = $this->_schemaOf($destAreaId);
                 $saveData = ['record_id' => $destTmpId, 'area_id' => $destAreaId];
                 $fields = ['area_id'];
@@ -1768,7 +1767,7 @@ class RecordImport {
                 $errorsBefore = array_keys($this->cms->errors);
                 $saved = $this->record->importSave(array_values(array_unique($fields)), $saveData, (array)($entry['stored'] ?? []), (array)($entry['prehashed'] ?? []), stayTemporary: true);
                 if (!$saved) {
-                    // Feldfehler des Inhalts kenntlich machen: "{link} #n › {feld}"
+                    // mark field errors of the content: "{link} #n › {field}"
                     foreach (array_keys($this->cms->errors) as $key) {
                         if (is_int($key) || in_array($key, $errorsBefore, true)) continue;
                         $error = $this->cms->errors[$key];
@@ -1781,7 +1780,7 @@ class RecordImport {
                 $final[] = $destTmpId;
             }
             if ($partial) continue;
-            // nicht mehr genannte Inhalte abhängen - der Check-in löscht sie als verwaist
+            // detach contents no longer named - the check-in deletes them as orphans
             foreach ($current as $destId) {
                 if (!isset($used[$destId])) $this->record->removeRelations($colDef, $tmpId, $destId);
             }
@@ -1790,8 +1789,8 @@ class RecordImport {
     }
 
     /**
-     * Zweiter Durchlauf: den (jetzt produktiven) Datensatz erneut auschecken,
-     * Verknüpfungen und Bezüge mit den zugeordneten Ids setzen, einchecken.
+     * Second pass: check out the (now productive) record again,
+     * set links and references with the assigned ids, check in.
      */
     private function _importFinish(array $item, array $job): array
     {
@@ -1806,18 +1805,18 @@ class RecordImport {
             $item['status'] = 'failed';
             return $item;
         }
-        // Die Sperre ist die eigene (erster Durchlauf) - auschecken
+        // the lock is our own (first pass) - check out
         if (!$tmpId = $this->record->checkOut($prodData)) {
             $item['status'] = 'failed';
             return $item;
         }
         try {
-            // Verknüpfungen
+            // links
             // --------------------
             $relations = (array)$prepared['relations'];
             foreach ($schema as $name => $colDef) {
                 if (!in_array((string)($colDef['type'] ?? ''), $this->cms->relationTypes, true)) continue;
-                // link-Felder hat der erste Durchlauf erledigt (CSV/DOCX)
+                // link fields were handled by the first pass (CSV/DOCX)
                 if (!empty($prepared['links_handled']) && in_array((string)$colDef['type'], $this->cms->dependentTypes, true)) continue;
                 if (array_key_exists($name, $relations)) {
                     $ids = [];
@@ -1833,7 +1832,7 @@ class RecordImport {
                 }
             }
 
-            // Bezüge auf andere Datensätze / Templates
+            // references to other records / templates
             // --------------------
             $saveData = ['record_id' => $tmpId, 'area_id' => $areaId];
             $fields = ['area_id'];
@@ -1848,8 +1847,8 @@ class RecordImport {
                         continue;
                     }
                     if ($value === (int)($prodData['parent_id'] ?? 0)) continue;
-                    // unter den Vater der Datei: ans Ende seiner Geschwister, in
-                    // Dateireihenfolge (EINFÜGEPOSITION)
+                    // under the parent of the file: at the end of its siblings, in
+                    // file order (INSERTION POSITION)
                     $movedTo = $value;
                     $saveData['previous_id'] = $this->_insertPrevious($areaId, $value, $job);
                 }
@@ -1866,7 +1865,7 @@ class RecordImport {
                 if (!in_array($name, $stored, true)) $stored[] = $name;
             }
 
-            // Check-in (die Feldwerte kommen aus dem Arbeitsstand der Arbeitskopie)
+            // check-in (the field values come from the working state of the working copy)
             // --------------------
             if (!$this->record->importSave(array_values(array_unique($fields)), $saveData, $stored, [])) {
                 throw new \RuntimeException('#save failed');
@@ -1885,11 +1884,11 @@ class RecordImport {
     }
 
     /**
-     * Einfügeposition eines neuen Datensatzes (EINFÜGEPOSITION): Vater aus dem
-     * Auftrag (nur Bereiche mit Baum) und der Vorgänger auf dieser Ebene.
+     * Insertion position of a new record (INSERTION POSITION): parent from the
+     * job (only areas with a tree) and the predecessor on this level.
      *
-     * @return array|null  ['parent_id' => int, 'previous_id' => int]; null, wenn der
-     *                     Bereich weder Baum noch Handsortierung führt
+     * @return array|null  ['parent_id' => int, 'previous_id' => int]; null if the
+     *                     area has neither a tree nor manual sorting
      */
     private function _insertPlacement(int $areaId, array $schema, array $job): ?array
     {
@@ -1901,9 +1900,9 @@ class RecordImport {
     }
 
     /**
-     * Vorgänger des nächsten neuen Datensatzes unter einem Vater: der zuletzt dort
-     * eingefügte, davor der previous_id des Auftrags (auf der Ebene des
-     * Auftrags-Vaters), sonst der letzte vorhandene Datensatz der Ebene.
+     * Predecessor of the next new record under a parent: the one most recently
+     * inserted there, before that the previous_id of the job (on the level of the
+     * job parent), otherwise the last existing record of the level.
      */
     private function _insertPrevious(int $areaId, int $parentId, array $job): int
     {
@@ -1928,11 +1927,11 @@ class RecordImport {
     }
 
     /**
-     * created_at / created_by / owner_id (ORIGIN_FIELDS) eines neu angelegten
-     * Datensatzes oder Templates aus der Datei setzen. Die Admin-Ids nur mit
-     * $restoreAdmins (Datei aus dieser Datenbank bzw. CSV) und nur, wenn der Admin
-     * existiert - sonst bleibt der Session-Admin; changed_by bleibt er immer.
-     * Templates haben keinen owner_id (nur Spalten, die $table kennt).
+     * Set created_at / created_by / owner_id (ORIGIN_FIELDS) of a newly created
+     * record or template from the file. The admin ids only with
+     * $restoreAdmins (file from this database resp. CSV) and only if the admin
+     * exists - otherwise the session admin remains; changed_by always remains it.
+     * Templates have no owner_id (only columns that $table knows).
      */
     private function _restoreCreated(string $table, string $idField, int $id, array $source, bool $restoreAdmins): void
     {
@@ -1970,8 +1969,8 @@ class RecordImport {
     }
 
     /**
-     * Datensatz im Bereich über das Feld `slug` finden (Update-Kriterium 'slug'):
-     * der Wert der Hauptsprache in data_chr. 0 = kein Feld `slug` oder kein Treffer.
+     * Find a record in the area via the field `slug` (update criterion 'slug'):
+     * the value of the primary language in data_chr. 0 = no field `slug` or no match.
      */
     private function _recordBySlug(int $areaId, array $values, int $primaryId): int
     {
@@ -1994,13 +1993,13 @@ class RecordImport {
     }
 
     /**
-     * Zugeordnete Id: aus der Zuordnungstabelle, sonst unverändert (ein Datensatz,
-     * Bereich oder Template, das nicht in der Datei war, gilt als vorhanden).
+     * Assigned id: from the mapping table, otherwise unchanged (a record,
+     * area or template that was not in the file counts as existing).
      */
     private function _mapId(string $kind, int $id): int
     {
         if (isset($this->map[$kind][$id])) return (int)$this->map[$kind][$id];
-        // Templates, die nicht importiert wurden: über Name und zugeordneten Bereich
+        // templates that were not imported: via name and assigned area
         if ($kind === 'template' && isset($this->fileTemplates[$id])) {
             $fileAreaId = (int)$this->fileTemplates[$id]['area_id'];
             $areaId = (int)($this->map['area'][$fileAreaId] ?? $fileAreaId);
@@ -2014,8 +2013,8 @@ class RecordImport {
     }
 
     /**
-     * Arbeitskopie verwerfen, die gesammelten Meldungen behalten (cancel() räumt
-     * Cms::errors nicht auf, ein Fehler dort ginge aber im Protokoll unter).
+     * Discard the working copy, keep the collected messages (cancel() does not clear
+     * Cms::errors, but an error there would otherwise be lost in the log).
      */
     private function _cancelKeepErrors(int $tmpId): void
     {
@@ -2035,8 +2034,8 @@ class RecordImport {
     private function _recordInArea(int $recordId, int $areaId, bool $orTmp = false): bool
     {
         $this->db->pushResult();
-        // $orTmp: im zweiten Durchlauf ist ein neuer Vaterdatensatz noch eine
-        // Arbeitskopie unter seiner endgültigen Id
+        // $orTmp: in the second pass a new parent record is still a
+        // working copy under its final id
         $tmpCondition = $orTmp ? "AND `deleted` = 0" : "AND `tmp` = 0 AND `deleted` = 0";
         $this->db->query("SELECT 1 FROM `record` WHERE `record_id` = ? AND `area_id` = ? $tmpCondition", 'ii', [$recordId, $areaId]);
         $found = $this->db->num_rows > 0;
@@ -2048,13 +2047,13 @@ class RecordImport {
     // Blueprints (Core/Modules/Area/blueprints/{type}/*.xml)
 
     /**
-     * Bauplan eines Bereichs lesen: eine XML-Datei im Exportformat mit genau einem
-     * <area> (Einstellungen und Felder, keine Datensätze). AreaBackend belegt damit
-     * die Eingabemaske eines neuen Bereichs vor (create()) und legt nach dem
-     * Speichern die Felder an (importBlueprint()).
+     * Read the blueprint of an area: an XML file in export format with exactly one
+     * <area> (settings and fields, no records). AreaBackend uses it to pre-fill
+     * the input mask of a new area (create()) and creates the fields after
+     * saving (importBlueprint()).
      *
-     * @return array|null  Bereich wie aus _xmlStructure() (mit 'fields'), null wenn
-     *                     die Datei nicht lesbar ist oder keinen Bereich enthält
+     * @return array|null  area as from _xmlStructure() (with 'fields'), null if
+     *                     the file is not readable or contains no area
      */
     public function readBlueprint(string $path): ?array
     {
@@ -2065,13 +2064,13 @@ class RecordImport {
     }
 
     /**
-     * Felder des Bauplans in einem (gerade angelegten) Bereich erstellen und die
-     * Feldbezüge des Bereichs setzen (default_field_id, sort_field_id,
-     * login_name_field_id, login_password_field_id). Relationen und Pointer auf
-     * andere Bereiche des Bauplans lassen sich nicht auflösen - nur Bezüge auf den
-     * Bereich selbst. Fehler landen in Cms::errors.
+     * Create the fields of the blueprint in an (just created) area and set the
+     * field references of the area (default_field_id, sort_field_id,
+     * login_name_field_id, login_password_field_id). Relations and pointers to
+     * other areas of the blueprint cannot be resolved - only references to the
+     * area itself. Errors end up in Cms::errors.
      *
-     * @return int  Anzahl angelegter Felder, -1 wenn der Bauplan nicht lesbar ist
+     * @return int  number of fields created, -1 if the blueprint is not readable
      */
     public function importBlueprint(string $path, int $areaId): int
     {
@@ -2087,9 +2086,9 @@ class RecordImport {
         $this->pendingTriggers = [];
         $this->fileAreas = [$fileAreaId => ['name' => (string)$area['name'], 'type' => (string)$area['type']]];
         $this->schemaMemo = [];
-        // Snippet-Verweise (#modul.key) der Felder in der Sprache des Admins auflösen -
-        // außer Custom-Snippets, deren Texte die Datei mitbringt (Kopie eines
-        // Bereichs, areaBlueprintFile()): die übernimmt _saveField() als Verweis
+        // resolve snippet references (#module.key) of the fields in the language of the admin -
+        // except custom snippets whose texts the file brings along (copy of an
+        // area, areaBlueprintFile()): _saveField() takes those over as a reference
         foreach ($area['fields'] as &$field) {
             foreach (['label', 'note', 'tooltip'] as $col) {
                 if (!isset($field[$col]) || !str_starts_with((string)$field[$col], '#')) continue;
@@ -2099,8 +2098,8 @@ class RecordImport {
         }
         unset($field);
         $result = ['total' => 0, 'done' => 0, 'failed' => 0, 'skipped' => 0, 'inserted' => 0, 'updated' => 0, 'replaced' => 0, 'items' => []];
-        // Konverter der Thumbnail-Felder: Baupläne sind fremd - Treffer nach Hash,
-        // sonst anlegen, ohne Prozessor übergehen (KONVERTER)
+        // converters of the thumbnail fields: blueprints are foreign - matches by hash,
+        // otherwise create, skip without processor (CONVERTERS)
         $this->sameDb = false;
         $used = $this->_usedConverterIds([$fileAreaId => $area], [$fileAreaId]);
         $this->_importConverters(array_intersect_key($this->converterPlan($converters, []), $used), $result);
@@ -2131,12 +2130,12 @@ class RecordImport {
     }
 
     // ====================
-    // Struktur und Templates (XML, global)
+    // Structure and templates (XML, global)
 
     /**
-     * Bereiche, Felder und Templates der Datei importieren (siehe Klassenkommentar,
-     * "Zwei Durchläufe"). Ohne globalen Auftrag werden nur die Zuordnungen der
-     * Bereiche der Datei auf vorhandene Bereiche gefüllt (für die Verknüpfungen).
+     * Import the areas, fields and templates of the file (see class comment,
+     * "two passes"). Without a global job only the assignments of the
+     * areas of the file to existing areas are filled (for the links).
      *
      * @return array  ['areas' => n, 'converters' => n, 'fields' => n, 'templates' => n]
      */
@@ -2149,8 +2148,8 @@ class RecordImport {
         $settings = $isGlobal ? (array)($job['areas'] ?? []) : [];
         $folderId = (int)($job['folder_id'] ?? 0);
         $instanceId = (int)($job['instance_id'] ?? 0);
-        // Zielebene und Mandant passen zusammen (die Maske bietet nur die Ordner des
-        // gewählten Mandanten an) - ein Ordner eines anderen Mandanten gilt nicht
+        // target level and instance match (the mask only offers the folders of the
+        // chosen instance) - a folder of another instance does not count
         if ($instanceId > 0 && $folderId > 0 && (int)($this->_areaOf($folderId)['instance_id'] ?? 0) !== $instanceId) {
             $folderId = 0;
         }
@@ -2160,29 +2159,29 @@ class RecordImport {
         foreach ($areas as $fileAreaId => $area) {
             $this->fileAreas[$fileAreaId] = ['name' => (string)$area['name'], 'type' => (string)$area['type'], 'default_field' => $this->_fileFieldName($area, (int)($area['default_field_id'] ?? 0))];
         }
-        // abweichende Bereichsnamen aus der Maske
+        // deviating area names from the mask
         foreach ($areas as $fileAreaId => &$area) {
             $override = trim((string)($settings[$fileAreaId]['name'] ?? ''));
             if ($override !== '' && preg_match('/^[0-9a-z_\-]+$/', $override)) $area['name'] = $override;
         }
         unset($area);
 
-        // 1. Bereiche (Eltern vor Kindern)
+        // 1. areas (parents before children)
         // --------------------
-        $imported = []; // Datei-area_id => Modus, mit dem der Bereich geschrieben wurde
+        $imported = []; // file area_id => mode with which the area was written
         foreach ($areas as $fileAreaId => $area) {
             $areaSettings = (array)($settings[$fileAreaId] ?? []);
             $mode = $isGlobal ? (string)($areaSettings['structure'] ?? 'ignore') : 'ignore';
             $by = (string)($areaSettings['structure_by'] ?? 'name');
             if (!in_array($mode, self::GLOBAL_MODES, true)) $mode = 'ignore';
 
-            // vorhandener Bereich nach Kriterium (die Id nur aus derselben Datenbank)
+            // existing area by criterion (the id only from the same database)
             $existingId = ($by === 'area_id' && !empty($job['same_db']))
                 ? $this->_resolveArea($fileAreaId, '', (string)$area['type'])
                 : $this->_resolveArea(0, (string)$area['name'], (string)$area['type']);
             if ($mode === 'ignore') {
-                // nicht anfassen - nur zuordnen, damit Datensätze und Templates
-                // hinein können (gleicher Name, sonst - aus derselben Datenbank - gleiche Id)
+                // do not touch - only assign, so that records and templates
+                // can go into it (same name, otherwise - from the same database - same id)
                 $target = $this->_resolveArea(0, (string)$area['name'], (string)$area['type']);
                 if ($target < 1 && !empty($job['same_db'])) $target = $this->_resolveArea($fileAreaId, '', (string)$area['type']);
                 if ($target > 0) $this->map['area'][$fileAreaId] = $target;
@@ -2198,7 +2197,7 @@ class RecordImport {
                 continue;
             }
             try {
-                // insert legt immer neu an - auch wenn es einen gleichnamigen Bereich gibt
+                // insert always creates anew - even if there is an area of the same name
                 $areaId = $this->_saveArea($area, $update ? $existingId : 0, $mode, $folderId, $instanceId, $item['messages']);
                 $this->map['area'][$fileAreaId] = $areaId;
                 $imported[$fileAreaId] = $mode;
@@ -2214,8 +2213,8 @@ class RecordImport {
             $this->_addItem($result, $item);
         }
 
-        // 2. Konverter der Thumbnail-Felder, dann die Felder der geschriebenen
-        //    Inhaltsbereiche
+        // 2. converters of the thumbnail fields, then the fields of the written
+        //    content areas
         // --------------------
         if (!empty($imported)) {
             $used = $this->_usedConverterIds($areas, array_keys($imported));
@@ -2223,12 +2222,12 @@ class RecordImport {
             $summary['converters'] = $this->_importConverters($plan, $result);
             $summary['fields'] = $this->_importFields($areas, $imported, $result);
         }
-        // Custom-Snippets der Beschriftungen in die Sets der Zielinstanzen
+        // custom snippets of the labels into the sets of the target instances
         $this->_importSnippets($result);
 
-        // 3. Templates
+        // 3. templates
         // --------------------
-        $this->savedTemplates = []; // template_id (neu) => Daten der Datei (Code-Ersetzungen am Ende)
+        $this->savedTemplates = []; // template_id (new) => data of the file (code replacements at the end)
         foreach ($templates as $template) {
             $fileAreaId = (int)$template['area_id'];
             $areaSettings = (array)($settings[$fileAreaId] ?? []);
@@ -2268,10 +2267,10 @@ class RecordImport {
             }
             $this->_addItem($result, $item);
         }
-        // Custom-Snippets, die die Templates ansprechen (Kurzform custom.{key})
+        // custom snippets that the templates address (short form custom.{key})
         $this->_importSnippets($result);
 
-        // 4. Bereiche, zweiter Durchlauf: Default-/Sortierfeld, Templates
+        // 4. areas, second pass: default/sort field, templates
         // --------------------
         foreach ($imported as $fileAreaId => $mode) {
             $this->cms->errorsReset();
@@ -2290,13 +2289,13 @@ class RecordImport {
     }
 
     /**
-     * <areas>, <templates>, <converters> und <snippets> der Datei lesen, dazu die
-     * Sprachen des Headers.
+     * Read the <areas>, <templates>, <converters> and <snippets> of the file, plus
+     * the languages of the header.
      *
-     * @return array  [areas (area_id => Daten, Baumreihenfolge), templates (Liste),
-     *                 converters (converter_id der Datei => Daten),
-     *                 snippets (instance_id => [schlüssel => [lang => text]]),
-     *                 languages (language_id der Datei => Kürzel)]
+     * @return array  [areas (area_id => data, tree order), templates (list),
+     *                 converters (converter_id of the file => data),
+     *                 snippets (instance_id => [key => [lang => text]]),
+     *                 languages (language_id of the file => code)]
      */
     private function _xmlStructure(string $path): array
     {
@@ -2309,7 +2308,7 @@ class RecordImport {
         if (!@$reader->open($path)) return [$areas, $templates, $converters, $snippets, $languages];
         while (@$reader->read()) {
             if ($reader->nodeType !== \XMLReader::ELEMENT) continue;
-            // die Datensätze werden hier nicht gebraucht: den ganzen Block überspringen
+            // the records are not needed here: skip the whole block
             if ($reader->depth === 1 && $reader->name === 'records') {
                 $reader->next();
                 continue;
@@ -2331,8 +2330,8 @@ class RecordImport {
                 foreach ($node->access as $access) {
                     $area['access'][] = ['template_id' => (int)$access['template_id'], 'selectable' => (int)$access['selectable'], 'override' => (int)$access['override']];
                 }
-                // Trigger-Templates in ihrer Reihenfolge (<triggers><trigger template_id/>…);
-                // ohne den Block bleibt der Stand des Zielbereichs
+                // trigger templates in their order (<triggers><trigger template_id/>…);
+                // without the block the state of the target area remains
                 if (isset($node->triggers)) {
                     $area['trigger_template_ids'] = [];
                     foreach ($node->triggers->trigger ?? [] as $trigger) $area['trigger_template_ids'][] = (int)$trigger['template_id'];
@@ -2347,12 +2346,12 @@ class RecordImport {
                     $field['rel_area_ids'] = [];
                     foreach ($fieldNode->rel_area_ids->area_id ?? [] as $relAreaId) $field['rel_area_ids'][] = (int)$relAreaId;
                     $field['source_fields'] = [];
-                    // über ein link-Feld: Attribut rel_field_id (Schlüssel wie Field::sourceKey())
+                    // via a link field: attribute rel_field_id (key as Field::sourceKey())
                     foreach ($fieldNode->source_fields->field_id ?? [] as $sourceNode) {
                         $field['source_fields'][] = Field::sourceKey((int)$sourceNode, (int)($sourceNode['rel_field_id'] ?? 0));
                     }
-                    // Konverter eines Thumbnail-Feldes in ihrer Reihenfolge; ältere
-                    // Dateien (bis 2026-09-15) führen sie in details.converter_ids
+                    // converters of a thumbnail field in their order; older
+                    // files (up to 2026-09-15) carry them in details.converter_ids
                     $field['converter_ids'] = [];
                     if (isset($fieldNode->converter_ids)) {
                         foreach ($fieldNode->converter_ids->converter_id ?? [] as $converterId) $field['converter_ids'][] = (int)$converterId;
@@ -2402,7 +2401,7 @@ class RecordImport {
     }
 
     /**
-     * Ein <converter> der Datei (RecordExport::_xmlConverters()).
+     * A <converter> of the file (RecordExport::_xmlConverters()).
      *
      * @return array  converter_id, hash, processor, type, extension, label,
      *                media_types_incl, media_types_excl, details (Array)
@@ -2419,22 +2418,22 @@ class RecordImport {
         $converter['media_types_incl'] = (string)$node->media_types_incl;
         $converter['media_types_excl'] = (string)$node->media_types_excl;
         $converter['details'] = json_decode((string)$node->details, true) ?: [];
-        // Der Hash wird aus den Einstellungen der Datei berechnet, nicht dem Attribut
-        // entnommen: eine von Hand geänderte Datei (Bauplan, Template-Satz) bleibt so
-        // stimmig - das Attribut dient der Lesbarkeit
+        // The hash is calculated from the settings of the file, not taken from the
+        // attribute: a manually edited file (blueprint, template set) stays
+        // consistent this way - the attribute serves readability
         $converter['hash'] = Converter::settingsHash($converter);
         return $converter;
     }
 
     // ====================
-    // Konverter der Thumbnail-Felder (KONVERTER)
+    // Converters of the thumbnail fields (CONVERTERS)
 
     /**
-     * Treffer der Konverter der Datei in der Zieldatenbank - für Maske und Plan.
+     * Matches of the converters of the file in the target database - for mask and plan.
      *
-     * @param array $converters  converter_id der Datei => Daten (_xmlConverter())
-     * @param bool  $sameDb      Datei stammt aus dieser Datenbank: die Id zählt
-     * @return array  converter_id der Datei => Daten + 'installed' (Prozessor),
+     * @param array $converters  converter_id of the file => data (_xmlConverter())
+     * @param bool  $sameDb      file comes from this database: the id counts
+     * @return array  converter_id of the file => data + 'installed' (processor),
      *                'match' ('id' | 'hash' | ''), 'match_id' (converter_id, 0)
      */
     public function converterMatches(array $converters, bool $sameDb): array
@@ -2462,11 +2461,11 @@ class RecordImport {
     }
 
     /**
-     * Was mit jedem Konverter der Datei geschieht: die Entscheidung der Maske
-     * (Job 'converters'), sonst automatisch - Treffer verknüpfen, sonst anlegen,
-     * wenn der Prozessor installiert ist, sonst ignorieren.
+     * What happens to each converter of the file: the decision of the mask
+     * (job 'converters'), otherwise automatically - link matches, otherwise create
+     * if the processor is installed, otherwise ignore.
      *
-     * @return array  converter_id der Datei => Daten (converterMatches()) +
+     * @return array  converter_id of the file => data (converterMatches()) +
      *                'action' ('link' | 'create' | 'ignore'), 'converter_id' (link)
      */
     public function converterPlan(array $converters, array $job): array
@@ -2485,7 +2484,7 @@ class RecordImport {
                 if ($converter['installed']) $converter['action'] = 'create';
             }
             elseif ($choice !== 'ignore') {
-                // automatisch
+                // automatic
                 if ((int)$converter['match_id'] > 0) {
                     $converter['action'] = 'link';
                     $converter['converter_id'] = (int)$converter['match_id'];
@@ -2498,12 +2497,12 @@ class RecordImport {
     }
 
     /**
-     * Konverter der Datei zuordnen bzw. anlegen (vor den Feldern) und
-     * $this->map['converter'] füllen - 0 für ignorierte. Angelegte Konverter
-     * gehen durch Converter::save() (Prozessor-Hooks, Prüfung der Einstellungen).
+     * Assign resp. create the converters of the file (before the fields) and
+     * fill $this->map['converter'] - 0 for ignored ones. Created converters
+     * go through Converter::save() (processor hooks, check of the settings).
      *
-     * @param array $plan  converterPlan(), ggf. auf die gebrauchten Konverter beschränkt
-     * @return int  Anzahl angelegter Konverter
+     * @param array $plan  converterPlan(), if applicable limited to the converters used
+     * @return int  number of created converters
      */
     private function _importConverters(array $plan, array &$result): int
     {
@@ -2551,11 +2550,11 @@ class RecordImport {
     }
 
     /**
-     * Konverter, auf die die Thumbnail-Felder dieser Bereiche der Datei verweisen.
+     * Converters that the thumbnail fields of these areas of the file refer to.
      *
-     * @param array $areas        Bereiche der Datei (_xmlStructure())
-     * @param array $fileAreaIds  area_ids der Datei, deren Felder geschrieben werden
-     * @return array  converter_ids der Datei (Schlüssel)
+     * @param array $areas        areas of the file (_xmlStructure())
+     * @param array $fileAreaIds  area_ids of the file whose fields are written
+     * @return array  converter_ids of the file (keys)
      */
     private function _usedConverterIds(array $areas, array $fileAreaIds): array
     {
@@ -2572,15 +2571,15 @@ class RecordImport {
     }
 
     /**
-     * converter_ids eines Thumbnail-Feldes der Datei (in ihrer Reihenfolge) auf die
-     * Zieldatenbank abbilden: über $this->map['converter']; nicht in der Datei
-     * geführte Konverter (ältere Exporte) gelten nur aus derselben Datenbank und nur,
-     * wenn es sie gibt.
+     * Map the converter_ids of a thumbnail field of the file (in their order) to the
+     * target database: via $this->map['converter']; converters not carried in the
+     * file (older exports) apply only from the same database and only
+     * if they exist.
      *
-     * In der Analyse steht für einen erst anzulegenden Konverter -1 in der Zuordnung
-     * (analyze()) - er zählt als vorhanden, die Ids werden dort nicht geschrieben.
+     * In the analysis, -1 stands in the assignment for a converter still to be created
+     * (analyze()) - it counts as existing, the ids are not written there.
      *
-     * @return array  converter_ids, leer wenn keiner übrig bleibt
+     * @return array  converter_ids, empty if none remains
      */
     private function _mapConverterIds(array $field, bool $sameDb): array
     {
@@ -2606,9 +2605,9 @@ class RecordImport {
     }
 
     /**
-     * Einen Bereich anlegen bzw. schreiben (erster Durchlauf: ohne Feld- und
-     * Template-Bezüge). Neue Bereiche entstehen unter dem zugeordneten Vater der
-     * Datei, sonst unter der Zielebene; die Instanz kommt vom Vater.
+     * Create resp. write an area (first pass: without field and
+     * template references). New areas arise under the assigned parent of the
+     * file, otherwise under the target level; the instance comes from the parent.
      *
      * @return int  area_id
      */
@@ -2616,8 +2615,8 @@ class RecordImport {
     {
         $fileParentId = (int)($area['parent_id'] ?? 0);
         $details = (array)($area['details'] ?? []);
-        // Feld- und Bereichsbezüge erst im zweiten Durchlauf (die Anmeldefelder
-        // älterer Dateien stehen noch in details)
+        // field and area references only in the second pass (the login fields of
+        // older files still stand in details)
         unset($details['login_name_field_id'], $details['login_password_field_id']);
         $details['profile_area_ids'] = array_values(array_filter(array_map(
             fn($id) => $this->_mapId('area', (int)$id), (array)($details['profile_area_ids'] ?? [])
@@ -2641,31 +2640,31 @@ class RecordImport {
             }
             $save = $previous;
             if (!self::modeReplaces($mode)) {
-                // update: nur Beschriftung, Icon, Notiz, Sortierung, Details
+                // update: only label, icon, note, sorting, details
                 unset($data['type'], $data['name']);
             }
             foreach ($data as $key => $value) $save[$key] = $value;
             $save['area_id'] = $existingId;
             $this->_mapAreaTexts($save, (int)$previous['instance_id'], $existingId, $messages);
-            // Datei ohne Slug-Prefix (auch ältere Exporte): der vorhandene bleibt
+            // file without slug prefix (also older exports): the existing one remains
             if (!array_key_exists('slug_prefix', (array)$save['details']) && !empty($previous['details']['slug_prefix'])) {
                 $save['details']['slug_prefix'] = $previous['details']['slug_prefix'];
             }
-            // Lösch-Policy: aus derselben Datenbank die der Datei, sonst bleibt die des
-            // Zielbereichs (Policy-Ids sind je Datenbank vergeben)
+            // deletion policy: from the same database that of the file, otherwise that of the
+            // target area remains (policy ids are assigned per database)
             if ($this->sameDb && (int)($area['privacy_policy_id'] ?? 0) > 0) {
                 $save['privacy_policy_id'] = (int)$area['privacy_policy_id'];
             }
-            // Template-Zuweisungen bleiben (Area::hookOnSaved() ersetzt nur übergebene),
-            // bis _saveAreaReferences() sie setzt
-            // Platz im Baum behalten: ohne previous_id rückte der Bereich an den Anfang
+            // template assignments remain (Area::hookOnSaved() replaces only those passed),
+            // until _saveAreaReferences() sets them
+            // keep the place in the tree: without previous_id the area would move to the beginning
             $save['previous_id'] = $this->_areaPreviousId($previous);
             if (!$this->area->save([], $save)) throw new \RuntimeException('#' . $this->cms->errorMsgLast());
             return $existingId;
         }
-        // neu: unter dem zugeordneten Vater der Datei, sonst der Zielebene. Mandant:
-        // vom importierten Vater; sonst der gewählte, sonst der der Zielebene, sonst
-        // der aus der Datei (wenn es ihn gibt), sonst der erste
+        // new: under the assigned parent of the file, otherwise the target level. Instance:
+        // from the imported parent; otherwise the chosen one, otherwise that of the
+        // target level, otherwise the one from the file (if it exists), otherwise the first
         $mappedParentId = $fileParentId > 0 ? (int)($this->map['area'][$fileParentId] ?? 0) : 0;
         $parentId = $mappedParentId > 0 ? $mappedParentId : $folderId;
         $instanceId = 0;
@@ -2693,13 +2692,13 @@ class RecordImport {
         $data['default_template_id'] = 0;
         $data['list_template_id'] = 0;
         $data['overview_template_id'] = 0;
-        // Lösch-Policy: aus derselben Datenbank die der Datei; aus einer fremden die
-        // Standard-Policy des Bereichstyps (0 - Area::hookOnSave() setzt sie, ebenso
-        // bei einer Id, die es hier nicht oder nicht für die Instanz gibt)
+        // deletion policy: from the same database that of the file; from a foreign one the
+        // default policy of the area type (0 - Area::hookOnSave() sets it, likewise
+        // for an id that does not exist here or not for the instance)
         $data['privacy_policy_id'] = $this->sameDb ? (int)($area['privacy_policy_id'] ?? 0) : 0;
-        // Reihenfolge der Datei behalten: hinter dem zuletzt angelegten Geschwister,
-        // sonst hinter dem letzten vorhandenen (ohne previous_id käme jeder neue
-        // Bereich an den Anfang seiner Ebene)
+        // keep the order of the file: after the most recently created sibling,
+        // otherwise after the last existing one (without previous_id every new
+        // area would move to the beginning of its level)
         if (!isset($this->lastSibling[$parentId])) {
             $this->db->pushResult();
             $this->db->query(
@@ -2718,15 +2717,15 @@ class RecordImport {
     }
 
     /**
-     * Texte und Slug-Prefix eines Bereichs für die Zielinstanz aufbereiten (siehe
-     * Klassenkommentar "Custom-Snippets und Slug-Prefix"): Snippet-Verweise in
-     * Beschriftung und Notiz umschreiben, details.slug_prefix auf die Sprachen der
-     * Zielinstanz umsetzen und prüfen - ein unzulässiger Präfix entfällt mit Hinweis.
+     * Prepare the texts and slug prefix of an area for the target instance (see
+     * class comment "Custom snippets and slug prefix"): rewrite snippet references in
+     * label and note, map details.slug_prefix to the languages of the
+     * target instance and check it - an impermissible prefix is dropped with a note.
      *
-     * @param array $data        Bereichsdaten für Area::save() (label, note, details)
-     * @param int   $instanceId  Zielinstanz
-     * @param int   $areaId      vorhandener Bereich (0 = neu)
-     * @param array $messages    Hinweise für das Protokoll
+     * @param array $data        area data for Area::save() (label, note, details)
+     * @param int   $instanceId  target instance
+     * @param int   $areaId      existing area (0 = new)
+     * @param array $messages    notes for the log
      */
     private function _mapAreaTexts(array &$data, int $instanceId, int $areaId, array &$messages): void
     {
@@ -2756,11 +2755,11 @@ class RecordImport {
     }
 
     /**
-     * Verweise auf Custom-Snippets (#custom.{instance_id}.{key}) auf das Set der
-     * Zielinstanz umschreiben und die Snippets zum Übernehmen vormerken
-     * ($pendingSnippets, geschrieben von _importSnippets()). Texte aus der Datei, aus
-     * derselben Datenbank ersatzweise aus dem Set der Quellinstanz; ein Snippet, das
-     * es nirgends gibt, bleibt als Verweis stehen.
+     * Rewrite references to custom snippets (#custom.{instance_id}.{key}) to the set of the
+     * target instance and mark the snippets for taking over
+     * ($pendingSnippets, written by _importSnippets()). Texts from the file; from the
+     * same database alternatively from the set of the source instance; a snippet that
+     * exists nowhere remains as a reference.
      */
     private function _mapSnippetRefs(string $text, int $targetInstanceId): string
     {
@@ -2780,10 +2779,10 @@ class RecordImport {
     }
 
     /**
-     * Custom-Snippets vormerken, die ein importiertes Template anspricht
-     * (Snippets::templateRefs()) - Texte aus der Datei, aus derselben Installation
-     * notfalls aus dem Set. Die Kurzform custom.{key} gilt für die Instanz der Seite,
-     * der Quelltext bleibt deshalb unverändert.
+     * Mark custom snippets that an imported template addresses
+     * (Snippets::templateRefs()) - texts from the file, from the same installation
+     * if need be from the set. The short form custom.{key} applies to the instance of the page,
+     * the source text therefore remains unchanged.
      */
     private function _queueTemplateSnippets(string $code, int $sourceInstanceId, int $targetInstanceId): void
     {
@@ -2796,8 +2795,8 @@ class RecordImport {
     }
 
     /**
-     * Die vorgemerkten Custom-Snippets in die Sets der Zielinstanzen schreiben
-     * (Snippets::merge(): nur Fehlendes) - je Set ein Protokolleintrag.
+     * Write the marked custom snippets into the sets of the target instances
+     * (Snippets::merge(): only missing ones) - one log entry per set.
      */
     private function _importSnippets(array &$result): void
     {
@@ -2812,7 +2811,7 @@ class RecordImport {
                 $this->_addItem($result, $item);
                 continue;
             }
-            // vorhandene Schlüssel mit anderem Text: das Set behält seinen
+            // existing keys with other text: the set keeps its own
             $kept = [];
             foreach ($snippets as $key => $texts) {
                 if (!isset($existing[$key])) continue;
@@ -2833,8 +2832,8 @@ class RecordImport {
     }
 
     /**
-     * Zweiter Durchlauf eines Bereichs: Default-/Sortierfeld, Default-Template,
-     * Template-Zuweisungen, Anmeldefelder - alles Ids, die erst jetzt feststehen.
+     * Second pass of an area: default/sort field, default template,
+     * template assignments, login fields - all ids that are only fixed now.
      */
     private function _saveAreaReferences(array $area, int $areaId): void
     {
@@ -2844,12 +2843,12 @@ class RecordImport {
         $save['default_field_id'] = (int)($area['default_field_id'] ?? 0) > 0 ? $this->_mapId('field', (int)$area['default_field_id']) : 0;
         $save['sort_field_id'] = (int)($area['sort_field_id'] ?? 0) > 0 ? $this->_mapId('field', (int)$area['sort_field_id']) : 0;
         $save['default_template_id'] = (int)($area['default_template_id'] ?? 0) > 0 ? $this->_mapId('template', (int)$area['default_template_id']) : 0;
-        // nur Felder / Templates, die es wirklich gibt
+        // only fields / templates that really exist
         if ($save['default_field_id'] > 0 && !$this->_fieldInArea($save['default_field_id'], $areaId)) $save['default_field_id'] = 0;
         if ($save['sort_field_id'] > 0 && !$this->_fieldInArea($save['sort_field_id'], $areaId)) $save['sort_field_id'] = 0;
         if ($save['default_template_id'] > 0 && !$this->_templateExists($save['default_template_id'])) $save['default_template_id'] = 0;
-        // Listen- und Trigger-Template (in der Datei seit 2026-09-23; ältere Dateien
-        // nennen sie nicht - dann bleibt der Stand des Zielbereichs)
+        // list and trigger template (in the file since 2026-09-23; older files
+        // do not name them - then the state of the target area remains)
         if (array_key_exists('list_template_id', $area)) {
             $listId = (int)$area['list_template_id'] > 0 ? $this->_mapId('template', (int)$area['list_template_id']) : 0;
             $save['list_template_id'] = ($listId > 0 && $this->_templateExists($listId)) ? $listId : 0;
@@ -2857,7 +2856,7 @@ class RecordImport {
         if (array_key_exists('trigger_template_ids', $area)) {
             $this->pendingTriggers[$areaId] = array_map('intval', (array)$area['trigger_template_ids']);
         }
-        // Übersichts-Template der Präfix-Adresse (in der Datei seit 2026-09-27)
+        // overview template of the prefix address (in the file since 2026-09-27)
         if (array_key_exists('overview_template_id', $area)) {
             $overviewId = (int)$area['overview_template_id'] > 0 ? $this->_mapId('template', (int)$area['overview_template_id']) : 0;
             $save['overview_template_id'] = ($overviewId > 0 && $this->_templateExists($overviewId)) ? $overviewId : 0;
@@ -2872,7 +2871,7 @@ class RecordImport {
         }
         $save['selectable_templates'] = $selectable;
         $save['override_templates'] = $override;
-        // Anmeldefelder (Spalten seit 2026-09-14; ältere Dateien führen sie in details)
+        // login fields (columns since 2026-09-14; older files carry them in details)
         $fileDetails = (array)($area['details'] ?? []);
         foreach (['login_name_field_id', 'login_password_field_id'] as $key) {
             $fileFieldId = (int)($area[$key] ?? $fileDetails[$key] ?? 0);
@@ -2887,8 +2886,8 @@ class RecordImport {
     }
 
     /**
-     * Trigger-Templates der importierten Bereiche setzen ($pendingTriggers) - nach
-     * den Datensätzen und dem Auflösen der Code-Markierungen.
+     * Set the trigger templates of the imported areas ($pendingTriggers) - after
+     * the records and the resolution of the code markers.
      */
     private function _applyTriggerTemplates(array &$result): void
     {
@@ -2912,8 +2911,8 @@ class RecordImport {
     }
 
     /**
-     * Vorgänger eines Bereichs im Baum (previous_id), damit ein Update ihn nicht
-     * verschiebt (TreeManagerTrait::updateInTree() vergleicht damit).
+     * Predecessor of an area in the tree (previous_id), so that an update does not
+     * move it (TreeManagerTrait::updateInTree() compares against it).
      */
     private function _areaPreviousId(array $areaRow): int
     {
@@ -2942,20 +2941,20 @@ class RecordImport {
     }
 
     /**
-     * Felder der geschriebenen Bereiche importieren, in Abhängigkeitsreihenfolge:
-     * einfache Typen, Thumbnails (nach ihrem Upload-Feld), Relationen (ein Feld je
-     * Paar - Field::hookOnSaved() legt das Gegenfeld an, das dann die Angaben des
-     * Gegenfeldes der Datei bekommt), Pointer (Zielbereiche), Volltext (Quellfelder).
-     * Bei replace verschwinden Felder des Bereichs, die die Datei nicht nennt.
+     * Import the fields of the written areas, in dependency order:
+     * simple types, thumbnails (after their upload field), relations (one field per
+     * pair - Field::hookOnSaved() creates the counter field, which then receives the
+     * data of the counter field of the file), pointers (target areas), fulltext (source fields).
+     * With replace, fields of the area that the file does not name disappear.
      *
-     * @param array $areas     Bereiche der Datei (_xmlStructure())
-     * @param array $imported  Datei-area_id => Modus der geschriebenen Bereiche
-     * @return int  Anzahl geschriebener Felder
+     * @param array $areas     areas of the file (_xmlStructure())
+     * @param array $imported  file area_id => mode of the written areas
+     * @return int  number of fields written
      */
     private function _importFields(array $areas, array $imported, array &$result): int
     {
         $count = 0;
-        // Alle Felder der Datei (auch der nicht geschriebenen Bereiche - Gegenfelder)
+        // all fields of the file (also of the areas not written - counter fields)
         $allFields = [];
         foreach ($areas as $fileAreaId => $area) {
             foreach ((array)$area['fields'] as $fileFieldId => $field) {
@@ -2967,8 +2966,8 @@ class RecordImport {
             $type = (string)($field['type'] ?? '');
             if ($type === 'fulltext') return 6;
             if (in_array($type, $this->cms->multiAreaTypes, true)) return 5;
-            // relation1 vor relation: das Gegenfeld, das Field::hookOnSaved() anlegt,
-            // ist immer vom Typ 'relation' - die "1"-Seite muss also selbst gespeichert werden
+            // relation1 before relation: the counter field that Field::hookOnSaved() creates
+            // is always of type 'relation' - the "1" side must therefore be saved itself
             if ($type === 'relation1') return 3;
             if ($type === 'relation') return 4;
             if ($type === 'file' && (int)($field['parent_field_id'] ?? 0) > 0) return 2;
@@ -2990,7 +2989,7 @@ class RecordImport {
             $mode = (string)$imported[$fileAreaId];
             $areaId = (int)$this->map['area'][$fileAreaId];
             $item = ['kind' => 'field', 'id' => $fileFieldId, 'label' => (string)($field['label'] ?? '') . ' (' . (string)$field['name'] . ', ' . $this->_areaLabel($areaId) . ')', 'status' => 'failed', 'messages' => []];
-            // Thumbnail ohne zuordenbaren Konverter: übergehen (KONVERTER)
+            // thumbnail without assignable converter: skip (CONVERTERS)
             if ($this->_isThumbnail($field) && empty($this->_mapConverterIds($field, $this->sameDb))) {
                 $handled[$fileFieldId] = true;
                 $item['status'] = 'skipped';
@@ -2998,8 +2997,8 @@ class RecordImport {
                 $this->_addItem($result, $item);
                 continue;
             }
-            // Volltext-Standardfeld: reserviert, der Core schreibt ihn ohne Eingabefeld
-            // (Dateien aus der Zeit, als es noch eines war)
+            // fulltext default field: reserved, the core writes it without an input field
+            // (files from the time when it still was one)
             if ((string)$field['name'] === Field::FULLTEXT) {
                 $handled[$fileFieldId] = true;
                 $item['status'] = 'skipped';
@@ -3025,7 +3024,7 @@ class RecordImport {
             $this->_addItem($result, $item);
         }
 
-        // replace: Felder, die die Datei nicht nennt, entfernen
+        // replace: remove fields that the file does not name
         foreach ($imported as $fileAreaId => $mode) {
             if (!self::modeReplaces($mode)) continue;
             $areaId = (int)$this->map['area'][$fileAreaId];
@@ -3055,9 +3054,9 @@ class RecordImport {
     }
 
     /**
-     * Ein Feld anlegen bzw. schreiben. Bei Relationen wird das Gegenfeld der Datei
-     * dem von Field::hookOnSaved() angelegten (bzw. dem vorhandenen) Gegenfeld
-     * zugeordnet und mit dessen Angaben nachgezogen.
+     * Create resp. write a field. For relations the counter field of the file is
+     * assigned to the counter field created by Field::hookOnSaved() (resp. the existing one)
+     * and updated with its data.
      *
      * @return int  field_id
      */
@@ -3075,7 +3074,7 @@ class RecordImport {
             $data['details']['profile_area_ids'] = array_values(array_filter(array_map(fn($id) => $this->_mapId('area', (int)$id), (array)$data['details']['profile_area_ids'])));
         }
         if ($this->_isThumbnail($field)) {
-            // Reihenfolge der Datei bleibt (`rel_field_converter`.position)
+            // order of the file remains (`rel_field_converter`.position)
             $data['converter_ids'] = $this->_mapConverterIds($field, $this->sameDb);
             unset($data['details']['converter_ids']);
         }
@@ -3128,7 +3127,7 @@ class RecordImport {
             if ($fieldId < 1) throw new \RuntimeException('#' . $this->cms->errorMsgLast());
         }
 
-        // Gegenfeld einer Relation nachziehen
+        // update the counter field of a relation
         if (str_starts_with($type, 'relation')) {
             $counterId = (int)($this->_fieldRow($fieldId)['rel_field_id'] ?? 0);
             $fileCounterId = (int)($field['rel_field_id'] ?? 0);
@@ -3154,7 +3153,7 @@ class RecordImport {
         return $fieldId;
     }
 
-    /** Feld der Datei ist ein Thumbnail (Upload-Feld mit display_type 'thumbnail')? */
+    /** Is the field of the file a thumbnail (upload field with display_type 'thumbnail')? */
     private function _isThumbnail(array $field): bool
     {
         return (string)($field['type'] ?? '') === 'file' && (string)($field['display_type'] ?? '') === 'thumbnail';
@@ -3170,10 +3169,10 @@ class RecordImport {
     }
 
     /**
-     * Markierungen im Code der geschriebenen Templates auflösen (Export-Option
-     * "portable", RecordExport::_markTemplateReferences()) und die Templates erneut
-     * speichern (Kompilierung), wenn sich etwas geändert hat. Läuft nach den
-     * Datensätzen - erst dann stehen alle Ids fest. Ohne Markierungen passiert nichts.
+     * Resolve the markers in the code of the written templates (export option
+     * "portable", RecordExport::_markTemplateReferences()) and save the templates again
+     * (compilation) if something has changed. Runs after the
+     * records - only then are all ids fixed. Without markers nothing happens.
      */
     private function _rewriteTemplateCodes(array &$result): void
     {
@@ -3200,18 +3199,18 @@ class RecordImport {
     }
 
     /**
-     * <!-- CMS:REPLACE typ=wert [slug="…"] --> durch den tatsächlichen Wert ersetzen:
+     * Replace <!-- CMS:REPLACE typ=wert [slug="…"] --> with the actual value:
      *
-     *     template_id / area_id / record_id   zugeordnete Id ($this->map, sonst dieselbe)
-     *     template_name / area_name           Name des zugeordneten Templates/Bereichs
-     *                                         (Bereiche können beim Import umbenannt sein)
-     *     record_id mit slug                  mit importiert: die zugeordnete Id, sonst
-     *                                         der Datensatz mit diesem URL-Pfad
-     *                                         ([Slug-Prefix/]slug) in der Instanz des
-     *                                         Templates ($templateInstanceId)
+     *     template_id / area_id / record_id   assigned id ($this->map, otherwise the same)
+     *     template_name / area_name           name of the assigned template/area
+     *                                         (areas may have been renamed during the import)
+     *     record_id with slug                 imported along: the assigned id, otherwise
+     *                                         the record with this URL path
+     *                                         ([slug prefix/]slug) in the instance of the
+     *                                         template ($templateInstanceId)
      *
-     * Ist ein Ziel weder zugeordnet noch vorhanden, bleibt der Wert der Datei stehen
-     * und $unresolved zählt hoch (Protokoll).
+     * If a target is neither assigned nor present, the value of the file remains
+     * and $unresolved is incremented (log).
      */
     private function _resolveTemplateMarkers(string $code, int &$unresolved, int $templateInstanceId = 0): string
     {
@@ -3231,8 +3230,8 @@ class RecordImport {
                         if (!$this->_areaOf($id)) $unresolved++;
                         return (string)$id;
                     case 'record_id':
-                        // mit importiert: die zugeordnete Id; sonst zuerst über den
-                        // Pfad (fremde Datenbank - die Id der Datei bedeutet dort nichts)
+                        // imported along: the assigned id; otherwise first via the
+                        // path (foreign database - the id of the file means nothing there)
                         if (isset($this->map['record'][(int)$value])) return (string)$this->map['record'][(int)$value];
                         if ($slug !== '') {
                             $bySlug = $this->_recordIdBySlug($slug, $templateInstanceId);
@@ -3242,7 +3241,7 @@ class RecordImport {
                         if (!$this->_recordExists($id)) $unresolved++;
                         return (string)$id;
                     case 'template_name':
-                        // "bereich.template": Bereichsname getrennt zuordnen (kann umbenannt sein)
+                        // "area.template": assign the area name separately (may have been renamed)
                         $areaPrefix = '';
                         $templateName = $value;
                         if (str_contains($value, '.')) {
@@ -3279,10 +3278,10 @@ class RecordImport {
     }
 
     /**
-     * Datensatz über seinen URL-Pfad [Slug-Prefix/]slug finden - wie ein Aufruf der
-     * Seite (Cms::recordIdsBySlugPath()) in der Instanz des Templates und ihren
-     * zusammengeschalteten Instanzen, je Instanz in der Hauptsprache (der Export
-     * schreibt den Pfad der Hauptsprache). 0 = kein oder kein eindeutiger Treffer.
+     * Find a record via its URL path [slug prefix/]slug - like a call of the
+     * page (Cms::recordIdsBySlugPath()) in the instance of the template and its
+     * linked instances, per instance in the primary language (the export
+     * writes the path of the primary language). 0 = no or no unique match.
      */
     private function _recordIdBySlug(string $path, int $instanceId): int
     {
@@ -3324,7 +3323,7 @@ class RecordImport {
     }
 
     /**
-     * Vorhandenes Template nach Kriterium: Name im Zielbereich oder template_id.
+     * Existing template by criterion: name in the target area or template_id.
      */
     private function _resolveTemplate(array $template, int $areaId, string $by): int
     {
@@ -3341,7 +3340,7 @@ class RecordImport {
     }
 
     /**
-     * Ein Template anlegen bzw. schreiben - Template::save() kompiliert den Code.
+     * Create resp. write a template - Template::save() compiles the code.
      *
      * @return int  template_id
      */
@@ -3372,11 +3371,11 @@ class RecordImport {
     // XML lesen
 
     /**
-     * Datensätze der XML-Datei als Generator. Zielbereich, Modus und
-     * Update-Kriterium je Eintrag: global aus $job['areas'] (Bereiche der Datei sind
-     * über $this->map['area'] zugeordnet - _importStructure()); im Bereich nur die
-     * Datensätze des gewählten Quellbereichs der Datei (source_area_id), Ziel ist
-     * der aufrufende Bereich, Modus $job['mode'].
+     * Records of the XML file as a generator. Target area, mode and
+     * update criterion per entry: globally from $job['areas'] (areas of the file are
+     * assigned via $this->map['area'] - _importStructure()); within an area only the
+     * records of the chosen source area of the file (source_area_id), the target is
+     * the calling area, mode $job['mode'].
      */
     private function _xmlEntries(string $path, array $job): \Generator
     {
@@ -3409,7 +3408,7 @@ class RecordImport {
                     $targetAreaId = (int)($this->map['area'][$originAreaId] ?? 0);
                 }
                 else {
-                    // nur der gewählte Quellbereich (ohne Angabe: alle) - hierher
+                    // only the chosen source area (without specification: all) - here
                     if ($sourceAreaId > 0 && $originAreaId !== $sourceAreaId) {
                         $reader->next();
                         continue;
@@ -3418,7 +3417,7 @@ class RecordImport {
                 }
                 if ($targetAreaId < 1) {
                     $entry['error'] = $this->cms->snippet('area.error_area_not_found');
-                    // Beschriftung aus dem Default-Feld der Datei (Analyse: Bereich entsteht erst)
+                    // label from the default field of the file (analysis: the area only arises then)
                     $defaultField = (string)($this->fileAreas[$originAreaId]['default_field'] ?? '');
                     foreach ($defaultField !== '' ? $node->field : [] as $field) {
                         if ((string)$field['name'] !== $defaultField) continue;
@@ -3438,8 +3437,8 @@ class RecordImport {
     }
 
     /**
-     * Ein <record>-Element in die Importform (siehe _importOne()) bringen: Felder
-     * nach Name auf das Zielschema, Sprachen nach Kürzel auf die Instanz.
+     * Bring a <record> element into the import form (see _importOne()): fields
+     * by name onto the target schema, languages by code onto the instance.
      */
     private function _xmlRecordData(\SimpleXMLElement $node, array $header, int $areaId, array $job): array
     {
@@ -3447,10 +3446,10 @@ class RecordImport {
         $langCtx = $this->_languagesOf($areaId);
         $languageIds = $langCtx['language_ids'];
         $primaryId = $langCtx['primary_id'];
-        // Sprache der Datei -> Sprache der Instanz (über das Kürzel)
+        // language of the file -> language of the instance (via the code)
         $xmlLanguages = (array)($header['languages'] ?? []);
         $xmlPrimary = (int)($header['primary_language_id'] ?? 0);
-        // Format 2: die Hauptsprache der Instanz, aus der der Datensatz stammt
+        // format 2: the primary language of the instance the record comes from
         $fileInstanceId = (int)($node['instance_id'] ?? 0);
         if ($fileInstanceId > 0 && isset($header['primary_by_instance'][$fileInstanceId])) {
             $xmlPrimary = (int)$header['primary_by_instance'][$fileInstanceId];
@@ -3462,7 +3461,7 @@ class RecordImport {
         }
         $data = ['area_id' => $areaId, 'values' => [], 'stored' => [], 'prehashed' => [], 'relations' => [], 'files' => [], 'meta' => []];
 
-        // Meta-Spalten aus den Attributen (created_at und ORIGIN_FIELDS nur für
+        // meta columns from the attributes (created_at and ORIGIN_FIELDS only for
         // _restoreCreated())
         foreach (array_merge(self::META_FIELDS, ['created_at'], self::ORIGIN_FIELDS) as $name) {
             if (!isset($node[$name])) continue;
@@ -3491,7 +3490,7 @@ class RecordImport {
                     $fileLang = (string)$file['file_language_id'];
                     $rowLang = (int)$file['language_id'];
                     if ((string)$file['extension'] === '') continue;
-                    // nur eigene Dateien (Fallback-Zeilen zeigen auf dieselbe Datei)
+                    // only own files (fallback rows point to the same file)
                     if ($fileLang !== '' && (int)$fileLang !== $rowLang) continue;
                     $langKey = '';
                     if ($this->cms->isMultilingualField($colDef)) {
@@ -3499,7 +3498,7 @@ class RecordImport {
                         if ($targetLang === null) continue;
                         $langKey = (string)$targetLang;
                     }
-                    if ($path === '') continue; // Export ohne Dateien: nichts ändern
+                    if ($path === '') continue; // export without files: change nothing
                     $anyPath = true;
                     $absolute = $this->_importFilePath($job, $path);
                     $files[$langKey] = $absolute === null ? null : ['importfile' => $absolute, 'filename' => (string)$file['filename']];
@@ -3509,7 +3508,7 @@ class RecordImport {
                 continue;
             }
 
-            // Skalare Werte je Sprache
+            // scalar values per language
             $values = [];
             $fallback = [];
             foreach ($field->value as $value) {
@@ -3530,7 +3529,7 @@ class RecordImport {
                         $value[$languageId] = ($xmlLang !== false && isset($values[$xmlLang])) ? $values[$xmlLang] : $primaryValue;
                     }
                     else {
-                        // Fallback der Datei = keine eigene Übersetzung -> leer
+                        // fallback of the file = no own translation -> empty
                         $value[$languageId] = ($xmlLang !== false && isset($values[$xmlLang]) && empty($fallback[$xmlLang])) ? $values[$xmlLang] : '';
                     }
                 }
@@ -3568,7 +3567,7 @@ class RecordImport {
     }
 
     /**
-     * Absoluter Pfad einer Datei aus der Importdatei (media/…), null wenn sie fehlt.
+     * Absolute path of a file from the import file (media/…), null if it is missing.
      */
     private function _importFilePath(array $job, string $relative): ?string
     {
@@ -3586,11 +3585,11 @@ class RecordImport {
     // CSV lesen
 
     /**
-     * Zeilen einer CSV-Datei (eigener Parser: Einfassungszeichen dürfen
-     * Zeilenumbrüche und verdoppelte Einfassungszeichen enthalten, der
-     * Zeilenumbruch ist frei wählbar). Eine UTF-8-BOM wird übergangen.
+     * Lines of a CSV file (own parser: enclosure characters may contain
+     * line breaks and doubled enclosure characters, the
+     * line break can be freely chosen). A UTF-8 BOM is skipped.
      *
-     * @return array  Zeilen als Arrays von Zellen
+     * @return array  lines as arrays of cells
      */
     private function _csvRows(string $path, array $settings): array
     {
@@ -3644,7 +3643,7 @@ class RecordImport {
                 $i += $eolLen;
                 continue;
             }
-            // fremder Zeilenumbruch (\n statt \r\n): ebenfalls als Zeilenende nehmen
+            // foreign line break (\n instead of \r\n): also take it as line end
             if (($char === "\n" || $char === "\r") && $eol !== $char) {
                 if ($char === "\r" && $i + 1 < $length && $content[$i + 1] === "\n") $i++;
                 $row[] = $cell;
@@ -3661,7 +3660,7 @@ class RecordImport {
             $row[] = $cell;
             $rows[] = $row;
         }
-        // leere Zeilen (nur eine leere Zelle) übergehen
+        // skip empty lines (only one empty cell)
         return array_values(array_filter($rows, fn($r) => count($r) > 1 || trim((string)($r[0] ?? '')) !== ''));
     }
 
@@ -3679,8 +3678,8 @@ class RecordImport {
     }
 
     /**
-     * Zeilen der CSV-Datei als Generator (die Zuordnung 'mapping' macht daraus
-     * Feldwerte; skip übergeht die Kopfzeile).
+     * Lines of the CSV file as a generator (the assignment 'mapping' turns them into
+     * field values; skip passes over the header line).
      */
     private function _csvEntries(string $path, array $job): \Generator
     {
@@ -3704,7 +3703,7 @@ class RecordImport {
     }
 
     /**
-     * Eine CSV-Zeile in die Importform bringen (Zielschlüssel siehe csvTargets()).
+     * Bring a CSV line into the import form (target keys see csvTargets()).
      */
     private function _csvRecordData(array $row, array $mapping, int $areaId, bool $stored, array $job): array
     {
@@ -3717,8 +3716,8 @@ class RecordImport {
             $key = (string)$key;
             if ($key === '' || !array_key_exists($index, $row)) continue;
             $value = (string)$row[$index];
-            // Spalte eines link-Feldes: "{link}.{…}" - erst sammeln, die Inhalte
-            // entstehen, wenn alle Spalten gelesen sind (_csvLinks())
+            // column of a link field: "{link}.{…}" - collect first, the contents
+            // arise when all columns have been read (_csvLinks())
             $dot = strpos($key, '.');
             if ($dot !== false && isset($schema[substr($key, 0, $dot)])
                 && in_array((string)($schema[substr($key, 0, $dot)]['type'] ?? ''), $this->cms->dependentTypes, true)
@@ -3728,7 +3727,7 @@ class RecordImport {
             }
             if ($key === 'record_id' || in_array($key, self::META_FIELDS, true) || in_array($key, self::ORIGIN_FIELDS, true)) {
                 if (isset($schema[$key]) && empty($schema[$key]['meta'])) {
-                    // gleichnamiges Eingabefeld (kein Meta-Feld) - unten als Wert
+                    // input field of the same name (not a meta field) - below as value
                 }
                 else {
                     $data['meta'][$key] = trim($value);
@@ -3765,7 +3764,7 @@ class RecordImport {
                 $value = trim($value);
                 $langKey = ($languageId === null) ? '' : (string)$languageId;
                 if ($value === '') {
-                    // leere Zelle: bei replace wird die Datei entfernt (nicht genannt)
+                    // empty cell: with replace the file is removed (not named)
                     continue;
                 }
                 $absolute = $this->_importFilePath($job, $value);
@@ -3789,10 +3788,10 @@ class RecordImport {
                 $data['stored'][] = $name;
             }
         }
-        // Datei-Spalten je Sprache: der CSV-Export schreibt in jede Sprachspalte den
-        // aufgelösten Pfad - bei einer Sprache ohne eigene Datei den der Hauptsprache.
-        // Dieselbe Datei noch einmal für die Sprache anzulegen, machte aus dem
-        // Fallback eine eigene Datei; deshalb: gleicher Pfad wie die Hauptsprache = weg
+        // file columns per language: the CSV export writes the resolved path into every language
+        // column - for a language without its own file that of the primary language.
+        // Creating the same file again for the language would turn the fallback
+        // into an own file; therefore: same path as the primary language = removed
         foreach ($data['files'] as $name => $langFiles) {
             $primaryKey = (string)$primaryId;
             $primaryFile = (string)($langFiles[$primaryKey]['importfile'] ?? '');
@@ -3802,11 +3801,11 @@ class RecordImport {
                 if ((string)($fileData['importfile'] ?? '') === $primaryFile) unset($data['files'][$name][$langKey]);
             }
         }
-        // eingebettete Inhalte
+        // embedded contents
         foreach ($linkCells as $name => $cells) {
             $data['links'][$name] = $this->_csvLinks($schema[$name], $cells, $langCtx, $stored, $job);
         }
-        // leere Passwort-Zellen: Feld nicht anfassen
+        // empty password cells: do not touch the field
         foreach ($data['prehashed'] as $name) {
             if ((string)($data['values'][$name] ?? '') === '') unset($data['values'][$name]);
         }
@@ -3819,14 +3818,14 @@ class RecordImport {
     }
 
     /**
-     * Die Spalten eines link-Feldes einer CSV-Zeile -> eingebettete Inhalte
-     * (EINGEBETTETE INHALTE). Je Inhalt ein Wert, mit " | " getrennt; die Anzahl
-     * der Inhalte gibt die Spalte record_id vor (sonst die Spalte mit den meisten
-     * Werten). Bei genau einem Inhalt wird nicht getrennt - ein Text darf dann
-     * " | " enthalten. Passt die Anzahl einer Spalte nicht, trägt das Ergebnis
-     * 'error' (der Datensatz wird nicht importiert).
+     * The columns of a link field of a CSV line -> embedded contents
+     * (EMBEDDED CONTENTS). One value per content, separated by " | "; the number
+     * of contents is set by the record_id column (otherwise the column with the most
+     * values). With exactly one content no separation takes place - a text may then
+     * contain " | ". If the number of a column does not match, the result carries
+     * 'error' (the record is not imported).
      *
-     * @param array $cells  Unterschlüssel (record_id, area_id, {feld}, {feld}.{code}) => Zelle
+     * @param array $cells  sub-key (record_id, area_id, {field}, {field}.{code}) => cell
      * @return array  ['entries' => [['id' => int|null, 'area_id', 'values', 'files',
      *                'stored', 'prehashed'], …], 'error' => string]
      */
@@ -3845,7 +3844,7 @@ class RecordImport {
             $count = 0;
             foreach ($cells as $cell) $count = max($count, count($split((string)$cell)));
         }
-        // Spalten -> [feld, Sprache] und Werte je Inhalt
+        // columns -> [field, language] and values per content
         $columns = [];
         foreach ($cells as $sub => $cell) {
             $sub = (string)$sub;
@@ -3910,7 +3909,7 @@ class RecordImport {
                     $entry['stored'][] = $field;
                 }
             }
-            // Datei je Sprache mit dem Pfad der Hauptsprache: Fallback, keine eigene Datei
+            // file per language with the path of the primary language: fallback, no own file
             foreach ($entry['files'] as $field => $langFiles) {
                 $primaryFile = (string)($langFiles[(string)$langCtx['primary_id']]['importfile'] ?? '');
                 if ($primaryFile === '') continue;
@@ -3929,7 +3928,7 @@ class RecordImport {
     // DOCX lesen
 
     /**
-     * Tabellen des Word-Dokuments (RecordExport::_exportDocx()) -> Datensätze.
+     * Tables of the Word document (RecordExport::_exportDocx()) -> records.
      *
      * @return array|null  [['record_id', 'language_id', 'source_language_id', 'fields' => [name => text],
      *                     'links' => [link => [record_id => [feld => text]]]], …]
@@ -3969,7 +3968,7 @@ class RecordImport {
             for ($i = 1; $i + 1 < count($rows); $i += 2) {
                 if (!preg_match('/^field=([a-z0-9_\-]+)(?:\.([a-z0-9_\-]+))?/', $rows[$i], $m)) { $i--; continue; }
                 if (!empty($m[2])) {
-                    // Feld eines eingebetteten Inhalts: "field={link}.{feld} | record_id={id}"
+                    // field of an embedded content: "field={link}.{field} | record_id={id}"
                     $destId = preg_match('/record_id=(\d+)/', $rows[$i], $mm) ? (int)$mm[1] : 0;
                     $record['links'][$m[1]][$destId][$m[2]] = $rows[$i + 1];
                     continue;
@@ -4001,7 +4000,7 @@ class RecordImport {
     }
 
     /**
-     * Datensätze der DOCX-Datei als Generator: Update in der Zielsprache.
+     * Records of the DOCX file as a generator: update in the target language.
      */
     private function _docxEntries(string $path, array $job): \Generator
     {
@@ -4017,7 +4016,7 @@ class RecordImport {
                 if ($colDef === null || !$this->cms->isMultilingualField($colDef)) continue;
                 $data['values'][$name] = [$languageId => $this->docxText($text, $options)];
             }
-            // eingebettete Inhalte: nur die genannten übersetzen (partial)
+            // embedded contents: translate only the named ones (partial)
             foreach ((array)($record['links'] ?? []) as $linkName => $dests) {
                 $colDef = $schema[$linkName] ?? null;
                 if ($colDef === null || !in_array((string)($colDef['type'] ?? ''), $this->cms->dependentTypes, true)) continue;
@@ -4044,10 +4043,10 @@ class RecordImport {
     }
 
     /**
-     * Übersetzten Text nach den DOCX-Optionen aufbereiten:
-     *   punct  Satzzeichen neben CJK-Zeichen in ideografische umwandeln
-     *   space  Leerzeichen zwischen CJK-Zeichen in das ideografische Leerzeichen
-     *   rtl    Abschnitte in Rechts-nach-links-Schrift markieren: 'unicode'
+     * Prepare the translated text according to the DOCX options:
+     *   punct  convert punctuation next to CJK characters into ideographic punctuation
+     *   space  convert spaces between CJK characters into the ideographic space
+     *   rtl    mark sections in right-to-left script: 'unicode'
      *          (RLI … PDI), 'html' (<span dir="rtl">), 'none'
      */
     public function docxText(string $text, array $options): string
@@ -4068,7 +4067,7 @@ class RecordImport {
         if ($rtl === 'unicode' || $rtl === 'html') {
             $pattern = '/[\p{Arabic}\p{Hebrew}\p{Syriac}\p{Thaana}](?:[\p{Arabic}\p{Hebrew}\p{Syriac}\p{Thaana}\p{N}\p{P}\p{Zs}]*[\p{Arabic}\p{Hebrew}\p{Syriac}\p{Thaana}])?/u';
             if (preg_match_all($pattern, $text, $matches) > 0) {
-                // ein einziger Abschnitt, der den ganzen Text ausmacht, braucht keine Markierung
+                // a single section that makes up the whole text needs no marker
                 if (!(count($matches[0]) === 1 && trim($text) === trim($matches[0][0]))) {
                     $text = preg_replace_callback($pattern, fn($m) => $rtl === 'html'
                         ? '<span dir="rtl">' . $m[0] . '</span>'
@@ -4126,8 +4125,8 @@ class RecordImport {
     }
 
     /**
-     * Ergebnis als interne Nachricht an den auslösenden Admin: Zusammenfassung als
-     * Text, das Protokoll (HTML mit Farben) im HTML-Teil.
+     * Result as an internal message to the triggering admin: summary as
+     * text, the log (HTML with colors) in the HTML part.
      *
      * @return string  Betreff
      */
@@ -4140,7 +4139,7 @@ class RecordImport {
             $this->cms->snippet('record.import_report_subject')
         );
         if ($adminId < 1) return $subject;
-        // Text: nur die Zusammenfassung - das Protokoll steht im HTML-Teil
+        // text: only the summary - the log is in the HTML part
         $body = $this->summaryText($job, $result);
         if (!empty($result['error'])) $body .= "\n" . (string)$result['error'];
         $this->message->sendSystem($adminId, $subject, $body, $this->protocolHtml($job, $result));
@@ -4148,7 +4147,7 @@ class RecordImport {
     }
 
     /**
-     * "Import {Modus}: n hinzugefügt, n geändert, n ersetzt, n fehlgeschlagen, n übersprungen"
+     * "Import {mode}: n added, n changed, n replaced, n failed, n skipped"
      */
     public function summaryText(array $job, array $result): string
     {
@@ -4163,8 +4162,8 @@ class RecordImport {
     }
 
     /**
-     * Protokoll als HTML-Tabelle mit Farben (Bootstrap-Klassen) - für die
-     * Ergebnisseite und den HTML-Teil der Nachricht.
+     * Log as an HTML table with colors (Bootstrap classes) - for the
+     * result page and the HTML part of the message.
      */
     public function protocolHtml(array $job, array $result): string
     {
@@ -4227,7 +4226,7 @@ class RecordImport {
     }
 
     /**
-     * Sprachen der Instanz eines Bereichs: ['instance_id', 'language_ids', 'primary_id']
+     * Languages of the instance of an area: ['instance_id', 'language_ids', 'primary_id']
      */
     private function _languagesOf(int $areaId): array
     {
@@ -4239,7 +4238,7 @@ class RecordImport {
     }
 
     /**
-     * Beschriftung für das Protokoll: das Default-Feld des Bereichs aus den Werten.
+     * Label for the log: the default field of the area from the values.
      */
     private function _labelOf(int $areaId, array $values): string
     {

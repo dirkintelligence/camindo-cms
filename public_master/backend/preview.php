@@ -1,20 +1,20 @@
 <?php
 /**
- * Vorschau aus dem Backend: einen Datensatz bzw. ein Standalone-Template so
- * ausliefern, wie es das Frontend täte - nur mit Admin-Session und auch für
- * unveröffentlichte Datensätze (Page::resolvePreview(), Backend-Modus - siehe
- * Klassenkommentar von Page). Läuft das Backend nicht unter einer Domain der
- * Instanz, geht es per Token weiter auf deren Hauptdomain
- * (FrontendHandover::previewUrl()) - dort gibt es auch die Bilder.
+ * Preview from the backend: deliver a record or a standalone template
+ * as the frontend would - only with administrator session and also for
+ * unpublished records (Page::resolvePreview(), backend mode - see
+ * class comment of Page). If the backend does not run under a domain of the
+ * instance, it continues via token to its main domain
+ * (FrontendHandover::previewUrl()) - the images are there too.
  *
- * Aufruf (Backend::buttonAddPreview()):
+ * Call (Backend::buttonAddPreview()):
  *     preview.php?instance={id}&request={slug|id}[,{template}][&lang={code}]
  */
 use Camindo\Core\Page;
 
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_BACKEND', true);
-// Ausgabe ist ein Frontend-Template: Sicherheits-Header des Frontends (SecurityHeaders)
+// Output is a frontend template: security headers of the frontend (SecurityHeaders)
 define ('CAMINDO_PREVIEW', true);
 
 // Bootstrap laden

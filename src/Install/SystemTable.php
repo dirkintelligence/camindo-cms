@@ -1,16 +1,16 @@
 <?php
 /**
- * Tabelle `system` - Schlüssel/Wert-Speicher des Cores.
+ * Table `system` - key/value store of the core.
  *
- *     core_version   Stand, auf den die Datenbank migriert ist (Zeiger, 14 §3.3)
+ *     core_version   state to which the database is migrated (pointer, developer docs, chapter 09 (Installation and update))
  *     installed_at   Installer
  *     upgraded_at    letztes camindo.php upgrade
  *
- * Teil von schema.sql seit dem ersten Release (9.0.0). Ohne diese Tabelle gab es keinen Versionsstand in der
- * Datenbank - exists() sagt, ob die Tabelle da ist; UpgradeCommand nimmt dann
- * 9.0.0 als Ausgangsstand an.
+ * Part of schema.sql since the first release (9.0.0). Without this table there was no version state in the
+ * database - exists() says whether the table is there; UpgradeCommand then takes
+ * 9.0.0 as the starting state.
  *
- * @see docs/developers/14-installation-und-update.md, 2.1
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Install;
 
@@ -50,7 +50,7 @@ class SystemTable {
     }
 
     /**
-     * Alle Einträge: key => value
+     * All entries: key => value
      */
     public function all(): array
     {

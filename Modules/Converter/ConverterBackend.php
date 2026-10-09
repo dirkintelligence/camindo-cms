@@ -1,39 +1,39 @@
 <?php
 /**
- * Backend-Oberfläche für die Medienkonverter (Tabelle `converter`).
+ * Backend UI for the media converters (table `converter`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     converter_list.php     -> list()             Konverterliste
- *     converter_info.php     -> info()             Detailansicht
- *     converter_create.php   -> chooseProcessor()  Schritt 1: Prozessor wählen
- *     converter_edit.php     -> edit()             Schritt 2 und alles weitere
- *     converter_search.php   -> search()           Suchmaske und Suchausführung
+ *     converter_list.php     -> list()             converter list
+ *     converter_info.php     -> info()             detail view
+ *     converter_create.php   -> chooseProcessor()  step 1: choose processor
+ *     converter_edit.php     -> edit()             step 2 and everything else
+ *     converter_search.php   -> search()           search mask and search execution
  *
- * ANLEGEN IN ZWEI SCHRITTEN
+ * CREATING IN TWO STEPS
  * --------------------
- * Wie bei den Eingabefeldern: erst der Prozessor, dann das Formular. Der Prozessor
- * bestimmt, welche Einstellungen es überhaupt gibt, und lässt sich nachträglich nicht
- * wechseln - deshalb steht die Auswahl in einem eigenen Schritt (chooseProcessor()),
- * gruppiert nach Medienart.
+ * As with the input fields: first the processor, then the form. The processor
+ * determines which settings exist at all and cannot be changed afterwards, so
+ * the choice is made in a separate step (chooseProcessor()),
+ * grouped by media kind.
  *
- * DER PROZESSOR LIEFERT SEINEN TEIL DES FORMULARS SELBST
+ * THE PROCESSOR PROVIDES ITS PART OF THE FORM ITSELF
  * --------------------
- * Diese Klasse rendert nur die gemeinsamen Felder (label, Mime-Filter, extension).
- * Alles Prozessorspezifische kommt aus zwei Dateien im Prozessor-Verzeichnis, die
- * mitten in der Methode eingebunden werden:
+ * This class only renders the shared fields (label, MIME filter, extension).
+ * All processor-specific parts come from two files in the processor directory, which are
+ * included in the middle of the method:
  *
- *     {Prozessor}/backend/form.php   Eingabefelder   (in _editForm())
- *     {Prozessor}/backend/info.php   Detailanzeige   (in info())
+ *     {processor}/backend/form.php   input fields  (in _editForm())
+ *     {processor}/backend/info.php   detail display (in info())
  *
- * Der include läuft im Gültigkeitsbereich der Methode, die Dateien greifen also direkt
- * auf $this->backend, $this->converter und $this->data zu. Ein neuer Prozessor braucht
- * damit keine Änderung an dieser Klasse - aber auch: er bekommt vollen Zugriff auf sie.
+ * The include runs in the scope of the method, so the files access directly
+ * $this->backend, $this->converter and $this->data. A new processor therefore needs
+ * no change to this class - but it also gets full access to it.
  *
- * @see Camindo\Core\Modules\Converter\Converter  Dataset/Model, erweitert sein Schema
- *                                                   um die Felder des Prozessors
- * @see Camindo\Core\MediaProcessor                 Basisklasse der Prozessoren
- * @see Camindo\Core\Modules\Area\FieldBackend     wählt Konverter für Thumbnail-Felder
+ * @see Camindo\Core\Modules\Converter\Converter  Dataset/model, extends its schema
+ *                                                   with the fields of the processor
+ * @see Camindo\Core\MediaProcessor                 base class of the processors
+ * @see Camindo\Core\Modules\Area\FieldBackend     selects converters for thumbnail fields
  */
 namespace Camindo\Core\Modules\Converter;
 
@@ -62,16 +62,16 @@ class ConverterBackend {
     }
 
     /**
-     * Konverterliste (backend/converter_list.php).
+     * Converter list (backend/converter_list.php).
      *
-     * Standardsortierung 'processor ASC, label ASC' aus Converter - die Konverter
-     * desselben Prozessors stehen dadurch beieinander.
+     * Default sort 'processor ASC, label ASC' from Converter - so the converters
+     * of the same processor are kept together.
      */
     public function list()
     {
         $id = (int)($_REQUEST['id'] ?? 0);
 
-        // Seitenelemente
+        // Page elements
         // --------------------
 
         // Bread crum navi
@@ -90,7 +90,7 @@ class ConverterBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Liste
+        // List
         // --------------------
         $f = $this->cms->select([
             'request' => 'all',
@@ -99,7 +99,7 @@ class ConverterBackend {
             'filtertext' => 'true',
         ], $this->converter);
 
-        // Suchbegriffe oder geänderte Sortierung als lesbarer Text
+        // Search terms or changed sorting as readable text
         echo $this->backend->filterText($f);
 
         if ($this->db->num_rows > 0) {
@@ -130,7 +130,7 @@ class ConverterBackend {
             $tplTableRow = $this->backend->template('converter.converter_table_row');
             $tableRows = '';
             
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+            // Get results (Dataset::fetch: with post-processing)
             while ($data = $this->converter->fetch()) {
 
                 // Label | Processor | Type
@@ -165,21 +165,21 @@ class ConverterBackend {
     /**
      * Detailansicht eines Konverters (backend/converter_info.php).
      *
-     * Die Mime-Filter werden zeilenweise eingegeben und hier als Liste dargestellt;
-     * htmlspecialchars() läuft VOR dem Zerlegen, weil der fertige HTML-Block danach mit
-     * dem Flag 'html' übergeben wird und infoAdd() ihn dann nicht mehr maskiert.
+     * The MIME filters are entered line by line and shown here as a list;
+     * htmlspecialchars() runs BEFORE splitting, because the finished HTML block is then passed
+     * with the flag 'html' and infoAdd() no longer escapes it.
      *
-     * Am Ende bindet die Methode {Prozessor}/backend/info.php ein - der Prozessor
-     * stellt seine eigenen Einstellungen selbst dar. Der include läuft im
-     * Gültigkeitsbereich dieser Methode, die Datei arbeitet also mit $data,
-     * $this->backend und $this->converter weiter.
+     * At the end the method includes {processor}/backend/info.php - the processor
+     * presents its own settings itself. The include runs in the
+     * scope of this method, so the file continues to work with $data,
+     * $this->backend and $this->converter.
      */
     public function info()
     {
         $id = (int)($_REQUEST['id'] ?? 0);
         $tab = (string)($_REQUEST['tab'] ?? '');
 
-        // Seitenelemente
+        // Page elements
         // --------------------
 
         // Bread crum navi
@@ -213,8 +213,8 @@ class ConverterBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Tabs: Einstellungen | Verwendet von (n) - die Thumbnail-Felder, die den
-        // Konverter nutzen (`rel_field_converter`)
+        // Tabs: Settings | Used by (n) - the thumbnail fields that use the
+        // converter (`rel_field_converter`)
         $usedBy = $this->field->getFieldIdsByConverter($id);
         $back = !empty($_REQUEST['back']) ? '&back=true' : '';
         $this->backend->tabBarReset();
@@ -225,7 +225,7 @@ class ConverterBackend {
             $tab !== 'usage' ? "cApp.layers.replace('Converter/converter_info.php?id={$id}&tab=usage{$back}');" : '',
             $tab === 'usage'
         );
-        // "Änderungen" (Audit-Log, Backend::auditTabAdd())
+        // "Changes" (audit log, Backend::auditTabAdd())
         $this->backend->auditTabAdd("Converter/converter_info.php?id={$id}{$back}");
         echo $this->backend->tabBar();
 
@@ -242,14 +242,14 @@ class ConverterBackend {
     }
 
     /**
-     * Suchmaske.
+     * Search mask.
      *
-     * Nur die gemeinsamen Felder - nach prozessorspezifischen Einstellungen lässt sich
-     * nicht suchen, sie liegen in der JSON-Spalte `details`.
+     * Only the shared fields - processor-specific settings cannot be searched,
+     * they are in the JSON column `details`.
      */
     public function searchForm():void
     {
-        // Seiten-Parameter
+        // Page parameters
         $filter = (array) ($_REQUEST['filter'] ?? []);
 
         echo '<form action="Converter/converter_search.php" method="post">';
@@ -263,7 +263,7 @@ class ConverterBackend {
         // H1
         echo $this->backend->headline('#converter.headline_search');
 
-        // Suchmaske des Converters
+        // Search mask of the converter
         $this->backend->formInit('converter.converter_search_form');
         $this->backend->searchField($this->converter, ['name' => 'label', 'value' => $filter['label'] ?? '']);
         $this->backend->searchField($this->converter, ['name' => 'type', 'value' => $filter['type'] ?? '']);
@@ -292,11 +292,11 @@ class ConverterBackend {
     }
 
     /**
-     * function=delete: Löschbestätigung.
+     * function=delete: deletion confirmation.
      *
-     * Verwenden Thumbnail-Felder den Konverter (`rel_field_converter`), steht das als
-     * Warnung dabei: die Zuordnungen fallen per Fremdschlüssel weg, ein Feld kann
-     * danach ohne Konverter dastehen und erzeugt dann keine Thumbnails mehr.
+     * If thumbnail fields use the converter (`rel_field_converter`), this is shown as a
+     * warning: the assignments are removed via foreign key, a field can then
+     * be left without a converter and then no longer generates thumbnails.
      */
     private function _editDeleteForm(): void
     {
@@ -319,24 +319,24 @@ class ConverterBackend {
     }
 
     /**
-     * Suche ausführen.
+     * Run search.
      *
-     * Wie in den anderen Modulen: keine eigene Trefferliste, sondern Suchlayer
-     * schließen und den Listenlayer mit den Parametern in der URL neu laden.
-     * json_encode maskiert alles, was das Javascript-Literal beenden könnte;
-     * substr(..., 1) entfernt nur das öffnende Anführungszeichen, das schließende
-     * beendet unten den String.
+     * As in the other modules: no own result list, but close the search layer
+     * and reload the list layer with the parameters in the URL.
+     * json_encode escapes everything that could end the JavaScript literal;
+     * substr(..., 1) only removes the opening quotation mark, the closing one
+     * ends the string below.
      */
     public function search():void
     {
-        // Parameter aus Post
+        // Parameters from POST
         $queryString = http_build_query($_POST);
 
-        // Sicher für Javascript verpacken
+        // Wrap safely for JavaScript
         $safeParams = json_encode($queryString, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
         $safeUri = '"Converter/index.php?' . substr($safeParams, 1);
 
-        // Referer-Layer mit diesen Parametern neu laden
+        // Reload referer layer with these parameters
         $this->backend->script("
             cApp.layers.close();
             cApp.layers.replace({$safeUri});
@@ -344,20 +344,20 @@ class ConverterBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/converter_edit.php).
+     * Create / copy / change / delete (backend/converter_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md).
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)).
      *
-     * Der Prozessorname wird gleich zu Anfang aus data[processor] gezogen und
-     * gesäubert: aus ihm werden ein Verzeichnispfad (für den include der
-     * Prozessor-Formulardatei) und ein Klassenname. Beim Bearbeiten überschreibt
-     * _editLoad() den Wert mit dem gespeicherten - aus dem Request kommt er nur beim
-     * Anlegen, direkt aus chooseProcessor().
+     * The processor name is taken from data[processor] right at the start and
+     * cleaned: a directory path (for the include of the
+     * processor form file) and a class name are built from it. When editing,
+     * _editLoad() overwrites the value with the stored one - the request only supplies it when
+     * creating, directly from chooseProcessor().
      */
     public function edit(): void
     {
-        // Seiten-Parameter
+        // Page parameters
         $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->function = (string)($_REQUEST['function'] ?? '');
         if ($this->function == '') $this->function = 'edit';
@@ -413,16 +413,16 @@ class ConverterBackend {
     }
 
     /**
-     * Schritt 1 beim Anlegen: Prozessor wählen (backend/converter_create.php).
+     * Step 1 when creating: choose processor (backend/converter_create.php).
      *
-     * Zeigt die installierten Prozessoren nach Medienart gruppiert. Je Art gibt es im
-     * Formular-Template einen Platzhalter {type_image_links}, {type_audio_links}, … der
-     * hier mit den Links gefüllt wird; eine Art ohne installierten Prozessor bekommt
-     * statt der Liste einen Leer-Block.
+     * Shows the installed processors grouped by media kind. For each kind the
+     * form template has a placeholder {type_image_links}, {type_audio_links}, … which
+     * is filled here with the links; a kind without an installed processor gets
+     * an empty block instead of the list.
      *
-     * Jeder Link ersetzt den Layer durch converter_edit.php mit function=create und dem
-     * gewählten Prozessor. Die Liste stammt aus var/config/components/processors.php,
-     * nicht aus der Datenbank (siehe Converter).
+     * Each link replaces the layer with converter_edit.php using function=create and the
+     * chosen processor. The list comes from var/config/components/processors.php,
+     * not from the database (see Converter).
      */
     public function chooseProcessor():void {
 
@@ -473,13 +473,13 @@ class ConverterBackend {
     }
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     /**
-     * function=create: Formular mit den Defaults vorbelegen.
+     * function=create: prefill the form with the defaults.
      *
-     * Converter::init() verlangt den Prozessor als Vorgabe - erst mit ihm ist das
-     * Schema vollständig und kann Defaults für seine Felder liefern.
+     * Converter::init() requires the processor as a default - only with it is the
+     * schema complete and can it supply defaults for its fields.
      */
     private function _editCreate(): void
     {
@@ -492,8 +492,8 @@ class ConverterBackend {
     /**
      * function=edit|copy|delete: Konverter laden.
      *
-     * Der gespeicherte Prozessorname gewinnt über den aus dem Request - der Prozessor
-     * eines bestehenden Konverters lässt sich nicht wechseln.
+     * The stored processor name takes precedence over the one from the request - the processor
+     * of an existing converter cannot be changed.
      */
     private function _editLoad(): void
     {
@@ -501,19 +501,19 @@ class ConverterBackend {
             $this->processorName = $this->converter->cleanProcessorName($this->data['processor']);
         }
         else {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
 
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the ID now
         if ($this->function == 'copy') {
             $this->id = 0;
         }
     }
 
     /**
-     * Überschrift des Formulars. Beim Löschen die Bezeichnung des Konverters, sonst
-     * die allgemeine Überschrift.
+     * Heading of the form. When deleting, the label of the converter, otherwise
+     * the general heading.
      */
     private function _editHeadline() {
         if ($this->function == 'delete') {
@@ -531,9 +531,9 @@ class ConverterBackend {
     /**
      * function=save: speichern.
      *
-     * $fields leer heißt: alle Schema-Felder, die in $data stehen - und dazu gehören
-     * nach dem Laden des Prozessors auch dessen eigene Felder, die in der JSON-Spalte
-     * `details` landen. Eine feste Feldliste ginge hier also gar nicht.
+     * $fields empty means: all schema fields that are in $data - and after loading
+     * the processor, this includes its own fields, which end up in the JSON column
+     * `details`. A fixed field list would therefore not work here.
      */
     private function _editSave(): void
     {
@@ -543,7 +543,7 @@ class ConverterBackend {
             $msg = $this->cms->snippet('converter.message_converter_saved');
             $this->backend->balloon('success', $msg);
 
-            // Referer aktualisieren und Fenster schließen
+            // Update referer and close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -555,7 +555,7 @@ class ConverterBackend {
     }
 
     /**
-     * function=delete_confirm: löschen.
+     * function=delete_confirm: delete.
      */
     private function _editDeleteConfirm(): void
     {
@@ -564,7 +564,7 @@ class ConverterBackend {
             $msg = $this->cms->snippet('converter.message_converter_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -576,7 +576,7 @@ class ConverterBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -586,16 +586,16 @@ class ConverterBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Zweigeteilt: erst die gemeinsamen Felder aus dem Converter-Schema, dann per
-     * include die Eingabefelder des Prozessors aus dessen backend/form.php. Die
-     * eingebundene Datei läuft im Gültigkeitsbereich dieser Methode und ruft dort
-     * dieselben $this->backend->formField()-Aufrufe auf; ihre Werte landen über das
-     * erweiterte Schema in der JSON-Spalte `details`.
+     * Split in two: first the shared fields from the converter schema, then via
+     * include the input fields of the processor from its backend/form.php. The
+     * included file runs in the scope of this method and makes the same
+     * $this->backend->formField() calls there; its values end up via the
+     * extended schema in the JSON column `details`.
      *
-     * Der Prozessor selbst steht nicht zur Auswahl, sondern nur als Text und
-     * Hidden-Feld im Formular - er wurde in chooseProcessor() festgelegt.
+     * The processor itself is not selectable, only shown as text and a
+     * hidden field in the form - it was set in chooseProcessor().
      */
     private function _editForm(): void
     {
@@ -619,10 +619,10 @@ class ConverterBackend {
         $processorDir = $this->converter->getProcessorDir();
         include $processorDir . '/backend/form.php';
 
-        // {processor_note}: Platz für einen Hinweis des Prozessors unter den
-        // Medientypen - z. B. Formate, die nur über einen externen Delegate laufen
-        // (Magick: SVG, PDF). Hat ihn die form.php des Prozessors nicht belegt,
-        // fällt er ersatzlos weg.
+        // {processor_note}: placeholder for a note of the processor below the
+        // media types - e.g. formats that only run via an external delegate
+        // (Magick: SVG, PDF). If the processor's form.php does not fill it,
+        // it is simply dropped.
         $this->backend->formReplace('{processor_note}', '');
 
         // function, id
@@ -638,8 +638,8 @@ class ConverterBackend {
     }
 
     /**
-     * Infoseite, Tab "Verwendet von": je Thumbnail-Feld ein Teaser (verlinkt auf die
-     * Feld-Info) mit dem Bereich dahinter. Ohne Verwendung ein Hinweis.
+     * Info page, tab "Used by": for each thumbnail field a teaser (linked to the
+     * field info) with the area behind it. Without use, a note.
      *
      * @param array $fieldIds  Field::getFieldIdsByConverter()
      */
@@ -660,7 +660,7 @@ class ConverterBackend {
     }
 
     /**
-     * Infoseite, Tab "Einstellungen"
+     * Info page, tab "Settings"
      */
     private function _infoSettings(array $data): void
     {
@@ -707,11 +707,11 @@ class ConverterBackend {
     }
 
     /**
-     * Infoseite, Tab "Used by..."
+     * Info page, tab "Used by..."
      */
     private function _infoUsage(array $data): void
     {
-        // Liste alle Thumbnail-Felder, die den Converter nutzen
+        // List all thumbnail fields that use the converter
 
     }
 }

@@ -1,10 +1,10 @@
 <?php
 /**
- * Was eine Migration oder ein Komponenten-Installer zum Arbeiten bekommt.
+ * What a migration or a component installer gets to work with.
  *
- * Eine PHP-Migration (Core/install/migrations/{version}.php bzw.
- * {Komponente}/install/migrations/{version}.php) gibt eine Closure zurück, die
- * genau dieses Objekt erhält:
+ * A PHP migration (Core/install/migrations/{version}.php or
+ * {component}/install/migrations/{version}.php) returns a closure that
+ * receives exactly this object:
  *
  *     return static function (InstallContext $ctx): void {
  *         if (!$ctx->columnExists('record', 'owner_id')) {
@@ -13,12 +13,12 @@
  *         $ctx->log('owner_id added');
  *     };
  *
- * Die Helfer tableExists()/columnExists()/indexExists() sind das, was jedes der
- * früheren Core/cron/migrate_*.php selbst nachgebaut hatten. log() schreibt über den
- * Logger des Aufrufers - auf der CLI nach STDOUT, im Backend ins Aside.
+ * The helpers tableExists()/columnExists()/indexExists() are what each of the
+ * earlier Core/cron/migrate_*.php had rebuilt themselves. log() writes via the
+ * logger of the caller - on the CLI to STDOUT, in the backend to the aside.
  *
- * Keine Backend-Klassen (Backend, Session) - Migrationen laufen auf der
- * Kommandozeile. Siehe docs/developers/14-installation-und-update.md, 3.2.
+ * No backend classes (Backend, Session) - migrations run on the
+ * command line. See developer docs, chapter 09 (Installation and update).
  */
 namespace Camindo\Core\Install;
 
@@ -30,8 +30,8 @@ use Closure;
 class InstallContext {
 
     /**
-     * @param string  $component  Komponentenname, '' für den Core
-     * @param string  $path       Verzeichnis der Komponente bzw. des Cores
+     * @param string  $component  component name, '' for the core
+     * @param string  $path       directory of the component or core
      * @param Closure $logger     function(string $line): void
      */
     public function __construct(
@@ -57,8 +57,8 @@ class InstallContext {
 
     // ==== Schema-Helfer ====
 
-    // SHOW-Anweisungen lassen sich nicht mit Platzhaltern vorbereiten - die Namen
-    // werden deshalb geprüft (ident()) und direkt eingesetzt.
+    // SHOW statements cannot be prepared with placeholders - the names
+    // are therefore checked (ident()) and inserted directly.
 
     public function tableExists(string $table): bool
     {
@@ -81,9 +81,9 @@ class InstallContext {
     }
 
     /**
-     * SQL-Datei Anweisung für Anweisung ausführen (SqlFile).
+     * Execute SQL file statement by statement (SqlFile).
      *
-     * @return int  Zahl der Anweisungen
+     * @return int  number of statements
      */
     public function runSqlFile(string $file): int
     {

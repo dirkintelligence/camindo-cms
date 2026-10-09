@@ -1,45 +1,45 @@
 <?php
 /**
- * Zugriffsschutz des Medienverzeichnisses über .htaccess-Dateien.
+ * Access protection of the media directory via .htaccess files.
  *
- * Die Ablage ist {paths.media_dir}/{instance_id}/{field_id}/{datei} (siehe
- * Cms::mediaFolder()). Zwei Ebenen von .htaccess-Dateien regeln, wer eine Datei
- * direkt über den Webserver abrufen darf:
+ * The storage is {paths.media_dir}/{instance_id}/{field_id}/{file} (see
+ * Cms::mediaFolder()). Two levels of .htaccess files govern who may fetch a file
+ * directly via the web server:
  *
- *     media/{instance_id}/.htaccess              DOMAIN-SPERRE
- *         Der Webserver liefert die Dateien der Instanz nur aus, wenn der Request
- *         über eine Domain der Instanz selbst oder einer Instanz kommt, die sie
- *         lesen darf (`rel_instance_instance`: dort steht die Instanz als
- *         readable_id - ihre Inhalte und damit ihre Bilder erscheinen auf den
- *         Seiten dieser "lesenden" Instanzen). Alle anderen Hosts bekommen 403.
- *         Geschrieben werden diese Dateien für ALLE Instanzen, sobald sich im Modul
- *         Instance etwas ändert (rebuildAll()) - eine Änderung an den lesbaren
- *         Instanzen von A betrifft die Sperre von B. Dieselbe Datei trägt die
- *         RewriteRule für sprechende Dateinamen ({record},{name}.{ext} ->
- *         {record}.{ext}, siehe Cms::mediaUriName()).
+ *     media/{instance_id}/.htaccess              DOMAIN LOCK
+ *         The web server only serves the files of the instance if the request
+ *         comes via a domain of the instance itself or of an instance that may
+ *         read it (`rel_instance_instance`: there the instance appears as
+ *         readable_id - its contents and thus its images appear on the
+ *         pages of these "reading" instances). All other hosts get 403.
+ *         These files are written for ALL instances as soon as something changes in the
+ *         Instance module (rebuildAll()) - a change to the readable
+ *         instances of A affects the lock of B. The same file carries the
+ *         RewriteRule for speaking file names ({record},{name}.{ext} ->
+ *         {record}.{ext}, see Cms::mediaUriName()).
  *
- *     media/{instance_id}/{field_id}/.htaccess   FELD-SPERRE ('user_auth')
- *         Ein Upload- oder Thumbnail-Feld mit details.user_auth = 1 sperrt jeden
- *         direkten Zugriff. Seine Dateien liefert ausschließlich public/file.php
- *         (Camindo\Core\MediaDelivery) aus - nach Prüfung der Frontend-Session.
- *         Geschrieben bzw. entfernt von Field::hookOnSaved() (protectField()).
+ *     media/{instance_id}/{field_id}/.htaccess   FIELD LOCK ('user_auth')
+ *         An upload or thumbnail field with details.user_auth = 1 blocks every
+ *         direct access. Its files are delivered exclusively by public/file.php
+ *         (Camindo\Core\MediaDelivery) - after checking the frontend session.
+ *         Written or removed by Field::hookOnSaved() (protectField()).
  *
- * Das Backend verlinkt nie direkt ins Medienverzeichnis, sondern immer auf
- * backend/file.php (RecordBackendServerFile::filePreview()). Das Script entscheidet
- * anhand von hostAllowed(), ob es per Location auf die Datei umleiten darf oder sie
- * selbst lesen muss (Backend-Domain ist nicht die der Instanz, Feld ist gesperrt).
+ * The backend never links directly into the media directory, but always to
+ * backend/file.php (RecordBackendServerFile::filePreview()). The script decides
+ * using hostAllowed() whether it may redirect to the file via Location or must read it
+ * itself (backend domain is not that of the instance, field is locked).
  *
- * DOMAINS ALS REGULÄRE AUSDRÜCKE
+ * DOMAINS AS REGULAR EXPRESSIONS
  * --------------------
- * `rel_instance_domain`.`regex` = 1 kennzeichnet ein PCRE-Muster (siehe
- * InstanceCache::resolveDomain()). Apache versteht dieselben Muster in RewriteCond,
- * deshalb landen sie unverändert in der .htaccess; wörtliche Domains werden
- * maskiert. Die Standard-Instance bekommt immer ".*" dazu - sie fängt jeden
- * unbekannten Host auf, ihre Dateien sind damit von überall abrufbar. Für die
- * PHP-Seite (hostAllowed()) gilt dieselbe Liste.
+ * `rel_instance_domain`.`regex` = 1 marks a PCRE pattern (see
+ * InstanceCache::resolveDomain()). Apache understands the same patterns in RewriteCond,
+ * so they go into the .htaccess unchanged; literal domains are
+ * escaped. The default instance always gets ".*" added - it catches every
+ * unknown host, so its files can be fetched from anywhere. For the
+ * PHP side (hostAllowed()) the same list applies.
  *
- * Alle Angaben kommen aus dem Instanz-Dateicache (InstanceCache), nicht aus der
- * Datenbank - die Hooks des Moduls Instance schreiben den Cache vorher neu.
+ * All data comes from the instance file cache (InstanceCache), not from the
+ * database - the hooks of the Instance module rewrite the cache beforehand.
  *
  * @see Camindo\Core\Cms::mediaFolder()                Ablageschema
  * @see Camindo\Core\Modules\Instance\Instance          ruft rebuildAll()
@@ -52,17 +52,17 @@ namespace Camindo\Core;
 
 class MediaAccess {
 
-    /** Name der Sperrdateien */
+    /** Name of the lock files */
     private const HTACCESS = '.htaccess';
 
     /**
-     * AKTIVER INHALT: Dateitypen, die ein Browser beim direkten Aufruf als Dokument
-     * bzw. Skript ausführt - aus /media im Ursprung der Website wäre das
-     * gespeichertes XSS. Uploads aus dem Frontend lehnt VirtualFieldsTrait dafür ab
-     * (setUntrustedUploads()); was im Backend hochgeladen wurde, liefert der
-     * Webserver mit `Content-Security-Policy: sandbox` und als Download aus
+     * ACTIVE CONTENT: file types that a browser executes as a document or script
+     * on direct access - from /media in the origin of the website this would be
+     * stored XSS. Uploads from the frontend are rejected by VirtualFieldsTrait for that
+     * (setUntrustedUploads()); what was uploaded in the backend is delivered by the
+     * web server with `Content-Security-Policy: sandbox` and as a download
      * (writeInstanceHtaccess(), MediaDelivery::sendFile()).
-     * developer_docs/16-sicherheit.md §9.3
+     * Developer docs, chapter 14 (Security: web)
      */
     public const ACTIVE_CONTENT_EXTENSIONS = [
         'html', 'htm', 'xhtml', 'xht', 'shtml', 'svg', 'svgz',
@@ -85,7 +85,7 @@ class MediaAccess {
     }
 
     /**
-     * Aktiver Inhalt (siehe ACTIVE_CONTENT_EXTENSIONS)? Extension ODER Mime-Typ.
+     * Active content (see ACTIVE_CONTENT_EXTENSIONS)? Extension OR mime type.
      */
     public static function isActiveContent(string $mimeType, string $extension): bool
     {
@@ -94,26 +94,26 @@ class MediaAccess {
     }
 
     // ====================
-    // Domain-Sperre je Instanz
+    // Domain lock per instance
     // ====================
 
     /**
-     * Hosts, über die die Dateien einer Instanz abrufbar sind - als PCRE-Fragmente
-     * ohne Anker und Delimiter, wörtliche Domains bereits maskiert.
+     * Hosts from which the files of an instance can be fetched - as PCRE fragments
+     * without anchor and delimiter, literal domains already escaped.
      *
-     * Enthalten sind die Domains der Instanz selbst und die aller Instanzen, die
-     * sie lesen dürfen (siehe Klassenkommentar). Reihenfolge: eigene Instanz zuerst.
+     * Included are the domains of the instance itself and those of all instances that
+     * may read it (see class comment). Order: own instance first.
      *
      * @param int $instanceId
-     * @return string[]  leer = kein Host darf zugreifen
+     * @return string[]  empty = no host may access
      */
     public function allowedHostPatterns(int $instanceId): array
     {
         $patterns = [];
         foreach ($this->readingInstanceIds($instanceId) as $id) {
-            // Die Standard-Instance fängt jeden Host auf, der nirgends eingetragen
-            // ist (InstanceCache::resolveDomain()) - ihre Dateien müssen von
-            // überall abrufbar sein, sonst zeigte genau dieser Auftritt keine Bilder.
+            // The default instance catches every host that is not registered anywhere
+            // (InstanceCache::resolveDomain()) - its files must be fetchable from
+            // everywhere, otherwise exactly this site would show no images.
             if ($id === (int)($this->instanceCache->all()['default_id'] ?? 0)) {
                 $patterns[] = '.*';
             }
@@ -131,13 +131,13 @@ class MediaAccess {
     }
 
     /**
-     * Darf dieser Host die Dateien der Instanz direkt abrufen?
+     * May this host fetch the files of the instance directly?
      *
-     * Dieselbe Prüfung, die die .htaccess der Instanz im Webserver vornimmt - für
-     * backend/file.php, das daran entscheidet, ob es umleiten darf.
+     * The same check the instance's .htaccess performs in the web server - for
+     * backend/file.php, which decides whether it may redirect.
      *
      * @param int    $instanceId
-     * @param string $host  Hostname, mit oder ohne Port
+     * @param string $host  host name, with or without port
      */
     public function hostAllowed(int $instanceId, string $host): bool
     {
@@ -145,19 +145,19 @@ class MediaAccess {
         if (($colon = strpos($host, ':')) !== false) $host = substr($host, 0, $colon);
         if ($host === '') return false;
         foreach ($this->allowedHostPatterns($instanceId) as $pattern) {
-            // Ein ungültiges Muster aus dem Backend zählt nicht als Treffer
+            // An invalid pattern from the backend does not count as a match
             if (@preg_match('~^(?:' . str_replace('~', '\\~', $pattern) . ')$~ui', $host) === 1) return true;
         }
         return false;
     }
 
     /**
-     * .htaccess-Dateien ALLER Instanz-Verzeichnisse neu schreiben.
+     * Rewrite the .htaccess files of ALL instance directories.
      *
-     * Aufzurufen nach jeder Änderung im Modul Instance (Domains, lesbare Instanzen,
-     * gelöschte Instanz). Verzeichnisse, die es im Medienverzeichnis gibt, deren
-     * Instanz aber nicht (mehr) existiert, bekommen eine Vollsperre - sie sollen
-     * nicht plötzlich ohne Regel dastehen.
+     * To be called after every change in the Instance module (domains, readable
+     * instances, deleted instance). Directories that exist in the media directory whose
+     * instance no longer exists (any more) get a full lock - they must
+     * not suddenly stand there without a rule.
      */
     public function rebuildAll(): void
     {
@@ -166,7 +166,7 @@ class MediaAccess {
             $this->writeInstanceHtaccess($instanceId);
         }
 
-        // Verwaiste Instanz-Verzeichnisse sperren
+        // Lock orphaned instance directories
         $mediaDir = $this->mediaDir();
         foreach ((array)glob($mediaDir . '/*', GLOB_ONLYDIR) as $dir) {
             $name = basename($dir);
@@ -177,7 +177,7 @@ class MediaAccess {
     }
 
     /**
-     * .htaccess eines Instanz-Verzeichnisses schreiben (Verzeichnis wird angelegt).
+     * Write the .htaccess of an instance directory (directory is created).
      *
      * @param int $instanceId
      */
@@ -197,28 +197,27 @@ class MediaAccess {
             'RewriteEngine On',
         ];
         if (empty($patterns)) {
-            // Keine Domain bekannt -> niemand darf direkt zugreifen
+            // No domain known -> nobody may access directly
             $lines[] = 'RewriteRule .* - [F,L]';
         }
         else {
-            // Port darf hinter dem Host stehen (camindo.local:8080). Das Muster ist
-            // in Anführungszeichen, damit auch ein Leerzeichen in einem regulären
-            // Ausdruck die Zeile nicht zerlegt.
+            // A port may follow the host (camindo.local:8080). The pattern is
+            // in quotation marks, so that even a space in a regular
+            // expression does not split the line.
             $alternation = implode('|', $patterns);
             $lines[] = 'RewriteCond %{HTTP_HOST} "!^(?:' . $alternation . ')(?::[0-9]+)?$" [NC]';
             $lines[] = 'RewriteRule .* - [F,L]';
         }
-        // Sprechende Dateinamen: {field}/{record}[_{lang}],{name}.{ext} - der Teil
-        // ",{name}" wird ungeprüft verworfen (siehe Cms::mediaUriName()). Die Regel
-        // steht hier und nicht in public/.htaccess, weil ein RewriteEngine On in
-        // diesem Verzeichnis die Regeln des Elternverzeichnisses nicht erbt.
+        // Speaking file names: {field}/{record}[_{lang}],{name}.{ext} - the part
+        // ",{name}" is discarded unchecked (see Cms::mediaUriName()). The rule
+        // is here and not in public/.htaccess, because a RewriteEngine On in
+        // this directory does not inherit the rules of the parent directory.
         $lines[] = '# Sprechende Dateinamen: {feld}/{datensatz},{name}.{endung} -> {feld}/{datensatz}.{endung}';
         $lines[] = 'RewriteRule ^([0-9]+/[0-9]+(?:_[0-9]+)?),[^/]*\\.([^./]+)$ $1.$2 [L]';
         $lines[] = '</IfModule>';
-        // Kein MIME-Sniffing; aktiver Inhalt (SVG, HTML, XML, JS) läuft beim
-        // direkten Aufruf ohne Skripte in einem eigenen Ursprung und kommt als
-        // Download - als <img> eingebunden bleibt ein SVG sichtbar (Klassenkonstante
-        // ACTIVE_CONTENT_EXTENSIONS)
+        // No MIME sniffing; active content (SVG, HTML, XML, JS) runs on a direct
+        // call without scripts in its own origin and comes as a download - an SVG embedded
+        // as <img> remains visible (class constant ACTIVE_CONTENT_EXTENSIONS)
         $lines[] = '<IfModule mod_headers.c>';
         $lines[] = 'Header set X-Content-Type-Options "nosniff"';
         $lines[] = '<FilesMatch "\\.(?i:' . implode('|', self::ACTIVE_CONTENT_EXTENSIONS) . ')$">';
@@ -235,15 +234,15 @@ class MediaAccess {
     // ====================
 
     /**
-     * Direkten Zugriff auf das Verzeichnis eines Feldes sperren bzw. freigeben.
+     * Lock or release direct access to the directory of a field.
      *
-     * Gesperrt heißt: Dateien dieses Feldes kommen nur noch über public/file.php
-     * (Frontend, mit Session-Prüfung) bzw. backend/file.php. Ohne Sperre gilt allein
-     * die Domain-Sperre der Instanz.
+     * Locked means: files of this field only come via public/file.php
+     * (frontend, with session check) or backend/file.php. Without a lock only
+     * the domain lock of the instance applies.
      *
      * @param int  $fieldId
-     * @param bool $protected  true = sperren, false = Sperre entfernen
-     * @param int  $instanceId Instanz des Feldes, wenn bekannt
+     * @param bool $protected  true = lock, false = remove lock
+     * @param int  $instanceId instance of the field, if known
      */
     public function protectField(int $fieldId, bool $protected, int $instanceId = 0): void
     {
@@ -264,9 +263,9 @@ class MediaAccess {
     }
 
     /**
-     * Ist das Verzeichnis eines Feldes gesperrt (.htaccess vorhanden)?
-     * Maßgeblich für das Verhalten ist details.user_auth des Feldes - das hier ist
-     * nur die Frage an das Dateisystem, z. B. für Reparaturwerkzeuge.
+     * Is the directory of a field locked (.htaccess present)?
+     * What counts for the behavior is details.user_auth of the field - this is
+     * only the question to the file system, e.g. for repair tools.
      */
     public function isFieldProtected(int $fieldId, int $instanceId = 0): bool
     {
@@ -275,10 +274,10 @@ class MediaAccess {
     }
 
     /**
-     * Feld-Sperren aller Upload-/Thumbnail-Felder mit dem Bestand in `field`
-     * abgleichen (Werkzeug: Tools -> Entwickler).
+     * Reconcile the field locks of all upload/thumbnail fields with the stock in `field`
+     * (tool: Tools -> Developer).
      *
-     * @return int  Anzahl der geschriebenen Sperren
+     * @return int  number of locks written
      */
     public function rebuildFieldProtection(): int
     {
@@ -305,9 +304,9 @@ class MediaAccess {
     // ====================
 
     /**
-     * Die Feld-Verzeichnisse eines Bereichs von einem Instanz-Verzeichnis in ein
-     * anderes verschieben - nach einem Instanzwechsel des Bereichs
-     * (Area::hookOnSaved()). Feld-Sperren wandern als Teil des Verzeichnisses mit.
+     * Move the field directories of an area from one instance directory to
+     * another - after an instance change of the area
+     * (Area::hookOnSaved()). Field locks move along as part of the directory.
      *
      * @param int $areaId
      * @param int $oldInstanceId
@@ -331,7 +330,7 @@ class MediaAccess {
             }
             $target = "{$mediaDir}/{$newInstanceId}/{$fieldId}";
             if (is_dir($target)) {
-                // Rest eines abgebrochenen Vorgangs: Dateien einzeln hinüberziehen
+                // Remnant of an aborted operation: move the files over one by one
                 foreach ((array)scandir($source) as $entry) {
                     if ($entry === '.' || $entry === '..') continue;
                     @rename("{$source}/{$entry}", "{$target}/{$entry}");
@@ -343,7 +342,7 @@ class MediaAccess {
                 throw new \Exception("MediaAccess: could not move \"{$source}\" to \"{$target}\".");
             }
         }
-        // Das neue Instanz-Verzeichnis braucht seine Domain-Sperre
+        // The new instance directory needs its domain lock
         $this->writeInstanceHtaccess($newInstanceId);
     }
 
@@ -352,10 +351,10 @@ class MediaAccess {
     // ====================
 
     /**
-     * Die Instanz selbst plus alle Instanzen, die sie lesen dürfen (readable_id =
-     * $instanceId in `rel_instance_instance`) - aus dem Dateicache.
+     * The instance itself plus all instances that may read it (readable_id =
+     * $instanceId in `rel_instance_instance`) - from the file cache.
      *
-     * @return int[]  eigene Instanz zuerst
+     * @return int[]  own instance first
      */
     private function readingInstanceIds(int $instanceId): array
     {
@@ -383,8 +382,8 @@ class MediaAccess {
     }
 
     /**
-     * .htaccess in ein Verzeichnis schreiben - erst temporär, dann per rename():
-     * der Webserver sieht nie eine halb geschriebene Datei.
+     * Write .htaccess into a directory - first temporarily, then via rename():
+     * the web server never sees a half-written file.
      */
     private function writeFile(string $dir, string $content): void
     {

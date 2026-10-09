@@ -1,15 +1,15 @@
 <?php
 /**
- * options_provider der Extension MarkdownVisual (Core/Extensions/MarkdownVisual):
- * ergänzt die Feldoptionen um die Texte der Oberfläche (Tooltips, Menüs, Dialoge) in
- * der Backend-Sprache - Snippets ext.markdownvisual.ui_{schlüssel}. Das Script kennt
- * dieselben Schlüssel mit englischen Vorgaben (TEXTS in markdownvisual.ext.js).
+ * options_provider of the MarkdownVisual extension (Core/Extensions/MarkdownVisual):
+ * adds the UI texts (tooltips, menus, dialogs) in the backend language to the field
+ * options - snippets ext.markdownvisual.ui_{key}. The script knows the same keys with
+ * English defaults (TEXTS in markdownvisual.ext.js).
  */
 namespace Camindo\Core;
 
 class MarkdownVisualOptions {
 
-    /** Snippet-Präfix der Texte (HtmlVisualOptions: ext.htmlvisual.ui_) */
+    /** Snippet prefix of the texts (HtmlVisualOptions: ext.htmlvisual.ui_) */
     protected const PREFIX = 'ext.markdownvisual.ui_';
 
     public const TEXT_KEYS = [
@@ -33,7 +33,7 @@ class MarkdownVisualOptions {
     {
         $texts = [];
         foreach (self::TEXT_KEYS as $key) {
-            // ein fehlendes Snippet liefert seinen Index - dann gilt die Vorgabe des Scripts
+            // a missing snippet returns its index - then the script's default applies
             $index = static::PREFIX . $key;
             $text = $this->cms->snippet($index);
             if ($text !== '' && $text !== $index) $texts[$key] = $text;

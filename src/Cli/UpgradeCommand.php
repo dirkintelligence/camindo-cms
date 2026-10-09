@@ -2,30 +2,30 @@
 /**
  * upgrade [--no-components] [--no-backup] [--unlock]
  *
- * Datenbank und Laufzeit auf den Stand der Dateien bringen - nach jedem
- * `composer update camindo/cms`, und als Reparaturlauf ("alle Caches und Listen
- * neu") jederzeit. Schritte, jeder ins Log (14 §6.2):
+ * Bring database and runtime to the state of the files - after every
+ * `composer update camindo/cms`, and as a repair run ("all caches and lists
+ * new") at any time. Steps, each logged (developer docs, chapter 09 (Installation and update)):
  *
- *   1. Wartungsmodus setzen (falls nicht schon gesetzt)
- *   2. Sicherung (nur wenn Migrationen anstehen; --no-backup überspringt)
- *   3. from = system.core_version (Tabelle fehlt: 9.0.0 - der Stand vor diesem
- *      Mechanismus), to = CAMINDO_VERSION; Datenbank neuer als Dateien = Abbruch
- *   4. Core-Migrationen Core/install/migrations from -> to, Zeiger nach jeder Version
- *   5. Komponenten abgleichen: Core-Zeilen nachziehen, Zusatzkomponenten entdecken,
- *      update_version setzen, Laufzeitlisten schreiben (ComponentManager::refresh())
- *   6. Zusatzkomponenten mit wartendem Update in Abhängigkeitsreihenfolge
- *      (ComponentManager::updateAll(); --no-components überspringt); eine, deren
- *      requires die neue Core-Version nicht erlaubt, bleibt mit Fehler stehen
- *   7. Laufzeit: Snippet-Sets der Instanzen im früheren PHP-Format nach .ini,
- *      Snippet-Cache, HTML-Cache, Instanz-/Gruppen-Cache, Templates neu
- *      kompilieren (der Compiler kann sich geändert haben), .htaccess,
- *      kopierte Backend-Assets auffrischen (ein Symlink bleibt)
+ *   1. Set maintenance mode (if not already set)
+ *   2. Backup (only if migrations are pending; --no-backup skips it)
+ *   3. from = system.core_version (table missing: 9.0.0 - the state before this
+ *      mechanism), to = CAMINDO_VERSION; database newer than files = abort
+ *   4. Core migrations Core/install/migrations from -> to, pointer after each version
+ *   5. Compare components: update core rows, discover add-on components,
+ *      set update_version, write runtime lists (ComponentManager::refresh())
+ *   6. Add-on components with a pending update in dependency order
+ *      (ComponentManager::updateAll(); --no-components skips it); one whose
+ *      requires does not allow the new core version stays with an error
+ *   7. Runtime: snippet sets of the instances in the earlier PHP format to .ini,
+ *      snippet cache, HTML cache, instance/group cache, templates anew
+ *      compile (the compiler may have changed), .htaccess,
+ *      refresh copied backend assets (a symlink stays)
  *   8. system.core_version, upgraded_at; Versionsstempel var/config/core.php
- *   9. Wartungsmodus entfernen - nur den eigenen (auch den eines abgebrochenen
- *      upgrade), oder mit --unlock jeden
+ *   9. Remove maintenance mode - only one's own (also that of an aborted
+ *      upgrade), or with --unlock everyone's
  *
- * Ein Fehler bricht ab und lässt den Lock stehen; der Zeiger steht auf der letzten
- * guten Version, der nächste Lauf setzt dort an.
+ * An error aborts and leaves the lock in place; the pointer stays at the last
+ * good version, the next run continues from there.
  */
 namespace Camindo\Core\Cli;
 
@@ -45,7 +45,7 @@ use Camindo\Core\SystemState;
 
 class UpgradeCommand extends Command {
 
-    // Stand einer Datenbank ohne Tabelle `system`
+    // State of a database without table `system`
     private const PRE_SYSTEM_VERSION = '9.0.0';
 
     private string $logFile = '';
@@ -62,7 +62,7 @@ class UpgradeCommand extends Command {
         $ownLock = false;
 
         try {
-            // 1. Lock - ein Lock aus einem abgebrochenen upgrade gilt als eigener
+            // 1. Lock - a lock from an aborted upgrade counts as its own
             if (!$state->isMaintenance()) {
                 $state->lock("upgrade to $to");
                 $ownLock = true;
@@ -88,7 +88,7 @@ class UpgradeCommand extends Command {
             $dir = (string)$config->get('paths.core_dir') . '/install/migrations';
             $pending = $runner->pending($dir, $from, $to);
 
-            // 2. Sicherung
+            // 2. Backup
             if ($pending && empty($options['no-backup'])) {
                 $file = $this->get(Backup::class)->beforeChange("upgrade-$from-$to");
                 $this->log('backup ' . basename($file));
@@ -107,11 +107,11 @@ class UpgradeCommand extends Command {
                 $this->log('no pending migrations');
             }
 
-            // 5. Komponenten abgleichen, Laufzeitlisten
+            // 5. Compare components, runtime lists
             $status = $this->get(ComponentManager::class)->refresh(fn(string $line) => $this->log('  ' . $line));
             $this->log('components: refreshed');
 
-            // 6. wartende Komponenten-Updates in Abhängigkeitsreihenfolge
+            // 6. pending component updates in dependency order
             $manager = $this->get(ComponentManager::class);
             if (empty($options['no-components'])) {
                 $done = $manager->updateAll(fn(string $line) => $this->log('  ' . $line), empty($options['no-backup']));

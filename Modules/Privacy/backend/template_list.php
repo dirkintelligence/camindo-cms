@@ -1,6 +1,6 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Vorlagen der Datenauskunft je Instanz und Sprache (Modul Privacy)
+// Templates of the data disclosure per instance and language (module Privacy)
 use Camindo\Core\Modules\Privacy\PrivacyBackend;
 
 $app->get(PrivacyBackend::class)->templateList();

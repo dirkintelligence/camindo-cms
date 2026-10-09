@@ -1,111 +1,110 @@
 <?php
 /**
- * Community-Features im Frontend: Anmeldung, Registrierung, Beiträge, Warenkorb.
- * Instanzname im Code: $recordUser.
+ * Community features in the frontend: sign-in, registration, contributions, shopping basket.
+ * Name in the code: $recordUser.
  *
- * "User" meint in camindo den Website-Besucher, nicht den Backend-Benutzer -
- * der heißt "Administrator" und wird von Camindo\Core\Modules\Admin\Admin verwaltet.
+ * "User" in camindo means the website visitor, not the backend user -
+ * the latter is called "administrator" and is managed by Camindo\Core\Modules\Admin\Admin.
  *
- * WARUM RecordUser UND NICHT User
+ * WHY RecordUser AND NOT User
  * --------------------
- * Ein User ist in camindo kein Sonderfall mit eigener Tabelle, sondern ein ganz
- * normaler Datensatz: das Profil ist ein `record` in einem Bereich vom Typ
- * 'profile', und was ein User im Frontend beiträgt (Kommentare, Anzeigen, Bilder)
- * sind `record`-Datensätze in Bereichen vom Typ 'ugc'. Anmeldedaten, Profilfelder
- * und Beiträge laufen damit über dieselben Wege wie alle anderen Inhalte -
- * Cms::select() zum Lesen, Record zum Schreiben (Arbeitskopie, Validierung, Uploads,
- * Thumbnails, Relationen - alles wie im Backend, nur ohne Administrator).
+ * A user in camindo is not a special case with its own table, but a completely
+ * normal record: the profile is a `record` in an area of type
+ * 'profile', and what a user contributes in the frontend (comments, ads, images)
+ * are `record` entries in areas of type 'ugc'. Sign-in data, profile fields
+ * and contributions thus run through the same paths as all other contents -
+ * Cms::select() for reading, Record for writing (working copy, validation, uploads,
+ * thumbnails, relations - all as in the backend, only without administrator).
  *
- * Deshalb liegt die Klasse im Modul Record und trägt dessen Namenspräfix. Das
- * Modul User bleibt die Backend-Oberfläche dazu (RecordUser hat keine).
+ * That is why the class lives in the module Record and carries its name prefix. The
+ * module User remains the backend user interface for it (RecordUser has none).
  *
- * DIE BAUSTEINE
+ * THE BUILDING BLOCKS
  * --------------------
- *     Bereich 'profile'   ein Datensatz je User. In `area`.`details` stehen die
- *                         beiden Anmeldefelder: login_name_field_id (chars oder
- *                         encrypted, z. B. eine E-Mail-Adresse) und
- *                         login_password_field_id (password). Ohne beide kann sich
- *                         in diesem Bereich niemand anmelden.
- *     Bereich 'ugc'       Beiträge. details.profile_area_ids nennt die Profil-
- *                         Bereiche, deren User hier schreiben dürfen.
- *     record.user_id      Besitzer eines Datensatzes (Profil-Datensatz). Daran
- *                         hängt die Besitzprüfung von USER_INPUT id=… und
- *                         USER_DELETE.
- *     record.status_id    2 = unbestätigt (nach USER_REGISTER), 0 = freigeschaltet
- *                         (USER_REGISTER_CONFIRM), 1 = deaktiviert
- *     record.owner_id     Owner im Backend (ein Admin): Parameter 'owner' von
- *                         USER_REGISTER / USER_INPUT, sonst user.default_owner_id
- *                         (ownerId()); wird auch created_by
- *     record.needs_review 1 bei allem, was ein User anlegt oder ändert - die
- *                         Gegenlese-Liste des Moduls User
- *     user_session        Frontend-Session (Camindo\Core\UserSession), Cookie
- *                         'usess' bzw. Parameter 'cookiename'
- *     user_token          Einmal-Tokens für Freischaltung und Passwort-Reset
- *     user_basket         Warenkorb je Session
- *     user_login_attempt  Brute-Force-Schutz (LoginGuard::forUsers())
+ *     area 'profile'      one record per user. In `area`.`details` are the
+ *                         two sign-in fields: login_name_field_id (chars or
+ *                         encrypted, e.g. an e-mail address) and
+ *                         login_password_field_id (password). Without both nobody can
+ *                         sign in to this area.
+ *     area 'ugc'          contributions. details.profile_area_ids names the profile
+ *                         areas whose users may write here.
+ *     record.user_id      owner of a record (profile record). The ownership check of
+ *                         USER_INPUT id=… and USER_DELETE depends on it.
+ *     record.status_id    2 = unconfirmed (after USER_REGISTER), 0 = enabled
+ *                         (USER_REGISTER_CONFIRM), 1 = disabled
+ *     record.owner_id     owner in the backend (an admin): parameter 'owner' of
+ *                         USER_REGISTER / USER_INPUT, otherwise user.default_owner_id
+ *                         (ownerId()); also becomes created_by
+ *     record.needs_review 1 for everything a user creates or changes - the
+ *                         review list of the module User
+ *     user_session        frontend session (Camindo\Core\UserSession), cookie
+ *                         'usess' or parameter 'cookiename'
+ *     user_token          one-time tokens for activation and password reset
+ *     user_basket         shopping basket per session
+ *     user_login_attempt  brute-force protection (LoginGuard::forUsers())
  *
- * WER DARF WAS SCHREIBEN (USER_INPUT / USER_DELETE)
+ * WHO MAY WRITE WHAT (USER_INPUT / USER_DELETE)
  * --------------------
- *     Bereich 'ugc'       angemeldet, Profil-Bereich des Users steht in
- *                         details.profile_area_ids; ändern/löschen nur eigene
- *                         Datensätze (user_id)
- *     Bereich 'profile'   nur das eigene Profil (id = angemeldeter User), kein
- *                         Anlegen - dafür ist USER_REGISTER da
- *     Bereich 'record'    nur mit ignoreuser=true
- *     ignoreuser=true     hebt ALLE Prüfungen auf - das Template trägt dann die
- *                         Verantwortung (z. B. ein Kontaktformular ohne Anmeldung)
+ *     area 'ugc'          signed in, the user's profile area is in
+ *                         details.profile_area_ids; change/delete only one's own
+ *                         records (user_id)
+ *     area 'profile'      only the own profile (id = signed-in user), no
+ *                         creation - that is what USER_REGISTER is for
+ *     area 'record'       only with ignoreuser=true
+ *     ignoreuser=true     lifts ALL checks - the template then bears the
+ *                         responsibility (e.g. a contact form without sign-in)
  *
- * WAS DIE BEFEHLE HINTERLASSEN
+ * WHAT THE COMMANDS LEAVE BEHIND
  * --------------------
- * Die Ergebnisse stehen in $set (CMS:TEXT useval="{$set['user_id']}") - je Befehl
- * dokumentiert. Nach einem erfolgreichen USER_LOGIN / USER_REGISTER /
- * USER_REGISTER_CONFIRM / USER_PW ist zusätzlich der Profil-Datensatz der
- * laufende Datensatz ($cms), nach USER_INPUT der gespeicherte Datensatz - das
- * Erfolgstemplate kann ihn mit CMS:TEXT & Co. ausgeben. Fehler landen in
- * Cms::error() und lassen sich im Formular-Template mit CMS:MESSAGE zeigen.
+ * The results are in $set (CMS:TEXT useval="{$set['user_id']}") - documented per
+ * command. After a successful USER_LOGIN / USER_REGISTER /
+ * USER_REGISTER_CONFIRM / USER_PW the profile record is additionally the
+ * current record ($cms), after USER_INPUT the saved record - the
+ * success template can output it with CMS:TEXT & Co. Errors end up in
+ * Cms::error() and can be shown in the form template with CMS:MESSAGE.
  *
- * SCHUTZ (developer_docs/20-frontend-schutz.md)
+ * PROTECTION (developer docs, chapter 14 (Security: web))
  * --------------------
- *     Drosselung        USER_PW, USER_REGISTER, Fehlanmeldungen je Herkunft
- *                       (RateLimiter, user.throttle); Meldung 'throttled'
- *     Formularschutz    formguard=true (FormGuard: Zeitstempel, Köderfeld)
- *     zweiter Faktor    area.details.second_factor (UserSecondFactor):
- *                       USER_LOGIN codetemplate=… -> USER_LOGIN_CODE; Verwaltung
- *                       durch den User mit USER_2FA
+ *     throttling        USER_PW, USER_REGISTER, failed sign-ins per origin
+ *                       (RateLimiter, user.throttle); message 'throttled'
+ *     form protection   formguard=true (FormGuard: timestamp, decoy field)
+ *     second factor     area.details.second_factor (UserSecondFactor):
+ *                       USER_LOGIN codetemplate=… -> USER_LOGIN_CODE; management
+ *                       by the user with USER_2FA
  *
- * Die Befehle mit php_suffix 'include_and_stop' (USER_DELETE, USER_INPUT, USER_LOGIN,
- * USER_LOGIN_CODE, USER_PROTECT, USER_PW, USER_REGISTER, USER_REGISTER_CONFIRM) geben einen
- * Templatenamen zurück: den des Erfolgs- bzw. Fehlertemplates. Der Compiler bindet
- * es ein und beendet danach die Seite - außer Cms::$returnAfterSuccess ist gesetzt
- * (Befehl CMS:CONTINUE). Ein leerer Rückgabewert lässt das Template weiterlaufen.
+ * The commands with php_suffix 'include_and_stop' (USER_DELETE, USER_INPUT, USER_LOGIN,
+ * USER_LOGIN_CODE, USER_PROTECT, USER_PW, USER_REGISTER, USER_REGISTER_CONFIRM) return a
+ * template name: that of the success or error template. The compiler includes
+ * it and then ends the page - unless Cms::$returnAfterSuccess is set
+ * (command CMS:CONTINUE). An empty return value lets the template continue.
  *
- * FORMULARDATEN
+ * FORM DATA
  * --------------------
- * Der Parameter 'data' (Standard "data") nennt den Namen des Request-Arrays, in
- * dem die Eingaben stehen: die Formularfelder heißen data[feldname], Uploads
- * data[feldname] in $_FILES - dieselbe Form, die auch die Backend-Eingabemaske
- * schickt, sodass Record::save() Uploads und mehrsprachige Felder
- * (data[feldname][language_id]) ohne Umweg versteht.
+ * The parameter 'data' (default "data") names the request array in
+ * which the inputs are: the form fields are called data[fieldname], uploads
+ * data[fieldname] in $_FILES - the same form that the backend input mask
+ * also sends, so that Record::save() understands uploads and multilingual fields
+ * (data[fieldname][language_id]) without detour.
  *
- * NACHLADEN STATT KONSTRUKTOR
+ * LOADED LATER INSTEAD OF THE CONSTRUCTOR
  * --------------------
- * Die Klasse wird nicht mit jedem Request gebaut, sondern über LazyServicesTrait
- * erst dann, wenn ein Template tatsächlich einen (CMS:USER_...)-Befehl enthält -
- * siehe $lazyServices in Camindo\Core\Page.
+ * The class is not built with every request, but via LazyServicesTrait
+ * only when a template actually contains a (CMS:USER_...) command -
+ * see $lazyServices in Camindo\Core\Page.
  *
- * AUFRUFKONVENTION
+ * CALL CONVENTION
  * --------------------
- * Alle cms*-Methoden werden ausschließlich aus kompilierten Templates aufgerufen und
- * bekommen genau einen Parameter: das Array $_a mit den im Template angegebenen
- * Befehlsparametern. Vgl. die cms*-Methoden in Camindo\Core\Cms.
+ * All cms* methods are called exclusively from compiled templates and
+ * receive exactly one parameter: the array $_a with the command parameters
+ * given in the template. Cf. the cms* methods in Camindo\Core\Cms.
  *
- * @see Camindo\Core\Modules\Record\Record         Datensätze lesen und schreiben
- * @see Camindo\Core\UserSession                    Frontend-Session
- * @see Camindo\Core\MediaDelivery                  geschützte Dateien (user_auth)
- * @see Camindo\Core\Modules\User\UserBackend      Backend-Oberfläche dazu
- * @see Camindo\Core\Modules\Template\commands.php Definition der CMS:USER_*-Befehle
- * @see Camindo\Core\LazyServicesTrait             Nachladen
- * @see docs/developers/06-templates.md            Befehlsreferenz
+ * @see Camindo\Core\Modules\Record\Record         read and write records
+ * @see Camindo\Core\UserSession                    frontend session
+ * @see Camindo\Core\MediaDelivery                  protected files (user_auth)
+ * @see Camindo\Core\Modules\User\UserBackend      backend user interface for it
+ * @see Camindo\Core\Modules\Template\commands.php definition of the CMS:USER_* commands
+ * @see Camindo\Core\LazyServicesTrait             loading later
+ * @see developer docs, chapter 06 (Template compiler)
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -127,19 +126,19 @@ use Camindo\Core\Modules\Privacy\PrivacyJobs;
 
 class RecordUser {
 
-    /** Spaltenbreite von `user_login_attempt`.`name` (siehe LoginGuard) */
+    /** Column width of `user_login_attempt`.`name` (see LoginGuard) */
     private const NAME_MAX = 64;
 
-    /** Falsche Codes je wartender Anmeldung (USER_LOGIN_CODE), danach zurück zum Passwort */
+    /** Wrong codes per pending sign-in (USER_LOGIN_CODE), then back to the password */
     private const MAX_CODE_ATTEMPTS = 3;
 
-    /** Hat USER_LOGIN_CODE submit/resend in diesem Request schon ausgewertet? */
+    /** Has USER_LOGIN_CODE already evaluated submit/resend in this request? */
     private bool $loginCodeHandled = false;
 
-    /** Bereiche je Request: area_id => Zeile aus `area` (details bereits dekodiert) */
+    /** Areas per request: area_id => row from `area` (details already decoded) */
     private array $areaCache = [];
 
-    /** Hat das letzte saveRecord() ein Passwort gesetzt? */
+    /** Did the last saveRecord() set a password? */
     private bool $passwordChanged = false;
 
     public function __construct(
@@ -162,16 +161,16 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_AUTH - Prüft die Session auf Gültigkeit.
+     * CMS:USER_AUTH - checks the session for validity.
      *
-     * Nimmt die Session aus 'sessionid' oder dem Cookie 'cookiename' auf und prüft
-     * mit 'filter' (Syntax wie CMS:SELECT) den Profil-Datensatz. Ergebnis in $set:
+     * Takes the session from 'sessionid' or the cookie 'cookiename' and checks
+     * the profile record with 'filter' (syntax as CMS:SELECT). Result in $set:
      *
-     *     $set['user_id']          record_id des Profils, 0 = nicht angemeldet
-     *     $set['user']             der Profil-Datensatz (Array) oder []
-     *     $set['user_session_id']  Session-Id, '' = keine
+     *     $set['user_id']          record_id of the profile, 0 = not signed in
+     *     $set['user']             the profile record (array) or []
+     *     $set['user_session_id']  session id, '' = none
      *
-     * Gibt nichts aus. Für einen Zugriffsschutz mit Fehlertemplate siehe USER_PROTECT.
+     * Outputs nothing. For access protection with an error template see USER_PROTECT.
      */
     public function cmsAuth($p): void
     {
@@ -179,11 +178,11 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_PROTECT - Schützt ein Template vor dem Zugriff nicht angemeldeter Besucher.
+     * CMS:USER_PROTECT - protects a template from access by visitors who are not signed in.
      *
-     * Wie USER_AUTH; ist niemand angemeldet (oder der Filter trifft nicht), wird das
-     * 'errortemplate' eingebunden und die Seite beendet. Sonst läuft das Template
-     * weiter, $set ist wie bei USER_AUTH gefüllt.
+     * Like USER_AUTH; if nobody is signed in (or the filter does not match), the
+     * 'errortemplate' is included and the page ended. Otherwise the template
+     * continues, $set is filled as with USER_AUTH.
      */
     public function cmsProtect($p): string
     {
@@ -192,9 +191,9 @@ class RecordUser {
     }
 
     /**
-     * Gemeinsame Laufzeit von USER_AUTH und USER_PROTECT.
+     * Shared runtime of USER_AUTH and USER_PROTECT.
      *
-     * @return bool  true, wenn ein User angemeldet ist und der Filter passt
+     * @return bool  true if a user is signed in and the filter matches
      */
     private function authenticate(array $p): bool
     {
@@ -217,24 +216,24 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_LOGIN - Prüft die Anmeldedaten und erzeugt eine neue Session.
+     * CMS:USER_LOGIN - checks the sign-in data and creates a new session.
      *
-     * Zwei Wege:
-     *   1. Name + Passwort aus data[{namefeld}] / data[{passwortfeld}] - die beiden
-     *      Felder legt der Profil-Bereich fest (details.login_*_field_id). Nur mit
+     * Two ways:
+     *   1. Name + password from data[{namefield}] / data[{passwordfield}] - the two
+     *      fields are defined by the profile area (details.login_*_field_id). Only with
      *      'submit'.
-     *   2. 'hash': ein Passwort-Reset-Token aus USER_PW - meldet den User ohne
-     *      Passwort an (einmalig), damit er im Anschluss per USER_INPUT ein neues
-     *      setzen kann. 'submit' ist dann nicht nötig.
+     *   2. 'hash': a password reset token from USER_PW - signs the user in without
+     *      password (once), so that afterwards they can set a new one via
+     *      USER_INPUT. 'submit' is then not needed.
      *
-     * Der Brute-Force-Schutz zählt Fehlversuche je Name (LoginGuard::forUsers()).
-     * Ein Profil mit status_id 2 (unbestätigt) oder 1 (deaktiviert) wird abgewiesen.
+     * The brute-force protection counts failed attempts per name (LoginGuard::forUsers()).
+     * A profile with status_id 2 (unconfirmed) or 1 (disabled) is rejected.
      *
-     * Meldungen ('message'): blocked, failed, disabled, unconfirmed, hash, container.
-     * Ergebnis in $set wie USER_AUTH; der Profil-Datensatz wird zum laufenden
-     * Datensatz des Erfolgstemplates.
+     * Messages ('message'): blocked, failed, disabled, unconfirmed, hash, container.
+     * Result in $set as with USER_AUTH; the profile record becomes the
+     * current record of the success template.
      *
-     * @return string  successtemplate oder '' (Fehler in Cms::error())
+     * @return string  successtemplate or '' (error in Cms::error())
      */
     public function cmsLogin($p): string
     {
@@ -251,7 +250,7 @@ class RecordUser {
         $cookie = $this->_bool($p['cookie'] ?? true);
         $cookieName = (string)($p['cookiename'] ?? '');
 
-        // 2. Anmeldung mit Passwort-Reset-Token
+        // 2. sign-in with password reset token
         // --------------------
         if ($hash !== '') {
             $recordId = $this->consumeToken($hash, 'password');
@@ -265,16 +264,16 @@ class RecordUser {
                     (int)$profile['status_id'] === 2 ? 'user.error_unconfirmed' : 'user.error_disabled');
                 return '';
             }
-            // Mit Authenticator-App: auch der Reset-Link braucht den Code - sonst
-            // übernähme jeder mit Zugriff auf das Postfach das Konto. Ein Code per
-            // E-Mail entfällt: der Link kam über dasselbe Postfach.
+            // With an authenticator app: the reset link also needs the code - otherwise
+            // anyone with access to the mailbox would take over the account. A code by
+            // e-mail is dropped: the link came through the same mailbox.
             if ($this->secondFactor()->policy($area) !== 'none' && $this->secondFactor()->method((int)$profile['record_id']) === 'totp') {
                 return $this->startSecondFactor($profile, $area, 'totp', '', $cookie, $cookieName, $p, true);
             }
             return $this->loginProfile($profile, $cookie, $cookieName, $p, true);
         }
 
-        // 1. Name + Passwort
+        // 1. name + password
         // --------------------
         $nameField = $this->fieldName((int)($area['login_name_field_id'] ?? 0), $areaId);
         $pwField   = $this->fieldName((int)($area['login_password_field_id'] ?? 0), $areaId);
@@ -300,8 +299,8 @@ class RecordUser {
             $this->fail($p, 'blocked', 'user.error_login_blocked', ['minutes' => (int)ceil($blockedSeconds / 60)]);
             return '';
         }
-        // Fehlversuche je Herkunft über alle Namen (Credential Stuffing: viele
-        // Konten mit je einem Passwort aus einem fremden Leck)
+        // failed attempts per origin across all names (credential stuffing: many
+        // accounts, each with one password from a foreign leak)
         $limiter = $this->container->get(RateLimiter::class);
         $origin = $this->container->get(ClientIp::class)->rateKey();
         if (!$limiter->allows('login_ip', $origin)) {
@@ -309,10 +308,10 @@ class RecordUser {
             return '';
         }
 
-        // Profil zum Namen - genau eines
+        // profile for the name - exactly one
         $profile = $this->findProfile($areaId, $nameField, $name);
-        // Auch ohne Treffer prüfen: ein erfundener Name soll nicht schneller
-        // antworten als ein vorhandener (siehe Admin::loginByName())
+        // check even without a hit: an invented name should not respond faster
+        // than an existing one (see Admin::loginByName())
         $profileOk = $profile !== null && $this->passwordOk((int)$profile['record_id'], $pwField, $password);
         if ($profile === null) $this->crypt->passwordVerify($password, '');
         if (!$profileOk) {
@@ -331,9 +330,9 @@ class RecordUser {
             $this->fail($p, 'disabled', 'user.error_disabled');
             return '';
         }
-        // Zweiter Faktor (area.details.second_factor, UserSecondFactor::needed()):
-        // der Zähler des LoginGuard bleibt stehen, bis auch der Code stimmt - sonst
-        // ließe sich Passwort + Code im Wechsel beliebig oft raten
+        // second factor (area.details.second_factor, UserSecondFactor::needed()):
+        // the LoginGuard counter stays until the code is right too - otherwise
+        // password + code could be guessed alternately any number of times
         $method = $this->secondFactor()->needed($profile, $area);
         if ($method !== '') {
             return $this->startSecondFactor($profile, $area, $method, $guardName, $cookie, $cookieName, $p);
@@ -343,20 +342,20 @@ class RecordUser {
     }
 
     /**
-     * Passwort (bzw. Reset-Link) stimmt, ein zweiter Faktor fehlt noch: eine
-     * ANONYME Session (neue Id, ein Warenkorb zieht mit um) merkt sich die
-     * wartende Anmeldung in details.mfa_pending, eingebunden wird das
-     * 'codetemplate'. Angemeldet ist danach niemand - das erledigt
-     * CMS:USER_LOGIN_CODE mit dem richtigen Code.
+     * Password (or reset link) is correct, a second factor is still missing: an
+     * ANONYMOUS session (new id, a basket moves along) records the
+     * pending sign-in in details.mfa_pending, the 'codetemplate' is included.
+     * Nobody is signed in afterwards - CMS:USER_LOGIN_CODE handles that with the right
+     * code.
      *
-     * Beim Code per E-Mail entsteht hier der Code und steht in $set['login_code'];
-     * das codetemplate verschickt ihn (CMS:EMAIL an die Adresse des Profils, das
-     * der laufende Datensatz ist). Der Befehl selbst verschickt nichts - wie alle
-     * CMS:USER_*-Befehle.
+     * For a code by e-mail the code is created here and stands in $set['login_code'];
+     * the codetemplate sends it (CMS:EMAIL to the address of the profile, which
+     * is the current record). The command itself sends nothing - like all
+     * CMS:USER_* commands.
      *
      * $set: second_factor ('totp' | 'email'), login_pending = 1, pending_user
-     * (Profil), login_code, user_session_id (wartende Session, für Aufrufe ohne
-     * Cookie).
+     * (profile), login_code, user_session_id (pending session, for calls without
+     * cookie).
      */
     private function startSecondFactor(array $profile, array $area, string $method, string $guardName, bool $cookie, string $cookieName, array $p, bool $reset = false): string
     {
@@ -396,39 +395,39 @@ class RecordUser {
         return $template;
     }
 
-    /** user.login_code_expiration, mindestens 60 Sekunden */
+    /** user.login_code_expiration, at least 60 seconds */
     private function loginCodeExpiration(): int
     {
         return max(60, (int)($this->config->get('user.login_code_expiration') ?: 600));
     }
 
     /**
-     * CMS:USER_LOGIN_CODE - zweiter Schritt der Anmeldung: Code aus der App, per
-     * E-Mail/SMS oder ein Wiederherstellungscode.
+     * CMS:USER_LOGIN_CODE - second step of the sign-in: code from the app, by
+     * e-mail/SMS or a recovery code.
      *
-     * Liest die wartende Anmeldung aus der Session (details.mfa_pending, siehe
-     * startSecondFactor()). Mit 'submit': Code aus data[{codefield}] (Vorgabe
-     * data[code]) prüfen. Richtig -> Anmeldung wie USER_LOGIN (neue Session-Id,
-     * Gerät verbuchen) und 'successtemplate'. Falsch -> Meldung 'code'; jeder
-     * Fehlversuch zählt im LoginGuard auf dasselbe Konto wie das Passwort, nach
-     * MAX_CODE_ATTEMPTS falschen Codes ist die wartende Anmeldung verworfen
-     * (Meldung 'expired', zurück zum Passwort).
+     * Reads the pending sign-in from the session (details.mfa_pending, see
+     * startSecondFactor()). With 'submit': check the code from data[{codefield}] (default
+     * data[code]). Correct -> sign-in as with USER_LOGIN (new session id,
+     * register the device) and 'successtemplate'. Wrong -> message 'code'; each
+     * failed attempt counts in the LoginGuard against the same account as the password; after
+     * MAX_CODE_ATTEMPTS wrong codes the pending sign-in is discarded
+     * (message 'expired', back to the password).
      *
-     * 'resend' (nur beim Code per E-Mail): neuer Code, gedrosselt über
-     * user.throttle.login_code. Er steht wie beim ersten Mal in $set['login_code'],
-     * eingebunden wird 'codetemplate' - dasselbe Template, das nach USER_LOGIN den
-     * Code mit CMS:EMAIL verschickt ($set['code_resent'] = 1).
+     * 'resend' (only for the code by e-mail): new code, throttled via
+     * user.throttle.login_code. As the first time it stands in $set['login_code'],
+     * 'codetemplate' is included - the same template that sends the code
+     * with CMS:EMAIL after USER_LOGIN ($set['code_resent'] = 1).
      *
-     * Ohne submit und resend: nur $set füllen (second_factor, login_pending) - so
-     * kann das Formular-Template auch aus dem codetemplate eingebunden werden. Je
-     * Request wird submit/resend nur beim ersten Aufruf ausgewertet; ein weiterer
-     * Aufruf (das eingebundene Formular sieht denselben POST) füllt nur $set.
+     * Without submit and resend: only fill $set (second_factor, login_pending) - so
+     * the form template can also be included from the codetemplate. Per
+     * request submit/resend is evaluated only on the first call; a further call
+     * (the included form sees the same POST) only fills $set.
      *
-     * Meldungen: token, code, expired, blocked, throttled.
-     * $set nach Erfolg wie USER_LOGIN, dazu second_factor_used ('totp' | 'email' |
-     * 'recovery') und recovery_remaining.
+     * Messages: token, code, expired, blocked, throttled.
+     * $set after success as USER_LOGIN, plus second_factor_used ('totp' | 'email' |
+     * 'recovery') and recovery_remaining.
      *
-     * @return string  successtemplate oder ''
+     * @return string  successtemplate or ''
      */
     public function cmsLoginCode($p): string
     {
@@ -463,7 +462,7 @@ class RecordUser {
         if (!$submit && !$resend) return '';
         if (!$this->csrfOk($p)) return '';
 
-        // Neuer Code
+        // new code
         // --------------------
         if ($resend && !$submit) {
             if ((string)$pending['m'] !== 'email') return '';
@@ -487,7 +486,7 @@ class RecordUser {
             return $template;
         }
 
-        // Code prüfen
+        // check code
         // --------------------
         $guard = $this->loginGuard->forUsers();
         $guardName = (string)$pending['g'];
@@ -498,8 +497,8 @@ class RecordUser {
         $input = $this->requestData($p);
         $codeField = $this->_name((string)($p['codefield'] ?? '')) ?: 'code';
         $code = trim((string)($input[$codeField] ?? ''));
-        // Kein Code im Request (etwa das Anmeldeformular, das hierher weiterleitet):
-        // kein Fehlversuch, keine Meldung
+        // No code in the request (e.g. the sign-in form that redirects here):
+        // no failed attempt, no message
         if ($code === '') return '';
         $used = '';
         if ((string)$pending['m'] === 'totp') {
@@ -532,32 +531,32 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_2FA - zweiten Faktor des angemeldeten Users verwalten
-     * (developer_docs/20-frontend-schutz.md B.4). Der Profil-Bereich muss
-     * second_factor ≠ 'none' haben.
+     * CMS:USER_2FA - manage the second factor of the signed-in user
+     * (developer docs, chapter 13 (Security: authentication)). The profile area must
+     * have second_factor ≠ 'none'.
      *
-     *     function=status        (Vorgabe) nur lesen
-     *     function=totp_setup    neuen Schlüssel erzeugen, nichts speichern:
-     *                            $set['totp_setup'] = token, secret (zum Abtippen),
-     *                            qr (HTML: QR-Code für die App, withQrCode()),
-     *                            uri (otpauth://, öffnet auf dem Telefon die App)
-     *     function=totp_enable   data[token] + data[code] aus der App -> speichern,
-     *                            $set['recovery_codes'] (nur jetzt zu sehen)
-     *     function=code_enable   Code per E-Mail/SMS als Faktor wählen, bestätigt
-     *                            mit dem Passwort (data[current_password])
-     *     function=disable       abschalten - bei TOTP mit App- oder
-     *                            Wiederherstellungscode (data[code]), beim Code mit
-     *                            dem Passwort. Bei second_factor 'required' wird aus
-     *                            TOTP der Code; den Code abschalten geht dann nicht
-     *     function=recovery_renew  neue Wiederherstellungscodes, mit App-Code
+     *     function=status        (default) read only
+     *     function=totp_setup    create a new key, store nothing:
+     *                            $set['totp_setup'] = token, secret (to type in),
+     *                            qr (HTML: QR code for the app, withQrCode()),
+     *                            uri (otpauth://, on the phone the app opens)
+     *     function=totp_enable   data[token] + data[code] from the app -> save,
+     *                            $set['recovery_codes'] (only visible now)
+     *     function=code_enable   choose the code by e-mail/SMS as factor, confirmed
+     *                            with the password (data[current_password])
+     *     function=disable       switch off - with TOTP via app or
+     *                            recovery code (data[code]), with the code via
+     *                            the password. With second_factor 'required' TOTP becomes
+     *                            the code; switching off the code is then not possible
+     *     function=recovery_renew  new recovery codes, with app code
      *
-     * Schreibende Funktionen nur mit 'submit' (POST) und CSRF-Token.
-     * $set nach jeder Funktion: second_factor ('' | 'totp' | 'email'),
-     * second_factor_policy, second_factor_since (UTC), recovery_count; nach einer
-     * Änderung second_factor_changed = Ereignis (totp_enabled, totp_disabled,
+     * Writing functions only with 'submit' (POST) and CSRF token.
+     * $set after each function: second_factor ('' | 'totp' | 'email'),
+     * second_factor_policy, second_factor_since (UTC), recovery_count; after a
+     * change second_factor_changed = event (totp_enabled, totp_disabled,
      * code_enabled, code_disabled, recovery_renewed).
      *
-     * Meldungen: auth, policy, token, code, current, setup, blocked.
+     * Messages: auth, policy, token, code, current, setup, blocked.
      */
     public function cmsTwoFactor($p): void
     {
@@ -588,7 +587,7 @@ class RecordUser {
         }
         if ($function === 'status' || !in_array($function, ['totp_enable', 'code_enable', 'disable', 'recovery_renew'], true)) return;
         if (!$this->submitted($p)) {
-            // Formular noch nicht abgeschickt: beim Einrichten den Schlüssel erneut zeigen
+            // form not yet submitted: when setting up, show the key again
             if ($function === 'totp_enable' && ($setup = $sf->setupFromToken($profile, (string)($input['token'] ?? ''), $account, $issuer))) {
                 $GLOBALS['set']['totp_setup'] = $this->withQrCode($setup);
             }
@@ -618,7 +617,7 @@ class RecordUser {
 
             case 'code_enable':
                 if ($method === 'totp') {
-                    // Wechsel von der App zum Code: wie Abschalten mit App-Code
+                    // switch from the app to the code: like switching off with the app code
                     if (!$this->totpConfirmed($profile, $area, $code, $p)) break;
                 }
                 elseif (!$this->currentPasswordOk($area, $recordId, $input, $p, false)) {
@@ -660,13 +659,13 @@ class RecordUser {
     }
 
     /**
-     * QR-Code zum Einrichten der Authenticator-App: $setup['qr'] ist fertiges HTML
-     * - ein Element mit data-c9-qr (der otpauth://-URI), die Bibliothek
-     * qrcode-generator (kazuhikoarase, MIT) aus den Backend-Assets und ein kleines
-     * Script, das daraus ein SVG macht; beide Scripts mit der Nonce der Seite, also
-     * auch unter einer durchgesetzten Script-Policy lauffähig ('self'). Dieselbe
-     * Bibliothek und dasselbe Attribut wie im Backend (cApp.ui.qrCodes()).
-     * $setup['qr_script'] = URL der Bibliothek für eigene Einbindungen.
+     * QR code for setting up the authenticator app: $setup['qr'] is finished HTML
+     * - an element with data-c9-qr (the otpauth:// URI), the library
+     * qrcode-generator (kazuhikoarase, MIT) from the backend assets and a small
+     * script that turns it into an SVG; both scripts with the nonce of the page, so that
+     * they also run under an enforced script policy ('self'). The same
+     * library and the same attribute as in the backend (cApp.ui.qrCodes()).
+     * $setup['qr_script'] = URL of the library for own inclusions.
      */
     private function withQrCode(array $setup): array
     {
@@ -681,7 +680,7 @@ class RecordUser {
         return $setup;
     }
 
-    /** $set-Werte zum Zustand (USER_2FA) */
+    /** $set values for the state (USER_2FA) */
     private function twoFactorVars(int $recordId, string $policy): void
     {
         $state = $this->secondFactor()->state($recordId);
@@ -692,8 +691,8 @@ class RecordUser {
     }
 
     /**
-     * App- oder (mit $allowRecovery) Wiederherstellungscode bestätigt eine Änderung;
-     * Fehlversuche zählen im LoginGuard wie ein falsches Passwort.
+     * App code or (with $allowRecovery) recovery code confirms a change;
+     * failed attempts count in the LoginGuard like a wrong password.
      */
     private function totpConfirmed(array $profile, array $area, string $code, array $p, bool $allowRecovery = true): bool
     {
@@ -716,7 +715,7 @@ class RecordUser {
         return true;
     }
 
-    /** Falscher App-Code beim Einrichten: Meldung und Fehlversuch */
+    /** Wrong app code when setting up: message and failed attempt */
     private function codeFailure(array $area, int $recordId, array $p): void
     {
         $this->loginGuard->forUsers()->recordFailure(mb_substr((int)$area['area_id'] . ':#' . $recordId, 0, self::NAME_MAX));
@@ -729,17 +728,17 @@ class RecordUser {
     }
 
     /**
-     * Session für ein geprüftes Profil anlegen, Gerät verbuchen, $set und $cms füllen.
+     * Create a session for a verified profile, record the device, fill $set and $cms.
      *
-     * $reset (Anmeldung über den Reset-Link): die Session darf bis
-     * details.password_reset_until ein neues Passwort ohne das alte setzen
-     * (USER_INPUT, currentPasswordOk()); $set['password_reset'] = 1. Eine normale
-     * Anmeldung löscht eine solche Freigabe (create() übernimmt sonst die Details
-     * einer laufenden Session desselben Profils).
+     * $reset (sign-in via the reset link): the session may set a new password
+     * without the old one until details.password_reset_until
+     * (USER_INPUT, currentPasswordOk()); $set['password_reset'] = 1. A normal
+     * sign-in deletes such a release (otherwise create() takes over the details
+     * of a running session of the same profile).
      *
-     * $set['new_device'] = 1, wenn sich das Profil von einem unbekannten Gerät
-     * anmeldet und schon andere Geräte hat (LoginDevices) - das Erfolgstemplate kann
-     * dann eine Hinweis-E-Mail verschicken; $set['device'] = label, ip, time (UTC).
+     * $set['new_device'] = 1 if the profile signs in from an unknown device
+     * and already has other devices (LoginDevices) - the success template can
+     * then send a notification e-mail; $set['device'] = label, ip, time (UTC).
      */
     private function loginProfile(array $profile, bool $cookie, string $cookieName, array $p, bool $reset = false): string
     {
@@ -767,10 +766,10 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_LOGOUT - Beendet und löscht die Session eines angemeldeten Users.
-     * 'deletecookie' = false lässt das Cookie stehen (nur serverseitig beenden).
-     * 'submit' ist optional: angegeben, aber leer (Seite einfach aufgerufen) -
-     * nichts tun, auch keine Meldung 'token'; ohne den Parameter immer abmelden.
+     * CMS:USER_LOGOUT - ends and deletes the session of a signed-in user.
+     * 'deletecookie' = false leaves the cookie in place (end only server-side).
+     * 'submit' is optional: given but empty (page simply called) -
+     * do nothing, also no message 'token'; without the parameter always sign out.
      */
     public function cmsLogout($p): void
     {
@@ -787,24 +786,24 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_REGISTER - Erzeugt ein User-Profil aus den Eingaben, Status = 2 (unbestätigt).
+     * CMS:USER_REGISTER - creates a user profile from the inputs, status = 2 (unconfirmed).
      *
-     * Schreibt einen Datensatz in den Profil-Bereich 'container' (Felder aus
-     * data[...], eingeschränkt durch 'fields', überschrieben durch 'overwrite'),
-     * mit status_id 2 und needs_review 1. 'emailfield' muss eine gültige
-     * E-Mail-Adresse enthalten; Anmeldename und E-Mail dürfen im Bereich noch nicht
-     * vorkommen. Alle Feldprüfungen des Bereichs gelten wie im Backend.
+     * Writes a record into the profile area 'container' (fields from
+     * data[...], restricted by 'fields', overwritten by 'overwrite'),
+     * with status_id 2 and needs_review 1. 'emailfield' must contain a valid
+     * e-mail address; sign-in name and e-mail must not yet occur in the area.
+     * All field checks of the area apply as in the backend.
      *
-     * Ein Freischalt-Token (Tabelle user_token, purpose 'register') landet in
-     * $set['hash'] - das Erfolgstemplate baut daraus den Link auf eine Seite mit
-     * CMS:USER_REGISTER_CONFIRM und verschickt ihn (E-Mail-Versand ist Sache des
-     * Templates). Dazu $set['user_id'], $set['user'] (das Profil), $set['email'];
-     * das Profil ist der laufende Datensatz des Erfolgstemplates.
+     * An activation token (table user_token, purpose 'register') ends up in
+     * $set['hash'] - the success template builds from it the link to a page with
+     * CMS:USER_REGISTER_CONFIRM and sends it (sending the e-mail is up to the
+     * template). Additionally $set['user_id'], $set['user'] (the profile), $set['email'];
+     * the profile is the current record of the success template.
      *
-     * Meldungen ('message'): container, email, exists, save (plus Feldfehler der
-     * Validierung).
+     * Messages ('message'): container, email, exists, save (plus field errors of the
+     * validation).
      *
-     * @return string  successtemplate oder ''
+     * @return string  successtemplate or ''
      */
     public function cmsRegister($p): string
     {
@@ -820,7 +819,7 @@ class RecordUser {
         $emailField = $this->_name((string)($p['emailfield'] ?? ''));
         $input = $this->requestData($p);
 
-        // E-Mail-Adresse
+        // e-mail address
         $email = trim((string)($input[$emailField] ?? ''));
         if ($emailField === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $this->fail($p, 'email', 'user.error_email_invalid');
@@ -828,9 +827,9 @@ class RecordUser {
         }
         $input[$emailField] = $email;
 
-        // Drosselung und Formularschutz: geprüft wird vorab, gezählt nur, was eine
-        // E-Mail auslöst oder ein Konto verraten könnte (Erfolg und 'exists') - ein
-        // Tippfehler in der Passwort-Richtlinie soll niemanden aussperren
+        // throttling and form protection: checked in advance, only what triggers an
+        // e-mail or could reveal an account is counted (success and 'exists') - a
+        // typo in the password policy should not lock anyone out
         $buckets = [
             ['register_ip', $this->container->get(ClientIp::class)->rateKey()],
             ['register_value', $areaId . '|' . mb_strtolower($email)],
@@ -842,8 +841,8 @@ class RecordUser {
             return '';
         }
 
-        // Anmeldename und E-Mail müssen im Bereich einmalig sein - unabhängig davon,
-        // ob der Redakteur das Flag 'unique' gesetzt hat
+        // sign-in name and e-mail must be unique in the area - regardless of
+        // whether the editor has set the flag 'unique'
         $nameField = $this->fieldName((int)($area['login_name_field_id'] ?? 0), $areaId);
         foreach (array_unique(array_filter([$emailField, $nameField])) as $field) {
             $value = trim((string)($input[$field] ?? ''));
@@ -874,15 +873,15 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_REGISTER_CONFIRM - Schaltet ein User-Profil frei, Status = 0.
+     * CMS:USER_REGISTER_CONFIRM - enables a user profile, status = 0.
      *
-     * 'hash' ist das Token aus USER_REGISTER. Ein unbekanntes oder abgelaufenes
-     * Token (user.token_expiration) ergibt die Meldung 'hash'. Das Token wird
-     * verbraucht; der User ist danach NICHT angemeldet (dafür USER_LOGIN), aber
-     * $set['user_id'] / $set['user'] sind gefüllt und das Profil ist der laufende
-     * Datensatz des Erfolgstemplates.
+     * 'hash' is the token from USER_REGISTER. An unknown or expired
+     * token (user.token_expiration) gives the message 'hash'. The token is
+     * consumed; the user is then NOT signed in (that is USER_LOGIN), but
+     * $set['user_id'] / $set['user'] are filled and the profile is the current
+     * record of the success template.
      *
-     * @return string  successtemplate oder ''
+     * @return string  successtemplate or ''
      */
     public function cmsRegisterConfirm($p): string
     {
@@ -908,17 +907,17 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_PW - Bereitet das Zurücksetzen eines Passworts vor.
+     * CMS:USER_PW - prepares the reset of a password.
      *
-     * Sucht im Profil-Bereich 'container' das Profil, dessen Feld 'uniquefield' den
-     * Wert 'uniquevalue' trägt (z. B. die E-Mail-Adresse). Gefunden: ein Token
-     * (purpose 'password') landet in $set['hash']; das Erfolgstemplate verschickt
-     * daraus den Link auf eine Seite mit (CMS:USER_LOGIN hash=…). Nicht gefunden:
-     * Meldung 'notfound' und das 'errortemplate'.
+     * Searches in the profile area 'container' for the profile whose field 'uniquefield' carries
+     * the value 'uniquevalue' (e.g. the e-mail address). Found: a token
+     * (purpose 'password') ends up in $set['hash']; the success template sends
+     * from it the link to a page with (CMS:USER_LOGIN hash=…). Not found:
+     * message 'notfound' and the 'errortemplate'.
      *
-     * Ohne 'uniquevalue' (Formular noch nicht abgeschickt) passiert nichts.
+     * Without 'uniquevalue' (form not yet submitted) nothing happens.
      *
-     * @return string  successtemplate, errortemplate oder ''
+     * @return string  successtemplate, errortemplate or ''
      */
     public function cmsPw($p): string
     {
@@ -934,11 +933,10 @@ class RecordUser {
         }
         $field = $this->_name((string)($p['uniquefield'] ?? ''));
 
-        // Drosselung und Formularschutz VOR der Suche: gezählt wird der eingegebene
-        // Wert, nicht das gefundene Konto - sonst wäre nur eine existierende
-        // Adresse irgendwann gesperrt, und daran ließe sich ablesen, welche
-        // Adressen ein Konto haben. Die Antwort ist das errortemplate, wie bei
-        // 'notfound'.
+        // throttling and form protection BEFORE the search: the entered value is counted,
+        // not the account found - otherwise only an existing address would at some point
+        // be locked, and one could tell which addresses have an account. The answer is
+        // the errortemplate, as with 'notfound'.
         $buckets = [
             ['pw_ip', $this->container->get(ClientIp::class)->rateKey()],
             ['pw_value', (int)$area['area_id'] . '|' . mb_strtolower($value)],
@@ -967,31 +965,31 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_INPUT - Erzeugt oder aktualisiert einen Datensatz aus Frontend-Eingaben.
+     * CMS:USER_INPUT - creates or updates a record from frontend inputs.
      *
-     * Ablauf:
-     *   1. 'submit' muss gefüllt sein, 'container' ein Datensatzbereich der Instanz
-     *   2. Berechtigung (siehe Klassenkommentar "Wer darf was schreiben")
-     *   3. 'id': vorhandenen Datensatz aktualisieren - gehört er nicht dem User
-     *      oder gibt es ihn nicht, wird ohne 'forceupdate' ein neuer angelegt, mit
-     *      'forceupdate' abgebrochen (Meldung 'notfound')
-     *   4. Eingaben aus data[...]: nur die Felder aus 'fields' (leer = alle
-     *      benutzerdefinierten Felder des Bereichs); Metafelder ausschließlich über
-     *      'overwrite'. 'removefiles' leert Upload-Felder. Uploads kommen aus
+     * Sequence:
+     *   1. 'submit' must be filled, 'container' a record area of the instance
+     *   2. authorization (see class comment "Who may write what")
+     *   3. 'id': update an existing record - if it does not belong to the user
+     *      or does not exist, a new one is created without 'forceupdate', with
+     *      'forceupdate' aborted (message 'notfound')
+     *   4. inputs from data[...]: only the fields from 'fields' (empty = all
+     *      user-defined fields of the area); meta fields exclusively via
+     *      'overwrite'. 'removefiles' empties upload fields. Uploads come from
      *      $_FILES[data].
-     *   5. Speichern mit allen Prüfungen des Bereichs (Feldfehler -> CMS:MESSAGE);
-     *      neue Datensätze bekommen user_id = angemeldeter User und needs_review 1,
-     *      geänderte needs_review 1
-     *   6. Erfolg: $set['record_id'], der Datensatz ist der laufende Datensatz des
-     *      'successtemplate' (ohne successtemplate läuft das Template weiter)
+     *   5. save with all checks of the area (field errors -> CMS:MESSAGE);
+     *      new records get user_id = signed-in user and needs_review 1,
+     *      changed ones needs_review 1
+     *   6. success: $set['record_id'], the record is the current record of the
+     *      'successtemplate' (without successtemplate the template continues)
      *
-     * 'masterid' hängt den neuen Datensatz als Kind unter den angegebenen
-     * (parent_id) - nur in Bereichen mit Baum (Eingabefeld parent_id), sonst ohne
-     * Wirkung.
+     * 'masterid' attaches the new record as a child under the given one
+     * (parent_id) - only in areas with a tree (input field parent_id), otherwise without
+     * effect.
      *
-     * Meldungen ('message'): container, access, notfound, save.
+     * Messages ('message'): container, access, notfound, save.
      *
-     * @return string  successtemplate oder ''
+     * @return string  successtemplate or ''
      */
     public function cmsInput($p): string
     {
@@ -1027,7 +1025,7 @@ class RecordUser {
             }
         }
 
-        // Vorhandenen Datensatz?
+        // existing record?
         // --------------------
         $previous = null;
         if ($id > 0) {
@@ -1041,15 +1039,15 @@ class RecordUser {
             }
         }
 
-        // Owner (Backend-Admin) eines neuen Datensatzes
+        // owner (backend admin) of a new record
         $ownerId = 0;
         if ($id < 1) {
             $ownerId = $this->ownerId($p);
             if ($ownerId < 1) return '';
         }
 
-        // Neues Passwort im eigenen Profil: nur mit dem bisherigen oder direkt nach
-        // dem Reset-Link (currentPasswordOk())
+        // new password in one's own profile: only with the previous one or directly after
+        // the reset link (currentPasswordOk())
         $input = $this->requestData($p);
         if ($type === 'profile' && !$ignoreUser
             && $this->passwordInput($areaId, $input, $this->_list($p['fields'] ?? []))
@@ -1066,19 +1064,19 @@ class RecordUser {
         );
         if ($recordId < 1) return '';
 
-        // Neues Passwort: alle anderen Sessions des Profils beenden - wer das alte
-        // kannte (oder eine Session gekapert hat), ist draußen. Die laufende
-        // Session bleibt, wenn sie zu diesem Profil gehört.
+        // new password: end all other sessions of the profile - whoever knew the old one
+        // (or hijacked a session) is shut out. The running session
+        // stays if it belongs to this profile.
         $GLOBALS['set']['password_changed'] = 0;
         if ($type === 'profile' && $this->passwordChanged) {
             $keep = $this->userSession->recordId() === $recordId ? $this->userSession->id() : '';
             $this->userSession->closeAllOf($recordId, $keep);
-            // Reset-Freigabe verbraucht
+            // reset release used up
             if ($keep !== '' && $this->userSession->get('password_reset_until')) {
                 $this->userSession->setDetail('password_reset_until', null);
             }
-            // Hinweis: das Erfolgstemplate kann eine E-Mail schicken, ein eigener
-            // Notifier (security.login_notifier) z. B. eine SMS
+            // note: the success template can send an e-mail, a custom
+            // notifier (security.login_notifier) e.g. an SMS
             $GLOBALS['set']['password_changed'] = 1;
             $profile = $this->loadRecord($recordId) ?? [];
             $this->loginDevices->notify('password_changed', 'user', $profile, $this->loginDevices->context());
@@ -1091,13 +1089,13 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_DELETE - Löscht einen Datensatz, der dem angemeldeten User gehört.
+     * CMS:USER_DELETE - deletes a record that belongs to the signed-in user.
      *
-     * Soft-Delete wie im Backend (Papierkorb). Ein Profil kann sich selbst löschen
-     * (id = angemeldeter User) - seine Sessions enden damit. 'ignoreuser' hebt die
-     * Besitzprüfung auf. Bei fehlender Berechtigung: 'message_error'.
+     * Soft delete as in the backend (trash). A profile can delete itself
+     * (id = signed-in user) - its sessions end with it. 'ignoreuser' lifts the
+     * ownership check. If authorization is missing: 'message_error'.
      *
-     * @return string  successtemplate oder ''
+     * @return string  successtemplate or ''
      */
     public function cmsDelete($p): string
     {
@@ -1117,8 +1115,8 @@ class RecordUser {
             $this->failMessage((string)($p['message_error'] ?? ''), 'user.error_access_denied');
             return '';
         }
-        // Was "löschen" heißt, sagt die Lösch-Policy des Bereichs (Modul Privacy):
-        // Papierkorb, Felder überschreiben, endgültig löschen …
+        // what "delete" means is stated by the deletion policy of the area (module Privacy):
+        // trash, overwrite fields, delete permanently …
         if ($this->container->get(PrivacyJobs::class)->delete($id) === null) {
             return '';
         }
@@ -1134,20 +1132,20 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_TOKEN - CSRF-Token für ein Formular mit schreibendem CMS:USER_*-Befehl.
+     * CMS:USER_TOKEN - CSRF token for a form with a writing CMS:USER_* command.
      *
-     * Gibt ein verstecktes Feld <input type="hidden" name="_token" value="…"> aus,
-     * mit format=value nur den Wert (für Ajax: Header X-Camindo-Token oder POST-Feld
-     * _token). Das Token steht außerdem in $set['user_token']. Geprüft wird es von
-     * USER_LOGIN, USER_REGISTER, USER_PW, USER_INPUT (wenn 'submit' gefüllt ist),
-     * USER_DELETE, USER_LOGOUT und USER_BASKET (außer function=load).
+     * Outputs a hidden field <input type="hidden" name="_token" value="…">,
+     * with format=value only the value (for Ajax: header X-Camindo-Token or POST field
+     * _token). The token is also in $set['user_token']. It is checked by
+     * USER_LOGIN, USER_REGISTER, USER_PW, USER_INPUT (if 'submit' is filled),
+     * USER_DELETE, USER_LOGOUT and USER_BASKET (except function=load).
      *
-     * Das Token hängt an einem Cookie: der ERSTE Aufruf je Request muss vor der
-     * ersten Ausgabe stehen, üblicherweise (CMS:USER_TOKEN set=…) am
-     * Template-Anfang; weitere Aufrufe im Formular geben dann dasselbe Token aus.
-     * Steht er zu spät, gibt es kein Token - ausgegeben wird ein HTML-Kommentar
-     * mit dem Hinweis, die Formulare scheitern mit der Meldung 'token'.
-     * Siehe UserSession::csrfToken().
+     * The token hangs on a cookie: the FIRST call per request must come before the
+     * first output, usually (CMS:USER_TOKEN set=…) at the
+     * start of the template; further calls in the form then output the same token.
+     * If it comes too late, there is no token - an HTML comment is output
+     * with the note; the forms fail with the message 'token'.
+     * See UserSession::csrfToken().
      */
     public function cmsToken($p): void
     {
@@ -1160,8 +1158,8 @@ class RecordUser {
             $html = strtolower((string)($p['format'] ?? '')) === 'value'
                 ? $token
                 : '<input type="hidden" name="_token" value="' . htmlspecialchars($token, ENT_QUOTES) . '">';
-            // formguard=true: Zeitstempel und Köderfeld dazu (FormGuard) - nur im
-            // Formular, nicht beim frühen Aufruf mit set=… am Template-Anfang
+            // formguard=true: timestamp and decoy field added (FormGuard) - only in the
+            // form, not with the early call set=… at the start of the template
             if (FormGuard::parameter($p['formguard'] ?? '') !== false && strtolower((string)($p['format'] ?? '')) !== 'value') {
                 $html .= $this->container->get(FormGuard::class)->fields();
             }
@@ -1171,17 +1169,17 @@ class RecordUser {
     }
 
     /**
-     * CMS:USER_PASSWORD_RULES - Regeln und Texte der Passwort-Richtlinie als JSON für
-     * data-c9-password (Extension Password, im Template inline eingebunden):
+     * CMS:USER_PASSWORD_RULES - rules and texts of the password policy as JSON for
+     * data-c9-password (extension Password, included inline in the template):
      *
      *     <input type="password" name="data[passwort]"
      *            data-c9-password='(CMS:USER_PASSWORD_RULES container=kunden)'>
      *
-     * Ausgabe HTML-maskiert (für ein Attribut in einfachen oder doppelten
-     * Anführungszeichen). Texte in der Sprache der Seite. Trägt das Feld die
-     * Extension, sind es genau die Regeln, die der Server beim Speichern prüft
-     * (PasswordPolicy::rulesFor()); sonst security.password_policy - geprüft wird
-     * dann nicht.
+     * Output HTML-escaped (for an attribute in single or double quotation marks).
+     * Texts in the language of the page. If the field carries the
+     * extension, these are exactly the rules the server checks on saving
+     * (PasswordPolicy::rulesFor()); otherwise security.password_policy - then
+     * nothing is checked.
      */
     public function cmsPasswordRules($p): void
     {
@@ -1207,38 +1205,38 @@ class RecordUser {
     // ====================
 
     /**
-     * CMS:USER_BASKET - Bearbeiten eines Warenkorbs.
+     * CMS:USER_BASKET - edit a shopping basket.
      *
-     * Der Warenkorb hängt an der Frontend-Session - auch an einer anonymen: gibt es
-     * keine Session, legt der Befehl eine an (Cookie). Er bleibt 'duration' Tage ab
-     * der letzten Änderung (Standard user.basket_days) und überlebt eine Anmeldung.
+     * The basket hangs on the frontend session - also on an anonymous one: if there is
+     * no session, the command creates one (cookie). It remains 'duration' days from
+     * the last change (default user.basket_days) and survives a sign-in.
      *
-     *     function=load           Warenkorb lesen
-     *     function=add            Artikel aus $_REQUEST['variable'] hinzufügen -
-     *                             eine Liste von record_ids (Menge 1) oder
-     *                             record_id => Menge. 'overwrite' = true setzt die
-     *                             Menge statt sie zu addieren.
-     *     function=update         Mengen setzen (record_id => Menge, 0 entfernt)
-     *     function=update_addon   'basket_addon' (Text, z. B. serialisiert) zur
-     *                             Kategorie speichern
+     *     function=load           read the basket
+     *     function=add            add articles from $_REQUEST['variable'] -
+     *                             a list of record_ids (quantity 1) or
+     *                             record_id => quantity. 'overwrite' = true sets the
+     *                             quantity instead of adding to it.
+     *     function=update         set quantities (record_id => quantity, 0 removes)
+     *     function=update_addon   save 'basket_addon' (text, e.g. serialized) for the
+     *                             category
      *
-     * 'category' trennt mehrere Warenkörbe je Session (Standard 0).
+     * 'category' separates several baskets per session (default 0).
      *
-     * Was in den Warenkorb darf (basketAllowedIds()): nur VERÖFFENTLICHTE
-     * Datensätze (Cms::publishedSql() wie CMS:SELECT), die der Request sehen darf.
-     * Ohne 'container' aus Bereichen vom Typ 'record' oder 'ugc' - nie Profile;
-     * mit 'container' (Bereichsnamen oder Ids, kommasepariert) nur aus diesen
-     * Bereichen (auch 'profile', wenn ausdrücklich genannt). Dieselbe Prüfung gilt
-     * beim Lesen: ein Artikel, der inzwischen offline ist, bleibt in `user_basket`
-     * stehen, erscheint aber weder in $set['basket'] noch in der Ergebnismenge.
+     * What may go into the basket (basketAllowedIds()): only PUBLISHED
+     * records (Cms::publishedSql() as CMS:SELECT) that the request may see.
+     * Without 'container' from areas of type 'record' or 'ugc' - never profiles;
+     * with 'container' (area names or ids, comma-separated) only from these
+     * areas (also 'profile', if explicitly named). The same check applies
+     * when reading: an article that is now offline remains in `user_basket`
+     * but appears neither in $set['basket'] nor in the result set.
      *
-     * Ergebnis in $set - nach JEDER Funktion:
-     *     $set['basket']        record_id => Menge (Kategorie)
-     *     $set['basket_count']  Summe der Mengen
-     *     $set['basket_addon']  gespeicherter Zusatztext der Kategorie
-     * Bei function=load stehen die Artikel-Datensätze außerdem als Ergebnismenge
-     * bereit (Cms::select() über die record_ids) - ein folgendes CMS:RESULT_START
-     * durchläuft sie; die Menge je Zeile liefert $set['basket'][$cms['record_id']].
+     * Result in $set - after EVERY function:
+     *     $set['basket']        record_id => quantity (category)
+     *     $set['basket_count']  sum of the quantities
+     *     $set['basket_addon']  stored additional text of the category
+     * With function=load the article records are additionally available as a result set
+     * (Cms::select() via the record_ids) - a following CMS:RESULT_START
+     * runs through them; the quantity per row is given by $set['basket'][$cms['record_id']].
      */
     public function cmsBasket($p): void
     {
@@ -1253,7 +1251,7 @@ class RecordUser {
         if ($days < 1) $days = (int)$this->config->get('user.basket_days') ?: 30;
 
         $changed = false;
-        // Schreibende Funktionen nur mit Token; ohne bleibt es beim Lesen
+        // writing functions only with a token; without it, it stays read-only
         if ($function !== 'load' && !$this->csrfOk($p)) $function = 'load_only';
         if ($function === 'add' || $function === 'update') {
             $variable = preg_replace('/[^a-zA-Z0-9_]/', '', (string)($p['variable'] ?? ''));
@@ -1275,8 +1273,8 @@ class RecordUser {
                 }
             }
             unset($quantities[0]);
-            // Nur Datensätze, die in den Warenkorb dürfen; entfernen (update mit
-            // Menge 0) geht immer - sonst bliebe ein offline gegangener Artikel hängen
+            // only records that may go into the basket; removing (update with
+            // quantity 0) always works - otherwise an article that went offline would remain stuck
             $allowedIds = $this->basketAllowedIds(array_keys($quantities), $containerIds);
             $quantities = array_filter(
                 $quantities,
@@ -1310,8 +1308,8 @@ class RecordUser {
             $basket[(int)$row['record_id']] = (int)$row['quantity'];
         }
         $this->db->popResult();
-        // Was (nicht mehr) veröffentlicht ist oder außerhalb von 'container' liegt,
-        // zählt nicht mit (die Zeile bleibt stehen, siehe Methodenkommentar)
+        // what is (no longer) published or lies outside 'container' does not count
+        // (the row remains, see method comment)
         $basket = array_intersect_key($basket, array_flip($this->basketAllowedIds(array_keys($basket), $containerIds)));
         $GLOBALS['set']['basket'] = $basket;
         $GLOBALS['set']['basket_count'] = array_sum($basket);
@@ -1329,8 +1327,8 @@ class RecordUser {
     }
 
     /**
-     * Artikel im Warenkorb setzen / addieren / entfernen. Ob der Datensatz in den
-     * Warenkorb darf, hat der Aufrufer geprüft (basketAllowedIds()).
+     * Set / add / remove an article in the basket. Whether the record may go into the
+     * basket has been checked by the caller (basketAllowedIds()).
      */
     private function basketSet(string $sessionId, int $category, int $recordId, int $quantity, bool $overwrite, bool $removeZero): void
     {
@@ -1359,11 +1357,11 @@ class RecordUser {
     }
 
     /**
-     * Bereiche aus 'container' (Namen oder Ids, kommasepariert) - nur
-     * Datensatzbereiche, die der Request sehen darf.
+     * Areas from 'container' (names or ids, comma-separated) - only
+     * record areas that the request may see.
      *
-     * @return int[]|null  null = kein 'container' angegeben; [] = angegeben, aber
-     *                     nichts davon gefunden (dann darf nichts in den Warenkorb)
+     * @return int[]|null  null = no 'container' given; [] = given, but
+     *                     none of them found (then nothing may go into the basket)
      */
     private function basketContainerIds(array $p): ?array
     {
@@ -1378,13 +1376,13 @@ class RecordUser {
     }
 
     /**
-     * Welche der Ids dürfen in den Warenkorb? Veröffentlicht (Cms::publishedSql(),
-     * wie CMS:SELECT), sichtbar für den Request (Cms::$sqlAccess), und aus den
-     * Bereichen $containerIds - ohne diese aus Bereichen vom Typ 'record' oder
-     * 'ugc' (nie Profile anderer User).
+     * Which of the ids may go into the basket? Published (Cms::publishedSql(),
+     * as CMS:SELECT), visible to the request (Cms::$sqlAccess), and from the
+     * areas $containerIds - without these from areas of type 'record' or
+     * 'ugc' (never profiles of other users).
      *
      * @param int[]      $ids
-     * @param int[]|null $containerIds  siehe basketContainerIds()
+     * @param int[]|null $containerIds  see basketContainerIds()
      * @return int[]
      */
     private function basketAllowedIds(array $ids, ?array $containerIds): array
@@ -1415,24 +1413,24 @@ class RecordUser {
     }
 
     // ====================
-    // Datensätze schreiben
+    // Write records
     // ====================
 
     /**
-     * Datensatz aus Frontend-Eingaben anlegen oder aktualisieren - über dieselbe
-     * Arbeitskopie wie das Backend (tmpInit()/checkOut() -> save()).
+     * Create or update a record from frontend inputs - via the same working copy
+     * as the backend (tmpInit()/checkOut() -> save()).
      *
-     * @param int    $areaId       Bereich
-     * @param int    $id           vorhandener Datensatz, 0 = neu
-     * @param array  $input        Eingaben (data[...])
-     * @param array  $fields       erlaubte Feldnamen, leer = alle benutzerdefinierten
-     * @param array  $overwrite    Werte, die die Eingaben überschreiben (auch Metafelder)
-     * @param array  $removeFiles  Upload-Felder, deren Datei entfernt wird
-     * @param int    $userId       Besitzer (nur bei neuen Datensätzen gesetzt)
-     * @param array  $p            Befehlsparameter (Meldungen)
-     * @param int    $masterId     parent_id für neue Datensätze in Baum-Bereichen
-     * @param int    $ownerId      Owner (admin_id) neuer Datensätze, siehe ownerId()
-     * @return int                 record_id, 0 bei Fehler (Meldungen in Cms::error())
+     * @param int    $areaId       area
+     * @param int    $id           existing record, 0 = new
+     * @param array  $input        inputs (data[...])
+     * @param array  $fields       allowed field names, empty = all user-defined
+     * @param array  $overwrite    values that overwrite the inputs (also meta fields)
+     * @param array  $removeFiles  upload fields whose file is removed
+     * @param int    $userId       owner (only set for new records)
+     * @param array  $p            command parameters (messages)
+     * @param int    $masterId     parent_id for new records in tree areas
+     * @param int    $ownerId      owner (admin_id) of new records, see ownerId()
+     * @return int                 record_id, 0 on error (messages in Cms::error())
      */
     private function saveRecord(int $areaId, int $id, array $input, array $fields, array $overwrite, array $removeFiles, int $userId, array $p, int $masterId = 0, int $ownerId = 0): int
     {
@@ -1440,8 +1438,8 @@ class RecordUser {
         $allowed = array_map(fn($f) => $this->_name((string)$f), $this->_list($fields));
         $allowed = array_values(array_filter($allowed));
 
-        // Uploads: Record::save() liest $_FILES['data'] - ein anderer Array-Name
-        // wird dorthin gespiegelt
+        // uploads: Record::save() reads $_FILES['data'] - another array name
+        // is mirrored there
         $dataName = $this->dataName($p);
         if ($dataName !== 'data' && isset($_FILES[$dataName]) && !isset($_FILES['data'])) {
             $_FILES['data'] = $_FILES[$dataName];
@@ -1465,7 +1463,7 @@ class RecordUser {
             $tmpId = (int)$data['record_id'];
         }
 
-        // Eingaben übernehmen: nur benutzerdefinierte Felder, die 'fields' erlaubt
+        // take over inputs: only user-defined fields that 'fields' allows
         // --------------------
         $written = [];
         foreach ($schemaVirtual as $name => $colDef) {
@@ -1473,11 +1471,11 @@ class RecordUser {
             if (!empty($allowed) && !in_array($name, $allowed, true)) continue;
             if (!empty($colDef['meta'])) continue;
             $type = (string)($colDef['type'] ?? 'text');
-            if ($type === 'file' || $type === 'fulltext') continue; // Dateien über $_FILES
+            if ($type === 'file' || $type === 'fulltext') continue; // files via $_FILES
             $data[$name] = $input[$name];
             $written[] = $name;
         }
-        // Upload-Felder: die Datei kommt aus $_FILES, das Feld gilt als übermittelt
+        // upload fields: the file comes from $_FILES, the field counts as transmitted
         foreach ($schemaVirtual as $name => $colDef) {
             if ((string)($colDef['type'] ?? '') !== 'file') continue;
             if ((string)($colDef['display_type'] ?? '') !== 'upload') continue;
@@ -1485,13 +1483,13 @@ class RecordUser {
             if (isset($_FILES['data']['name'][$name]) || in_array($name, $removeFiles, true)) $written[] = $name;
         }
 
-        // Dateien entfernen
+        // remove files
         foreach ($removeFiles as $name) {
             $fieldId = (int)($schemaVirtual[$name]['field_id'] ?? 0);
             if ($fieldId > 0) $this->record->markFileDeleted($tmpId, $fieldId);
         }
 
-        // Überschreibungen (Metafelder erlaubt), Besitzer, Baum
+        // overwrites (meta fields allowed), owner, tree
         // --------------------
         foreach ($overwrite as $name => $value) {
             $name = $this->_name((string)$name);
@@ -1502,8 +1500,8 @@ class RecordUser {
         if ($id < 1) {
             $data['user_id'] = $userId;
             $written[] = 'user_id';
-            // Owner im Backend: owner_id und created_by - ohne Backend-Session nimmt
-            // Dataset::save() den mitgegebenen Wert (siehe ownerId())
+            // owner in the backend: owner_id and created_by - without a backend session
+            // Dataset::save() takes the passed value (see ownerId())
             if ($ownerId > 0) {
                 $data['owner_id'] = $ownerId;
                 $data['created_by'] = $ownerId;
@@ -1517,9 +1515,9 @@ class RecordUser {
         $data['record_id'] = $tmpId;
         $written = array_values(array_unique($written));
 
-        // Wird ein Passwort gesetzt? (leer = bisheriges behalten, siehe
-        // VirtualFieldsTrait::saveVirtualFields()) - cmsInput() beendet danach die
-        // übrigen Sessions des Profils
+        // is a password being set? (empty = keep the previous one, see
+        // VirtualFieldsTrait::saveVirtualFields()) - cmsInput() then ends the
+        // other sessions of the profile
         $this->passwordChanged = false;
         foreach ($written as $name) {
             $colDef = $schemaVirtual[$name] ?? [];
@@ -1530,8 +1528,8 @@ class RecordUser {
             }
         }
 
-        // Speichern - alle Prüfungen des Bereichs; Uploads aus dem Frontend ohne
-        // aktiven Inhalt (VirtualFieldsTrait::setUntrustedUploads())
+        // save - all checks of the area; uploads from the frontend without
+        // active content (VirtualFieldsTrait::setUntrustedUploads())
         // --------------------
         $this->record->setUntrustedUploads(true);
         try {
@@ -1541,8 +1539,8 @@ class RecordUser {
             $this->record->setUntrustedUploads(false);
         }
         if (!$recordId) {
-            // Arbeitskopie samt hochgeladener Dateien verwerfen: das Frontend kann
-            // sie anders als die Backend-Maske nicht erneut anzeigen
+            // discard the working copy together with the uploaded files: unlike the backend
+            // mask, the frontend cannot display them again
             $this->record->cancel($tmpId);
             if (!$this->cms->hasErrors) $this->fail($p, 'save', 'user.error_save_failed');
             return 0;
@@ -1551,13 +1549,13 @@ class RecordUser {
     }
 
     /**
-     * Owner (Backend-Admin) für die Datensätze, die ein User anlegt: Parameter
-     * 'owner' (admin_id), sonst die Konfiguration user.default_owner_id. Der Admin
-     * muss existieren - sonst Meldung 'owner' (user.error_owner) und 0.
+     * Owner (backend admin) for the records that a user creates: parameter
+     * 'owner' (admin_id), otherwise the configuration user.default_owner_id. The admin
+     * must exist - otherwise message 'owner' (user.error_owner) and 0.
      *
-     * Jeder Datensatz gehört im Backend einem Admin (record.owner_id, dazu
-     * created_by); seine Gruppe entscheidet, welche anderen Admins ihn bearbeiten
-     * dürfen (docs/developers/12-group-rights.md).
+     * In the backend every record belongs to an admin (record.owner_id, plus
+     * created_by); their group decides which other admins may edit it
+     * (developer docs, chapter 11 (Permissions)).
      */
     private function ownerId(array $p): int
     {
@@ -1575,17 +1573,17 @@ class RecordUser {
     }
 
     // ====================
-    // Profile und Datensätze lesen
+    // Read profiles and records
     // ====================
 
     /**
-     * Profil-Datensatz laden - über Cms::select(), damit Instanz-Zugriff und
-     * optionale Filterkriterien (USER_AUTH / USER_PROTECT) gelten.
+     * Load a profile record - via Cms::select(), so that instance access and
+     * optional filter criteria (USER_AUTH / USER_PROTECT) apply.
      *
      * @param int   $recordId
-     * @param array $filter  zusätzliche Kriterien (Syntax wie CMS:SELECT 'filter')
-     * @param array $mode    filtermode je Feld
-     * @return array|null    Datensatz oder null (unbekannt, kein Zugriff, Filter trifft nicht)
+     * @param array $filter  additional criteria (syntax as CMS:SELECT 'filter')
+     * @param array $mode    filtermode per field
+     * @return array|null    record or null (unknown, no access, filter does not match)
      */
     private function loadProfile(int $recordId, array $filter = [], array $mode = []): ?array
     {
@@ -1601,24 +1599,24 @@ class RecordUser {
             $this->db->popResult();
         }
         if ($data === null) return null;
-        // Nur Datensätze aus Profil-Bereichen
+        // only records from profile areas
         $area = $this->areaById((int)$data['area_id']);
         if ($area === null || (string)$area['type'] !== 'profile') return null;
         return $data;
     }
 
     /**
-     * Profil zu einem Feldwert (Anmeldename, E-Mail) - genau ein Treffer.
+     * Profile for a field value (sign-in name, e-mail) - exactly one hit.
      *
-     * Direkt auf der data_*-Tabelle statt über Cms::select(): dessen Filter-Syntax
-     * deutet Operatoren, Platzhalter und " OR " in der Eingabe - ein Anmeldename
-     * muss aber wörtlich verglichen werden. Bei 'chars' vergleicht die Datenbank
-     * ohne Groß-/Kleinschreibung (Kollation), bei 'encrypted' über den Hash der
-     * wie beim Speichern normalisierten Eingabe (Cms::encryptedHash()). Gefunden
-     * wird nur, was der Request sehen darf (Cms::$sqlAccess).
+     * Directly on the data_* table instead of via Cms::select(): its filter syntax
+     * interprets operators, wildcards and " OR " in the input - but a sign-in name
+     * must be compared literally. For 'chars' the database compares
+     * without regard to upper/lower case (collation), for 'encrypted' via the hash of the
+     * input normalized as on saving (Cms::encryptedHash()). Only what the request
+     * may see is found (Cms::$sqlAccess).
      *
-     * @param bool $any  true: irgendein Treffer genügt (Dublettenprüfung), auch
-     *                   mehrere; false: genau einer, sonst null
+     * @param bool $any  true: any hit suffices (duplicate check), even
+     *                   several; false: exactly one, otherwise null
      */
     private function findProfile(int $areaId, string $field, string $value, bool $any = false): ?array
     {
@@ -1633,8 +1631,8 @@ class RecordUser {
             $needle = $value;
         }
         elseif ($type === 'encrypted') {
-            // Eingabe normalisiert hashen wie beim Speichern (Cms::encryptedHash():
-            // klein, ohne Leerraum und Satzzeichen) - "Anna@…" findet "anna@…"
+            // hash the input normalized as on saving (Cms::encryptedHash():
+            // lowercase, without whitespace and punctuation) - "Anna@…" finds "anna@…"
             $needle = $this->cms->encryptedHash($value);
             if ($needle === '') return null;
             $table = 'data_enc';
@@ -1666,12 +1664,12 @@ class RecordUser {
     }
 
     /**
-     * Passwort eines Profils mit der Eingabe vergleichen (`data_pwd`, Hash mit
-     * eingebettetem Salt - Crypt::passwordVerify()).
+     * Compare the password of a profile with the input (`data_pwd`, hash with
+     * embedded salt - Crypt::passwordVerify()).
      *
      * @param int    $recordId
-     * @param string $pwField   Name des Passwort-Feldes
-     * @param string $password  Eingabe (Klartext)
+     * @param string $pwField   name of the password field
+     * @param string $password  input (plain text)
      */
     private function passwordOk(int $recordId, string $pwField, string $password): bool
     {
@@ -1687,8 +1685,8 @@ class RecordUser {
         $this->db->popResult();
         if (!$this->crypt->passwordVerify($password, $stored)) return false;
 
-        // Früheres Format oder alte Parameter: jetzt, wo das Passwort bekannt ist,
-        // neu hashen (Crypt::passwordNeedsRehash()) - alle Sprachzeilen des Feldes
+        // older format or old parameters: now that the password is known, rehash
+        // (Crypt::passwordNeedsRehash()) - all language rows of the field
         if ($this->crypt->passwordNeedsRehash($stored)) {
             $this->db->pushResult();
             $this->db->query(
@@ -1702,8 +1700,8 @@ class RecordUser {
     }
 
     /**
-     * Setzt die Eingabe ein Passwort-Feld des Bereichs auf einen nicht leeren Wert?
-     * (leer = bisheriges behalten; nur Felder, die 'fields' zulässt)
+     * Does the input set a password field of the area to a non-empty value?
+     * (empty = keep the previous one; only fields that 'fields' allows)
      */
     private function passwordInput(int $areaId, array $input, array $fields): bool
     {
@@ -1720,18 +1718,18 @@ class RecordUser {
     }
 
     /**
-     * Darf die laufende Session das Passwort ihres Profils ändern?
+     * May the running session change the password of its profile?
      *
-     * Ja, wenn
-     *   - sie über den Reset-Link angemeldet wurde und die Freigabe noch gilt
-     *     (details.password_reset_until, siehe loginProfile()), oder
-     *   - das bisherige Passwort (Anmelde-Passwortfeld des Bereichs) im Request steht:
-     *     data[{currentfield}], Vorgabe data[current_password].
-     * Ein Profil ohne gespeichertes Passwort braucht keins. Fehlversuche zählen im
-     * Brute-Force-Schutz wie eine falsche Anmeldung (gleicher Name) - sonst ließe
-     * sich das Passwort über dieses Formular durchprobieren.
+     * Yes, if
+     *   - it was signed in via the reset link and the release still applies
+     *     (details.password_reset_until, see loginProfile()), or
+     *   - the previous password (sign-in password field of the area) is in the request:
+     *     data[{currentfield}], default data[current_password].
+     * A profile without a stored password needs none. Failed attempts count in the
+     * brute-force protection like a wrong sign-in (same name) - otherwise the
+     * password could be tried out via this form.
      *
-     * Meldungen: 'current' (user.error_password_current), 'blocked'.
+     * Messages: 'current' (user.error_password_current), 'blocked'.
      */
     private function currentPasswordOk(array $area, int $userId, array $input, array $p, bool $allowReset = true): bool
     {
@@ -1740,7 +1738,7 @@ class RecordUser {
 
         $areaId = (int)$area['area_id'];
         $pwField = $this->fieldName((int)($area['login_password_field_id'] ?? 0), $areaId);
-        if ($pwField === '') return true; // kein Anmeldefeld - nichts, woran zu prüfen wäre
+        if ($pwField === '') return true; // no sign-in field - nothing to check against
         $fn = $this->cms->resolveVirtualField($pwField);
         $this->db->pushResult();
         $this->db->query(
@@ -1770,7 +1768,7 @@ class RecordUser {
     }
 
     /**
-     * Produktiven Datensatz laden, den dieser Request sehen darf (Instanz-Zugriff).
+     * Load a productive record that this request may see (instance access).
      */
     private function loadRecord(int $recordId): ?array
     {
@@ -1793,10 +1791,10 @@ class RecordUser {
     }
 
     /**
-     * Datensatz laden, der dem User gehört (record.user_id) - oder sein eigenes
-     * Profil. Mit $ignoreUser genügt, dass es ihn gibt.
+     * Load a record that belongs to the user (record.user_id) - or their own
+     * profile. With $ignoreUser it suffices that it exists.
      *
-     * @param int  $areaId  Bereich, in dem er liegen muss (0 = beliebig)
+     * @param int  $areaId  area in which it must lie (0 = any)
      */
     private function loadOwned(int $recordId, int $areaId, int $userId, bool $ignoreUser): ?array
     {
@@ -1805,18 +1803,18 @@ class RecordUser {
         if ($areaId > 0 && (int)$data['area_id'] !== $areaId) return null;
         if ($ignoreUser) return $data;
         if ($userId < 1) return null;
-        if ($recordId === $userId) return $data;                    // eigenes Profil
-        if ((int)($data['user_id'] ?? 0) === $userId) return $data; // eigener Beitrag
+        if ($recordId === $userId) return $data;                    // own profile
+        if ((int)($data['user_id'] ?? 0) === $userId) return $data; // own contribution
         return null;
     }
 
     // ====================
-    // Bereiche und Felder
+    // Areas and fields
     // ====================
 
     /**
-     * Bereich zu Id oder Name ('container'), auf erlaubte Typen und den
-     * Instanz-Zugriff des Requests geprüft. `details` ist dekodiert.
+     * Area by id or name ('container'), checked for allowed types and the
+     * instance access of the request. `details` is decoded.
      */
     private function loadArea(mixed $container, array $types): ?array
     {
@@ -1826,8 +1824,8 @@ class RecordUser {
             $area = $this->areaById((int)$container);
         }
         else {
-            // Name -> Id aus dem Instanz-Dateicache (nur Bereiche der Instanzen des
-            // Requests, Cms::areaMap()); der erste Treffer in Zugriffsreihenfolge
+            // name -> id from the instance file cache (only areas of the instances of the
+            // request, Cms::areaMap()); the first hit in access order
             $area = null;
             foreach ($this->cms->areaIds($container) as $areaId) {
                 $area = $this->areaById((int)$areaId);
@@ -1855,7 +1853,7 @@ class RecordUser {
     }
 
     /**
-     * Name eines Feldes des Bereichs, '' wenn es das Feld dort nicht gibt.
+     * Name of a field of the area, '' if the field does not exist there.
      */
     private function fieldName(int $fieldId, int $areaId): string
     {
@@ -1867,20 +1865,20 @@ class RecordUser {
     }
 
     // ====================
-    // Aufräumen (Cron)
+    // Cleanup (cron)
     // ====================
 
     /**
-     * Unbestätigte Profile (status_id 2 nach USER_REGISTER), die älter als
-     * user.unconfirmed_days sind, endgültig löschen. Wer eine fremde Adresse
-     * registriert und den Link nie klickt, blockiert sie so nur für diese Frist -
-     * danach kann sich der Inhaber selbst registrieren. Aufruf aus der Zeitplaner-
-     * Aufgabe "Aufbewahrungsfristen anwenden" (Typ retention), höchstens
-     * PURGE_UNCONFIRMED_LIMIT je Aufruf - der Runner wiederholt, solange es volle Runden sind.
+     * Permanently delete unconfirmed profiles (status_id 2 after USER_REGISTER) that are older than
+     * user.unconfirmed_days. Anyone who registers a foreign address and never clicks
+     * the link blocks it only for this period -
+     * afterwards the owner can register themselves. Called by the scheduler
+     * task "Apply retention periods" (type retention), at most
+     * PURGE_UNCONFIRMED_LIMIT per call - the runner repeats as long as there are full rounds.
      *
-     * @return int  Anzahl gelöschter Profile
+     * @return int  number of deleted profiles
      */
-    /** Unbestätigte Profile je Aufruf von purgeUnconfirmed() */
+    /** Unconfirmed profiles per call of purgeUnconfirmed() */
     public const PURGE_UNCONFIRMED_LIMIT = 200;
 
     public function purgeUnconfirmed(): int
@@ -1920,8 +1918,8 @@ class RecordUser {
     // ====================
 
     /**
-     * formguard=true (bzw. =N Sekunden Mindestzeit): stammt das Formular von einem
-     * Menschen? (FormGuard)
+     * formguard=true (or =N seconds minimum time): does the form come from a
+     * human? (FormGuard)
      */
     private function humanOk(array $p): bool
     {
@@ -1931,10 +1929,10 @@ class RecordUser {
     }
 
     /**
-     * Alle Buckets erlauben die Anfrage? Dann zählen (RateLimiter). Eine
-     * abgewiesene Anfrage zählt in keinem.
+     * Do all buckets allow the request? Then count it (RateLimiter). A
+     * rejected request counts in none.
      *
-     * @param array $buckets  Liste [bucket, schlüssel]
+     * @param array $buckets  list of [bucket, key]
      */
     private function throttleHit(array $buckets): bool
     {
@@ -1966,8 +1964,8 @@ class RecordUser {
     // ====================
 
     /**
-     * Einmal-Token anlegen (Freischaltung, Passwort-Reset). Ältere Tokens desselben
-     * Zwecks für das Profil verfallen.
+     * Create a one-time token (activation, password reset). Older tokens of the same
+     * purpose for the profile expire.
      */
     private function createToken(int $recordId, string $purpose): string
     {
@@ -1988,8 +1986,8 @@ class RecordUser {
     }
 
     /**
-     * Token einlösen: gültig -> record_id, das Token wird gelöscht; sonst 0.
-     * Abgelaufene Tokens (user.token_expiration) werden dabei mit entfernt.
+     * Redeem a token: valid -> record_id, the token is deleted; otherwise 0.
+     * Expired tokens (user.token_expiration) are removed in the process.
      */
     private function consumeToken(string $token, string $purpose): int
     {
@@ -2022,7 +2020,7 @@ class RecordUser {
     }
 
     /**
-     * Gültigkeit des Reset-Tokens und der Freigabe danach (user.password_token_expiration).
+     * Validity of the reset token and of the release afterwards (user.password_token_expiration).
      */
     private function passwordTokenExpiration(): int
     {
@@ -2035,21 +2033,21 @@ class RecordUser {
     // ====================
 
     /**
-     * $set['user_id'], $set['user'], $set['user_session_id'] setzen.
+     * Set $set['user_id'], $set['user'], $set['user_session_id'].
      */
     private function setUserVars(int $userId, array $profile, string $sessionId = ''): void
     {
         $GLOBALS['set']['user_id'] = $userId;
         $GLOBALS['set']['user'] = $profile;
         $GLOBALS['set']['user_session_id'] = $sessionId !== '' ? $sessionId : ($userId > 0 ? $this->userSession->id() : '');
-        // Darf diese Session ein neues Passwort ohne das alte setzen? (Reset-Link,
-        // loginProfile()) - das Formular lässt dann das Feld "bisheriges Passwort" weg
+        // may this session set a new password without the old one? (reset link,
+        // loginProfile()) - the form then leaves out the field "previous password"
         $until = $userId > 0 ? (string)($this->userSession->get('password_reset_until') ?? '') : '';
         $GLOBALS['set']['password_reset'] = ($until !== '' && $until >= gmdate('Y-m-d H:i:s')) ? 1 : 0;
     }
 
     /**
-     * 'submit': der Befehl läuft nur, wenn der Wert nicht leer ist.
+     * 'submit': the command only runs if the value is not empty.
      */
     private function submitted(array $p): bool
     {
@@ -2058,9 +2056,9 @@ class RecordUser {
     }
 
     /**
-     * CSRF-Prüfung eines schreibenden Befehls (17-csrf.md §2.5): gültiges Token aus
-     * CMS:USER_TOKEN im Request, sonst Meldung 'token' und false. Abschaltbar je
-     * Befehl mit csrf=false oder global mit user.csrf = false.
+     * CSRF check of a writing command (developer docs, chapter 14 (Security: web)): valid token from
+     * CMS:USER_TOKEN in the request, otherwise message 'token' and false. Can be switched off per
+     * command with csrf=false or globally with user.csrf = false.
      */
     private function csrfOk(array $p): bool
     {
@@ -2071,7 +2069,7 @@ class RecordUser {
     }
 
     /**
-     * Name des Request-Arrays mit den Eingaben ('data', Standard "data").
+     * Name of the request array with the inputs ('data', default "data").
      */
     private function dataName(array $p): string
     {
@@ -2080,7 +2078,7 @@ class RecordUser {
     }
 
     /**
-     * Eingaben aus dem Request ($_POST hat Vorrang vor $_REQUEST).
+     * Inputs from the request ($_POST takes precedence over $_REQUEST).
      */
     private function requestData(array $p): array
     {
@@ -2090,8 +2088,8 @@ class RecordUser {
     }
 
     /**
-     * Fehlermeldung ablegen: Text aus 'message[index]' des Befehls, sonst das
-     * Snippet.
+     * Store an error message: text from 'message[index]' of the command, otherwise the
+     * snippet.
      */
     private function fail(array $p, string $index, string $snippet, array $params = []): void
     {
@@ -2106,7 +2104,7 @@ class RecordUser {
     }
 
     /**
-     * Kommaliste oder Array -> bereinigte Liste.
+     * Comma list or array -> cleaned list.
      */
     private function _list(mixed $value): array
     {
@@ -2117,7 +2115,7 @@ class RecordUser {
     }
 
     /**
-     * Template-Parameter als Wahrheitswert lesen ("true"/"false" aus dem Template).
+     * Read a template parameter as a truth value ("true"/"false" from the template).
      */
     private function _bool(mixed $value): bool
     {
@@ -2126,7 +2124,7 @@ class RecordUser {
     }
 
     /**
-     * Feldnamen auf [a-z0-9_-] beschränken (wie Cms::_name()).
+     * Restrict field names to [a-z0-9_-] (as Cms::_name()).
      */
     private function _name(string $s): string
     {
@@ -2134,8 +2132,8 @@ class RecordUser {
     }
 
     /**
-     * successtemplate / errortemplate: Referenz "[bereich.]name" zur kompilierten
-     * Datei auflösen (Cms::templateFile()); '' bleibt '' (kein Template).
+     * successtemplate / errortemplate: resolve the reference "[area.]name" to the compiled
+     * file (Cms::templateFile()); '' stays '' (no template).
      */
     private function _template(string $s): string
     {

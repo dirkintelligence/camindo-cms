@@ -1,55 +1,55 @@
 <?php
 /**
- * Medien-Import: aus jeder Datei einer Zip-Datei wird ein neuer Datensatz - die Datei
- * im gewählten Upload-Feld, auf Wunsch ihr Name als Text in einem zweiten Feld.
+ * Media import: from each file of a zip file a new record is created - the file
+ * in the chosen upload field, on request its name as text in a second field.
  *
- * Unabhängig von RecordImport (XML/CSV/DOCX): keine Modi (immer INSERT), keine
- * Spaltenzuordnung, kein Hintergrundprozess. Die Maske ist
- * RecordBackendMediaImport (record_media_import.php), erreichbar im Menü rechts der
- * Datensatzliste eines Bereichs, unter "Import".
+ * Independent of RecordImport (XML/CSV/DOCX): no modes (always INSERT), no
+ * column mapping, no background process. The mask is
+ * RecordBackendMediaImport (record_media_import.php), reachable in the menu on the right of the
+ * record list of an area, under "Import".
  *
- * ABLAUF
+ * PROCESS
  * --------------------
- *     prepare()  Zip-Datei (Upload oder aus var/upload) nach
- *                var/tmp/mediaimport-{token}/ entpacken - jede Datei unter einem
- *                erzeugten Namen (files/{n}.{ext}), ihr Pfad in der Zip-Datei (nach
- *                UTF-8 umgewandelt, siehe DATEINAMEN) steht im Verzeichnis
- *                manifest.json. Ignoriert werden Einträge, die mit einem Punkt
- *                beginnen (auch in Verzeichnisnamen: .git/…, __MACOSX/…) und typische
- *                Metadateien (Thumbs.db, desktop.ini, …); jede Datei bekommt ihren
- *                Mime-Typ (finfo, aus dem Inhalt) und ggf. den Grund, aus dem sie
- *                nicht importierbar ist (GEFÄHRLICHE DATEIEN)
- *     analyze()  die Dateien des Verzeichnisses nach Mime-Typ gruppiert
- *     run()      je Datei der gewählten Typen: tmpInit() -> importSave() mit der
- *                Datei als 'importfile' (wie der CSV-Import) - Eingabeprüfung,
- *                Thumbnails, Check-in wie in der Eingabemaske
+ *     prepare()  unpack the zip file (upload or from var/upload) into
+ *                var/tmp/mediaimport-{token}/ - each file under a
+ *                generated name (files/{n}.{ext}); its path in the zip file (converted
+ *                to UTF-8, see FILE NAMES) is stored in the directory
+ *                manifest.json. Entries starting with a dot are ignored
+ *                (also in directory names: .git/…, __MACOSX/…), as are typical
+ *                metadata files (Thumbs.db, desktop.ini, …); each file gets its
+ *                MIME type (finfo, from the content) and, if applicable, the reason why it is
+ *                not importable (DANGEROUS FILES)
+ *     analyze()  the files of the directory grouped by MIME type
+ *     run()      for each file of the chosen types: tmpInit() -> importSave() with the
+ *                file as 'importfile' (as with the CSV import) - input check,
+ *                thumbnails, check-in as in the input mask
  *
- * Das Verzeichnis hält nie Dateien unter ihrem Originalnamen: Pfadsprünge
- * (Zip-Slip), Namen in fremder Kodierung und Endungen wie .php spielen damit auf
- * dem Server keine Rolle. Die Endung der erzeugten Namen ist die (gesäuberte) des
- * Originals - die Eingabeprüfung des Upload-Feldes sieht dieselbe Endung wie bei
- * einem Upload.
+ * The directory never holds files under their original name: path jumps
+ * (zip slip), names in foreign encodings and extensions such as .php play no role
+ * on the server this way. The extension of the generated names is the (cleaned) one
+ * of the original - the input check of the upload field sees the same extension as
+ * with an upload.
  *
- * GEFÄHRLICHE DATEIEN
+ * DANGEROUS FILES
  * --------------------
- * Nicht importierbar (ausgegraut) sind: ausführbarer Code (Record::forbiddenExtensions()
- * und ausführbare Programme/Skripte, EXECUTABLE_EXTENSIONS), aktiver Inhalt, den ein
- * Browser als Dokument bzw. Skript ausführt (MediaAccess::isActiveContent(): HTML,
- * SVG, XML, JavaScript - Endung ODER erkannter Mime-Typ), leere Dateien und Dateien,
- * deren Inhalt nicht zur Endung passt (Record::mimeExtensionMismatch(), z. B. ein
- * JPEG mit Endung .png).
+ * Not importable (grayed out) are: executable code (Record::forbiddenExtensions()
+ * and executable programs/scripts, EXECUTABLE_EXTENSIONS), active content that a
+ * browser runs as a document or script (MediaAccess::isActiveContent(): HTML,
+ * SVG, XML, JavaScript - extension OR recognized MIME type), empty files and files
+ * whose content does not match the extension (Record::mimeExtensionMismatch(), e.g. a
+ * JPEG with the extension .png).
  *
- * DATEINAMEN
+ * FILE NAMES
  * --------------------
- * Zip-Dateien kennen keine verbindliche Kodierung der Namen: UTF-8 (Kennzeichen im
- * Eintrag, macOS, 7-Zip) oder die OEM-Codepage des Systems (Windows-Explorer: CP437
- * bzw. CP850), manche Werkzeuge schreiben Windows-1252. filenameUtf8() prüft die
- * rohen Bytes: gültiges UTF-8 bleibt (in NFC - macOS zerlegt Umlaute), sonst gewinnt
- * die Umwandlung aus CP850 oder Windows-1252, die mehr Buchstaben ergibt.
- * filenameText() macht daraus den Text des Namensfeldes: ohne Verzeichnis und Endung,
- * Minus und Unterstrich als Leerzeichen.
+ * Zip files have no binding encoding for names: UTF-8 (flag in the
+ * entry, macOS, 7-Zip) or the OEM code page of the system (Windows Explorer: CP437
+ * or CP850); some tools write Windows-1252. filenameUtf8() checks the
+ * raw bytes: valid UTF-8 remains (in NFC - macOS decomposes umlauts), otherwise the
+ * conversion from CP850 or Windows-1252 wins, which yields more letters.
+ * filenameText() turns this into the text of the name field: without directory and extension,
+ * minus and underscore as spaces.
  *
- * @see Camindo\Core\Modules\Record\RecordBackendMediaImport  die Maske
+ * @see Camindo\Core\Modules\Record\RecordBackendMediaImport  the mask
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -64,19 +64,19 @@ use Camindo\Core\System;
 
 class RecordMediaImport {
 
-    /** Präfix der Importverzeichnisse in var/tmp */
+    /** Prefix of the import directories in var/tmp */
     public const DIR_PREFIX = 'mediaimport-';
 
     /** Verzeichnisliste im Importverzeichnis */
     private const MANIFEST = 'manifest.json';
 
-    /** Typische Metadateien (Windows, macOS), kleingeschrieben - werden ignoriert */
+    /** Typical metadata files (Windows, macOS), lowercase - are ignored */
     public const META_FILES = ['thumbs.db', 'ehthumbs.db', 'ehthumbs_vista.db', 'desktop.ini', 'icon' . "\r", 'folder.jpg', 'albumartsmall.jpg'];
 
-    /** Verzeichnisse mit Metadaten, kleingeschrieben - ihr Inhalt wird ignoriert */
+    /** Directories with metadata, lowercase - their contents are ignored */
     public const META_DIRS = ['__macosx', '$recycle.bin', 'system volume information'];
 
-    /** Ausführbare Programme und Skripte - nicht importierbar */
+    /** Executable programs and scripts - not importable */
     public const EXECUTABLE_EXTENSIONS = [
         'exe', 'com', 'bat', 'cmd', 'msi', 'msp', 'scr', 'pif', 'cpl', 'dll', 'sys',
         'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'ps1', 'psm1', 'hta', 'lnk', 'reg',
@@ -98,14 +98,14 @@ class RecordMediaImport {
     }
 
     // ====================
-    // Schritt 1: bereitstellen
+    // Step 1: provide
 
     /**
-     * Zip-Datei in ein neues Importverzeichnis entpacken (siehe Klassenkommentar).
+     * Unpack the zip file into a new import directory (see class comment).
      *
-     * @param string $source        Pfad der Zip-Datei (Upload-Tmpfile oder Datei in var/upload)
-     * @param string $originalName  ursprünglicher Dateiname (Endung!)
-     * @return array  ['dir' => 'mediaimport-…'] oder ['error' => …]
+     * @param string $source        path of the zip file (upload tmpfile or file in var/upload)
+     * @param string $originalName  original file name (extension!)
+     * @return array  ['dir' => 'mediaimport-…'] or ['error' => …]
      */
     public function prepare(string $source, string $originalName): array
     {
@@ -123,7 +123,7 @@ class RecordMediaImport {
             $this->removeDir($dirName);
             return ['error' => $this->cms->snippet('record.error_import_zip')];
         }
-        // Platz für den entpackten Inhalt? (Angaben der Zip-Datei)
+        // space for the unpacked contents? (figures from the zip file)
         $total = 0;
         for ($i = 0; $i < $zip->numFiles; $i++) $total += (int)(($zip->statIndex($i) ?: [])['size'] ?? 0);
         $free = @disk_free_space($dir);
@@ -138,8 +138,8 @@ class RecordMediaImport {
             $stat = $zip->statIndex($i, \ZipArchive::FL_ENC_RAW);
             if ($stat === false) continue;
             $path = $this->filenameUtf8((string)$stat['name']);
-            // Pfadteile '.' und '..' fallen weg (abgelegt wird ohnehin unter
-            // erzeugtem Namen - es geht nur um die Anzeige)
+            // path parts '.' and '..' are dropped (stored under a generated
+            // name anyway - it is only about the display)
             $path = implode('/', array_filter(explode('/', str_replace('\\', '/', $path)), fn($part) => $part !== '' && $part !== '.' && $part !== '..'));
             if ($path === '' || str_ends_with((string)$stat['name'], '/')) continue; // Verzeichnis
             $entry = [
@@ -156,7 +156,7 @@ class RecordMediaImport {
                 $files[] = $entry;
                 continue;
             }
-            // unter erzeugtem Namen ablegen, Endung des Originals (gesäubert)
+            // store under a generated name, extension of the original (cleaned)
             $extension = (string)preg_replace('/[^a-z0-9]/', '', strtolower((string)pathinfo($path, PATHINFO_EXTENSION)));
             $stored = 'files/' . (++$number) . ($extension !== '' ? '.' . $extension : '');
             $in = $zip->getStreamIndex($i);
@@ -187,10 +187,10 @@ class RecordMediaImport {
     }
 
     /**
-     * Wird der Eintrag ignoriert? Punkt am Anfang eines Pfadteils, Metadateien und
-     * -verzeichnisse (META_FILES, META_DIRS), Office-Sperrdateien (~$…).
+     * Is the entry ignored? Dot at the start of a path part, metadata files and
+     * directories (META_FILES, META_DIRS), Office lock files (~$…).
      *
-     * @return string  '' oder Grund ('hidden' | 'meta')
+     * @return string  '' or reason ('hidden' | 'meta')
      */
     private function _ignoredReason(string $path): string
     {
@@ -214,9 +214,9 @@ class RecordMediaImport {
     }
 
     /**
-     * Grund, aus dem eine Datei nicht importierbar ist (siehe GEFÄHRLICHE DATEIEN).
+     * Reason why a file cannot be imported (see DANGEROUS FILES).
      *
-     * @return string  '' (importierbar) | 'forbidden' | 'active' | 'mismatch' | 'empty'
+     * @return string  '' (importable) | 'forbidden' | 'active' | 'mismatch' | 'empty'
      */
     public function dangerReason(string $mime, string $extension, int $size): string
     {
@@ -234,10 +234,10 @@ class RecordMediaImport {
     }
 
     // ====================
-    // Dateinamen
+    // File names
 
     /**
-     * Rohe Bytes eines Namens aus der Zip-Datei als UTF-8 (siehe DATEINAMEN).
+     * Raw bytes of a name from the zip file as UTF-8 (see FILE NAMES).
      */
     public function filenameUtf8(string $raw): string
     {
@@ -250,12 +250,12 @@ class RecordMediaImport {
             $bestScore = PHP_INT_MIN;
             foreach (['CP850', 'Windows-1252'] as $encoding) {
                 $candidate = (string)@mb_convert_encoding($raw, 'UTF-8', $encoding);
-                // Buchstaben, Ziffern und übliche Zeichen zählen, Symbole (Rahmen,
-                // Steuerzeichen, Währungen) abziehen
+                // count letters, digits and usual characters, deduct symbols (box drawing,
+                // control characters, currency signs)
                 $good = (int)preg_match_all('/[\p{L}\p{N} ._\-()\/]/u', $candidate);
                 $bad = mb_strlen($candidate) - $good;
-                // Großbuchstabe mitten im Wort ("CafÚ" statt "Café") spricht gegen
-                // die Kodierung
+                // an uppercase letter in the middle of a word ("CafÚ" instead of "Café") speaks
+                // against the encoding
                 $bad += (int)preg_match_all('/\p{Ll}\p{Lu}/u', $candidate);
                 $score = $good - 2 * $bad;
                 if ($score > $bestScore) {
@@ -268,13 +268,13 @@ class RecordMediaImport {
         if (class_exists(\Normalizer::class)) {
             $utf8 = (string)(\Normalizer::normalize($utf8, \Normalizer::FORM_C) ?: $utf8);
         }
-        // Steuerzeichen entfernen
+        // remove control characters
         return (string)preg_replace('/[\x00-\x1F\x7F]/u', '', $utf8);
     }
 
     /**
-     * Text für das Namensfeld: Dateiname ohne Verzeichnis und Endung, Minus und
-     * Unterstrich als Leerzeichen, Leerraum zusammengefasst.
+     * Text for the name field: file name without directory and extension, minus and
+     * underscore as spaces, whitespace collapsed.
      */
     public function filenameText(string $path): string
     {
@@ -286,11 +286,11 @@ class RecordMediaImport {
     }
 
     // ====================
-    // Importverzeichnis
+    // Import directory
 
     /**
-     * Absoluter Pfad eines Importverzeichnisses, null bei ungültigem Namen oder
-     * fehlendem Verzeichnis.
+     * Absolute path of an import directory, null for an invalid name or a
+     * missing directory.
      */
     public function importDir(string $dirName): ?string
     {
@@ -300,7 +300,7 @@ class RecordMediaImport {
     }
 
     /**
-     * Importverzeichnis samt Inhalt entfernen.
+     * Remove the import directory including its contents.
      */
     public function removeDir(string $dirName): void
     {
@@ -317,7 +317,7 @@ class RecordMediaImport {
     }
 
     /**
-     * Die Dateiliste des Importverzeichnisses (prepare()), null ohne Verzeichnis.
+     * The file list of the import directory (prepare()), null without directory.
      *
      * @return array|null  [['path', 'size', 'mime', 'stored', 'reason', 'ignored'?], …]
      */
@@ -330,15 +330,15 @@ class RecordMediaImport {
     }
 
     // ====================
-    // Schritt 2: analysieren
+    // Step 2: analyze
 
     /**
-     * Dateien nach Mime-Typ gruppiert.
+     * Files grouped by MIME type.
      *
      * @return array [
-     *     'groups'  => [mime => ['count' => n, 'size' => Bytes, 'files' => [Pfad, …]]]  importierbar
-     *     'blocked' => [['path', 'mime', 'reason'], …]   nicht importierbar (ausgegraut)
-     *     'ignored' => [['path', 'reason'], …]           Punkt-Dateien, Metadateien
+     *     'groups'  => [mime => ['count' => n, 'size' => Bytes, 'files' => [path, …]]]  importable
+     *     'blocked' => [['path', 'mime', 'reason'], …]   not importable (grayed out)
+     *     'ignored' => [['path', 'reason'], …]           dot files, metadata files
      * ]
      */
     public function analyze(array $files): array
@@ -364,7 +364,7 @@ class RecordMediaImport {
     }
 
     /**
-     * Upload-Felder eines Bereichs (ohne Thumbnails): Name => Feld.
+     * Upload fields of an area (without thumbnails): name => field.
      */
     public function fileFields(int $areaId): array
     {
@@ -378,7 +378,7 @@ class RecordMediaImport {
     }
 
     /**
-     * Textfelder eines Bereichs (chars, text) für den Dateinamen: Name => Feld.
+     * Text fields of an area (chars, text) for the file name: name => field.
      */
     public function textFields(int $areaId): array
     {
@@ -392,20 +392,20 @@ class RecordMediaImport {
     }
 
     // ====================
-    // Schritt 3: importieren
+    // Step 3: import
 
     /**
-     * Import ausführen: je Datei der gewählten Typen ein neuer Datensatz.
+     * Run the import: one new record per file of the chosen types.
      *
      * @param array $job [
-     *     'area_id'    => Zielbereich,
-     *     'dir'        => Importverzeichnis (mediaimport-…),
-     *     'types'      => [Mime-Typ, …],
-     *     'file_field' => Name des Upload-Feldes,
-     *     'name_field' => Name des Textfeldes für den Dateinamen ('' = keins) ]
-     * @return array  wie RecordImport::run(): 'total', 'done', 'failed', 'skipped',
+     *     'area_id'    => target area,
+     *     'dir'        => import directory (mediaimport-…),
+     *     'types'      => [MIME type, …],
+     *     'file_field' => name of the upload field,
+     *     'name_field' => name of the text field for the file name ('' = none) ]
+     * @return array  as RecordImport::run(): 'total', 'done', 'failed', 'skipped',
      *                'inserted', 'items' => [['kind', 'id', 'label', 'status', 'messages'], …],
-     *                'error' (nur wenn gar nichts lief)
+     *                'error' (only if nothing ran at all)
      */
     public function run(array $job): array
     {
@@ -443,7 +443,7 @@ class RecordMediaImport {
             $path = (string)$file['path'];
             $text = $this->filenameText($path);
             $item = ['kind' => 'record', 'id' => 0, 'label' => $path, 'status' => 'failed', 'messages' => []];
-            // vom Upload-Feld nicht angenommen (Medien-Typen des Feldes): übergehen
+            // not accepted by the upload field (media types of the field): skip
             $extension = strtolower((string)pathinfo($path, PATHINFO_EXTENSION));
             if (!$this->record->fileTypeAllowed($fileFields[$fileField], (string)$file['mime'], $extension)) {
                 $item['status'] = 'skipped';
@@ -467,8 +467,8 @@ class RecordMediaImport {
                     $saveData[$nameField] = $this->cms->isMultilingualField($textFields[$nameField]) ? [$primaryId => $text] : $text;
                     $fields[] = $nameField;
                 }
-                // Einfügeposition: Baum bzw. Handsortierung - hinter dem letzten
-                // Datensatz der obersten Ebene, in der Reihenfolge der Zip-Datei
+                // insertion position: tree or manual sorting - after the last
+                // record of the top level, in the order of the zip file
                 if ($previousId !== null) {
                     $saveData['previous_id'] = $previousId;
                     if (isset($schema['parent_id'])) {
@@ -503,8 +503,8 @@ class RecordMediaImport {
     }
 
     /**
-     * Letzter Datensatz der obersten Ebene - null, wenn der Bereich weder Baum noch
-     * Handsortierung führt (dann ist die Position egal).
+     * Last record of the top level - null if the area has neither a tree nor
+     * manual sorting (then the position does not matter).
      */
     private function _lastRootRecord(int $areaId, array $schema): ?int
     {
@@ -534,7 +534,7 @@ class RecordMediaImport {
     }
 
     /**
-     * Die Meldungen aus Cms::errors als Klartext-Zeilen ("Label: Text").
+     * The messages from Cms::errors as plain text lines ("Label: text").
      * @return string[]
      */
     private function _errorTexts(): array
@@ -552,7 +552,7 @@ class RecordMediaImport {
     }
 
     /**
-     * "n hinzugefügt, n fehlgeschlagen, n übergangen"
+     * "n added, n failed, n skipped"
      */
     public function summaryText(array $result): string
     {

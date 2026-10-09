@@ -1,42 +1,42 @@
 <?php
 /**
- * Werkzeugkasten des Backends - die Seiten unter dem Menüpunkt "Tools".
+ * Tools panel of the backend - the pages under the menu item "Tools".
  *
- * Diese Klasse ist nur das Gerüst: Kopf mit Reitern, Fuß und je Reiter eine Methode,
- * die den eigentlichen Inhalt an eine der Tool-Klassen abgibt. Vier Reiter, vier
- * Einstiegsscripte in backend/:
+ * This class is only the framework: header with tabs, footer and for each tab one method
+ * that hands the actual content over to one of the tool classes. Four tabs, four
+ * entry scripts in backend/:
  *
- *     index.php           -> serverTools()    Serverumgebung, Versionen, phpinfo
- *     index_database.php  -> databaseTools()  Papierkorb leeren, Arbeitskopien verwerfen
- *     tool_delete.php     -> trashPurge()     dito, Papierkorb ausführen
- *     tool_tmp_delete.php -> tmpPurge()       dito, Arbeitskopien ausführen
- *     index_data.php      -> dataTools()      Inhaltswerkzeuge: Thumbnails neu erzeugen
- *     tool_thumbnails.php -> thumbnails()     dito, ausführen / im Hintergrund starten
- *     index_developer.php -> developerTools() Caches neu bauen, Debug
+ *     index.php           -> serverTools()    server environment, versions, phpinfo
+ *     index_database.php  -> databaseTools()  empty trash, discard working copies
+ *     tool_delete.php     -> trashPurge()     same, run emptying the trash
+ *     tool_tmp_delete.php -> tmpPurge()       same, run discarding working copies
+ *     index_data.php      -> dataTools()      content tools: regenerate thumbnails
+ *     tool_thumbnails.php -> thumbnails()     same, run / start in the background
+ *     index_developer.php -> developerTools() rebuild caches, debug
  *
- * $tabs hält Name und Ziel jedes Reiters an einer Stelle - _printHeader() baut die
- * Leiste daraus und markiert den übergebenen als aktiv.
+ * $tabs holds name and target of each tab in one place - _printHeader() builds the
+ * bar from it and marks the passed one as active.
  *
- * REITER DATENBANK
+ * DATABASE TAB
  * --------------------
- * Zwei Sofort-Werkzeuge mit Frist "älter als": Papierkorb leeren (Tage, Vorgabe
- * admin.trash_retention_days) und Arbeitskopien verwerfen (Stunden, Vorgabe 24).
- * 0 heißt: alles. Beide laufen im Request (ToolDatabase); der Normalfall für den
- * Papierkorb bleibt die Zeitplaner-Aufgabe "Papierkorb leeren" (Typ trash).
+ * Two immediate tools with a period "older than": empty trash (days, default
+ * admin.trash_retention_days) and discard working copies (hours, default 24).
+ * 0 means: everything. Both run in the request (ToolDatabase); the normal case for the
+ * trash remains the scheduler task "Empty trash" (type trash).
  *
- * CACHES OHNE BACKEND
+ * CACHES WITHOUT BACKEND
  * --------------------
- * Ist das Backend wegen eines fehlenden Snippets oder einer fehlenden Vorlage nicht
- * benutzbar, baut `php Core/cron/camindo.php cache all` beide Caches von der
- * Kommandozeile - tool_snippets.php und tool_html.php verlangen wie alle anderen
- * Scripte eine Anmeldung.
+ * If the backend is unusable due to a missing snippet or a missing template,
+ * `php Core/cron/camindo.php cache all` builds both caches from the
+ * command line - tool_snippets.php and tool_html.php, like all other
+ * scripts, require a login.
  *
- * @see Camindo\Core\Modules\Tools\ToolServer         Inhalt des Server-Reiters
- * @see Camindo\Core\Modules\Tools\ToolDeveloper      Inhalt des Entwickler-Reiters
- * @see Camindo\Core\Modules\Tools\ToolSnippets       Sprach-Cache
- * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  HTML-Vorlagen-Cache
- * @see Camindo\Core\Modules\Tools\ToolDatabase       Papierkorb leeren, Arbeitskopien verwerfen
- * @see Camindo\Core\Modules\Tools\ToolThumbnails     Thumbnails neu erzeugen
+ * @see Camindo\Core\Modules\Tools\ToolServer         content of the Server tab
+ * @see Camindo\Core\Modules\Tools\ToolDeveloper      content of the Developer tab
+ * @see Camindo\Core\Modules\Tools\ToolSnippets       language cache
+ * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  HTML template cache
+ * @see Camindo\Core\Modules\Tools\ToolDatabase       empty trash, discard working copies
+ * @see Camindo\Core\Modules\Tools\ToolThumbnails     regenerate thumbnails
  */
 namespace Camindo\Core\Modules\Tools;
 
@@ -58,8 +58,8 @@ class ToolsBackend {
     protected ?array $data = [];
     protected string $function = '';
 
-    // Reiter der Werkzeugseite: Name => Einstiegsscript. Der Name dient zugleich als
-    // Snippet-Schlüssel (#tools.tab_label_{name}).
+    // Tabs of the tools page: name => entry script. The name also serves as
+    // snippet key (#tools.tab_label_{name}).
     protected $tabs = [
         'server' => 'Tools/index.php',
         'database' => 'Tools/index_database.php',
@@ -83,17 +83,17 @@ class ToolsBackend {
     )
     {}
 
-    /** Vorgabe "älter als" für das Verwerfen von Arbeitskopien (Stunden) */
+    /** Default "older than" for discarding working copies (hours) */
     private const TMP_DEFAULT_HOURS = 24;
 
     /**
-     * Gemeinsamer Seitenkopf mit der Reiterleiste.
+     * Common page header with the tab bar.
      *
-     * @param string $activeTab  Schlüssel aus $tabs; dieser Reiter wird als aktiv
-     *                           markiert und bekommt keinen Link
+     * @param string $activeTab  key from $tabs; this tab is marked as active
+     *                           and gets no link
      */
     private function _printHeader(string $activeTab):void {
-        // Zusatzrecht des Reiters (zweite Sicherung neben Access::script())
+        // Additional right of the tab (second safeguard next to Access::script())
         $access = $this->backend->access();
         if (!$access->moduleRight('Tools', $activeTab)) $access->denied();
 
@@ -106,7 +106,7 @@ class ToolsBackend {
         // H1
         echo $this->backend->headline('#tools.headline_tools_list');
 
-        // Tabs - nur die mit Zusatzrecht (settings.php 'access', ein Recht je Reiter)
+        // Tabs - only those with the additional right (settings.php 'access', one right per tab)
         $this->backend->tabBarReset();
         foreach ($this->tabs as $tabName => $tabLink) {
             if (!$access->moduleRight('Tools', $tabName)) continue;
@@ -122,15 +122,15 @@ class ToolsBackend {
     }
 
     /**
-     * Gemeinsamer Seitenfuß.
+     * Common page footer.
      */
     private function _printFooter():void {
         echo $this->backend->template('container_footer');
     }
 
     /**
-     * Reiter "Datenbank" (backend/index_database.php): "Papierkorb leeren" und
-     * "Arbeitskopien verwerfen", je mit Frist "älter als".
+     * Tab "Database" (backend/index_database.php): "Empty trash" and
+     * "Discard working copies", each with a period "older than".
      */
     public function databaseTools(): void
     {
@@ -143,12 +143,12 @@ class ToolsBackend {
     }
 
     /**
-     * "Papierkorb leeren" ausführen (backend/tool_delete.php, POST aus dem Formular
-     * des Datenbank-Reiters: days, function=run).
+     * Run "Empty trash" (backend/tool_delete.php, POST from the form
+     * of the Database tab: days, function=run).
      *
-     * Löscht endgültig, was seit mindestens `days` Tagen als gelöscht markiert ist
-     * (ToolDatabase::purgeTrash(); 0 = alles). Das Ergebnis steht über dem Formular,
-     * das die eingegebene Frist behält. Administratoren im Papierkorb bleiben immer.
+     * Permanently deletes what has been marked as deleted for at least `days` days
+     * (ToolDatabase::purgeTrash(); 0 = everything). The result stands above the form,
+     * which keeps the entered period. Administrators in the trash always remain.
      */
     public function trashPurge(): void
     {
@@ -171,8 +171,8 @@ class ToolsBackend {
     }
 
     /**
-     * Reiter "Papierkorb eines Users" (backend/index_trash_user.php, Zusatzrecht
-     * trash_user): Profil-Id eingeben, sein Papierkorb wird sofort geleert.
+     * Tab "Trash of a user" (backend/index_trash_user.php, additional right
+     * trash_user): enter profile ID, its trash is emptied immediately.
      */
     public function trashUserTools(): void
     {
@@ -182,13 +182,13 @@ class ToolsBackend {
     }
 
     /**
-     * "Papierkorb eines Users leeren" ausführen (backend/tool_trash_user.php, POST:
-     * data[profile_id] bzw. trashed_profile_id, function=run) - ToolDatabase::purgeUserTrash().
+     * Run "Empty the trash of a website user" (backend/tool_trash_user.php, POST:
+     * data[profile_id] resp. trashed_profile_id, function=run) - ToolDatabase::purgeUserTrash().
      */
     public function trashUserPurge(): void
     {
         $this->_printHeader('trash_user');
-        // Profil aus dem Lookup bzw. der Auswahl der Profile im Papierkorb
+        // Profile from the lookup resp. the choice of profiles in the trash
         $profileId = $this->_privacyBackend()->pickedProfileId('profile_id');
         $report = '';
         if ((string)($_REQUEST['function'] ?? '') === 'run' && $this->backend->requirePost()) {
@@ -201,7 +201,7 @@ class ToolsBackend {
         $this->_printFooter();
     }
 
-    /** Das Formular "Papierkorb eines Users leeren" */
+    /** The form "Empty the trash of a website user" */
     private function _trashUserForm(?int $profileId = null, string $report = ''): void
     {
         echo $this->backend->template('tools.trash_user_form', [
@@ -210,20 +210,20 @@ class ToolsBackend {
         ]);
     }
 
-    /** Auswahl eines Profils (Lookup + Papierkorb) kommt aus dem Modul Privacy */
+    /** Choice of a profile (lookup + trash) comes from the module Privacy */
     private function _privacyBackend(): \Camindo\Core\Modules\Privacy\PrivacyBackend
     {
         return $GLOBALS['app']->get(\Camindo\Core\Modules\Privacy\PrivacyBackend::class);
     }
 
     /**
-     * "Arbeitskopien verwerfen" ausführen (backend/tool_tmp_delete.php, POST aus dem
-     * Formular des Datenbank-Reiters: hours, function=run).
+     * Run "Discard working copies" (backend/tool_tmp_delete.php, POST from the
+     * form of the Database tab: hours, function=run).
      *
-     * Entfernt Arbeitskopien (record.tmp = 1), die seit mindestens `hours` Stunden
-     * nicht mehr angefasst wurden (ToolDatabase::purgeTmp(); 0 = alle) - samt ihrer
-     * hochgeladenen Dateien. Ein Admin, der gerade noch bearbeitet, verliert damit
-     * seinen Zwischenstand; deshalb die Rückfrage im Formular.
+     * Removes working copies (record.tmp = 1) that have not been touched for at least
+     * `hours` hours (ToolDatabase::purgeTmp(); 0 = all), including their uploaded files.
+     * An admin who is still editing loses the interim state with it;
+     * hence the confirmation in the form.
      */
     public function tmpPurge(): void
     {
@@ -246,10 +246,10 @@ class ToolsBackend {
     }
 
     /**
-     * Das Formular "Papierkorb leeren": Frist in Tagen, Knopf mit Rückfrage.
+     * The form "Empty trash": period in days, button with confirmation.
      *
-     * @param int|null $days    Frist; null: admin.trash_retention_days
-     * @param string   $report  Ergebnis des letzten Laufs (HTML) über dem Formular
+     * @param int|null $days    period; null: admin.trash_retention_days
+     * @param string   $report  result of the last run (HTML) above the form
      */
     private function _trashForm(?int $days = null, string $report = ''): void
     {
@@ -260,10 +260,10 @@ class ToolsBackend {
     }
 
     /**
-     * Das Formular "Arbeitskopien verwerfen": Frist in Stunden, Knopf mit Rückfrage.
+     * The form "Discard working copies": period in hours, button with confirmation.
      *
-     * @param int|null $hours   Frist; null: TMP_DEFAULT_HOURS
-     * @param string   $report  Ergebnis des letzten Laufs (HTML) über dem Formular
+     * @param int|null $hours   period; null: TMP_DEFAULT_HOURS
+     * @param string   $report  result of the last run (HTML) above the form
      */
     private function _tmpForm(?int $hours = null, string $report = ''): void
     {
@@ -274,12 +274,12 @@ class ToolsBackend {
     }
 
     /**
-     * Meldung über einem Aufräum-Formular: Zusammenfassung, bei gescheiterten
-     * Datensätzen als Warnung mit deren Liste (die Details stehen zudem in
+     * Message above a cleanup form: summary, with a warning for failed records
+     * and their list (the details are also in
      * var/log/{Y-m-d}_trash.log).
      *
-     * @param string   $summary  Zusammenfassung des Laufs
-     * @param string[] $errors   Meldungen je gescheitertem Datensatz
+     * @param string   $summary  summary of the run
+     * @param string[] $errors   messages per failed record
      */
     private function _purgeAlert(string $summary, array $errors): string
     {
@@ -293,10 +293,10 @@ class ToolsBackend {
     }
 
     /**
-     * Reiter "Entwickler" (backend/index_developer.php).
+     * Tab "Developer" (backend/index_developer.php).
      *
-     * Enthält die Knöpfe zum Neubau der beiden Caches und die Session-Anzeige;
-     * zusammengestellt wird die Leiste in ToolDeveloper::list().
+     * Contains the buttons for rebuilding both caches and the session display;
+     * the bar is assembled in ToolDeveloper::list().
      */
     public function developerTools():void {
 
@@ -310,14 +310,14 @@ class ToolsBackend {
     }
 
     /**
-     * Reiter "Server" (backend/index.php) - der Standardreiter.
+     * Tab "Server" (backend/index.php) - the default tab.
      *
-     * Zeigt die Serverumgebung; zusammengestellt wird sie in ToolServer::list().
+     * Shows the server environment; it is assembled in ToolServer::list().
      */
     public function serverTools():void {
 
-        // (Ohne das Recht "Server" lässt Access::script() index.php nicht durch; die
-        //  Modulkachel der Startseite zeigt dann auf den ersten erlaubten Reiter -
+        // (Without the right "Server", Access::script() does not let index.php through; the
+        //  module tile on the start page then points to the first permitted tab -
         //  settings.php 'entries', StartBackend::_moduleButtons().)
         $this->_printHeader('server');
 
@@ -327,8 +327,8 @@ class ToolsBackend {
     }
 
     /**
-     * Reiter "Daten" (backend/index_data.php): "Thumbnails neu erzeugen" und
-     * "Baum normalisieren".
+     * Tab "Data" (backend/index_data.php): "Regenerate thumbnails" and
+     * "Normalize tree".
      */
     public function dataTools():void {
 
@@ -341,13 +341,13 @@ class ToolsBackend {
     }
 
     /**
-     * "Thumbnails neu erzeugen" ausführen (backend/tool_thumbnails.php, POST aus
-     * dem Formular des Daten-Reiters: area_id, background, function=run).
+     * Run "Regenerate thumbnails" (backend/tool_thumbnails.php, POST from
+     * the form of the Data tab: area_id, background, function=run).
      *
-     * Mit Schalter "Hintergrundprozess" (Vorgabe) startet ToolThumbnails::start()
-     * den Lauf in Core/cron/thumbnails.php und die Seite meldet nur den Start; das
-     * Ergebnis kommt als interne Nachricht. Sonst läuft ToolThumbnails::run() im
-     * Request und das Ergebnis steht über dem Formular.
+     * With the switch "Background process" (default) ToolThumbnails::start()
+     * starts the run in Core/cron/thumbnails.php and the page only reports the start; the
+     * result comes as an internal message. Otherwise ToolThumbnails::run() runs in the
+     * request and the result stands above the form.
      */
     public function thumbnails(): void
     {
@@ -387,8 +387,8 @@ class ToolsBackend {
     }
 
     /**
-     * Das Formular: Bereich (nur solche mit Thumbnail-Feldern), Schalter
-     * "Hintergrundprozess" (Vorgabe: an), Knopf "Generieren".
+     * The form: area (only those with thumbnail fields), switch
+     * "Background process" (default: on), button "Generate".
      */
     private function _thumbnailsForm(int $areaId = 0, bool $background = true): void
     {
@@ -409,14 +409,14 @@ class ToolsBackend {
     }
 
     /**
-     * "Baum normalisieren" prüfen / ausführen (backend/tool_tree_normalize.php,
-     * POST aus dem Formular des Daten-Reiters: area_id, function=check|run).
+     * "Normalize tree": check / run (backend/tool_tree_normalize.php,
+     * POST from the form of the Data tab: area_id, function=check|run).
      *
-     * 'check' ruft nur ToolTree::diagnose() (rein lesend) und zeigt den Befund.
-     * 'run' repariert den Baum (ToolTree::normalize()) und zeigt, was behoben wurde.
+     * 'check' only calls ToolTree::diagnose() (read-only) and shows the finding.
+     * 'run' repairs the tree (ToolTree::normalize()) and shows what was fixed.
      *
-     * Beide Wege melden IMMER ein Ergebnis - ein Knopfdruck ohne sichtbare Antwort
-     * wäre für den Anwender nicht von einem Fehlschlag zu unterscheiden.
+     * Both paths ALWAYS report a result - a button press without a visible answer
+     * would not be distinguishable from a failure for the user.
      */
     public function treeNormalize(): void
     {
@@ -438,7 +438,7 @@ class ToolsBackend {
             );
         }
         elseif ($areaId > 0) {
-            // 'check' und jeder andere Aufruf mit Bereich: nur prüfen
+            // 'check' and every other call with area: only check
             $report = $this->toolTree->diagnose($areaId);
         }
 
@@ -448,15 +448,15 @@ class ToolsBackend {
     }
 
     /**
-     * Das Formular: Bereich (nur solche mit Baum, ToolTree::areaOptions()), Knöpfe
-     * "Prüfen" / "Normalisieren"; bei vorliegendem Befund (ToolTree::diagnose())
-     * dessen Anzeige darüber.
+     * The form: area (only those with a tree, ToolTree::areaOptions()), buttons
+     * "Check" / "Normalize"; when a finding is present (ToolTree::diagnose()),
+     * its display above it.
      *
-     * @param int        $areaId  gewählter Bereich (0: keiner)
-     * @param array|null $report  aktueller diagnose()-Befund, null ohne Lauf
-     * @param array|null $before  Befund VOR einer Reparatur; null nach reiner Prüfung.
-     *                            Er liefert die Liste dessen, was behoben wurde -
-     *                            $report ist danach ja unauffällig.
+     * @param int        $areaId  selected area (0: none)
+     * @param array|null $report  current diagnose() finding, null without a run
+     * @param array|null $before  finding BEFORE a repair; null after a pure check.
+     *                            It supplies the list of what was fixed -
+     *                            $report is inconspicuous afterwards.
      */
     private function _treeForm(int $areaId = 0, ?array $report = null, ?array $before = null): void
     {
@@ -473,20 +473,20 @@ class ToolsBackend {
         $reportHtml = '';
         if ($report !== null) {
             if ($before === null) {
-                // Reine Prüfung
+                // Pure check
                 $reportHtml = $report['clean']
                     ? $this->_treeAlert('alert_success', 'tools.tree_report_clean', [], (int)$report['total'])
                     : $this->_treeAlert('alert_warning', 'tools.tree_report_issues_intro', $report);
             }
             elseif (!$report['clean']) {
-                // Nach dem Lauf immer noch auffällig
+                // Still conspicuous after the run
                 $reportHtml = $this->_treeAlert('alert_warning', 'tools.tree_report_still_issues_intro', $report);
             }
             elseif ($before['clean']) {
                 $reportHtml = $this->_treeAlert('alert_success', 'tools.tree_note_already_clean');
             }
             else {
-                // Behoben wurde das, was VOR dem Lauf auffiel
+                // Fixed is what was conspicuous BEFORE the run
                 $reportHtml = $this->_treeAlert('alert_success', 'tools.tree_report_repaired_intro', $before);
             }
         }
@@ -499,16 +499,16 @@ class ToolsBackend {
     }
 
     /**
-     * Meldung über dem Formular "Baum normalisieren".
+     * Message above the form "Normalize tree".
      *
-     * Mit $report wird an den Einleitungssatz die Aufzählung der auffälligen Punkte
-     * angehängt ("… 2 doppelt vergebene Positionen; 1 doppelt vergebener lft-Wert.");
-     * je nach Aufrufer sind das die gefundenen oder die behobenen.
+     * With $report, the list of the conspicuous points is appended to the introductory sentence
+     * ("… 2 duplicate positions; 1 duplicate lft value.");
+     * depending on the caller, these are the found or the fixed ones.
      *
      * @param string     $template  alert_success | alert_warning
-     * @param string     $snippet   Einleitungssatz
-     * @param array      $report    diagnose()-Befund, dessen Punkte aufgezählt werden
-     * @param int|null   $count     Zähler für ein Plural-Snippet ohne Aufzählung
+     * @param string     $snippet   introductory sentence
+     * @param array      $report    diagnose() finding whose points are enumerated
+     * @param int|null   $count     counter for a plural snippet without enumeration
      */
     private function _treeAlert(string $template, string $snippet, array $report = [], ?int $count = null): string
     {

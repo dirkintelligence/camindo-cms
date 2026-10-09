@@ -1,3 +1,3 @@
 <?php
-// Auslieferung geschützter Mediendateien (MediaDelivery) - Stub, der Code liegt im Core
+// Delivery of protected media files (MediaDelivery) - stub, the code is in the core
 require dirname(__DIR__) . '/Core/public_master/file.php';

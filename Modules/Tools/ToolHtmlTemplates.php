@@ -1,11 +1,11 @@
 <?php
 /**
- * HTML-Vorlagen-Cache neu bauen - die Backend-Oberfläche zu HtmlCache
- * (backend/tool_html.php, Reiter Developer im Modul Tools).
+ * Rebuild the HTML template cache - the backend UI for HtmlCache
+ * (backend/tool_html.php, Developer tab in the module Tools).
  *
- * Das Gegenstück zu ToolSnippets: der Builder ist HtmlCache (Core/src), damit
- * `camindo.php cache html`, `upgrade` und der ComponentManager ihn ohne Backend
- * rufen können. Hier nur der Aufruf und die Ausgabe in den Aside-Bereich.
+ * The counterpart to ToolSnippets: the builder is HtmlCache (Core/src), so that
+ * `camindo.php cache html`, `upgrade` and the ComponentManager can call it without a backend.
+ * Here only the call and the output into the aside area.
  *
  * @see Camindo\Core\HtmlCache
  * @see Camindo\Core\Backend::template()
@@ -27,12 +27,12 @@ class ToolHtmlTemplates {
     }
 
     /**
-     * Cache-Files neu aufbauen; Fortschritt als HTML in den Aside-Bereich.
+     * Rebuild cache files; progress as HTML in the aside area.
      *
-     * @param ?string $prefix  nur diese Komponente (siehe HtmlCache::build())
+     * @param ?string $prefix  only this component (see HtmlCache::build())
      */
     public function buildTemplateCache(?string $prefix = null): void {
-        // Zusatzrecht "developer" (Backend-Benutzergruppen)
+        // Additional right "developer" (backend user groups)
         $this->accessGuard('developer');
 
         $result = $this->htmlCache->build($prefix);
@@ -53,8 +53,8 @@ class ToolHtmlTemplates {
     }
 
     /**
-     * Zusatzrecht des Moduls Tools prüfen - Meldung und Abbruch, wenn es fehlt.
-     * Ohne geladene Rechte (CLI) verweigert Access nichts.
+     * Check the additional right of the module Tools - message and abort if it is missing.
+     * Without loaded rights (CLI) Access denies nothing.
      */
     private function accessGuard(string $right): void
     {

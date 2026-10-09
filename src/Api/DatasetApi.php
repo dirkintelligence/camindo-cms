@@ -1,11 +1,11 @@
 <?php
 /**
- * Basis der API-Klassen für Konfigurations-Datasets (Sprache, Status, Instanz,
- * Konverter, Zeitplaner, Template …): Liste, Detail, Anlegen, Ändern - über
- * DatasetWriter, mit denselben Rechten wie die Scripte der Oberfläche.
+ * Base of the API classes for configuration datasets (language, status, instance,
+ * converter, scheduler, template …): list, detail, create, change - via
+ * DatasetWriter, with the same rights as the scripts of the interface.
  *
- * Eine Unterklasse legt das Dataset, die Scripte und die Felder fest und
- * deklariert die API-Methoden selbst (das Attribut #[ApiMethod] trägt den Namen):
+ * A subclass defines the dataset, the scripts and the fields and
+ * declares the API methods itself (the attribute #[ApiMethod] carries the name):
  *
  *     class StatusApi extends DatasetApi
  *     {
@@ -20,12 +20,12 @@
  *         …
  *     }
  *
- * Antworten: list -> items (id + Felder), schema; info -> id, values, schema;
- * create/update -> id, simulated, fields (geschriebene Felder), values (Stand danach).
+ * Responses: list -> items (id + fields), schema; info -> id, values, schema;
+ * create/update -> id, simulated, fields (fields written), values (state afterwards).
  *
- * Gezeigte, aber nicht schreibbare Felder stehen im Schema mit readonly (bzw.
- * create_only, wenn nur das Anlegen sie schreibt); HINTS erklärt in der
- * Fehlermeldung, woher ihr Wert kommt.
+ * Shown but not writable fields are in the schema with readonly (or
+ * create_only, if only creating writes them); HINTS explains in the
+ * error message where their value comes from.
  */
 namespace Camindo\Core\Api;
 
@@ -33,17 +33,17 @@ use Camindo\Core\Dataset;
 
 abstract class DatasetApi
 {
-    /** Modul (Rechte über seine Scripte) */
+    /** Module (rights via its scripts) */
     protected const MODULE = '';
-    /** Scripte der Oberfläche je Aufgabe: list, info, edit */
+    /** Scripts of the interface per task: list, info, edit */
     protected const SCRIPTS = [];
-    /** Felder, die gezeigt werden */
+    /** Fields that are shown */
     protected const FIELDS = [];
-    /** Felder, die geschrieben werden dürfen ([] = FIELDS) */
+    /** Fields that may be written ([] = FIELDS) */
     protected const WRITABLE = [];
-    /** Felder, die nur das Anlegen schreibt (zusätzlich zu WRITABLE) */
+    /** Fields that only creating writes (in addition to WRITABLE) */
     protected const CREATE_ONLY = [];
-    /** Feld => Hinweis für die Fehlermeldung, wenn es nicht geschrieben werden darf */
+    /** Field => note for the error message if it may not be written */
     protected const HINTS = [];
 
     public function __construct(
@@ -53,13 +53,13 @@ abstract class DatasetApi
     {
     }
 
-    /** Auswahlwerte, die erst zur Laufzeit feststehen (Feld => Liste) - für schema */
+    /** Choice values that are only fixed at runtime (field => list) - for schema */
     protected function options(): array
     {
         return [];
     }
 
-    /** Zusätzliche Angaben zu einem Datensatz (info), z. B. Verwendung */
+    /** Additional details about a record (info), e.g. usage */
     protected function extra(int $id, array $data): array
     {
         return [];
@@ -75,7 +75,7 @@ abstract class DatasetApi
         return array_values(array_unique(array_merge($this->writable(), static::CREATE_ONLY)));
     }
 
-    /** Optionen für DatasetWriter::write()/prepare() um die Hinweise ergänzt */
+    /** Options for DatasetWriter::write()/prepare() supplemented by the hints */
     protected function writeOptions(array $options = []): array
     {
         return static::HINTS ? $options + ['hints' => static::HINTS] : $options;
@@ -115,7 +115,7 @@ abstract class DatasetApi
         return $this->result($this->writer->write($this->dataset, $id, $data, $this->writable(), $simulate, $this->writeOptions($options)));
     }
 
-    /** Ergebnis von write() mit dem Stand danach */
+    /** Result of write() with the state afterwards */
     protected function result(array $written): array
     {
         $values = null;

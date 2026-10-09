@@ -1,155 +1,152 @@
 <?php
 /**
- * Eingabemaske für Datensätze (Erweiterung für RecordBackend).
+ * Input mask for records (extension for RecordBackend).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     record_edit.php           -> edit()           anlegen / kopieren / ändern / löschen
- *     ajax_cancel.php           -> cancel()         Bearbeitung abbrechen
- *     ajax_lookup_preview.php   -> lookupPreview()  Verknüpfungen bearbeiten
- *     ajax_embed.php            -> embedAction()    eingebettete Inhalte (Feldtyp 'link')
- *     record_previous.php       -> updatePreviousOptions()  Vorgängerliste neu laden
- *     ajax_parent_lookup.php    -> parentLookupPreview()    Vaterdatensatz wählen
+ *     record_edit.php           -> edit()           create / copy / change / delete
+ *     ajax_cancel.php           -> cancel()         cancel editing
+ *     ajax_lookup_preview.php   -> lookupPreview()  edit links
+ *     ajax_embed.php            -> embedAction()    embedded contents (field type 'link')
+ *     record_previous.php       -> updatePreviousOptions()  reload the predecessor list
+ *     ajax_parent_lookup.php    -> parentLookupPreview()    choose the parent record
  *
- * Die aufwendigste Maske im Backend, aus drei Gründen: die Felder stehen nicht fest,
- * es wird nie am Original gearbeitet, und Verknüpfungen und Dateien werden schon
- * WÄHREND der Bearbeitung geschrieben, nicht erst beim Speichern.
+ * The most elaborate mask in the backend, for three reasons: the fields are not fixed,
+ * work is never done on the original, and links and files are already written
+ * DURING editing, not only when saving.
  *
- * ES WIRD IMMER AN EINER ARBEITSKOPIE GEARBEITET
+ * WORK IS ALWAYS DONE ON A WORKING COPY
  * --------------------
- * Das ist der Schlüssel zum Verständnis dieser Klasse. Beim Öffnen der Maske legt
- * Record::checkOut() eine Kopie des Datensatzes mit tmp=1 und origin_id an; ab da
- * bezieht sich $this->id auf DIESE Kopie, nicht auf das Original. Erst das Speichern
- * (checkIn innerhalb von Record::save()) überträgt sie und räumt sie ab, "Abbrechen"
- * (cancel()) verwirft sie.
+ * This is the key to understanding this class. When the mask is opened, Record::checkOut()
+ * creates a copy of the record with tmp=1 and origin_id; from then on $this->id refers
+ * to THIS copy, not the original. Only saving (checkIn within Record::save()) transfers
+ * and removes it; "Cancel" (cancel()) discards it.
  *
- * Das löst mehrere Probleme auf einmal:
- *   - Eine Verknüpfung oder ein Upload braucht eine record_id, um gespeichert zu
- *     werden. Beim Anlegen eines neuen Datensatzes gibt es die noch nicht - deshalb
- *     entsteht die Arbeitskopie schon beim Öffnen des leeren Formulars
- *     (_editCreate() -> tmpInit()) und nicht erst beim Speichern.
- *   - Eine fehlgeschlagene Eingabeprüfung wirft nichts weg: Dateien und
- *     Verknüpfungen hängen bereits an der Arbeitskopie.
- *   - Das Frontend sieht nie einen halbfertigen Stand.
+ * This solves several problems at once:
+ *   - A link or an upload needs a record_id in order to be saved. When creating a new
+ *     record there is none yet - that is why the working copy already arises when the
+ *     empty form is opened (_editCreate() -> tmpInit()) and not only when saving.
+ *   - A failed input check throws nothing away: files and links are already
+ *     attached to the working copy.
+ *   - The frontend never sees a half-finished state.
  *
- * BEARBEITUNGSSPERRE
+ * EDIT LOCK
  * --------------------
- * Die Arbeitskopie ist zugleich die Sperre: findet _editLoad() eine, arbeitet gerade
- * jemand anders an dem Datensatz. Angezeigt wird dann ein Hinweis mit Name und
- * Zeitpunkt sowie einem Link, der die Sperre mit unlock=1 übergeht.
+ * The working copy is at the same time the lock: if _editLoad() finds one, someone
+ * else is working on the record at the moment. A note with name and time is then shown,
+ * along with a link that bypasses the lock with unlock=1.
  *
- * ANLEGEN IN ZWEI SCHRITTEN
+ * CREATING IN TWO STEPS
  * --------------------
- * Ohne Bereich zeigt function=create erst die Bereichsauswahl (_editCreateForm());
- * erst mit Bereich entsteht die Arbeitskopie und die eigentliche Maske. Der Bereich
- * bestimmt schließlich, welche Felder es überhaupt gibt.
+ * Without an area, function=create first shows the area selection (_editCreateForm());
+ * only with an area do the working copy and the actual mask arise. The area finally
+ * determines which fields exist at all.
  *
- * WERTE WERDEN FÜR DIE ANZEIGE UMGEFORMT
+ * VALUES ARE CONVERTED FOR DISPLAY
  * --------------------
- * _editFormatLoadedValues() wandelt Datenbank- in Eingabeformate: Datum und Uhrzeit
- * ins lokale Format, Fließkommazahlen mit lokalem Dezimaltrennzeichen, Beträge von
- * Cent in Euro. Verknüpfungen werden zu Id-Arrays, damit ein Mehrfach-Auswahlfeld
- * damit umgehen kann. Den Rückweg geht Dataset beim Speichern.
+ * _editFormatLoadedValues() converts database into input formats: date and time
+ * into the local format, floating-point numbers with the local decimal separator, amounts from
+ * cents into euros. Links are turned into id arrays so that a multi-select field
+ * can handle them. The way back is taken by Dataset when saving.
  *
- * DER VATERDATENSATZ UND DIE POSITION GEHÖREN ZUSAMMEN
+ * THE PARENT RECORD AND THE POSITION BELONG TOGETHER
  * --------------------
- * Wie im Modul Area (siehe AreaBackend) wird die `position` nicht als Zahl eingegeben,
- * sondern über den VORANGEHENDEN Datensatz. Das Feld heißt beim Einrichten trotzdem
- * `position` - für den Redakteur ist das schlüssig, ohne Vaterdatensatz ist die
- * Position schlicht die Sortierung -, im Formular steht aber `previous_id`
- * (_editPreviousParams()); die Zahl rechnet TreeManagerTrait beim Speichern daraus aus.
+ * As in the module Area (see AreaBackend), `position` is not entered as a number,
+ * but via the PRECEDING record. The field is still called `position` in the setup -
+ * for the editor this is logical, without a parent record the position is simply the sorting -,
+ * but the form contains `previous_id` (_editPreviousParams()); TreeManagerTrait
+ * calculates the number from it when saving.
  *
- * Beides hängt zusammen: gelistet werden immer nur die Geschwister unter dem aktuell
- * gewählten Vaterdatensatz. Wechselt der Redakteur ihn, ist die Liste hinfällig und
- * wird per Ajax neu geholt (updatePreviousOptions()) - egal ob der Vaterdatensatz über
- * ein Auswahlfeld oder über ein Lookup-Feld gewählt wird.
+ * Both are linked: only the siblings under the currently selected parent record are ever listed.
+ * If the editor changes it, the list is obsolete and is fetched anew via Ajax
+ * (updatePreviousOptions()) - regardless of whether the parent record is chosen via a
+ * selection field or via a lookup field.
  *
- * MEHRSPRACHIGE FELDER
+ * MULTILINGUAL FIELDS
  * --------------------
- * Führt die Instanz des Bereichs mehr als eine Sprache (InstanceCache), bekommt jedes
- * Feld mit `multilingual` = 1 je Sprache ein Eingabefeld: data[feld][{language_id}],
- * Beschriftung mit dem Sprachkürzel als Zusatz (Backend::formField(), langId).
- * Die Darstellung wählt der Bereich (area.details.tabs):
+ * If the instance of the area maintains more than one language (InstanceCache), each
+ * field with `multilingual` = 1 gets an input field per language: data[field][{language_id}],
+ * label with the language code as addition (Backend::formField(), langId).
+ * The area selects the display (area.details.tabs):
  *
- *     tabs = 0   alle Sprachen untereinander auf einer Seite
- *     tabs = 1   ein Reiter je Sprache plus "Alle". Auf einem Sprach-Reiter zeigt die
- *                Maske nur diese Sprache; einsprachige Felder stehen in jedem Reiter.
- *                Ein Reiterwechsel speichert die Maske zwischen (function=tab ->
- *                Record::save() mit stayTemporary, siehe _editTab()) und lädt sie mit
- *                dem neuen Reiter - die anderen Sprachen bleiben im Arbeitsstand der
- *                Arbeitskopie erhalten (Dataset::save() führt sie je Sprache zusammen).
+ *     tabs = 0   all languages one below the other on one page
+ *     tabs = 1   one tab per language plus "All". On a language tab the
+ *                mask shows only this language; single-language fields appear on every tab.
+ *                A tab switch saves the mask in between (function=tab ->
+ *                Record::save() with stayTemporary, see _editTab()) and reloads it with
+ *                the new tab - the other languages remain in the working state of the
+ *                working copy (Dataset::save() merges them per language).
  *
- * Die Werte der Sprachen kommen aus dem Arbeitsstand der Arbeitskopie (dort stehen die
- * rohen Eingaben aller Sprachen, leer = nicht übersetzt), nach einem Request aus
- * diesem (_editLanguageValues()).
+ * The values of the languages come from the working state of the working copy (there the
+ * raw inputs of all languages are stored, empty = not translated), after a request from
+ * this (_editLanguageValues()).
  *
- * ZWEI ARTEN, VERKNÜPFUNGEN ZU SETZEN
+ * TWO WAYS TO SET LINKS
  * --------------------
- *     display_type != 'lookup'   Auswahlliste mit allen Datensätzen der Zielbereiche
- *                                (_relatedDatasetOptions()) - nur bei überschaubaren
- *                                Mengen sinnvoll, deshalb auf
- *                                admin.list_max_datasets begrenzt
- *     display_type == 'lookup'   Suchfenster; die Verknüpfung wird SOFORT geschrieben
- *                                (lookupPreview() -> Record::createRelations()), nicht
- *                                erst beim Speichern des Formulars
+ *     display_type != 'lookup'   selection list with all records of the target areas
+ *                                (_relatedDatasetOptions()) - only sensible with manageable
+ *                                volumes, therefore limited to
+ *                                admin.list_max_datasets
+ *     display_type == 'lookup'   search window; the link is written IMMEDIATELY
+ *                                (lookupPreview() -> Record::createRelations()), not
+ *                                only when the form is saved
  *
- * FEST VERKNÜPFTE INHALTE (Feldtyp 'link', Camindo\Core\LinkTrait)
+ * FIRMLY LINKED CONTENTS (field type 'link', Camindo\Core\LinkTrait)
  * --------------------
- * Die Zieldatensätze gehören dem Datensatz. Als 'lookup' wie oben; als 'embed' stehen
- * ihre Eingabemasken in dieser Maske (_embedBlock(), backend-embedded.js,
- * ajax_embed.php -> embedAction()). Die Inhalte werden mit dem Datensatz ausgecheckt
- * (_editLoad() -> checkOutDependents()), zwischengespeichert (_embedSave()) und
- * eingecheckt (_editSave() -> checkInDependents()); Abbrechen verwirft sie mit
+ * The target records belong to the record. As 'lookup' as above; as 'embed' their
+ * input masks stand in this mask (_embedBlock(), backend-embedded.js,
+ * ajax_embed.php -> embedAction()). The contents are checked out together with the record
+ * (_editLoad() -> checkOutDependents()), cached (_embedSave()) and
+ * checked in (_editSave() -> checkInDependents()); cancelling discards them along
  * (Record::cancel()).
  *
  * @see Camindo\Core\TemporaryTrait                      checkOut / checkIn / cancel
- * @see Camindo\Core\Modules\Record\RecordBackend        gemeinsame Basis
- * @see Camindo\Core\Modules\Record\RecordBackendUpload  Dateien in dieser Maske
- * @see Camindo\Core\Modules\Record\RecordBackendInfo    die Detailansicht dazu
- * @see docs/developers/04-dataset-api.md
+ * @see Camindo\Core\Modules\Record\RecordBackend        shared base
+ * @see Camindo\Core\Modules\Record\RecordBackendUpload  files in this mask
+ * @see Camindo\Core\Modules\Record\RecordBackendInfo    the detail view for it
+ * @see developer docs, chapter 03 (Dataset API)
  */
 namespace Camindo\Core\Modules\Record;
 
 class RecordBackendEdit extends RecordBackend {
 
-    // Eingaben der eingebetteten Inhalte (Felder vom Typ 'link', display_type
-    // 'embed'): $_REQUEST['embed'][{record_id}][feld] - siehe _embedCell()
+    // inputs of the embedded contents (fields of type 'link', display_type
+    // 'embed'): $_REQUEST['embed'][{record_id}][field] - see _embedCell()
     protected array $embedData = [];
 
-    /** Meldung „von einem anderen Benutzer gesperrt" (_editLoad()) */
+    /** Message "locked by another user" (_editLoad()) */
     private string $lockAlert = '';
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/record_edit.php).
+     * Create / copy / change / delete (backend/record_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md) - mit zwei Besonderheiten:
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)) - with two special features:
      *
-     *  - 'create' hat zwei Ausprägungen: ohne Bereich die Bereichsauswahl, mit
-     *    Bereich das eigentliche Formular (siehe Klassenkommentar).
-     *  - Vor dem Formular-Zweig steht bei 'errors' zusätzlich
-     *    _editRestoreSecuredFiles(): bereits gesicherte Uploads müssen zurück in die
-     *    erneut angezeigte Maske, weil Datei-Felder nicht im POST stehen.
+     *  - 'create' has two forms: without an area the area selection, with
+     *    an area the actual form (see class comment).
+     *  - Before the form branch, for 'errors', _editRestoreSecuredFiles() also runs:
+     *    uploads that have already been secured must return to the mask that is
+     *    shown again, because file fields are not in the POST.
      *
-     * Die Feldliste für das Speichern kommt aus dem Schema des Bereichs - eine feste
-     * Liste wie in den anderen Modulen ginge hier nicht, die Felder sind ja
-     * benutzerdefiniert.
+     * The field list for saving comes from the schema of the area - a fixed
+     * list as in the other modules would not work here, the fields are user-defined.
      *
-     * CHECK-OUT NUR PER POST (17-csrf.md §2.8)
+     * CHECK-OUT ONLY VIA POST (developer docs, chapter 14 (Security: web))
      * --------------------
-     * 'edit', 'copy' und 'create' mit Bereich legen eine Arbeitskopie an und setzen die
-     * Bearbeitungssperre - ein Seiteneffekt. Per GET antwortet edit() deshalb nur mit
-     * einem Platzhalter (_editOpenStub()): wurde der Layer aus der Oberfläche heraus
-     * geöffnet (cApp.layers.add()/replace(), data-intent), holt das Javascript die
-     * Maske sofort per POST nach - mit CSRF-Token. Stammt der Layer aus dem Hash
-     * (Lesezeichen, F5, Zurück-Taste, ein Link von außen, Frontend-Editing), zeigt
-     * der Platzhalter einen Knopf "Bearbeiten": erst der Klick checkt aus.
+     * 'edit', 'copy' and 'create' with an area create a working copy and set the
+     * edit lock - a side effect. Via GET, edit() therefore only answers with
+     * a placeholder (_editOpenStub()): if the layer was opened from the interface
+     * (cApp.layers.add()/replace(), data-intent), the JavaScript fetches the mask
+     * immediately via POST - with CSRF token. If the layer comes from the hash
+     * (bookmark, F5, back button, a link from outside, frontend editing), the
+     * placeholder shows a "Edit" button: only the click checks out.
      */
     public function edit(): void
     {
         echo $this->backend->template('container_header');
 
-        // Seiten-Parameter
+        // page parameters
         $this->function = (string)($_REQUEST['function'] ?? '');
         if ($this->function == '') $this->function = 'edit';
         $this->data = (array)($_REQUEST['data'] ?? []);
@@ -162,7 +159,7 @@ class RecordBackendEdit extends RecordBackend {
         // Bread crum navi
         $this->backend->setNaviLabel('#button_' . $this->function);
 
-        // Check-out per GET: nur der Platzhalter (siehe oben)
+        // check-out via GET: only the placeholder (see above)
         $checksOut = in_array($this->function, ['edit', 'copy'], true)
             || ($this->function === 'create' && !empty($this->areaId));
         if ($checksOut && strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST' && PHP_SAPI !== 'cli') {
@@ -171,7 +168,7 @@ class RecordBackendEdit extends RecordBackend {
             return;
         }
 
-        // Load
+        // load
         if (in_array($this->function, ['edit', 'copy', 'delete'], true)) {
             $this->_editLoad();
         }
@@ -179,7 +176,7 @@ class RecordBackendEdit extends RecordBackend {
         // H1
         echo $this->headline();
 
-        // Von einem anderen Benutzer gesperrt (_editLoad())
+        // locked by another user (_editLoad())
         if ($this->function === 'locked') {
             echo $this->lockAlert;
         }
@@ -189,8 +186,8 @@ class RecordBackendEdit extends RecordBackend {
         }
 
         if (in_array($this->function, ['edit', 'copy'], true)) {
-            // Datumsfelder und Fließkommazahlen in lokales Format umwandeln
-            // Relations als Array zur Verfügung stellen, wenn Eingabefeld diesem Format entspricht
+            // convert date fields and floating-point numbers to the local format
+            // provide relations as an array if the input field matches this format
             $this->_editFormatLoadedValues($schemaVirtual);
         }
 
@@ -199,17 +196,17 @@ class RecordBackendEdit extends RecordBackend {
             $this->_editCreate();
         }
 
-        // Geleerte Felder im Request nachtragen (siehe _editNormalizeSubmitted())
+        // add cleared fields to the request (see _editNormalizeSubmitted())
         if (in_array($this->function, ['save', 'tab'], true)) {
             $this->_editNormalizeSubmitted($schemaVirtual);
         }
 
         if ($this->function === 'save') {
-            // Owner nur mit dem Zusatzrecht (Lookup-Feld der Maske, _editForm())
+            // owner only with the additional right (lookup field of the mask, _editForm())
             $this->_editSave($this->service->saveFields($this->areaId, $this->data));
         }
 
-        // Reiterwechsel (mehrsprachige Eingabe mit Reitern): zwischenspeichern
+        // tab switch (multilingual input with tabs): save in between
         if ($this->function === 'tab') {
             $this->_editTab($schemaVirtual);
         }
@@ -230,8 +227,8 @@ class RecordBackendEdit extends RecordBackend {
         }
         elseif (in_array($this->function, ['create', 'edit', 'copy', 'errors', 'tab'], true)) {
             if (in_array($this->function, ['errors', 'tab'], true)) {
-                // Von _secureUploads() bereits gesicherte Dateien in die erneut
-                // angezeigte Maske zurückspielen (Datei-Felder stehen nicht im POST)
+                // feed files already secured by _secureUploads() back into the mask
+                // that is shown again (file fields are not in the POST)
                 $this->_editRestoreSecuredFiles($schemaVirtual);
             }
 
@@ -249,50 +246,49 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Läuft über das Schema des Bereichs und rendert jedes Feld mit
-     * visibility_input = 1 (_editFormFields()). Was für ein Eingabefeld daraus wird,
-     * sagt die Felddefinition - Backend::formField() erledigt das.
+     * Runs over the schema of the area and renders each field with
+     * visibility_input = 1 (_editFormFields()). Which input field it becomes
+     * is stated by the field definition - Backend::formField() takes care of that.
      *
-     * Von Hand beschafft werden nur die Auswahlmöglichkeiten, die nicht in der
-     * Felddefinition stehen können:
+     * Only the choices that cannot be part of the field definition are obtained by hand:
      *
-     *     relation / pointer  Datensätze der Zielbereiche (_relatedDatasetOptions())
-     *     template_id         die im Bereich zugelassenen Templates
-     *     status_id           die Status
-     *     parent_id           die übrigen Datensätze des Bereichs
-     *     position            desgleichen, ggf. auf die Geschwister begrenzt
+     *     relation / pointer  records of the target areas (_relatedDatasetOptions())
+     *     template_id         the templates permitted in the area
+     *     status_id           the statuses
+     *     parent_id           the other records of the area
+     *     position            likewise, if applicable limited to the siblings
      *
-     * Zwei Feldarten brauchen danach noch Nacharbeit an der Vorlage:
+     * Two kinds of field then still need rework on the template:
      *
-     *     Lookup-Felder  bekommen die URLs für Suchen, Anlegen und Aktualisieren
-     *                    sowie den fertigen Vorschaublock der bestehenden
-     *                    Verknüpfungen
-     *     Datei-Felder   bekommen den Vorschau-Link. Der zeigt nicht ins
-     *                    Medienverzeichnis, sondern auf backend/file.php - nur das
-     *                    kennt die Ablage und prüft die Berechtigung
-     *                    (RecordBackendServerFile::filePreview()). Der angehängte
-     *                    Zufallswert verhindert, dass der Browser eine alte Fassung
-     *                    aus dem Zwischenspeicher zeigt.
+     *     lookup fields  get the URLs for searching, creating and updating
+     *                    as well as the finished preview block of the existing
+     *                    links
+     *     file fields    get the preview link. It does not point into the
+     *                    media directory, but to backend/file.php - only that
+     *                    knows the storage and checks the permission
+     *                    (RecordBackendServerFile::filePreview()). The appended
+     *                    random value prevents the browser from showing an old version
+     *                    from the cache.
      *
-     * FEST VERKNÜPFTE INHALTE (Felder vom Typ 'link', Camindo\Core\LinkTrait)
+     * FIRMLY LINKED CONTENTS (fields of type 'link', Camindo\Core\LinkTrait)
      * --------------------
-     *     display_type 'lookup'  wie ein Pointer-Lookup: Suchfenster, Verknüpfung
-     *                            sofort an der Arbeitskopie
-     *     display_type 'embed'   die Eingabemasken der Inhalte stehen in dieser Maske
-     *                            (_embedBlock()): Feldlabel als Zwischenüberschrift,
-     *                            darunter je Inhalt eine Zelle mit dessen Maske. Die
-     *                            Inhalte sind beim Check-out mit ausgecheckt worden
-     *                            (LinkTrait::checkOutDependents()), ihre Eingabefelder
-     *                            heißen embed[{record_id}][feld]; Einfügen, Verschieben
-     *                            und Löschen laufen per Ajax (embedAction()), gespeichert
-     *                            wird mit dem Quelldatensatz (_editSave()).
+     *     display_type 'lookup'  like a pointer lookup: search window, link
+     *                            immediately on the working copy
+     *     display_type 'embed'   the input masks of the contents stand in this mask
+     *                            (_embedBlock()): field label as subheading,
+     *                            below it per content a cell with its mask. The
+     *                            contents were checked out together with the check-out
+     *                            (LinkTrait::checkOutDependents()), their input fields
+     *                            are called embed[{record_id}][field]; inserting, moving
+     *                            and deleting run via Ajax (embedAction()), saving
+     *                            happens with the source record (_editSave()).
      *
-     * data-changed="true" wird gesetzt, sobald das Formular nicht der erste Aufruf ist -
-     * das Javascript fragt dann beim Schließen nach, statt Eingaben zu verwerfen.
+     * data-changed="true" is set as soon as the form is not the first call -
+     * the JavaScript then asks on closing, instead of discarding inputs.
      *
-     * @param array $schemaVirtual  Schema mit virtuellen Felder
+     * @param array $schemaVirtual  schema with virtual fields
      */
     private function _editForm(array $schemaVirtual): void
     {
@@ -301,7 +297,7 @@ class RecordBackendEdit extends RecordBackend {
         else $changed = '';
         echo '<form action="Record/record_edit.php" method="post"' . $changed . '>';
 
-        // Sprachen der Instanz des Bereichs (siehe Klassenkommentar)
+        // languages of the instance of the area (see class comment)
         // --------------------
         $ctx = $this->_editLanguageContext();
         $languages = $ctx['languages'];
@@ -310,19 +306,19 @@ class RecordBackendEdit extends RecordBackend {
         if ($useTabs) {
             $this->backend->tabBarReset();
             foreach ($languages as $languageId => $language) {
-                // Reiter je Sprache
+                // tab per language
                 $label = $language['code'] ?? '**';
                 $link = "cApp.ui.recordTab(this, '{$languageId}');";
                 $this->backend->tabAdd($label, $link, (string)$tab === (string)$languageId);
             }
-            // Reiter "Alle"
+            // tab "All"
             $labelAll = '#record.tab_all_languages';
             $linkAll = "cApp.ui.recordTab(this, 'all');";
             $this->backend->tabAdd($labelAll, $linkAll, $tab === 'all');
             
             echo $this->backend->tabBar();
 
-            // Aktuell ausgewählte Sprache anzeigen
+            // show the currently selected language
             if (isset($languages[$tab])) {
                 echo $this->backend->template('edit_form_block', [
                     '{label}' => '',
@@ -335,13 +331,13 @@ class RecordBackendEdit extends RecordBackend {
 
         $this->backend->formInit('record.record_edit_form');
 
-        // Die Eingabefelder (siehe _editFormFields())
+        // the input fields (see _editFormFields())
         $shown = $this->_editFormFields($schemaVirtual, $ctx);
 
-        // Owner (Zusatzrecht "Owner anpassen"): als letztes Feld ein Lookup auf die
-        // Admin-Liste - der Wert reist als verstecktes data[owner_id] im Vorschaublock
-        // (12-group-rights.md); geschrieben wird er nur mit dem Recht (_editSave()
-        // nimmt ihn in $fields, Record::hookOnSave() prüft noch einmal)
+        // owner (additional right "adjust owner"): as the last field a lookup on the
+        // admin list - the value travels as hidden data[owner_id] in the preview block
+        // (developer docs, chapter 11 (Permissions)); it is only written with the right (_editSave()
+        // takes it into $fields, Record::hookOnSave() checks again)
         if ($this->backend->access()->areaSetOwner($this->areaId)) {
             $ownerId = (int)($this->data['owner_id'] ?? 0);
             if ($ownerId < 1) $ownerId = (int)$this->session->get('admin_id');
@@ -372,8 +368,8 @@ class RecordBackendEdit extends RecordBackend {
         $this->backend->formHidden('area_id', $this->areaId);
         $this->backend->formHidden('id', $this->id);
         $this->backend->formHidden('shown', implode(',', $shown));
-        // Reiter: der angezeigte (tab) und das Ziel eines Reiterwechsels
-        // (tab_target, setzt cApp.ui.recordTab() vor dem Absenden)
+        // tabs: the displayed one (tab) and the target of a tab switch
+        // (tab_target, set by cApp.ui.recordTab() before submitting)
         if ($useTabs) {
             $this->backend->formHidden('tab', (string)$tab);
             $this->backend->formHidden('tab_target', '');
@@ -388,23 +384,23 @@ class RecordBackendEdit extends RecordBackend {
             '{id}' => $this->id
         ]);
         
-        // JavaScript Anweisung für growing textarea, nach Ajax-Load
+        // JavaScript instruction for growing textarea, after Ajax load
         $this->backend->script("cApp.ui._initTextareaGrow(\$('.c9-layer:last'));");
         echo '</form>';
     }
 
     /**
-     * Sprachkontext der Maske: Sprachen der Instanz des Bereichs, Reiter-Modus und
-     * aktiver Reiter, dazu die Felder mit Fehlern in anderen Sprachen - gemeinsame
-     * Grundlage von _editForm() und den eingebetteten Masken (embedAction()).
+     * Language context of the mask: languages of the instance of the area, tab mode and
+     * active tab, plus the fields with errors in other languages - common
+     * basis of _editForm() and the embedded masks (embedAction()).
      *
-     * Fehler aus anderen Reitern: Dataset::save() registriert Feldfehler
-     * mehrsprachiger Felder unter "name.{language_id}" (eingebettet
-     * "embed.{record_id}.name.{language_id}"). Liegt der Fehler in einer Sprache, die
-     * der aktive Reiter nicht zeigt, bekäme der Redakteur ihn nie zu sehen - und
-     * könnte den Reiter wegen des Fehlers auch nicht wechseln. Deshalb werden solche
-     * Felder zusätzlich in ihrer Fehlersprache angezeigt (errorLanguages:
-     * Fehlerschlüssel ohne Sprache => [language_id, ...], siehe _editFormFields()).
+     * Errors from other tabs: Dataset::save() registers field errors of
+     * multilingual fields under "name.{language_id}" (embedded
+     * "embed.{record_id}.name.{language_id}"). If the error lies in a language that
+     * the active tab does not show, the editor would never see it - and
+     * could not switch the tab either because of the error. Therefore such
+     * fields are additionally shown in their error language (errorLanguages:
+     * error key without language => [language_id, ...], see _editFormFields()).
      *
      * @return array  languages, isMultilingual, languageIds, primaryId, useTabs, tab,
      *                errorLanguages
@@ -412,10 +408,10 @@ class RecordBackendEdit extends RecordBackend {
     private function _editLanguageContext(): array
     {
         $allLanguages = $this->_recordLanguages();
-        // Mehrsprachig ist die Instanz - unabhängig davon, wie viele Sprachen die
-        // Benutzergruppe sieht: Reiter und Felder gibt es nur für lesbare Sprachen,
-        // Eingabefelder nur für schreibbare (sonst grauer Text, siehe
-        // _editFormFields()); Sprachen ohne Recht bleiben beim Speichern unangetastet
+        // The instance is multilingual - regardless of how many languages the
+        // user group sees: tabs and fields exist only for readable languages,
+        // input fields only for writable ones (otherwise grayed-out text, see
+        // _editFormFields()); languages without right remain untouched when saving
         $isMultilingual = count($allLanguages) > 1;
         $languages = $this->record->readableLanguages($allLanguages);
         $languageIds = array_map('intval', array_keys($languages));
@@ -423,7 +419,7 @@ class RecordBackendEdit extends RecordBackend {
         $access = $this->backend->access();
         $writableIds = array_values(array_filter($languageIds, fn($id) => $access->languageWrite($id)));
         $useTabs = $isMultilingual && $this->_languageTabs();
-        // Aktiver Reiter: language_id oder 'all'
+        // active tab: language_id or 'all'
         $tab = $useTabs ? $this->_editCurrentTab($languageIds) : 'all';
         $errorLanguages = [];
         if ($useTabs && $tab !== 'all') {
@@ -446,23 +442,23 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Die Eingabefelder EINES Datensatzes in das Formular setzen - für den
-     * Datensatz der Maske ($varName 'data') und für jeden eingebetteten Inhalt eines
-     * 'link'-Feldes ($varName 'embed[{record_id}]', _embedCell()). Arbeitet auf
-     * $this->id / $this->data / $this->areaId / $this->areaData - die eingebettete
-     * Maske tauscht diesen Zusammenhang vorher aus.
+     * Set the input fields of ONE record in the form - for the record of the mask
+     * ($varName 'data') and for each embedded content of a 'link' field
+     * ($varName 'embed[{record_id}]', _embedCell()). Works on
+     * $this->id / $this->data / $this->areaId / $this->areaData - the embedded
+     * mask swaps this context beforehand.
      *
-     * Eingebettet entfallen die Felder `parent_id` und `position` (die Reihenfolge
-     * der Inhalte bestimmt die Verknüpfung) sowie 'link'-Felder der Inhalte selbst
-     * (keine Verschachtelung in der Maske - ihre Inhalte werden beim Check-in
-     * trotzdem mitgenommen, LinkTrait).
+     * When embedded, the fields `parent_id` and `position` are left out (the order
+     * of the contents is determined by the link) as well as 'link' fields of the contents themselves
+     * (no nesting in the mask - their contents are still taken along at check-in,
+     * LinkTrait).
      *
-     * @param array  $schemaVirtual  Schema des Bereichs
+     * @param array  $schemaVirtual  schema of the area
      * @param array  $ctx            _editLanguageContext()
-     * @param string $varName        Name des Request-Arrays ('data' | 'embed[{id}]')
-     * @param string $errorPrefix    Präfix der Fehlerschlüssel ('' | 'embed.{id}.')
-     * @return string[]  gerenderte Eingabefelder: "name" bzw. "name.{language_id}"
-     *                   (verstecktes Feld 'shown', siehe _editNormalizeSubmitted())
+     * @param string $varName        name of the request array ('data' | 'embed[{id}]')
+     * @param string $errorPrefix    prefix of the error keys ('' | 'embed.{id}.')
+     * @return string[]  rendered input fields: "name" or "name.{language_id}"
+     *                   (hidden field 'shown', see _editNormalizeSubmitted())
      */
     private function _editFormFields(array $schemaVirtual, array $ctx, string $varName = 'data', string $errorPrefix = ''): array
     {
@@ -475,13 +471,13 @@ class RecordBackendEdit extends RecordBackend {
         $embedded = ($varName !== 'data');
 
         if ($isMultilingual) {
-            // Werte je Sprache zusammenstellen (Arbeitsstand + Request)
+            // assemble values per language (working state + request)
             $this->_editLanguageValues($schemaVirtual, $languageIds);
         }
 
-        // Passwörter, die die Arbeitskopie bereits als Hash trägt (Record::
-        // securePasswords(): gesichert vor einer gescheiterten Prüfung oder einem
-        // Reiterwechsel) - das Feld darf dann leer bleiben und sagt das auch
+        // passwords the working copy already holds as a hash (Record::
+        // securePasswords(): secured before a failed check or a tab
+        // switch) - the field may then stay empty and also says so
         $keptPasswords = [];
         if ($this->id > 0) {
             foreach ($this->record->loadTmpData($this->id) as $name => $entry) {
@@ -489,24 +485,24 @@ class RecordBackendEdit extends RecordBackend {
             }
         }
 
-        // Bezugsgrößen für das Paar parent_id / position (siehe Klassenkommentar):
-        // Ohne Eingabefeld für parent_id gibt es keine Hierarchie zum Auswählen -
-        // die Vorgängerliste läuft dann über die Wurzelebene des Bereichs.
+        // reference values for the pair parent_id / position (see class comment):
+        // without an input field for parent_id there is no hierarchy to choose from -
+        // the predecessor list then runs over the root level of the area.
         $parentId = isset($schemaVirtual['parent_id'])
             ? (int)($this->data['parent_id'] ?? 0)
             : 0;
-        // Gibt es überhaupt eine Vorgängerliste, die neu geladen werden müsste?
+        // is there a predecessor list at all that would have to be reloaded?
         $hasPreviousField = isset($schemaVirtual['position'])
             && (int)($schemaVirtual['position']['visibility_input'] ?? 0) === 1
             && ($schemaVirtual['position']['display_type'] ?? '') !== 'lookup';
 
-        // Welche Eingabefelder die Maske enthält - "name" bzw. "name.{language_id}".
-        // Geht als verstecktes Feld 'shown' mit, damit der Server ein fehlendes
-        // Feld als GELEERT erkennt (siehe _editNormalizeSubmitted()).
+        // which input fields the mask contains - "name" or "name.{language_id}".
+        // Travels along as hidden field 'shown', so that the server recognizes a missing
+        // field as CLEARED (see _editNormalizeSubmitted()).
         $shown = [];
 
         foreach ($schemaVirtual as $name => $colDef) {
-            // Nur sichtbare Felder
+            // only visible fields
             $visibility = (int)($colDef['visibility_input'] ?? 0);
             if ($visibility !== 1) continue;
 
@@ -517,11 +513,11 @@ class RecordBackendEdit extends RecordBackend {
 
             if ($embedded && ($isLink || in_array($name, ['parent_id', 'position'], true))) continue;
 
-            // Verknüpfungsfeld ohne lesbaren Zielbereich: nicht in der Maske, nicht
-            // in 'shown' - die Verknüpfungen bleiben beim Speichern, wie sie sind
+            // link field without a readable target area: not in the mask, not
+            // in 'shown' - the links stay as they are when saving
             if (!$this->record->relationTargetReadable($colDef)) continue;
 
-            // Fest verknüpfte Inhalte, eingebettet: eigener Block statt Eingabefeld
+            // firmly linked contents, embedded: own block instead of an input field
             if ($isLink && $displayType === 'embed') {
                 $this->backend->formAppend(
                     '{' . $varName . '_' . $name . '}',
@@ -535,7 +531,7 @@ class RecordBackendEdit extends RecordBackend {
                 && !in_array($type, $this->cms->relationTypes)
             );
             // relation / pointer
-            // display_type != lookup -> Options aus Datensätzen in den Zielbereichen zusammenstellen
+            // display_type != lookup -> build options from records in the target areas
             $options = null;
             if (in_array($type, $this->cms->relationTypes, true) && $displayType != 'lookup') {                
                 if (str_starts_with($type, 'relation')) {
@@ -574,14 +570,14 @@ class RecordBackendEdit extends RecordBackend {
             }
 
             // position
-            // Eingegeben wird nicht die Zahl, sondern der VORGÄNGER-Datensatz
-            // (siehe _editPreviousParams()) - die Optionen sind daher record_ids.
+            // the input is not the number but the PREDECESSOR record
+            // (see _editPreviousParams()) - the options are therefore record_ids.
             elseif ($name == 'position' && $displayType != 'lookup') {
                 $options = $this->_previousOptions($parentId);
             }
 
             if (isset($keptPasswords[$name])) {
-                // gesichertes Passwort: kein Pflichtfeld mehr, Hinweis darunter
+                // secured password: no longer a required field, note below it
                 $colDef['flags'] = array_values(array_diff((array)($colDef['flags'] ?? []), ['not_empty']));
                 $colDef['note'] = '#record.note_password_kept';
             }
@@ -598,9 +594,9 @@ class RecordBackendEdit extends RecordBackend {
                 'primary' => $fieldId > 0 && $fieldId === (int)($this->areaData['default_field_id'] ?? 0)
             ];
 
-            // parent_id und position hängen zusammen: ein Wechsel des Vaterdatensatzes
-            // macht die Vorgängerliste hinfällig. Beide Zweige unten passen die
-            // Formularparameter dafür an.
+            // parent_id and position are linked: a change of the parent record
+            // makes the predecessor list obsolete. Both branches below adjust the
+            // form parameters accordingly.
             if ($name === 'parent_id') {
                 $fieldParams = $this->_editParentParams($fieldParams, $displayType, $hasPreviousField);
             }
@@ -608,23 +604,23 @@ class RecordBackendEdit extends RecordBackend {
                 $fieldParams = $this->_editPreviousParams($fieldParams, $parentId, $options);
             }
 
-            // Mehrsprachiges Feld: ein Eingabefeld je Sprache - auf einem Sprach-Reiter
-            // nur das der Reitersprache. Jedes bekommt seinen eigenen Platzhalter,
-            // damit die Felder in der Reihenfolge der Sprachen direkt untereinander
-            // stehen (append hängt einen fehlenden Platzhalter ans Ende an).
+            // multilingual field: one input field per language - on a language tab
+            // only that of the tab language. Each gets its own placeholder, so that
+            // the fields stand directly below each other in language order
+            // (append adds a missing placeholder at the end).
             if ($isMultilingual && $this->cms->isMultilingualField($colDef)) {
                 $values = (array)($this->data[$name] ?? []);
                 $formLanguages = ($tab === 'all') ? $languageIds : [(int)$tab];
                 if (!empty($errorLanguages[$errorPrefix . $name])) {
-                    // Sprachen mit Fehlern dazu, in der Reihenfolge der Instanz
+                    // add languages with errors, in the order of the instance
                     $formLanguages = array_values(array_intersect(
                         $languageIds, array_unique(array_merge($formLanguages, $errorLanguages[$errorPrefix . $name]))
                     ));
                 }
                 foreach ($formLanguages as $languageId) {
                     if (!in_array($languageId, $ctx['writableIds'], true)) {
-                        // nur lesbar: gespeicherter Wert als grauer Text, kein Eingabefeld
-                        // (nicht in 'shown' - der Wert bleibt beim Speichern unangetastet)
+                        // read-only: saved value as grayed-out text, no input field
+                        // (not in 'shown' - the value stays untouched when saving)
                         $this->backend->formAppend(
                             '{' . $varName . '_' . $name . '__' . $languageId . '}',
                             $this->_editReadOnlyField($colDef, $values[$languageId] ?? '', (string)($languages[$languageId]['code'] ?? $languageId))
@@ -638,15 +634,15 @@ class RecordBackendEdit extends RecordBackend {
                     $langParams['langSuffix'] = (string)($languages[$languageId]['code'] ?? $languageId);
                     $langParams['placeholder'] = '{' . $varName . '_' . $name . '__' . $languageId . '}';
                     if ($languageId !== $primaryId) {
-                        // Pflicht gilt nur für die Hauptsprache: eine weitere Sprache
-                        // darf leer bleiben (Fallback) - kein Stern, kein required
+                        // the requirement applies only to the primary language: a further language
+                        // may stay empty (fallback) - no asterisk, no required
                         $langParams['colDef']['flags'] = array_values(array_diff(
                             (array)($colDef['flags'] ?? []), ['not_empty']
                         ));
                     }
                     $this->backend->formField($this->record, $langParams);
                     if ($type === 'file') {
-                        // Upload-Feld: Vorschau der Datei DIESER Sprache
+                        // upload field: preview of the file of THIS language
                         $this->_editFileReplacements($name, $fieldId, (array)($values[$languageId] ?? []), $languageId);
                     }
                 }
@@ -657,10 +653,10 @@ class RecordBackendEdit extends RecordBackend {
             $this->backend->formField($this->record, $fieldParams);
 
             if ($name === 'parent_id' && $displayType === 'lookup') {
-                // Lookup-Feld für den Vaterdatensatz - Tabelle record -
-                // nachträgliche Ersetzungen. Anders als bei einem Verknüpfungsfeld
-                // wird hier NICHTS sofort geschrieben: die Vorschau enthält ein
-                // verstecktes Feld data[parent_id], das mit dem Formular abgeht.
+                // lookup field for the parent record - table record -
+                // subsequent replacements. Unlike a link field, NOTHING is written
+                // immediately here: the preview contains a hidden field data[parent_id]
+                // that is sent along with the form.
                 $urlSuffix = "&src_id={$this->id}&src_field={$fieldId}";
                 $this->backend->formReplace('{src_id}', $this->id);
                 $this->backend->formReplace('{src_field}', $fieldId);
@@ -672,12 +668,12 @@ class RecordBackendEdit extends RecordBackend {
             if (in_array($type, $this->cms->relationTypes, true)
                 && $displayType === 'lookup'
             ) {
-                // Lookup-Feld - Tabelle record - nachträgliche Ersetzungen
+                // lookup field - table record - subsequent replacements
                 $this->_editLookupReplacements($fieldId, (int)($colDef['max'] ?? 0));
             }
 
             if ($type === 'file') {
-                // Upload-Feld - Tabelle record - nachträgliche Ersetzungen:
+                // upload field - table record - subsequent replacements:
                 $this->_editFileReplacements($name, $fieldId, (array)($this->data[$name] ?? []), null);
             }
         }
@@ -686,25 +682,25 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Ein Feld einer nur lesbaren Sprache: Beschriftung mit Sprachkürzel und der
-     * gespeicherte Wert als grauer Text (class c9-grey-30) statt eines
-     * Eingabefeldes (12-group-rights.md).
+     * A field of a read-only language: label with language code and the
+     * saved value as grayed-out text (class c9-grey-30) instead of an
+     * input field (developer docs, chapter 11 (Permissions)).
      *
      * @param array  $colDef  Felddefinition
-     * @param mixed  $value   Wert im Anzeigeformat (_editLanguageValues())
-     * @param string $code    Sprachkürzel
+     * @param mixed  $value   value in display format (_editLanguageValues())
+     * @param string $code    language code
      */
     private function _editReadOnlyField(array $colDef, mixed $value, string $code): string
     {
         $label = $this->cms->textOrSnippet((string)($colDef['label'] ?? ''))
             . $this->backend->template('label_lang_suffix', ['{lang}' => htmlspecialchars($code)]);
         if (is_array($value)) {
-            // Datei / Verknüpfung: Anzeigeform aus backendValue()
+            // file / link: display form from backendValue()
             $html = $this->backend->backendValue($value, $colDef, 'short', $this->id);
         }
         else {
             $html = nl2br(htmlspecialchars((string)$value));
-            // in der Schreibrichtung seiner Sprache (Backend::fieldDirection())
+            // in the writing direction of its language (Backend::fieldDirection())
             $dir = $this->backend->fieldDirection($colDef, $code);
             if ($dir !== '' && trim($html) !== '') $html = '<span dir="' . $dir . '">' . $html . '</span>';
         }
@@ -716,17 +712,17 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     // ====================
-    // Fest verknüpfte Inhalte, eingebettet (Feldtyp 'link', display_type 'embed')
+    // Firmly linked contents, embedded (field type 'link', display_type 'embed')
 
     /**
-     * Den Block eines eingebetteten 'link'-Feldes rendern: Feldlabel als
-     * Zwischenüberschrift, darunter auf voller Breite je Inhalt eine Zelle mit
-     * dessen Eingabemaske (_embedCell()), dazu die Schaltflächen zum Anfügen (eine je
-     * Zielbereich). Der Block trägt die Angaben, die das Javascript für Einfügen,
-     * Verschieben und Löschen braucht (backend-embedded.js -> embedAction()).
+     * Render the block of an embedded 'link' field: field label as a
+     * subheading, below it at full width one cell per content with its
+     * input mask (_embedCell()), plus the buttons for appending (one per
+     * target area). The block carries the data that the JavaScript needs for inserting,
+     * moving and deleting (backend-embedded.js -> embedAction()).
      *
-     * @param string $name    Feldname
-     * @param array  $colDef  Felddefinition
+     * @param string $name    field name
+     * @param array  $colDef  field definition
      * @param array  $ctx     _editLanguageContext()
      */
     private function _embedBlock(string $name, array $colDef, array $ctx): string
@@ -750,7 +746,7 @@ class RecordBackendEdit extends RecordBackend {
             ])
             : '';
 
-        // Fehler am Feld selbst (z. B. not_empty: kein Inhalt)
+        // error on the field itself (e.g. not_empty: no content)
         $errorMsg = '';
         $blockClass = '';
         if (in_array($name, $this->cms->getErrorFields(), true)) {
@@ -775,8 +771,8 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Zielbereiche eines 'link'-Feldes: area_id => Beschriftung (für die
-     * Einfügen-Einträge des Zellenmenüs und die Anfügen-Schaltflächen).
+     * Target areas of a 'link' field: area_id => label (for the
+     * insert entries of the cell menu and the append buttons).
      */
     private function _embedAreas(int $fieldId): array
     {
@@ -789,8 +785,8 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Anfügen-Schaltflächen unter den Zellen: bei einem Zielbereich eine, sonst eine
-     * je Zielbereich mit dessen Beschriftung.
+     * Append buttons below the cells: with one target area one button, otherwise one
+     * per target area with its label.
      */
     private function _embedAddButtons(array $areas): string
     {
@@ -807,26 +803,26 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Die Zelle eines eingebetteten Inhalts: seine Eingabemaske (Feldlabel + Feld
-     * nebeneinander, wie in der Hauptmaske) mit dem Zellenmenü (more_vert:
-     * Einfügen vor / nach, nach oben / unten, Löschen).
+     * The cell of an embedded content: its input mask (field label + field
+     * side by side, as in the main mask) with the cell menu (more_vert:
+     * insert before / after, up / down, delete).
      *
-     * Der Inhalt ist eine Arbeitskopie des Session-Admins (LinkTrait). Seine Werte:
+     * The content is a working copy of the session admin (LinkTrait). Its values:
      *
-     *   1. aus dem Request (function save / tab / errors, embedAction()):
-     *      embed[{record_id}][feld] - rohe Eingabe im Anzeigeformat
-     *   2. sonst aus der Arbeitskopie (Record::load(): Arbeitsstand über
-     *      Cms::fetch()) im Datenbankformat -> _editFormatLoadedValues(); ein neu
-     *      eingefügter Inhalt ohne Arbeitsstand bekommt die Vorgaben seines Bereichs
+     *   1. from the request (function save / tab / errors, embedAction()):
+     *      embed[{record_id}][field] - raw input in display format
+     *   2. otherwise from the working copy (Record::load(): working state via
+     *      Cms::fetch()) in database format -> _editFormatLoadedValues(); a newly
+     *      inserted content without working state gets the defaults of its area
      *      (Record::init())
      *
-     * Die Feldschleife (_editFormFields()) arbeitet auf $this->id / $this->data /
-     * $this->areaId / $this->areaData / $this->function - der Zusammenhang wird für
-     * die Dauer der Zelle ausgetauscht. Feldfehler stehen unter
-     * "embed.{record_id}.feld" (_embedSave()).
+     * The field loop (_editFormFields()) works on $this->id / $this->data /
+     * $this->areaId / $this->areaData / $this->function - the context is swapped out
+     * for the duration of the cell. Field errors are stored under
+     * "embed.{record_id}.field" (_embedSave()).
      *
-     * @param int   $destId  Arbeitskopie des Inhalts
-     * @param array $colDef  das 'link'-Feld
+     * @param int   $destId  working copy of the content
+     * @param array $colDef  the 'link' field
      * @param array $ctx     _editLanguageContext()
      * @param array $areas   _embedAreas()
      */
@@ -860,7 +856,7 @@ class RecordBackendEdit extends RecordBackend {
                 $this->_editRestoreSecuredFiles($schemaVirtual);
             }
             elseif (empty($this->record->loadTmpData($destId))) {
-                // neu eingefügt, noch ohne Arbeitsstand: Vorgaben des Bereichs
+                // newly inserted, still without working state: defaults of the area
                 $this->function = 'create';
                 $this->data = (array)$this->record->init(['area_id' => $areaId]);
                 $this->data['record_id'] = $destId;
@@ -878,7 +874,7 @@ class RecordBackendEdit extends RecordBackend {
             $fields = $this->backend->formPop();
             $this->backend->formPush();
 
-            // Zellenmenü
+            // cell menu
             $insertItems = '';
             foreach ($areas as $insertAreaId => $label) {
                 $insertItems .= $this->backend->template('record.embed_menu_insert', [
@@ -903,27 +899,27 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Die eingebetteten Inhalte aller 'link'-Felder der Maske speichern - vor dem
-     * Quelldatensatz (_editSave(), _editTab()).
+     * Save the embedded contents of all 'link' fields of the mask - before the
+     * source record (_editSave(), _editTab()).
      *
-     * Je Inhalt Record::save() mit den Eingaben aus embed[{record_id}] - die
-     * Feldliste sind seine sichtbaren Eingabefelder (wie _editTab()), geleerte
-     * Felder aus embed_shown nachgetragen (_editNormalizeSubmitted()). Uploads
-     * liegen unter $_FILES['embed'][...][{record_id}] und werden für die Dauer des
-     * Aufrufs nach $_FILES['data'] gelegt, wo Dataset::save() sie erwartet.
+     * Record::save() per content with the inputs from embed[{record_id}] - the
+     * field list is its visible input fields (as in _editTab()), cleared
+     * fields added from embed_shown (_editNormalizeSubmitted()). Uploads
+     * lie under $_FILES['embed'][...][{record_id}] and are placed into $_FILES['data']
+     * for the duration of the call, where Dataset::save() expects them.
      *
-     * Immer mit stayTemporary: die geprüften Werte landen im Arbeitsstand der
-     * Arbeitskopie des Inhalts, von wo der Check-in sie nimmt
-     * (LinkTrait::checkInDependents() -> Record::save() mit gestagten Feldern).
-     * So ist die Prüfung durch, bevor eine Datei den Ort wechselt.
+     * Always with stayTemporary: the checked values end up in the working state of the
+     * working copy of the content, from where the check-in takes them
+     * (LinkTrait::checkInDependents() -> Record::save() with staged fields).
+     * This way the check is complete before a file changes location.
      *
-     * Feldfehler registriert Dataset::save() unter dem Feldnamen; sie werden auf
-     * "embed.{record_id}.feld" umgeschlüsselt, damit die Maske sie an der richtigen
-     * Zelle zeigt (Backend::formField() mit errorPrefix). Ohne Eingaben zu einem
-     * Inhalt (Zelle nicht im Request) bleibt sein Arbeitsstand, wie er ist.
+     * Dataset::save() registers field errors under the field name; they are re-keyed to
+     * "embed.{record_id}.field" so that the mask shows them at the correct
+     * cell (Backend::formField() with errorPrefix). Without inputs for a
+     * content (cell not in the request) its working state remains as it is.
      *
-     * @param array $schemaVirtual  Schema des Bereichs der Maske
-     * @return bool  false, wenn ein Inhalt nicht gespeichert werden konnte
+     * @param array $schemaVirtual  schema of the area of the mask
+     * @return bool  false if a content could not be saved
      */
     private function _embedSave(array $schemaVirtual): bool
     {
@@ -955,7 +951,7 @@ class RecordBackendEdit extends RecordBackend {
                 }
                 $fields[] = 'area_id';
 
-                // Uploads dieses Inhalts an die Stelle legen, wo save() sie erwartet
+                // place the uploads of this content where save() expects them
                 $filesKeep = $_FILES['data'] ?? null;
                 $_FILES['data'] = [];
                 foreach (['name', 'type', 'tmp_name', 'error', 'size'] as $key) {
@@ -972,7 +968,7 @@ class RecordBackendEdit extends RecordBackend {
                 }
                 if (!$saved) {
                     $ok = false;
-                    // Feldfehler auf die Zelle umschlüsseln
+                    // re-key field errors to the cell
                     foreach (array_keys($this->cms->errors) as $key) {
                         if (is_int($key) || in_array($key, $errorsBefore, true)) continue;
                         $this->cms->errors['embed.' . $destId . '.' . $key] = $this->cms->errors[$key];
@@ -985,27 +981,27 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Ajax: eingebettete Inhalte eines 'link'-Feldes bearbeiten
-     * (backend/ajax_embed.php, aufgerufen von backend-embedded.js).
+     * Ajax: edit embedded contents of a 'link' field
+     * (backend/ajax_embed.php, called by backend-embedded.js).
      *
-     *     insert   neuen Inhalt vor/nach dest_id einfügen (dest_id 0: ans Ende) -
-     *              Antwort ist die fertige Zelle (_embedCell()), das Javascript setzt
-     *              sie an ihre Stelle
-     *     up/down  Inhalt eine Stelle verschieben - das Javascript tauscht die Zellen
-     *     delete   Inhalt entfernen (LinkTrait::embedRemove(): Kante lösen,
-     *              Arbeitskopie verwerfen; ein produktives Original wird beim
-     *              Check-in als verwaist gelöscht)
+     *     insert   insert new content before/after dest_id (dest_id 0: at the end) -
+     *              the response is the finished cell (_embedCell()), the JavaScript places
+     *              it at its position
+     *     up/down  move the content one position - the JavaScript swaps the cells
+     *     delete   remove the content (LinkTrait::embedRemove(): detach the link,
+     *              discard the working copy; a productive original is deleted as
+     *              orphaned at check-in)
      *
-     * Bei up/down/delete bleibt die Antwort leer; ein Fehler kommt als Meldung. Die
-     * Arbeitskopie des Quelldatensatzes (src_id) muss dem Session-Admin gehören -
-     * das prüfen die LinkTrait-Methoden.
+     * For up/down/delete the response stays empty; an error comes as a message. The
+     * working copy of the source record (src_id) must belong to the session admin -
+     * the LinkTrait methods check that.
      *
      * Request: src_id, src_field, function, dest_id, area_id (insert), before (insert),
-     *          tab (aktiver Sprach-Reiter der Maske)
+     *          tab (active language tab of the mask)
      */
     public function embedAction(): void
     {
-        // Legt an, sortiert um, hängt aus - nur per POST (17-csrf.md §2.7)
+        // creates, reorders, detaches - POST only (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
@@ -1032,7 +1028,7 @@ class RecordBackendEdit extends RecordBackend {
             $this->errors();
             return;
         }
-        // Zusammenhang der Maske (Sprachen, Reiter)
+        // context of the mask (languages, tabs)
         $this->id = $srcId;
         $this->areaId = (int)$prodData[1];
         $this->areaData = $this->backend->areaData($this->areaId) ?? [];
@@ -1066,17 +1062,17 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Lookup-Feld (Verknüpfung mit Suchfenster): Platzhalter des zuletzt angefügten
-     * Eingabefeldes ersetzen - die URLs für Suchen, Anlegen und Aktualisieren
-     * (src_id ist die Arbeitskopie $this->id, an der die Verknüpfungen hängen) und
-     * der Vorschaublock der bestehenden Verknüpfungen (_lookupPreviewCreate()).
+     * Lookup field (link with search window): replace the placeholders of the most recently appended
+     * input field - the URLs for searching, creating and updating
+     * (src_id is the working copy $this->id to which the links are attached) and
+     * the preview block of the existing links (_lookupPreviewCreate()).
      *
-     * Muss direkt nach dem formField()-Aufruf des Feldes laufen (siehe
-     * _editFileReplacements()). Auch für die Vorlage der Stapelbearbeitung
+     * Must run directly after the formField() call of the field (see
+     * _editFileReplacements()). Also for the template of batch editing
      * (RecordBackendBatch).
      *
-     * @param int $fieldId  field_id des Verknüpfungsfeldes
-     * @param int $max      höchstens so viele Verknüpfungen (0 = beliebig)
+     * @param int $fieldId  field_id of the link field
+     * @param int $max      at most this many links (0 = any)
      */
     protected function _editLookupReplacements(int $fieldId, int $max): void
     {
@@ -1091,23 +1087,23 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Upload-Feld: Vorschau-Block und Platzhalter des zuletzt angefügten
-     * Eingabefeldes ersetzen ({src_id}, {src_field}, {lang}, {preview}).
+     * Upload field: replace the preview block and placeholders of the most recently appended
+     * input field ({src_id}, {src_field}, {lang}, {preview}).
      *
-     * Der Vorschau-Link zeigt nicht ins Medienverzeichnis, sondern auf
-     * backend/file.php - nur das kennt die Ablage und prüft die Berechtigung
-     * (RecordBackendServerFile::filePreview()); bei mehrsprachigen Feldern mit der
-     * Sprache als drittem Pfadteil. Der angehängte Zufallswert verhindert, dass der
-     * Browser eine alte Fassung aus dem Zwischenspeicher zeigt.
+     * The preview link does not point into the media directory, but to
+     * backend/file.php - only that knows the storage and checks the permission
+     * (RecordBackendServerFile::filePreview()); for multilingual fields with the
+     * language as third path part. The appended random value prevents the
+     * browser from showing an old version from the cache.
      *
-     * Muss direkt nach dem formField()-Aufruf des Feldes laufen: formReplace()
-     * ersetzt alle noch offenen Platzhalter im Formular, das nächste Upload-Feld
-     * bringt seine eigenen mit.
+     * Must run directly after the formField() call of the field: formReplace()
+     * replaces all still open placeholders in the form, the next upload field
+     * brings its own.
      *
-     * @param string   $name        Feldname
-     * @param int      $fieldId     field_id (Medienverzeichnis)
-     * @param array    $fileData    Metadaten der Datei (leer = keine Datei)
-     * @param int|null $languageId  Sprache bei mehrsprachigen Feldern
+     * @param string   $name        field name
+     * @param int      $fieldId     field_id (media directory)
+     * @param array    $fileData    metadata of the file (empty = no file)
+     * @param int|null $languageId  language for multilingual fields
      */
     protected function _editFileReplacements(string $name, int $fieldId, array $fileData, ?int $languageId): void
     {
@@ -1132,18 +1128,18 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Aktiver Reiter der Eingabemaske: language_id oder 'all'.
+     * Active tab of the input mask: language_id or 'all'.
      *
-     * Beim Reiterwechsel (function=tab) das Ziel aus tab_target - außer die
-     * Zwischenspeicherung ist gescheitert, dann bleibt der bisherige Reiter stehen,
-     * damit der Fehler dort korrigiert werden kann. Sonst der übermittelte Reiter
-     * (tab), beim ersten Aufruf die bevorzugte Sprachversion des Admins
-     * (persönliche Einstellung settings.language_id), sofern die Instanz sie führt,
-     * andernfalls die Hauptsprache. Beim ANLEGEN (function=create) immer die
-     * Hauptsprache: ein neuer Datensatz braucht zuerst seine Pflichtwerte dort, die
-     * anderen Sprachen sind nur Übersetzungen davon.
+     * On a tab switch (function=tab) the target from tab_target - unless the
+     * intermediate save failed, in which case the previous tab stays so that the
+     * error can be corrected there. Otherwise the submitted tab
+     * (tab); on the first call the admin's preferred language version
+     * (personal setting settings.language_id), provided the instance maintains it,
+     * otherwise the primary language. When CREATING (function=create) always the
+     * primary language: a new record first needs its mandatory values there, the
+     * other languages are only translations of them.
      *
-     * @param int[] $languageIds  Sprachen der Instanz
+     * @param int[] $languageIds  languages of the instance
      * @return int|string
      */
     private function _editCurrentTab(array $languageIds): int|string
@@ -1154,27 +1150,27 @@ class RecordBackendEdit extends RecordBackend {
         $tab = $useTarget && $target !== '' ? $target : $requested;
         if ($tab === 'all') return 'all';
         if ($tab !== '' && in_array((int)$tab, $languageIds, true)) return (int)$tab;
-        // Anlegen: Hauptsprache
+        // create: primary language
         if ((string)($_REQUEST['function'] ?? '') === 'create') return $languageIds[0] ?? 'all';
-        // Erster Aufruf: bevorzugte Sprachversion des Admins
+        // first call: the admin's preferred language version
         $preferred = (string)($this->backend->adminSettings()['language_id'] ?? '');
         if ($preferred !== '' && in_array((int)$preferred, $languageIds, true)) return (int)$preferred;
         return $languageIds[0] ?? 'all';
     }
 
     /**
-     * Werte der mehrsprachigen Felder für die Maske zusammenstellen:
-     * $this->data[feld] = [language_id => Wert].
+     * Assemble the values of the multilingual fields for the mask:
+     * $this->data[field] = [language_id => value].
      *
-     * Quellen, in dieser Reihenfolge je Sprache:
-     *   1. der Request (function=errors / tab): rohe Eingabe im Anzeigeformat
-     *   2. der Arbeitsstand der Arbeitskopie: Datenbankformat -> Anzeigeformat
-     *      (_editFormatValue()); leer = nicht übersetzt
-     *   3. ein einzelner Wert aus load()/init() (Cache der Hauptsprache bzw.
-     *      Default) für die Hauptsprache
+     * Sources, per language, in this order:
+     *   1. the request (function=errors / tab): raw input in display format
+     *   2. the working state of the working copy: database format -> display format
+     *      (_editFormatValue()); empty = not translated
+     *   3. a single value from load()/init() (cache of the primary language resp.
+     *      default) for the primary language
      *
-     * @param array $schemaVirtual  Schema des Bereichs
-     * @param int[] $languageIds    Sprachen der Instanz, Hauptsprache zuerst
+     * @param array $schemaVirtual  schema of the area
+     * @param int[] $languageIds    languages of the instance, primary language first
      */
     private function _editLanguageValues(array $schemaVirtual, array $languageIds): void
     {
@@ -1189,9 +1185,9 @@ class RecordBackendEdit extends RecordBackend {
             $displayType = (string)($colDef['display_type'] ?? 'text');
 
             if ($type === 'file') {
-                // Upload-Feld: je Sprache die eigene Datei aus dem Arbeitsstand der
-                // Arbeitskopie (keine Eingabe im Request - Datei-Felder stehen nicht
-                // im POST, siehe _editRestoreSecuredFiles())
+                // upload field: per language the own file from the working state of the
+                // working copy (no input in the request - file fields are not
+                // in the POST, see _editRestoreSecuredFiles())
                 $files = [];
                 $entry = (array)($tmpData[$name] ?? []);
                 $entries = !empty($entry) ? $this->record->fileEntries($entry) : [];
@@ -1207,17 +1203,17 @@ class RecordBackendEdit extends RecordBackend {
             $values = [];
             foreach ($languageIds as $languageId) {
                 if ($fromRequest && is_array($current) && array_key_exists($languageId, $current)) {
-                    // 1. aus dem Request (bereits Anzeigeformat)
+                    // 1. from the request (already display format)
                     $values[$languageId] = $current[$languageId];
                 }
                 elseif (is_array($tmpEntry) && array_key_exists($languageId, $tmpEntry)) {
-                    // 2. aus dem Zwischenstand der Arbeitskopie
+                    // 2. from the intermediate state of the working copy
                     $value = $tmpEntry[$languageId];
                     $isEmpty = is_array($value) ? empty($value) : ((string)$value === '');
                     $values[$languageId] = $isEmpty ? $value : $this->_editFormatValue($type, $displayType, $value);
                 }
                 elseif (!is_array($current) && $languageId === $primaryId) {
-                    // 3. einzelner Wert (Cache der Hauptsprache / Default)
+                    // 3. single value (cache of the primary language / default)
                     $values[$languageId] = ($this->function === 'create')
                         ? $current
                         : $this->_editFormatValue($type, $displayType, $current);
@@ -1231,42 +1227,42 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Geleerte Eingabefelder im Request nachtragen (function=save / tab).
+     * Add cleared input fields to the request (function=save / tab).
      *
-     * Ein Browser schickt einen ausgeschalteten Switch gar nicht mit, und
-     * serializeFiles() lässt leere Textfelder weg (kurze URLs). Für den Server sähe
-     * ein geleertes Feld damit genauso aus wie ein Feld, das gar nicht in der Maske
-     * stand - und Dataset::save() nähme dann den Zwischenstand aus dem Arbeitsstand bzw. den
-     * Altwert. Bei mehrsprachigen Feldern mit Reitern geschah genau das: ein
-     * herausgelöschter Text war nach dem Reiterwechsel wieder da.
+     * A browser does not send a switched-off switch at all, and
+     * serializeFiles() leaves out empty text fields (short URLs). For the server a
+     * cleared field would then look exactly like a field that was not in the mask at all -
+     * and Dataset::save() would then take the intermediate state from the working state resp. the
+     * old value. With multilingual fields with tabs exactly that happened: a
+     * deleted text was back after the tab switch.
      *
-     * Deshalb führt die Maske das versteckte Feld 'shown' mit: die Liste aller
-     * gerenderten Eingabefelder, "name" bzw. "name.{language_id}" (_editForm()).
-     * Alles, was darin steht, aber in data[] fehlt, wird hier als leer nachgetragen
-     * ('' bzw. [] bei Array-Typen). Ausgenommen:
+     * Therefore the mask carries the hidden field 'shown': the list of all
+     * rendered input fields, "name" or "name.{language_id}" (_editForm()).
+     * Everything that is listed there but missing in data[] is added here as empty
+     * ('' or [] for array types). Excluded:
      *
-     *     file                    kein Upload heißt "Datei behalten"
-     *     relation/pointer lookup schreiben sofort per Ajax, stehen nie im POST
+     *     file                    no upload means "keep the file"
+     *     relation/pointer lookup write immediately via Ajax, never in the POST
      *
-     * `parent_id` und `position` werden nicht als LEER, sondern als 0 nachgetragen:
-     * ihr erster Auswahleintrag trägt den leeren Wert ("kein Vaterdatensatz" bzw.
-     * "an den Anfang", siehe RecordBackend::_parentOptions()/_previousOptions()) -
-     * genau den wirft serializeFiles() weg. Ohne das Nachtragen sähe Dataset::save()
-     * sie als NICHT ÜBERMITTELT ($parentIdSubmitted / $previousIdSubmitted) und
-     * bewegte den Datensatz gar nicht: "an den Anfang" und "kein Vaterdatensatz"
-     * blieben wirkungslos. Eingegeben wird dabei der Vorgänger, nicht die Zahl -
-     * aus `position` in 'shown' wird deshalb data[previous_id]
+     * `parent_id` and `position` are added not as EMPTY but as 0:
+     * their first selection entry carries the empty value ("no parent record" resp.
+     * "to the beginning", see RecordBackend::_parentOptions()/_previousOptions()) -
+     * exactly that is discarded by serializeFiles(). Without the addition
+     * Dataset::save() would see them as NOT SUBMITTED ($parentIdSubmitted / $previousIdSubmitted) and
+     * would not move the record at all: "to the beginning" and "no parent record"
+     * would remain without effect. What is entered here is the predecessor, not the number -
+     * therefore `position` in 'shown' becomes data[previous_id]
      * (_editPreviousParams()).
      *
-     * Kein 'shown' im Request (z. B. Aufruf von außen): nichts wird verändert - eine
-     * Maske, die die Felder gar nicht zeigt, lässt den Datensatz stehen, wo er ist.
+     * No 'shown' in the request (e.g. call from outside): nothing is changed - a
+     * mask that does not show the fields at all leaves the record where it is.
      *
-     * @param array $schemaVirtual  Schema des Bereichs
+     * @param array $schemaVirtual  schema of the area
      */
     private function _editNormalizeSubmitted(array $schemaVirtual, ?array &$data = null, ?string $shownRaw = null): void
     {
-        // Ohne Angaben: die Maske selbst (data[] / shown); eingebettete Inhalte
-        // übergeben ihre Eingaben und ihr embed_shown[{record_id}] (_embedSave())
+        // without input: the mask itself (data[] / shown); embedded contents
+        // pass their inputs and their embed_shown[{record_id}] (_embedSave())
         if ($data === null) $data = &$this->data;
         $shownRaw = trim($shownRaw ?? (string)($_REQUEST['shown'] ?? ''));
         if ($shownRaw === '') return;
@@ -1282,9 +1278,9 @@ class RecordBackendEdit extends RecordBackend {
 
             if ($type === 'file' || $type === 'fulltext') continue;
             if (in_array($type, $this->cms->relationTypes, true) && $displayType === 'lookup') continue;
-            // 'link': Verknüpfungen hängen an der Arbeitskopie, nie im POST
+            // 'link': links are attached to the working copy, never in the POST
             if (in_array($type, $this->cms->dependentTypes, true)) continue;
-            // Baumfelder: 0 statt leer (siehe Methodenkommentar)
+            // tree fields: 0 instead of empty (see method comment)
             if ($name === 'parent_id') {
                 if (!array_key_exists('parent_id', $data)) $data['parent_id'] = 0;
                 continue;
@@ -1300,7 +1296,7 @@ class RecordBackendEdit extends RecordBackend {
             $empty = in_array($type, $this->cms->arrayTypes, true) ? [] : '';
 
             if ($languageId !== null) {
-                // mehrsprachig: data[name][language_id]
+                // multilingual: data[name][language_id]
                 if (!ctype_digit($languageId)) continue;
                 $languageId = (int)$languageId;
                 if (!is_array($data[$name] ?? null)) $data[$name] = [];
@@ -1315,16 +1311,16 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * function=tab: Reiterwechsel - die Maske zwischenspeichern.
+     * function=tab: tab switch - save the mask in between.
      *
-     * Record::save() mit stayTemporary schreibt die geprüften Eingaben in das
-     * Arbeitsstand der Arbeitskopie; die Sprachen, die nicht auf dem Reiter standen,
-     * bleiben dort erhalten (Dataset::save()). Gespeichert werden die Felder, die
-     * die Maske zeigt - alle sichtbaren Eingabefelder; mehrsprachige davon nur mit
-     * der Reitersprache. Schlägt die Prüfung fehl, bleibt der bisherige Reiter
-     * stehen (function 'errors'), sonst zeigt edit() die Maske mit dem Ziel-Reiter.
+     * Record::save() with stayTemporary writes the checked inputs into the
+     * working state of the working copy; the languages that were not on the tab
+     * remain there (Dataset::save()). Saved are the fields that the mask
+     * shows - all visible input fields; of those multilingual ones only with
+     * the tab language. If the check fails, the previous tab remains
+     * (function 'errors'), otherwise edit() shows the mask with the target tab.
      *
-     * @param array $schemaVirtual  Schema des Bereichs
+     * @param array $schemaVirtual  schema of the area
      */
     private function _editTab(array $schemaVirtual): void
     {
@@ -1336,21 +1332,21 @@ class RecordBackendEdit extends RecordBackend {
         }
         $fields[] = 'area_id';
 
-        // Eingebettete Inhalte (link/embed) ebenso zwischenspeichern
+        // save embedded contents (link/embed) in between as well
         $embedOk = $this->_embedSave($schemaVirtual);
 
-        // Kopie übergeben: save() wandelt $data per Referenz in die Speicherform um
-        // (currency in Cent, Datum ISO ...) - die Maske zeigt danach aber die Eingabe
+        // pass a copy: save() converts $data by reference into the storage format
+        // (currency in cents, date ISO ...) - the mask afterwards still shows the input
         $data = $this->data;
         if ($this->record->save($fields, $data, stayTemporary: true) && $embedOk) {
-            // Maske mit dem Ziel-Reiter anzeigen (siehe _editCurrentTab())
+            // show the mask with the target tab (see _editCurrentTab())
             return;
         }
         $this->function = 'errors';
     }
 
     /**
-     * Einen Datenbankwert für die Eingabemaske aufbereiten (siehe
+     * Prepare a database value for the input mask (see
      * _editFormatLoadedValues()).
      */
     private function _editFormatValue(string $type, string $displayType, mixed $value): mixed
@@ -1371,20 +1367,20 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Formularparameter des Feldes `parent_id` anpassen.
+     * Adjust the form parameters of the field `parent_id`.
      *
-     * Beide Darstellungen brauchen eine eigene Vorlage, weil der Wechsel des
-     * Vaterdatensatzes die Vorgängerliste hinfällig macht:
+     * Both presentations need their own template, because the change of the parent
+     * record makes the predecessor list obsolete:
      *
-     *     select   Vorlage mit onchange -> updatePreviousOptions() per Ajax
-     *     lookup   eigenes Lookup-Feld. Es schreibt - anders als ein
-     *              Verknüpfungsfeld - nichts sofort in die Datenbank, sondern legt
-     *              die Auswahl als verstecktes data[parent_id] in die Vorschau.
-     *              Das Kontextmenü der Verknüpfungsfelder passt dazu nicht.
+     *     select   template with onchange -> updatePreviousOptions() via Ajax
+     *     lookup   own lookup field. Unlike a link field, it writes
+     *              nothing immediately into the database, but places the
+     *              selection as hidden data[parent_id] into the preview.
+     *              The context menu of the link fields does not fit with it.
      *
-     * @param array  $fieldParams       Parameter für Backend::formField()
-     * @param string $displayType       display_type des Feldes
-     * @param bool   $hasPreviousField  Gibt es eine Vorgängerliste zum Nachladen?
+     * @param array  $fieldParams       parameters for Backend::formField()
+     * @param string $displayType       display_type of the field
+     * @param bool   $hasPreviousField  is there a predecessor list to reload?
      */
     private function _editParentParams(array $fieldParams, string $displayType, bool $hasPreviousField): array
     {
@@ -1400,21 +1396,21 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Formularparameter des Feldes `position` anpassen - eingegeben wird previous_id.
+     * Adjust the form parameters of the field `position` - previous_id is entered.
      *
-     * `position` ist zwar der Feldname, den der Redakteur in field_create.php vergibt
-     * (dort ist er schlüssig: ohne Vaterdatensatz ist die Position schlicht die
-     * Sortierung), im Formular steht aber der VORANGEHENDE Datensatz - genauso wie im
-     * Modul Area. Die Zahl selbst rechnet TreeManagerTrait beim Speichern aus:
+     * `position` is indeed the field name that the editor assigns in field_create.php
+     * (there it is logical: without a parent record the position is simply the
+     * sorting), but the form contains the PRECEDING record - just as in the
+     * module Area. The number itself is calculated by TreeManagerTrait when saving:
      * Dataset::save() -> createInTree() / updateInTree() -> calculatePosition().
-     * Deshalb heißt das Eingabefeld previous_id und nicht position.
+     * That is why the input field is called previous_id and not position.
      *
-     * Die Beschriftung wird nur dann ersetzt, wenn der Redakteur sie nicht selbst
-     * gesetzt hat - sonst stünde "Position" über einer Liste von Datensätzen.
+     * The label is replaced only if the editor has not set it himself -
+     * otherwise "Position" would stand above a list of records.
      *
-     * @param array $fieldParams  Parameter für Backend::formField()
-     * @param int   $parentId     Vaterdatensatz, auf den sich die Liste bezieht
-     * @param array $options      Auswahlliste aus _previousOptions()
+     * @param array $fieldParams  parameters for Backend::formField()
+     * @param int   $parentId     parent record to which the list refers
+     * @param array $options      selection list from _previousOptions()
      */
     private function _editPreviousParams(array $fieldParams, int $parentId, array $options): array
     {
@@ -1429,22 +1425,22 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Vorauswahl der Vorgängerliste.
+     * Preselection of the predecessor list.
      *
-     * Drei Fälle, in der Reihenfolge der Prüfung:
+     * Three cases, in the order of checking:
      *
-     *  1. Das Formular wird nach einem fehlgeschlagenen Speichern erneut gezeigt -
-     *     dann steht die Eingabe des Redakteurs im Request und bleibt stehen.
-     *  2. Neuer Datensatz - ans Ende der Geschwister, dieselbe Vorgabe wie in
-     *     updatePreviousOptions(). Eine KOPIE kommt hier nicht an: _editLoad() legt
-     *     ihr Vorbild als previous_id in $this->data, sie fällt damit unter Fall 1
-     *     und steht direkt hinter dem Vorbild.
-     *  3. Bestehender Datensatz - der Rückweg aus der gespeicherten `position`:
-     *     getPreviousId() sucht die größte Position unterhalb der eigenen beim selben
-     *     Parent. Position 1 heißt "steht am Anfang", also kein Vorgänger.
+     *  1. The form is shown again after a failed save - then the editor's input
+     *     is in the request and stays.
+     *  2. New record - at the end of the siblings, the same default as in
+     *     updatePreviousOptions(). A COPY does not arrive here: _editLoad() puts
+     *     its model as previous_id into $this->data, so it falls under case 1
+     *     and stands directly after the model.
+     *  3. Existing record - the way back from the saved `position`:
+     *     getPreviousId() looks for the largest position below its own under the same
+     *     parent. Position 1 means "at the beginning", so no predecessor.
      *
-     * @param int   $parentId  Vaterdatensatz, auf den sich die Liste bezieht
-     * @param array $options   Auswahlliste aus _previousOptions()
+     * @param int   $parentId  parent record to which the list refers
+     * @param array $options   selection list from _previousOptions()
      */
     private function _previousValue(int $parentId, array $options): int
     {
@@ -1452,36 +1448,36 @@ class RecordBackendEdit extends RecordBackend {
             return (int)$this->data['previous_id'];
         }
         if (in_array($this->function, ['create', 'copy'], true)) {
-            // 'disabled' ist der "…"-Eintrag einer abgeschnittenen Liste, kein Wert
+            // 'disabled' is the "…" entry of a truncated list, not a value
             unset($options['disabled']);
             return (int)array_key_last($options);
         }
         $position = (int)($this->data['position'] ?? 0);
         if ($position < 2) return 0;
-        // areaId: auf der Wurzelebene (parent_id IS NULL) unterscheidet nur der
-        // Inhaltsbereich die Geschwister voneinander
+        // areaId: at the root level (parent_id IS NULL) only the content
+        // area distinguishes the siblings from each other
         return $this->record->getPreviousId($parentId, $position, (int)$this->areaId);
     }
 
     /**
-     * Ajax: Optionen des Select-Feldes "previous_id" neu liefern
+     * Ajax: deliver the options of the select field "previous_id" anew
      * (backend/record_previous.php).
      *
-     * Wird aufgerufen, sobald der Redakteur im Formular den Vaterdatensatz wechselt -
-     * die bisherige Vorgängerliste gehört dann zu den falschen Geschwistern. Die
-     * Antwort besteht absichtlich nur aus <option>-Zeilen; das Javascript ersetzt
-     * damit den Inhalt des vorhandenen <select> (cApp.forms.updateElement()).
+     * Called as soon as the editor changes the parent record in the form -
+     * the previous predecessor list then belongs to the wrong siblings. The
+     * response deliberately consists only of <option> rows; the JavaScript thereby replaces
+     * the content of the existing <select> (cApp.forms.updateElement()).
      *
-     * Bereich und Original-Id kommen NICHT aus dem Request, sondern über
-     * Record::getProdData() aus der Arbeitskopie - das prüft zugleich, dass sie dem
-     * angemeldeten Redakteur gehört. Ohne Arbeitskopie (id = 0: die Einfügeposition
-     * der Import-Maske, RecordBackendImport) gilt area_id aus dem Request.
+     * Area and original id do NOT come from the request, but via
+     * Record::getProdData() from the working copy - this also checks that it belongs to the
+     * logged-in editor. Without a working copy (id = 0: the insertion position
+     * of the import mask, RecordBackendImport) area_id from the request applies.
      *
-     * Vorausgewählt wird immer der LETZTE Eintrag: der Datensatz landet ans Ende
-     * seiner neuen Geschwister, dieselbe Vorgabe wie beim Anlegen.
+     * The LAST entry is always preselected: the record ends up at the end
+     * of its new siblings, the same default as when creating.
      *
-     * Request: id = Arbeitskopie (0 = keine, dann area_id), data[parent_id] = neu
-     *          gewählter Vaterdatensatz
+     * Request: id = working copy (0 = none, then area_id), data[parent_id] = newly
+     *          selected parent record
      */
     public function updatePreviousOptions(): void
     {
@@ -1528,14 +1524,14 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Ajax: Vorschau des Vaterdatensatz-Lookups aktualisieren
+     * Ajax: update the preview of the parent-record lookup
      * (backend/ajax_parent_lookup.php).
      *
-     * Aufgerufen von cApp.ui.plookupUpdate(), nachdem in der Auswahlliste ein Häkchen
-     * gesetzt oder entfernt wurde. Geschrieben wird dabei nichts: die Antwort enthält
-     * das versteckte Feld data[parent_id], das erst mit dem Formular abgeht.
+     * Called by cApp.ui.plookupUpdate() after a check mark was set or removed in the
+     * selection list. Nothing is written here: the response contains the hidden field
+     * data[parent_id], which is only sent along with the form.
      *
-     * Request: src_id = Arbeitskopie, parent_id = gewählter Vaterdatensatz (0 = keiner)
+     * Request: src_id = working copy, parent_id = selected parent record (0 = none)
      */
     public function parentLookupPreview(): void
     {
@@ -1547,25 +1543,24 @@ class RecordBackendEdit extends RecordBackend {
             $this->errors();
             return;
         }
-        // Ein Datensatz kann nicht sein eigener Vaterdatensatz sein
+        // a record cannot be its own parent record
         if ($parentId > 0 && $parentId === (int)$prodData[0]) $parentId = 0;
 
         echo $this->_parentLookupPreviewCreate($parentId);
     }
 
     /**
-     * Den Vorschaublock des Vaterdatensatz-Lookups rendern.
+     * Render the preview block of the parent-record lookup.
      *
-     * Gemeinsamer Kern von _editForm() und parentLookupPreview(). Anders als bei einem
-     * Verknüpfungsfeld ist es immer höchstens EINE Zeile - und diese Zeile IST das
-     * Eingabefeld: sie trägt das versteckte data[parent_id]. Ohne Vaterdatensatz
-     * bleibt der Block leer, dann fehlt das Feld im Request und `parent_id` fällt auf
-     * die Wurzelebene zurück.
+     * Common core of _editForm() and parentLookupPreview(). Unlike with a link field
+     * it is always at most ONE row - and this row IS the input field: it carries the
+     * hidden data[parent_id]. Without a parent record the block stays empty, then the
+     * field is missing in the request and `parent_id` falls back to the root level.
      *
-     * Als Beschriftung dient der Inhalt des Default-Feldes des Bereichs, in dem der
-     * gewählte Datensatz liegt.
+     * The label is the content of the default field of the area in which the
+     * selected record lies.
      *
-     * @param int $parentId  Vaterdatensatz oder 0
+     * @param int $parentId  parent record or 0
      */
     private function _parentLookupPreviewCreate(int $parentId): string
     {
@@ -1597,36 +1592,36 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Geladene Werte ins Eingabeformat umwandeln.
+     * Convert loaded values into the input format.
      *
-     * Aus der Datenbank kommen Werte in ihrer Speicherform; im Formular soll das
-     * stehen, was der Redakteur eingegeben hätte:
+     * Values come from the database in their storage format; the form should show
+     * what the editor would have entered:
      *
-     *     currency        in Cent gespeichert -> geteilt durch 100, zwei Nachkommastellen
-     *     float, decimal  lokales Dezimaltrennzeichen
-     *     Datum, Zeit     ISO-Format -> lokales Format
-     *     relation,       bestehende Verknüpfungen als Id-Array (bzw. einzelne Id bei
-     *     pointer         einem Auswahlfeld) - nur bei Direktauswahl; Lookup-Felder
-     *                     holen sich ihre Anzeige selbst
+     *     currency        stored in cents -> divided by 100, two decimal places
+     *     float, decimal  local decimal separator
+     *     date, time      ISO format -> local format
+     *     relation,       existing links as an id array (or a single id for
+     *     pointer         a selection field) - only for direct selection; lookup fields
+     *                     fetch their display themselves
      *
-     * Den Rückweg geht Dataset beim Speichern.
+     * Dataset takes the way back when saving.
      *
-     * @param array &$schemaVirtual  Zeiger auf das Tabellenschema, nur virtuelle Felder
+     * @param array &$schemaVirtual  reference to the table schema, virtual fields only
      */
     private function _editFormatLoadedValues(array &$schemaVirtual):void
     {
-        // $virtalSchema enthält alle Eingabefelder
+        // $virtalSchema contains all input fields
         foreach ($schemaVirtual as $name => $colDef) {
-            // Nur sichtbare Eingabefelder beachten
+            // only consider visible input fields
             $visibilityInput = (int)($colDef['visibility_input'] ?? 0);
             if ($visibilityInput == 0) continue;
 
-            // Werte je nach Typ in Eingabeformat umwandeln
+            // convert values to the input format depending on type
             $type = (string)($colDef['type'] ?? 'text');
             $displayType = $colDef['display_type'] ?? 'text';
             $options = [];
-            // Mehrsprachige Felder formatiert _editLanguageValues() je Sprache
-            // (sofern die Instanz mehrere Sprachen führt - sonst wie einsprachig)
+            // multilingual fields are formatted per language by _editLanguageValues()
+            // (if the instance maintains several languages - otherwise like single-language)
             if (!empty($colDef['multilingual'])
                 && in_array($type, $this->cms->multilingualTypes, true)
                 && count($this->_recordLanguages()) > 1
@@ -1634,10 +1629,10 @@ class RecordBackendEdit extends RecordBackend {
                 continue;
             }
             if (in_array($type, $this->cms->relationTypes, true)) {
-                // relation / pointer Direktauswahl ('link' hat keine: Lookup oder
-                // eingebettete Masken, die ihre Anzeige selbst holen)
+                // relation / pointer direct selection ('link' has none: lookup or
+                // embedded masks, which fetch their display themselves)
                 if ($displayType !== 'lookup' && !in_array($type, $this->cms->dependentTypes, true)) {
-                    // Bestehende Verknüpfungen in Array laden:
+                    // load existing links into an array:
                     $this->cms->select([
                         'src_id' => $this->id,
                         'relation' => $name
@@ -1664,20 +1659,20 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * function=create (mit Bereich): Arbeitskopie für einen neuen Datensatz anlegen.
+     * function=create (with area): create a working copy for a new record.
      *
-     * tmpInit() legt sie sofort in der Datenbank an - anders als init() in den übrigen
-     * Modulen, das nur ein Array mit Defaults liefert. Der Grund: Verknüpfungen und
-     * Uploads brauchen eine record_id, an die sie sich hängen können, und zwar schon
-     * beim Ausfüllen des Formulars.
+     * tmpInit() creates it immediately in the database - unlike init() in the other
+     * modules, which only returns an array with defaults. The reason: links and
+     * uploads need a record_id to which they can attach, already
+     * while the form is being filled in.
      *
-     * $this->id trägt danach die Id der Arbeitskopie, nicht 0.
+     * $this->id then holds the id of the working copy, not 0.
      */
     private function _editCreate(): void
     {
         // INIT
         // --------------------
-        // (Rechte: Anlegen im Bereich prüft tmpInit(), Meldung in Cms::errors)
+        // (rights: creating in the area is checked by tmpInit(), message in Cms::errors)
         if (!$this->data = $this->record->tmpInit(['area_id' => $this->areaId])) {
             if (!$this->cms->hasErrors) $this->cms->error('_editCreate(): creation of temporary dataset failed.');
             $this->function = 'skip';
@@ -1688,15 +1683,14 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * function=create (ohne Bereich): Schritt 1 - Inhaltsbereich wählen.
+     * function=create (without area): step 1 - choose the content area.
      *
-     * Erst der Bereich sagt, welche Felder ein Datensatz hat; ohne ihn lässt sich
-     * keine Maske bauen. Die Auswahl schickt dasselbe Script mit gesetzter area_id
-     * erneut ab.
+     * Only the area says which fields a record has; without it no
+     * mask can be built. The selection submits the same script again with area_id set.
      *
-     * Kommt der Aufruf aus einem Pointer-/Link-Feld, sind nur dessen Zielbereiche
-     * wählbar ($areaIds aus _resolveParams()); sonst fehlen die abhängigen Bereiche
-     * (`area.dependent`, siehe LinkTrait).
+     * If the call comes from a pointer / link field, only its target areas are
+     * selectable ($areaIds from _resolveParams()); otherwise the dependent areas
+     * are missing (`area.dependent`, see LinkTrait).
      */
     private function _editCreateForm(): void
     {
@@ -1705,8 +1699,8 @@ class RecordBackendEdit extends RecordBackend {
 
        // area_id
         $sqlTypes = '';
-        $sqlValues = [];            
-        // (nur Bereiche, in denen die Gruppe anlegen darf)
+        $sqlValues = [];
+        // (only areas in which the group may create)
         $sql = "SELECT `area_id`, `depth`, `label` FROM `area` WHERE `type` IN ('record','profile','ugc') AND `deleted`=0"
              . $this->backend->areaAccessSql(writable:true);
         
@@ -1717,8 +1711,8 @@ class RecordBackendEdit extends RecordBackend {
             $sqlValues = $this->areaIds;
         }
         else {
-            // Abhängige Bereiche (Zielbereiche von 'link'-Feldern) nur aus einem
-            // solchen Feld heraus - ihre Datensätze gehören einem Quelldatensatz
+            // dependent areas (target areas of 'link' fields) only from such a
+            // field - their records belong to a source record
             $sql .= " AND `dependent` = 0";
         }
         
@@ -1745,38 +1739,38 @@ class RecordBackendEdit extends RecordBackend {
             'selectPlease' => true
         ]);
 
-        // Hidden-Felder
+        // hidden fields
         // --------------------
         $this->backend->formHidden('function', 'create');
         // call by lookup field
         $this->backend->formHidden('src_field', $this->srcField);
         $this->backend->formHidden('src_id', $this->srcId);
 
-        // Formular rendern
+        // render the form
         echo $this->backend->form('form_save_cancel');
         echo '</form>';
     }
 
     /**
-     * function=edit|copy|delete: Datensatz laden und zur Bearbeitung auschecken.
+     * function=edit|copy|delete: load the record and check it out for editing.
      *
-     * Drei Schritte:
+     * Three steps:
      *
-     *  1. Laden. Eine Arbeitskopie oder ein gelöschter Datensatz darf hier nicht
-     *     ankommen - bearbeitet wird immer der produktive Stand.
-     *  2. Bearbeitungssperre prüfen (nur bei 'edit'): findet Record::getLock() eine
-     *     fremde Arbeitskopie, arbeitet gerade jemand anders daran. Angezeigt wird
-     *     dann ein Hinweis mit Name und Zeitpunkt, dazu ein Link mit unlock=1, der
-     *     die Sperre übergeht - eine harte Sperre wäre unbrauchbar, weil eine
-     *     abgebrochene Sitzung sie sonst dauerhaft stehen ließe.
-     *  3. Check-out: Record::checkOut() legt die Arbeitskopie an, ab hier zeigt
-     *     $this->id auf sie. Beim Kopieren entsteht dabei eine Kopie ohne
-     *     origin_id - sie wird beim Speichern zu einem neuen Datensatz.
+     *  1. Load. A working copy or a deleted record must not arrive here - always the
+     *     productive state is edited.
+     *  2. Check the edit lock (only for 'edit'): if Record::getLock() finds a
+     *     foreign working copy, someone else is working on it at the moment. A note
+     *     with name and time is then shown, plus a link with unlock=1 that
+     *     bypasses the lock - a hard lock would be unusable, because an
+     *     aborted session would otherwise leave it in place permanently.
+     *  3. Check-out: Record::checkOut() creates the working copy, from here on
+     *     $this->id points to it. When copying, a copy without
+     *     origin_id arises - it becomes a new record when saved.
      */
     /**
-     * Platzhalter statt Eingabemaske bei einem GET (siehe edit(), "Check-out nur per
-     * POST"). cApp.layers.openPost() lädt den Layer per POST neu - sofort, wenn er
-     * aus der Oberfläche geöffnet wurde, sonst mit dem Knopf.
+     * Placeholder instead of the input mask for a GET (see edit(), "check-out only via
+     * POST"). cApp.layers.openPost() reloads the layer via POST - immediately if it
+     * was opened from the interface, otherwise with the button.
      */
     private function _editOpenStub(): void
     {
@@ -1796,9 +1790,9 @@ class RecordBackendEdit extends RecordBackend {
 
     private function _editLoad(): void
     {
-        // Laden, produktiv?, Rechte der Benutzergruppe (12-group-rights.md):
-        // Ändern/Löschen nach der Gruppe des Owners, Kopieren = Anlegen im Bereich -
-        // und nur, wenn alle Verknüpfungsfelder lesbare Zielbereiche haben
+        // load, productive?, rights of the user group (developer docs, chapter 11 (Permissions)):
+        // change/delete according to the group of the owner, copy = create in the area -
+        // and only if all link fields have readable target areas
         // (RecordService::loadForAction())
         $action = match ($this->function) {
             'delete' => 'delete',
@@ -1811,24 +1805,24 @@ class RecordBackendEdit extends RecordBackend {
             return;
         }
 
-        // Beim Auflösen der Seitenparameter stand der Bereich noch nicht fest - der
-        // Aufruf nennt nur die Datensatz-Id. Erst jetzt lassen sich die Angaben zu
-        // Default- und Sortierfeld nachladen; ohne sie bleiben die Beschriftungen in
-        // _parentOptions() und _previousOptions() leer.
+        // When resolving the page parameters the area was not yet fixed - the
+        // call names only the record id. Only now can the details on the
+        // default and sort field be loaded; without them the labels in
+        // _parentOptions() and _previousOptions() remain empty.
         $this->areaId = (int)$this->data['area_id'];
         $this->areaData = $this->backend->areaData($this->areaId);
 
-        // Edit-Lock prüfen (sofern nicht Parameter unlock=1 gesetzt ist)
+        // check the edit lock (unless parameter unlock=1 is set)
         // --------------------
         if ($this->function == 'edit' && !(bool)($_REQUEST['unlock'] ?? 0)) {
             if ($lock = $this->service->lockInfo($this->data)) {
-                // Meldung mit Knöpfen Sperre aufheben/Abbrechen - ausgegeben in edit()
-                // unter der Überschrift und dem Default-Feld des Datensatzes
+                // message with buttons to lift the lock / cancel - output in edit()
+                // below the heading and the default field of the record
                 $defaultName = $this->backend->getDefaultField($this->areaId)['name'] ?? '';
                 $label = $this->data[$defaultName] ?? '';
                 if (!is_scalar($label) || (string)$label === '') $label = $this->id;
-                // (template() löst {#…} erst nach den Platzhaltern auf - der Text mit
-                // seinen eigenen Platzhaltern wird deshalb hier zusammengesetzt)
+                // (template() resolves {#…} only after the placeholders - the text with
+                // its own placeholders is therefore assembled here)
                 $text = strtr($this->cms->snippet('record.alert_record_locked'), [
                     '{admin_name}' => $this->backend->teaser('admin', $lock['admin_id']),
                     '{changed_at}' => $this->cms->_formatDate($this->cms->utcToUserTZ(substr($lock['changed_at'], 0, 19)))
@@ -1845,11 +1839,11 @@ class RecordBackendEdit extends RecordBackend {
 
         // CHECK-OUT
         // --------------------
-        // Kopie: RecordService::checkOut() gibt ihr das Vorbild als `previous_id` mit -
-        // sie steht dann unmittelbar hinter ihm, beim selben Vaterdatensatz.
-        // Fest verknüpfte Inhalte eingebetteter 'link'-Felder werden mit
-        // ausgecheckt (nicht beim Löschen); scheitert das, ist die Arbeitskopie
-        // wieder verworfen und $this->id zeigt weiter auf das Original.
+        // copy: RecordService::checkOut() passes the model along as `previous_id` -
+        // it then stands directly after it, under the same parent record.
+        // Firmly linked contents of embedded 'link' fields are checked out
+        // along (not when deleting); if that fails, the working copy is
+        // discarded again and $this->id still points to the original.
         $tmpId = $this->service->checkOut($this->data, $this->function === 'copy', dependents: $this->function !== 'delete');
         if (!$tmpId) {
             $this->function = 'skip';
@@ -1860,22 +1854,22 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Die Eingabemaske für eine BESTEHENDE Arbeitskopie des Session-Admins - ohne
-     * neuen Check-out. Gebraucht vom Verschieben (RecordBackendMove): scheitert dort
-     * die Prüfung im Zielbereich, bleibt die von MoveTrait::movePrepare() umgebaute
-     * Arbeitskopie stehen, und der Redakteur ergänzt die fehlenden Eingaben in der
-     * Maske des Zielbereichs. Ab hier ist es eine gewöhnliche Bearbeitung: Speichern
-     * (function=save) checkt die Kopie ein, Abbrechen (record_cancel.php) verwirft
-     * sie - der Datensatz bleibt dann, wo er war.
+     * The input mask for an EXISTING working copy of the session admin - without
+     * a new check-out. Needed by moving (RecordBackendMove): if the check in the
+     * target area fails there, the working copy reshaped by MoveTrait::movePrepare()
+     * remains, and the editor adds the missing inputs in the mask of the
+     * target area. From here on it is an ordinary edit: saving
+     * (function=save) checks the copy in, cancelling (record_cancel.php) discards
+     * it - the record then stays where it was.
      *
-     * Werte kommen aus der Arbeitskopie selbst: Record::load() liest sie wie einen
-     * produktiven Datensatz (Cms::fetch() über `record_cache`, Verknüpfungen über
-     * data_rel der Kopie), Sprachen ergänzt _editLanguageValues() aus dem
-     * Arbeitsstand. Feldfehler in Cms::errors (Namen der Zielfelder, mehrsprachig
-     * "name.{language_id}") erscheinen an ihren Feldern.
+     * Values come from the working copy itself: Record::load() reads it like a
+     * productive record (Cms::fetch() via `record_cache`, links via
+     * data_rel of the copy), languages are added by _editLanguageValues() from the
+     * working state. Field errors in Cms::errors (names of the target fields, multilingual
+     * "name.{language_id}") appear at their fields.
      *
-     * @param int $tmpId  Arbeitskopie (tmp = 1, changed_by = Session-Admin)
-     * @return bool       false, wenn die Kopie nicht (mehr) dem Admin gehört
+     * @param int $tmpId  working copy (tmp = 1, changed_by = session admin)
+     * @return bool       false if the copy does not (or no longer) belong to the admin
      */
     protected function _editWorkingCopyForm(int $tmpId): bool
     {
@@ -1894,9 +1888,9 @@ class RecordBackendEdit extends RecordBackend {
         $this->data['record_id'] = $tmpId;
 
         $schemaVirtual = $this->record->virtualSchema($this->areaId, addMetaFields: false);
-        // Eingebettete Inhalte (link/embed) der Kopie auschecken, sofern noch nicht
-        // geschehen - beim Verschieben zeigen ihre Kanten noch auf die produktiven
-        // Inhalte (LinkTrait::checkOutDependents() übergeht Arbeitskopien)
+        // check out embedded contents (link/embed) of the copy, unless already
+        // done - when moving, their edges still point to the productive
+        // contents (LinkTrait::checkOutDependents() skips working copies)
         if (!$this->record->checkOutDependents($tmpId, false, $schemaVirtual)) return false;
         $this->_editFormatLoadedValues($schemaVirtual);
         $this->_editRestoreSecuredFiles($schemaVirtual);
@@ -1905,46 +1899,46 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * function=save: Eingaben prüfen und speichern.
+     * function=save: check the inputs and save them.
      *
-     * Record::save() erledigt alles Weitere: Validierung, checkIn der Arbeitskopie,
-     * Übernahme der Dateien (promoteTmpFiles()) und der Verknüpfungen, Neuberechnung
-     * des Baumes - alles in einer Transaktion. Die Prüfung der Bearbeitungssperre
-     * steckt ebenfalls dort.
+     * Record::save() does everything else: validation, checkIn of the working copy,
+     * taking over the files (promoteTmpFiles()) and the links, recalculation
+     * of the tree - all in one transaction. The check of the edit lock
+     * is also located there.
      *
-     * Wohin es danach geht, hängt davon ab, woher der Aufruf kam: aus einem
-     * Lookup-Feld heraus wird der neue Datensatz dort gleich verknüpft, sonst wird
-     * die Datensatzliste aktualisiert.
+     * Where it goes afterwards depends on where the call came from: from a
+     * lookup field the new record is linked there right away, otherwise
+     * the record list is updated.
      *
-     * @param array $fields  zu schreibende Felder - die Schema-Felder des Bereichs
+     * @param array $fields  fields to be written - the schema fields of the area
      */
     private function _editSave(array $fields): void
     {
-        // EDIT LOCK - Zugriff prüfen
-        // wird in Record::save() durchgeführt
+        // EDIT LOCK - check access
+        // is performed in Record::save()
 
-        // Fest verknüpfte Inhalte (link, LinkTrait)
+        // Firmly linked contents (link, LinkTrait)
         // --------------------
-        // 1. eingebettete Inhalte mit ihren Eingaben prüfen und zwischenspeichern
-        //    (stayTemporary) - vor allem anderen, damit kein Check-in beginnt,
-        //    solange eine Zelle Fehler hat
-        // 2. in einer Transaktion: Check-in der Inhalte (checkInDependents(): auch
-        //    Kopien und Verwaiste), dann der Quelldatensatz. Scheitert eines,
-        //    kommt alles zurück; die Arbeitskopien bleiben stehen
+        // 1. check the embedded contents with their inputs and save them in between
+        //    (stayTemporary) - before anything else, so that no check-in begins
+        //    while a cell has errors
+        // 2. in one transaction: check-in of the contents (checkInDependents(): also
+        //    copies and orphans), then the source record. If one fails,
+        //    everything is rolled back; the working copies remain
         $schemaVirtual = $this->record->virtualSchema($this->areaId, addMetaFields:false);
         if (!$this->_embedSave($schemaVirtual)) {
             $this->function = 'errors';
             return;
         }
-        // Check-in samt der Inhalte in einer Transaktion (RecordService::checkIn()).
-        // Kopie: bei Fehlern zeigt die Maske die Eingabe, nicht die Speicherform
+        // check-in including the contents in one transaction (RecordService::checkIn()).
+        // copy: on errors the mask shows the input, not the storage format
         $newId = $this->service->checkIn($this->id, $fields, $this->data);
         if ($newId) {
-            // Balloon Message
+            // balloon message
             $msg = $this->cms->snippet('message_record_saved');
             $this->backend->balloon('success', $msg);
 
-            // Debug-Funktion (Weiterleitung aussetzen, um direkte Debug-Ausgaben zu sehen)
+            // debug function (suspend the redirect to see direct debug output)
             if (
                 $this->data['title'] == 'camindodebugmedia'
                 && !empty($this->config->get('system.development_version'))
@@ -1956,18 +1950,18 @@ class RecordBackendEdit extends RecordBackend {
             }
 
             if ($this->srcField > 0 && $this->srcIsParent && $this->srcId > 0) {
-                // Referer ist das Lookupfeld für den Vaterdatensatz in einer
-                // Eingabemaske -> den neuen Datensatz dort eintragen (nicht verknüpfen).
-                // Erst schließen: dieses Formular hat SELBST ein Lookup-Feld mit
-                // derselben src-field, das sonst als Ziel gefunden würde
+                // referrer is the lookup field for the parent record in an
+                // input mask -> enter the new record there (do not link it).
+                // Close first: this form HAS ITSELF a lookup field with the
+                // same src-field, which would otherwise be found as the target
                 $this->backend->script("
                     cApp.layers.close();
                     cApp.ui.plookupUpdate({$this->srcField},'link',$newId,true);
                 ");
             }
             elseif ($this->srcField > 0 && $this->srcIsParent) {
-                // Dasselbe Feld in der SUCHMASKE (kein src_id): dort dürfen mehrere
-                // Vaterdatensätze gewählt werden, es gilt das gewöhnliche Such-Lookup
+                // the same field in the SEARCH MASK (no src_id): there several
+                // parent records may be chosen, the usual search lookup applies
                 $this->backend->script("
                     cApp.layers.close();
                     cApp.ui.slookupUpdate({$this->srcField},'link',$newId,true);
@@ -1975,15 +1969,15 @@ class RecordBackendEdit extends RecordBackend {
             }
             elseif ($this->srcField > 0) {
                 if (!empty($this->straight)) {
-                    // Referer ist Lookupfeld -> neuen Datensatz verknüpfen
+                    // referrer is lookup field -> link the new record
                     $this->backend->script("
                         cApp.ui.lookupRUpdate({$this->srcField},'link',$newId,0,true,{$this->srcId});
                         cApp.layers.close();
                     ");
                 }
                 else {
-                    // Referer ist Verknüpfungsliste -> Liste aktualisieren
-                    // und im Anschluss Datensatz verknüpfen (schließt ggf die Liste)
+                    // referrer is link list -> update the list
+                    // and then link the record (closes the list if applicable)
                     $this->backend->script("
                         cApp.layers.invalidate(function(){cApp.ui.lookupRUpdate({$this->srcField},'link',$newId,0,false,{$this->srcId});});
                         cApp.layers.close();
@@ -1991,7 +1985,7 @@ class RecordBackendEdit extends RecordBackend {
                 }
             }
             else {
-                // Referer ist Datensatzliste -> diese aktualisiert anzeigen
+                // referrer is record list -> display it updated
                 $this->backend->script("
                     cApp.layers.invalidate();
                     cApp.layers.close();
@@ -2004,35 +1998,34 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Nach fehlgeschlagener Eingabeprüfung (function 'errors'):
-     * Datei-Felder aus dem Zwischenstand (cache) der Arbeitskopie in $this->data
-     * zurückspielen, damit die von Dataset::save() -> _secureUploads() bereits
-     * gesicherten Uploads in der erneut angezeigten Eingabemaske erscheinen
-     * (Preview-Link + x-Button in _editForm()).
+     * After a failed input check (function 'errors'):
+     * feed the file fields from the intermediate state (cache) of the working copy back into $this->data,
+     * so that the uploads already secured by Dataset::save() -> _secureUploads()
+     * appear in the input mask shown again (preview link + x button in _editForm()).
      *
-     * Hintergrund: $this->data basiert auf $_REQUEST['data'] (POST) - Datei-Felder
-     * stehen dort nie drin; $_FILES ist nach move_uploaded_file() verbraucht.
-     * Die Datei selbst hängt bereits korrekt an der Arbeitskopie
-     * (physisch + `data_fil` + cache) und geht beim nächsten erfolgreichen
-     * Speichern via promoteTmpFiles() produktiv - es fehlt nur die Anzeige.
+     * Background: $this->data is based on $_REQUEST['data'] (POST) - file fields
+     * are never in there; $_FILES is consumed after move_uploaded_file().
+     * The file itself is already correctly attached to the working copy
+     * (physically + `data_fil` + cache) and goes productive at the next successful
+     * save via promoteTmpFiles() - only the display is missing.
      *
-     * @param array $schemaVirtual  Schema mit virtuellen Feldern
+     * @param array $schemaVirtual  schema with virtual fields
      */
     private function _editRestoreSecuredFiles(array $schemaVirtual): void
     {
         if ($this->id < 1) return;
 
-        // Nur für temporäre Arbeitskopien des Session-Admins
-        // (gleiches Zugriffsmuster wie removeUpload())
+        // only for temporary working copies of the session admin
+        // (same access pattern as removeUpload())
         if (!$this->record->getProdData($this->id)) return;
 
-        // Arbeitsstand der Arbeitskopie laden
+        // load the working state of the working copy
         $cache = $this->record->loadTmpData($this->id);
         if (empty($cache)) return;
 
         foreach ($schemaVirtual as $name => $colDef) {
             if ((string)($colDef['type'] ?? '') !== 'file') continue;
-            // Eintrag hat das Format [$type, $fileData], mehrsprachig je Sprache
+            // entry has the format [$type, $fileData], multilingual per language
             $entry = $cache[$name] ?? null;
             if (($entry[0] ?? '') !== 'file') continue;
             if ($this->cms->isMultilingualField($colDef)) {
@@ -2046,27 +2039,27 @@ class RecordBackendEdit extends RecordBackend {
                 continue;
             }
             $fileData = (array)($entry[1] ?? []);
-            // Löschmarkierungen (x-Button) und leere Einträge nicht anzeigen
+            // do not show delete markers (x button) and empty entries
             if (!empty($fileData['deleted']) || (int)($fileData['size'] ?? 0) < 1) continue;
             $this->data[$name] = $fileData;
         }
     }
 
     /**
-     * function=delete: Löschbestätigung.
+     * function=delete: deletion confirmation.
      *
-     * Führt der Bereich einen Baum (Eingabefeld `parent_id`, Record::isTreeArea())
-     * und hat der Datensatz Nachkommen, wird wie bei den Ordnern gefragt, was mit
-     * ihnen geschehen soll (vgl. AreaBackend::_editDeleteForm()): eine Ebene hoch
-     * rücken oder mit löschen. Das Radio-Feld steht in
-     * record_delete_with_option_form.html und kommt als $_REQUEST['deletechilds']
-     * zurück. Ohne Baum bzw. ohne Nachkommen bleibt es bei der einfachen Rückfrage.
+     * If the area has a tree (input field `parent_id`, Record::isTreeArea())
+     * and the record has descendants, the user is asked, as with folders, what
+     * should happen to them (cf. AreaBackend::_editDeleteForm()): move up one level
+     * or delete along. The radio field is in
+     * record_delete_with_option_form.html and comes back as $_REQUEST['deletechilds'].
+     * Without a tree resp. without descendants the simple confirmation remains.
      *
-     * Gezählt wird der ganze Teilbaum über lft/rgt (nicht nur die direkten Kinder),
-     * je Bereich - dort beginnt lft jeweils wieder bei 1 (TreeManagerTrait). Die
-     * Grenzen stammen aus $this->data: das ist der produktive Stand, den
-     * _editLoad() geladen hat - der Check-out ändert daran nur record_id/tmp/
-     * origin_id, die Arbeitskopie selbst hat lft = rgt = 0.
+     * The whole subtree is counted via lft/rgt (not only the direct children),
+     * per area - there lft starts again at 1 each time (TreeManagerTrait). The
+     * boundaries come from $this->data: that is the productive state that
+     * _editLoad() loaded - the check-out only changes record_id/tmp/
+     * origin_id there, the working copy itself has lft = rgt = 0.
      */
     private function _editDeleteForm(): void
     {
@@ -2085,9 +2078,9 @@ class RecordBackendEdit extends RecordBackend {
             }
         }
 
-        // Verknüpfte Datensätze (irgendein Verweisfeld, auch beidseitige Relationen
-        // über ausgeblendete Gegenfelder): Hinweis mit Knopf zur bereichsübergreifenden
-        // Trefferliste relation=any + dest_id - dieselbe Menge wie die Zählung
+        // linked records (any reference field, also two-sided relations
+        // via hidden counter fields): note with button to the cross-area
+        // hit list relation=any + dest_id - the same set as the count
         $references = '';
         $originId = (int)($this->data['origin_id'] ?? 0) ?: $this->id;
         $linked = $this->service->linkedRecordCount($originId);
@@ -2101,11 +2094,11 @@ class RecordBackendEdit extends RecordBackend {
             ]);
         }
 
-        // Was die Lösch-Policy des Bereichs mit der Datenbank tut (Modul Privacy)
+        // what the deletion policy of the area does with the database (module Privacy)
         $policy = $GLOBALS['app']->get(\Camindo\Core\Modules\Privacy\PrivacyBackend::class)->hintHtml($originId);
 
         if ($countChilds > 0) {
-            // Datensatz hat Nachkommen -> Rückfrage mit Wahlmöglichkeit
+            // record has descendants -> confirmation with a choice
             $items = $this->cms->snippet('record.x_records', ['count' => $countChilds]);
             $msg = str_replace('{items}', $items, $this->cms->snippet('record.alert_record_delete_with_childs'));
             $uid = $this->crypt->randomKey(16);
@@ -2128,32 +2121,32 @@ class RecordBackendEdit extends RecordBackend {
         $this->backend->formHidden('src_field', $this->srcField);
         $this->backend->formHidden('src_id', $this->srcId);
 
-        // Formular rendern
+        // render the form
         echo $this->backend->form('form_delete_cancel');
 
         echo '</form>';
     }
 
     /**
-     * Löschung durchführen - nach der Lösch-Policy des Bereichs (Modul Privacy,
-     * RecordService::delete()). Meist heißt das: in den Papierkorb; endgültig
-     * gelöscht wird dann vom Systemtool nach admin.trash_retention_days
-     * (Zeitplaner-Aufgabe "Papierkorb leeren"). Die Policy kann stattdessen Felder überschreiben oder
-     * erst später handeln ('changed' / 'scheduled').
+     * Carry out the deletion - according to the deletion policy of the area (module Privacy,
+     * RecordService::delete()). Usually this means: into the trash; it is then
+     * permanently deleted by the system tool after admin.trash_retention_days
+     * (scheduler task "Empty trash"). Instead, the policy can overwrite fields or
+     * act only later ('changed' / 'scheduled').
      *
-     * $withChilds steuert, was mit den Kind-Datensätzen passiert (Radio-Feld aus
-     * _editDeleteForm(), nur bei Bereichen mit Baum und vorhandenen Nachkommen):
-     *     true   der ganze Teilbaum wird mitmarkiert, der Baum bleibt unverändert
-     *     false  die Kinder rücken eine Ebene hoch (Dataset::liftChildren()), Standard
-     * Große Teilbäume wandern ab admin.mass_delete_threshold in einen
-     * Hintergrundprozess, damit das Löschen nicht am Web-Timeout scheitert.
+     * $withChilds controls what happens to the child records (radio field from
+     * _editDeleteForm(), only for areas with a tree and existing descendants):
+     *     true   the whole subtree is marked along, the tree remains unchanged
+     *     false  the children move up one level (Dataset::liftChildren()), default
+     * Large subtrees move from admin.mass_delete_threshold into a
+     * background process, so that deleting does not fail on the web timeout.
      */
     private function _editDeleteConfirm(): void
     {
         $withChilds = ((string)($_REQUEST['deletechilds'] ?? 'false') === 'true');
 
-        // Große Teilbäume gehen in den Hintergrund (RecordService::delete());
-        // $this->id ist die Arbeitskopie, gemeint ist das Original
+        // large subtrees go to the background (RecordService::delete());
+        // $this->id is the working copy, the original is meant
         $result = $this->service->delete($this->id, $withChilds);
         if ($result === 'background') {
             $this->backend->balloon('info', $this->cms->snippet('message_background_started'));
@@ -2167,7 +2160,7 @@ class RecordBackendEdit extends RecordBackend {
         // DELETE
         // --------------------
         if (in_array($result, ['deleted', 'changed', 'scheduled'], true)) {
-            // Balloon Message
+            // balloon message
             $msg = $this->cms->snippet(match ($result) {
                 'changed'   => 'privacy.message_record_changed',
                 'scheduled' => 'privacy.message_record_scheduled',
@@ -2176,14 +2169,14 @@ class RecordBackendEdit extends RecordBackend {
             $this->backend->balloon('success', $msg);
             
             if ($this->srcField > 0) {
-                // Referer ist Lookupfeld -> preview Container aktualisieren
+                // referrer is lookup field -> update the preview container
                 $this->backend->script("
                     cApp.ui.lookupRUpdate({$this->srcField},'',0,0,false,{$this->srcId});
                     cApp.layers.close();
                 ");
             }
             else {
-                // Referer ist Datensatzliste -> diese aktualisieren
+                // referrer is record list -> update it
                 $this->backend->script("
                     cApp.layers.invalidate();
                     cApp.layers.close();
@@ -2197,18 +2190,18 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Bearbeitung abbrechen (Ajax).
+     * Cancel editing (Ajax).
      *
-     * Verwirft die Arbeitskopie samt der daran hängenden Dateien und hebt damit
-     * zugleich die Bearbeitungssperre auf. Der produktive Datensatz bleibt, wie er
-     * war - deshalb ist "Abbrechen" hier tatsächlich folgenlos, obwohl währenddessen
-     * schon geschrieben wurde.
+     * Discards the working copy together with the files attached to it and thereby
+     * also lifts the edit lock. The productive record remains as it was - which is why
+     * "Cancel" really has no consequences here, although writing already took place
+     * in the meantime.
      */
     public function cancel(): void {
-        // Verwirft die Arbeitskopie samt hochgeladener Dateien - nur per POST
-        // (17-csrf.md §2.7). Der Layer schließt in jedem Fall: ein stehengebliebener
-        // Layer wäre für den Anwender schlimmer als eine übrige Arbeitskopie, die der
-        // Papierkorb (Modul Tools) ohnehin abräumt.
+        // discards the working copy together with uploaded files - POST only
+        // (developer docs, chapter 14 (Security: web)). The layer closes in any case: a layer
+        // left standing would be worse for the user than a remaining working copy, which the
+        // trash (module Tools) clears away anyway.
         $id = (int)($_REQUEST['id'] ?? 0);
         if ($this->backend->requirePost()) $this->record->cancel($id);
         $this->backend->script('cApp.layers.close();');
@@ -2216,26 +2209,26 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Auswahlliste der verknüpfbaren Datensätze.
+     * Selection list of the linkable records.
      *
-     * Für Relations- und Pointer-Felder mit Direktauswahl (display_type select,
-     * multiselect, radio, checkbox) - nicht für Lookup-Felder, die ein eigenes
-     * Suchfenster haben.
+     * For relation and pointer fields with direct selection (display_type select,
+     * multiselect, radio, checkbox) - not for lookup fields, which have their own
+     * search window.
      *
-     * Bei mehreren Zielbereichen (Pointer) werden sie nacheinander abgearbeitet;
-     * innerhalb eines Bereichs gilt dessen Standardsortierung, angezeigt wird der
-     * Inhalt seines Default-Feldes. Beides kann je Bereich verschieden sein, deshalb
-     * die Schleife statt einer einzigen Abfrage.
+     * With several target areas (pointer) they are processed one after the other;
+     * within an area its default sort order applies, and the content of its default
+     * field is shown. Both can differ per area, which is why the
+     * loop is used instead of a single query.
      *
-     * Die Gesamtzahl ist auf admin.list_max_datasets begrenzt (Standard 200) - der
-     * Zähler läuft über alle Bereiche hinweg, und das Limit der nächsten Abfrage wird
-     * um das bereits Geladene verringert. Bei Überschreitung wird abgebrochen und ein
-     * deaktivierter "…"-Eintrag angehängt, statt die Liste stillschweigend zu kürzen.
-     * Für größere Mengen ist das Lookup-Feld gedacht.
+     * The total number is limited to admin.list_max_datasets (default 200) - the
+     * counter runs across all areas, and the limit of the next query is reduced
+     * by what has already been loaded. If it is exceeded, processing stops and a
+     * disabled "…" entry is appended, instead of silently truncating the list.
+     * The lookup field is intended for larger volumes.
      *
-     * @param array $destAreas      Inhaltsbereichs-Ids
-     * @param bool $addEmptyOption  true (default): Bitte wählen-Option am Anfang der Liste
-     * @return array                Array mit id => defaultField Elementen
+     * @param array $destAreas      content area ids
+     * @param bool $addEmptyOption  true (default): "please select" option at the start of the list
+     * @return array                array with id => defaultField elements
      */
     protected function _relatedDatasetOptions(array $destAreas, bool $addEmptyOption = false): array {
 
@@ -2244,29 +2237,29 @@ class RecordBackendEdit extends RecordBackend {
 
         $multipleAreas = (count($areaIds) > 1);
 
-        // maximale Datensätze in Direktauswahl
+        // maximum records in direct selection
         $limit = $this->config->get('admin.list_max_datasets') ?? 200;
-        // mitzählen über mehrere Bereiche
+        // count across several areas
         $count = 0;
 
         $options = $addEmptyOption ? ['' => $this->cms->snippet('please_select')] : [];
         
-        // Datensätze mehrerer Bereiche: gruppiert nach Bereich,
-        // innerhalb Bereich wird Standard-Sotierung des Bereichs genommen
+        // records of several areas: grouped by area,
+        // within an area the area's default sort order is used
         foreach ($areaIds as $areaId) {
             $areaData = $this->backend->areaData((int)$areaId);
             $defaultFieldName = (string)$areaData['default_field_name'];
             $defaultFieldType = (string)$areaData['default_field_type'] ?? 'text';
             $param = [];
             $param['filter']['area_id'] = $areaId;
-            // Standardsortierung des Bereichs
+            // default sort order of the area
             $param['sort'] = (string)$areaData['sort_field_name'];
             $param['order'] = $areaData['sort_order'];
-            // lade +1 um zu prüfen, ob mehr vorhanden sind, abzüglich Anzahl aus Vorrunden
+            // load +1 to check whether more exist, minus the number from previous rounds
             $param['limit'] = $limit + 1 - $count;
             $this->cms->select($param);
             $numRows = $this->db->num_rows;
-            // Anzahl der angezeigten Datensätze
+            // number of records displayed
             $displayNumber = min($numRows, $limit - $count);
             $colDef = ['type' => $defaultFieldType];
             for ($i = 0; $i < $displayNumber; $i++) {
@@ -2274,12 +2267,12 @@ class RecordBackendEdit extends RecordBackend {
                 $value = $this->backend->backendValue($data[$defaultFieldName] ?? '', $colDef);
                 $options[(string)$data['record_id']] = $value;
             }
-            // Neu geladene Datensätze zum Gesamtzähler hinzufügen
+            // add newly loaded records to the total counter
             $count += $numRows;
-            // Limit überschritten?
+            // limit exceeded?
             if ($count > $limit) {
                 $options['disabled'] = $this->cms->snippet('ellipsis_spoken');
-                break; // keine weiteren Areas mehr verarbeiten
+                break; // do not process any further areas
             }
         }
         
@@ -2287,24 +2280,24 @@ class RecordBackendEdit extends RecordBackend {
     }
 
     /**
-     * Ajax: Verknüpfungen eines Lookup-Feldes bearbeiten und die Vorschau neu liefern.
+     * Ajax: edit the links of a lookup field and deliver the preview anew.
      *
-     * Die Verknüpfung wird SOFORT geschrieben, nicht erst beim Speichern des
-     * Formulars - möglich, weil sie an der Arbeitskopie hängt und mit ihr verworfen
-     * würde (siehe Klassenkommentar).
+     * The link is written IMMEDIATELY, not only when the form is saved - possible
+     * because it is attached to the working copy and would be discarded with it
+     * (see class comment).
      *
-     *     link     verknüpfen; bei max = 1 wird die bestehende Verknüpfung ersetzt
-     *              statt eine zweite anzulegen
-     *     unlink   eine Verknüpfung lösen
-     *     empty    alle Verknüpfungen des Feldes lösen
-     *     swap     zwei Verknüpfungen in der Reihenfolge tauschen (nur bei Feldern
-     *              mit custom_order)
+     *     link     link; with max = 1 the existing link is replaced
+     *              instead of creating a second one
+     *     unlink   remove a link
+     *     empty    remove all links of the field
+     *     swap     swap two links in order (only for fields
+     *              with custom_order)
      *
-     * Danach in jedem Fall die aktualisierte Vorschau. Fehler werden abgefangen und
-     * als Meldung ausgegeben - die Prüfungen (Höchstzahl, zulässiger Zielbereich)
-     * stecken in Record::createRelations().
+     * In any case, the updated preview follows afterwards. Errors are caught and
+     * output as a message - the checks (maximum number, permitted target area)
+     * are located in Record::createRelations().
      *
-     * Der auskommentierte 'up'/'down'-Block ist der Vorgänger von 'swap'.
+     * The commented-out 'up'/'down' block is the predecessor of 'swap'.
      *
      * Request: src_field, src_id, function, dest_id, swap_id
      */
@@ -2315,15 +2308,15 @@ class RecordBackendEdit extends RecordBackend {
         $swapId    = (int)($_REQUEST['swap_id'] ?? 0);
         $function  = (string)($_REQUEST['function'] ?? '');
 
-        // link/unlink/empty schreiben data_rel der Arbeitskopie - nur per POST
-        // (17-csrf.md §2.7). Ohne 'function' ist der Aufruf eine reine Neuanzeige
-        // des Vorschaublocks und darf GET bleiben.
+        // link/unlink/empty write data_rel of the working copy - POST only
+        // (developer docs, chapter 14 (Security: web)). Without 'function' the call is a pure
+        // redisplay of the preview block and may remain GET.
         if (in_array($function, ['link', 'unlink', 'empty'], true) && !$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
         }
 
-        // Lade Daten des angegebenen Relation-Feldes
+        // load data of the given relation field
         if (!$fieldData = $this->record->fieldData($srcField)) {
             $this->cms->error('lookupPreview() Exception: field not found.');
             $this->errors();
@@ -2337,7 +2330,7 @@ class RecordBackendEdit extends RecordBackend {
                 else $replace = false;
                 $this->record->createRelations($fieldData, $srcId, $destId, $replace);
             } catch (\Exception $e) {
-                // (Feldfehler aus createRelations() stehen schon in Cms::errors - '#')
+                // (field errors from createRelations() are already in Cms::errors - '#')
                 $errorMsg = $e->getMessage();
                 if (!str_starts_with($errorMsg, '#')) $this->cms->error($errorMsg);
                 $this->errors();
@@ -2394,22 +2387,22 @@ class RecordBackendEdit extends RecordBackend {
 
 
     /**
-     * Den Vorschaublock eines Lookup-Feldes rendern.
+     * Render the preview block of a lookup field.
      *
-     * Gemeinsamer Kern von lookupPreview() und _editForm() - das Formular baut ihn
-     * beim ersten Aufbau, danach ersetzt ihn das Javascript nach jeder Änderung.
+     * Common core of lookupPreview() and _editForm() - the form builds it
+     * on the first build, afterwards the JavaScript replaces it after every change.
      *
-     * Der Block enthält je Verknüpfung eine Zeile mit dem Titel des Zieldatensatzes
-     * und einem Entfernen-Verweis, dazu versteckte Felder mit den Ids - er IST also
-     * das Eingabefeld.
+     * The block contains one row per link with the title of the target record
+     * and a remove reference, plus hidden fields with the ids - so it IS
+     * the input field.
      *
-     * Welche Datensätze in Frage kommen, ergibt sich aus dem Feldtyp: 'relation' hat
-     * genau einen Zielbereich, 'pointer' mehrere.
+     * Which records come into question results from the field type: 'relation' has
+     * exactly one target area, 'pointer' several.
      *
-     * Je Zeile steht das Default-Feld des Zieldatensatzes - oder, wenn das Feld
-     * details.lookup_detailed trägt, die ausführliche Fassung
-     * (RecordBackend::detailedText()): alle Listenfelder des Zielbereichs untereinander,
-     * das Default-Feld fett, dazu die Ausgabe des Listen-Templates des Bereichs.
+     * Each row shows the default field of the target record - or, if the field
+     * carries details.lookup_detailed, the detailed version
+     * (RecordBackend::detailedText()): all list fields of the target area one below the other,
+     * the default field in bold, plus the output of the list template of the area.
      */
     protected function _lookupPreviewCreate(int $srcField, int $srcId): ?string {
         if ($srcField < 1 || $srcId < 1) {
@@ -2417,7 +2410,7 @@ class RecordBackendEdit extends RecordBackend {
             $this->errors();
             return null;
         }
-        // Lade Daten des angegebenen Relation-Feldes
+        // load data of the given relation field
         if (!$fieldData = $this->record->fieldData($srcField)) {
             $this->cms->error('_lookupPreviewCreate() Exception: field not found.');
             $this->errors();
@@ -2425,13 +2418,13 @@ class RecordBackendEdit extends RecordBackend {
         }
         $type = $fieldData['type'];
         if (str_starts_with($type, 'relation')) {
-            // Ein Zielbereich
+            // one target area
             $relAreaId = (int)$fieldData['rel_area_id'];
             if (empty($relAreaId)) return null;
             $relAreaIds = [(int)$relAreaId];
         }
         elseif (in_array($type, $this->cms->multiAreaTypes, true)) {
-            // Zielbereiche (pointer, link)
+            // target areas (pointer, link)
             $relAreaIds = $this->record->getRelAreaIds($srcField);
             if (empty($relAreaIds)) return null;
         }
@@ -2441,7 +2434,7 @@ class RecordBackendEdit extends RecordBackend {
         }
         $fieldName = $fieldData['name'];
 
-        // ausführliche Vorschau? (field.details.lookup_detailed)
+        // detailed preview? (field.details.lookup_detailed)
         $details = json_decode((string)($fieldData['details'] ?? ''), true) ?: [];
         $detailed = !empty($details['lookup_detailed']);
 
@@ -2464,7 +2457,7 @@ class RecordBackendEdit extends RecordBackend {
         
         $rowTpl = $customOrder ? 'record.lookup_table_ordered_row' : 'record.lookup_table_row';
 
-        // Für jede Zeile
+        // for each row
         // --------------------
         $rows = [];
         $i = 0;
@@ -2484,7 +2477,7 @@ class RecordBackendEdit extends RecordBackend {
 
             $this->db->pushResult();
 
-            // default field text / ausführliche Vorschau
+            // default field text / detailed preview
             // --------------------
             $id = (int)$data['record_id'];
             $areaId = (int)$data['area_id'];
@@ -2500,7 +2493,7 @@ class RecordBackendEdit extends RecordBackend {
                     ['type' => $fieldType]
                 );
             }
-            // (die ausführliche Fassung ohne text-truncate - sie hat mehrere Zeilen)
+            // (the detailed version without text-truncate - it has several lines)
             $columns = $this->backend->template($detailed ? 'record.lookup_table_column_detailed' : 'record.lookup_table_column', [
                 '{text}' => $label
             ]);
@@ -2509,26 +2502,26 @@ class RecordBackendEdit extends RecordBackend {
             // --------------------
             $buttons = [];
             if ($customOrder > 0) {          
-                // "down"-Button
+                // "down" button
                 $nextId = (int)$nextData['record_id'];
                 $replace = [
                     '{down_url}' => "cApp.ui.lookupUpdate('swap', $id, $nextId);",
                     '{class}' => ''
                 ];
                 if (empty($nextData)) {
-                    // ausblenden
+                    // hide
                     $replace['{class}'] = ' invisible';
                 }
                 $buttons[] = $this->backend->template('record.lookup_button_down', $replace);
 
-                // "up"-Button
+                // "up" button
                 $previousId = (int)$previousData['record_id'];
                 $replace = [
                     '{up_url}' => "cApp.ui.lookupUpdate('swap', $id, $previousId);",
                     '{class}' => ''
                 ];
                 if (empty($previousData)) {
-                    // ausblenden
+                    // hide
                     $replace['{class}'] = ' invisible';
                 }
                 $buttons[] = $this->backend->template('record.lookup_button_up', $replace);

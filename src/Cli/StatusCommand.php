@@ -2,15 +2,15 @@
 /**
  * status [--after-composer] [--json]
  *
- * Dateien gegen Datenbank: Core-Version der Dateien (CAMINDO_VERSION), Stand der
- * Datenbank (system.core_version), Versionsstempel (var/config/core.php),
- * Wartungsmodus, wartende Core-Migrationen, Komponenten mit wartendem Update,
- * .htaccess und Assets-Symlink.
+ * Files against database: core version of the files (CAMINDO_VERSION), state of the
+ * database (system.core_version), version stamp (var/config/core.php),
+ * maintenance mode, pending core migrations, components with a pending update,
+ * .htaccess and assets symlink.
  *
- * --after-composer: der Composer-Hook. Ohne erreichbare Datenbank (Build-Server,
- * CI, create-project vor dem Installer) nur ein Hinweis, Exit-Code 0. Schreibt nie.
+ * --after-composer: the Composer hook. Without a reachable database (build server,
+ * CI, create-project before the installer) only a note, exit code 0. Never writes.
  *
- * @see docs/developers/14-installation-und-update.md, 1.5
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Cli;
 
@@ -46,7 +46,7 @@ class StatusCommand extends Command {
             'actions'         => [],
         ];
 
-        // Nie installiert: nur der Hinweis auf den Installer
+        // Never installed: only the note about the installer
         if ($state->isNotInstalled()) {
             $info['actions'][] = 'not installed -> php Core/cron/camindo.php install';
             if (!empty($options['json'])) {
@@ -58,7 +58,7 @@ class StatusCommand extends Command {
             return Cli::OK;
         }
 
-        // Datenbank - darf fehlen
+        // Database - may be missing
         try {
             $db = $this->get(Database::class);
             $info['database'] = 'ok';
@@ -81,7 +81,7 @@ class StatusCommand extends Command {
             $info['database'] = 'unavailable: ' . $e->getMessage();
         }
 
-        // Geheimnisse aus der Umgebung (Config::ENV_SECRETS, CAMINDO_KEY)
+        // Secrets from the environment (Config::ENV_SECRETS, CAMINDO_KEY)
         $info['secrets_from_env'] = array_map(fn($key) => Config::ENV_SECRETS[$key], $config->fromEnv());
         $info['key_env'] = '';
         try {

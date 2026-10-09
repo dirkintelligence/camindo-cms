@@ -1,6 +1,6 @@
 /*
- * cApp.aside – Seitliches Panel
- * Resize per Drag-Handle, open/close API
+ * cApp.aside – Side panel
+ * Resize via drag handle, open/close API
  */
 (function (cApp) {
     'use strict';
@@ -17,7 +17,7 @@
             const $handle  = $('.resize-handle');
             const $overlay = $('.resize-overlay');
 
-            // Drag starten
+            // Start drag
             $handle.on('mousedown', (e) => {
                 e.preventDefault();
                 this._isResizing = true;
@@ -25,13 +25,13 @@
                 $('body').css('user-select', 'none');
             });
 
-            // Drag bewegen
+            // Move drag
             $(document).on('mousemove', (e) => {
                 if (!this._isResizing) return;
 
                 const windowWidth  = $(window).width();
                 const maxAsideWidth = windowWidth - this.minArticleWidth;
-                // Das Panel liegt am Zeilenende: rechts, bei dir="rtl" links
+                // The panel sits at the end of the line: right, with dir="rtl" left
                 let width = this._rtl() ? e.clientX : windowWidth - e.clientX;
 
                 width = Math.min(width, maxAsideWidth);
@@ -43,7 +43,7 @@
                 this._setWidth(width);
             });
 
-            // Drag beenden
+            // End drag
             $(document).on('mouseup', () => {
                 if (!this._isResizing) return;
                 this._isResizing = false;
@@ -51,7 +51,7 @@
                 $('body').css('user-select', '');
             });
 
-            // Fenstergröße anpassen
+            // Adjust to window size
             $(window).on('resize', () => {
                 if (this.currentWidth > 0 && $('aside').is(':visible')) {
                     const maxAsideWidth = $(window).width() - this.minArticleWidth;
@@ -62,11 +62,11 @@
             });
         },
 
-        // --- Öffentliche API ---
+        // --- Public API ---
 
         /**
-         * Öffnet das Aside-Panel und lädt optional einen Inhalt.
-         * @param {string} url  Optionaler Pfad für cLoadContent
+         * Opens the aside panel and optionally loads content.
+         * @param {string} url  Optional path for cLoadContent
          */
         open(url, width) {
             const maxPossible = $(window).width() - this.minArticleWidth;
@@ -84,8 +84,8 @@
         },
 
         /**
-         * Wie open(), aber der Inhalt wird per POST geholt - für Aktionen mit
-         * Seiteneffekt im Aside (17-csrf.md §2.7), z. B. der Komponenten-Abgleich.
+         * Like open(), but the content is fetched via POST - for actions with
+         * side effects in the aside (developer docs, chapter 14 (Security: web)), e.g. the component sync.
          * @param {string} url
          * @param {number} width  optional
          */
@@ -101,7 +101,7 @@
         },
 
         /**
-         * Schließt das Aside-Panel und leert den Inhalt.
+         * Closes the aside panel and clears its content.
          */
         close() {
             this._setWidth(0);
@@ -109,11 +109,11 @@
             $('aside').hide();
         },
 
-        // --- Intern ---
+        // --- Internal ---
 
-        // Logische Properties (inset-inline-end, margin-inline-end): rechts bzw. bei
-        // dir="rtl" links - wie aside in backend.css. Einheit ausdrücklich, jQuery
-        // hängt 'px' nur an bekannte Properties an.
+        // Logical properties (inset-inline-end, margin-inline-end): right, or with
+        // dir="rtl" left - like aside in backend.css. Unit stated explicitly, jQuery
+        // only appends 'px' to known properties.
         _setWidth(width) {
             this.currentWidth = width;
             $('aside').css('width', width);

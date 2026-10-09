@@ -1,37 +1,37 @@
 <?php
 /**
- * Backend-Oberfläche der Handbücher (Hauptmenü → Handbücher).
+ * Backend UI of the manuals (main menu → manuals).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
- *     index.php  -> page()        Seite, Trefferliste der Suche oder Stichwortverzeichnis
- *     print.php  -> printBook()   ein ganzes Handbuch als eigenständige HTML-Seite
- *                                 (neues Fenster, zum Ausdrucken oder als PDF)
+ *     index.php  -> page()        page, search hit list or keyword index
+ *     print.php  -> printBook()   a whole manual as a standalone HTML page
+ *                                 (new window, for printing or as PDF)
  *
- * Ebenen: Die Übersicht (README.md, Suche und Stichwortverzeichnis über alle
- * Handbücher) ist eine Ebene, ein Handbuch eine eigene Ebene darüber - die Pfadleiste
- * zeigt also Home > Handbücher > Handbuch für Anwender. Innerhalb eines Handbuchs
- * ersetzt jede Seite die Ebene; zurück zur Übersicht schließt die Ebene (_js()).
+ * Levels: the overview (README.md, search and keyword index across all
+ * manuals) is one level, a manual is its own level above it - the path bar
+ * therefore shows Home > Manuals > Manual for users. Within a manual each page
+ * replaces the level; going back to the overview closes the level (_js()).
  *
- * Kopf: Suchfeld, Auswahl des Handbuchs, Link auf das Stichwortverzeichnis (Vorlage
- * docs.docs_header). Suche und Stichwörter kommen aus dem Index in der Datenbank
- * (Docs::rebuildIndex()), die Seite selbst wird aus dem Markdown gerendert.
+ * Header: search field, selection of the manual, link to the keyword index (template
+ * docs.docs_header). Search and keywords come from the index in the database
+ * (Docs::rebuildIndex()); the page itself is rendered from the Markdown.
  *
- * Unter einer Handbuchseite stehen Links auf die vorige und die nächste Seite desselben
- * Handbuchs (Lesereihenfolge wie die Druckansicht, Docs::bookPages()); die Übersicht
- * (README.md) listet zusätzlich die Handbücher der Komponenten.
+ * Below a manual page there are links to the previous and the next page of the same
+ * manual (reading order as in the print view, Docs::bookPages()); the overview
+ * (README.md) additionally lists the manuals of the components.
  *
- * Parameter (GET, die Suche auch per POST aus dem Formular):
- *     page     Seite, z. B. "admins/07-benutzer-und-rechte.md" (Vorgabe: Startseite von
- *              book, sonst README.md)
- *     anchor   Abschnitt der Seite (Slug einer Überschrift) - wird angesprungen
- *     book     Handbuch für Suche und Stichwortverzeichnis ('' = alle; Docs::books())
- *     q        Suchbegriff(e) -> Trefferliste
- *     view     'index' -> Stichwortverzeichnis
- *     lang     Sprache der Handbücher; Vorgabe: Backend-Sprache, sonst en_US
+ * Parameters (GET; the search also via POST from the form):
+ *     page     page, e.g. "admins/07-benutzer-und-rechte.md" (default: start page of
+ *              book, otherwise README.md)
+ *     anchor   section of the page (slug of a heading) - is jumped to
+ *     book     manual for search and keyword index ('' = all; Docs::books())
+ *     q        search term(s) -> hit list
+ *     view     'index' -> keyword index
+ *     lang     language of the manuals; default: backend language, otherwise en_US
  *
- * Nur lesend - deshalb ohne POST-Bindung. Das Modul ist nicht 'listed': jeder
- * angemeldete Benutzer darf es öffnen, eine Kachel hat es nicht.
+ * Read-only - therefore without POST binding. The module is not 'listed': every
+ * logged-in user may open it, it has no tile.
  *
  * @see Camindo\Core\Modules\Docs\Docs
  */
@@ -45,7 +45,7 @@ class DocsBackend {
 
     private string $lang = '';
     private string $langParam = '';
-    /** Diese Ebene zeigt ein Handbuch ('' = die Übersicht) */
+    /** This level shows a manual ('' = the overview) */
     private string $book = '';
 
     public function __construct(
@@ -58,12 +58,12 @@ class DocsBackend {
     }
 
     /**
-     * Die Doku-Seite (backend/index.php), siehe Klassenkommentar.
+     * The doc page (backend/index.php), see class comment.
      */
     public function page(): void
     {
         $this->lang = $this->docs->language((string)($_REQUEST['lang'] ?? $this->cms->getLang()));
-        // Eine andere als die Backend-Sprache reist in allen Links mit
+        // A language other than the backend language travels along in all links
         $this->langParam = $this->lang !== $this->docs->language($this->cms->getLang()) ? '&lang=' . rawurlencode($this->lang) : '';
         $books = $this->docs->books($this->lang);
         $book = isset($books[(string)($_REQUEST['book'] ?? '')]) ? (string)$_REQUEST['book'] : '';
@@ -76,7 +76,7 @@ class DocsBackend {
         if ($book === '' && $query === '' && $view === '') $book = Docs::bookOf($page);
         $this->book = $book;
 
-        // Eine Seite: vorab rendern - ihr Titel steht in der Navigation
+        // A page: render it in advance - its title is shown in the navigation
         $rendered = ($query === '' && $view !== 'index')
             ? $this->docs->render($this->lang, $page, fn(string $target, string $a) => ' href="#"' . $this->_link($target, $a))
             : null;
@@ -95,7 +95,7 @@ class DocsBackend {
             echo $this->_keywordIndex($book);
         }
         else {
-            // Anfang eines Handbuchs (bzw. der Übersicht): Hinweis zur Gewähr
+            // Start of a manual (or of the overview): disclaimer note
             // $start = $page === 'README.md' || $page === $this->docs->startPage($this->lang, Docs::bookOf($page));
             echo $rendered['html'];
             echo $page === 'README.md' ? $this->_componentBooks() : $this->_pager($page);
@@ -108,13 +108,13 @@ class DocsBackend {
     }
 
     /**
-     * Ein ganzes Handbuch auf einer Seite (backend/print.php) - eigenständiges HTML
-     * ohne Backend-Rahmen, geöffnet in einem neuen Fenster: README, dann alle Kapitel
-     * in Lesereihenfolge (Docs::bookPages()), jedes Kapitel beim Drucken auf neuer
-     * Seite. Links innerhalb des Handbuchs springen an die Stelle im Dokument, Links
-     * in andere Handbücher bleiben Text.
+     * A whole manual on one page (backend/print.php) - standalone HTML
+     * without backend frame, opened in a new window: README, then all chapters
+     * in reading order (Docs::bookPages()), each chapter on a new
+     * page when printing. Links within the manual jump to the place in the document, links
+     * to other manuals remain text.
      *
-     * Parameter (GET): book (Pflicht), lang wie bei page().
+     * Parameters (GET): book (required), lang as with page().
      */
     public function printBook(): void
     {
@@ -143,12 +143,12 @@ class DocsBackend {
             '{date}' => is_string($date) ? $date : date('Y-m-d'),
         ]);
 
-        // Wie backend/index.php: bei rtl die gespiegelte Fassung von Bootstrap
+        // As in backend/index.php: for rtl the mirrored version of Bootstrap
         $dir = $this->cms->textDirection($this->lang);
         $assetDir = rtrim((string)$this->config->get('paths.backend_dir'), '/') . '/assets/';
         $bootstrap = ($dir === 'rtl' && is_file($assetDir . 'bootstrap/bootstrap.rtl.min.css'))
             ? 'bootstrap.rtl.min.css' : 'bootstrap.min.css';
-        // Stand der Datei an der Adresse: ein geändertes Stylesheet lädt der Browser neu
+        // The file's state at the address: a changed stylesheet is reloaded by the browser
         $asset = fn(string $file) => rtrim((string)$this->config->get('paths.backend'), '/') . '/assets/' . $file
             . '?v=' . (@filemtime($assetDir . $file) ?: 0);
 
@@ -165,8 +165,8 @@ class DocsBackend {
     }
 
     /**
-     * Link der Druckansicht: auf eine Seite des Handbuchs (bzw. einen Abschnitt) ein
-     * Sprung im Dokument, sonst null (nur Text).
+     * Link of the print view: to a page of the manual (or a section) a jump
+     * in the document, otherwise null (text only).
      */
     private function _printLink(array $pages, string $current, string $target, string $anchor): ?string
     {
@@ -178,7 +178,7 @@ class DocsBackend {
     }
 
     /**
-     * Kopfzeile: Suchfeld, Handbuch, Stichwortverzeichnis, Druckansicht.
+     * Header line: search field, manual, keyword index, print view.
      */
     private function _header(string $book, string $query): string
     {
@@ -210,7 +210,7 @@ class DocsBackend {
         ]);
     }
 
-    /** Trefferliste der Suche */
+    /** Hit list of the search */
     private function _searchResults(string $query, string $book): string
     {
         $hits = $this->docs->search($this->lang, $query, $book);
@@ -233,20 +233,20 @@ class DocsBackend {
         return $html . $this->backend->template('docs.search_hits', ['{hits}' => $items]);
     }
 
-    /** Stichwortverzeichnis: Buchstabenleiste, darunter Begriffe mit ihren Stellen */
+    /** Keyword index: letter bar, below it terms with their positions */
     private function _keywordIndex(string $book): string
     {
-        // Begriffe nach Anfangsbuchstaben gruppieren
+        // Group terms by initial letter
         $groups = [];
         foreach ($this->docs->keywords($this->lang, $book) as $term => $refs) {
-            // Umlaute unter dem Grundbuchstaben (Ä -> A)
+            // Umlauts under the base letter (Ä -> A)
             $first = mb_strtoupper(mb_substr(\Normalizer::normalize((string)$term, \Normalizer::FORM_D) ?: (string)$term, 0, 1));
             if (!preg_match('/\p{L}/u', $first)) $first = '#';
 
             $links = [];
             foreach ($refs as $ref) {
                 $label = $ref['title'] . ($ref['heading'] !== '' && $ref['heading'] !== $ref['title'] && $ref['heading'] !== $term ? ' – ' . $ref['heading'] : '');
-                // Mehrere Stellen desselben Abschnitts: ein Link genügt
+                // Several positions of the same section: one link is enough
                 if (isset($links[$label])) continue;
                 $links[$label] = $this->backend->template('docs.keyword_link', [
                     '{js}' => $this->backend->escape($this->_js($ref['page'], $ref['slug'])),
@@ -259,7 +259,7 @@ class DocsBackend {
             ]);
         }
 
-        // Buchstabenleiste und Gruppen
+        // Letter bar and groups
         $letters = '';
         $body = '';
         foreach ($groups as $letter => $entries) {
@@ -282,8 +282,8 @@ class DocsBackend {
     }
 
     /**
-     * Name eines Handbuchs: Snippet docs.book_{Handbuch} bei denen des Core, sonst der
-     * Titel der Startseite ('' = Übersicht).
+     * Name of a manual: snippet docs.book_{manual} for those of the core, otherwise the
+     * title of the start page ('' = overview).
      */
     public function bookLabel(string $book): string
     {
@@ -292,8 +292,8 @@ class DocsBackend {
     }
 
     /**
-     * Unter einer Handbuchseite: Links auf die vorige und die nächste Seite des Handbuchs
-     * (nur hier - die Druckansicht kommt ohne aus).
+     * Below a manual page: links to the previous and the next page of the manual
+     * (only here - the print view does without).
      */
     private function _pager(string $page): string
     {
@@ -313,7 +313,7 @@ class DocsBackend {
         ]);
     }
 
-    /** Unter der Übersicht: die Handbücher der Komponenten (Docs::books()) */
+    /** Below the overview: the manuals of the components (Docs::books()) */
     private function _componentBooks(): string
     {
         $items = '';
@@ -329,8 +329,8 @@ class DocsBackend {
     }
 
     /**
-     * Javascript: Doku-Seite mit anderen Parametern laden - in dieser Ebene oder
-     * ($add) als neue Ebene darüber
+     * JavaScript: load the doc page with other parameters - in this level or
+     * ($add) as a new level above it
      */
     private function _open(string $params, bool $add = false): string
     {
@@ -338,8 +338,8 @@ class DocsBackend {
     }
 
     /**
-     * Javascript: aus einem Handbuch zurück zur Übersicht - liegt sie als Ebene
-     * darunter, diese Ebene schließen, sonst die Übersicht hier laden
+     * JavaScript: from a manual back to the overview - if it lies as a level
+     * below, close this level, otherwise load the overview here
      */
     private function _overview(): string
     {
@@ -348,10 +348,10 @@ class DocsBackend {
     }
 
     /**
-     * Javascript eines Links - auf eine Handbuchseite, einen Anker derselben Seite
-     * ($target = '') oder Parameter der Doku-Seite ($target = '?…'). Aus der Übersicht
-     * öffnet eine Handbuchseite eine neue Ebene, aus einem Handbuch führt die Übersicht
-     * zurück (_overview()), alles andere ersetzt die Ebene. In Vorlagen als
+     * JavaScript of a link - to a manual page, an anchor of the same page
+     * ($target = '') or parameters of the doc page ($target = '?…'). From the overview
+     * a manual page opens a new level, from a manual the overview leads
+     * back (_overview()), everything else replaces the level. In templates as
      * href="javascript:{js}" (Backend::markHandlers()).
      */
     private function _js(string $target, string $anchor): string
@@ -369,15 +369,15 @@ class DocsBackend {
         return $this->_open($params, $this->book === '' && $targetBook !== '');
     }
 
-    /** Javascript: sanft zu einem Element der Seite blättern */
+    /** JavaScript: smoothly scroll to an element of the page */
     private function _scrollJs(string $id): string
     {
         return "document.getElementById(" . json_encode($id) . ")?.scrollIntoView({behavior:'smooth'});";
     }
 
     /**
-     * Link-Attribut für die Seiten aus Docs::render() - dort entsteht das <a> im
-     * Markdown-Renderer, nicht in einer Vorlage (Backend::on()).
+     * Link attribute for the pages from Docs::render() - there the <a> is created in the
+     * Markdown renderer, not in a template (Backend::on()).
      */
     private function _link(string $target, string $anchor): string
     {

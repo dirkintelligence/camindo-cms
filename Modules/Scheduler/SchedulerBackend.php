@@ -1,25 +1,25 @@
 <?php
 /**
- * Backend-Oberfläche für die zeitgesteuerten Aufgaben (Tabelle `scheduler`).
+ * Backend UI for the time-controlled tasks (table `scheduler`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     scheduler_list.php    -> list()     Aufgabenliste mit nächstem und letztem Lauf
- *     scheduler_info.php    -> info()     Detailansicht
- *     scheduler_create.php  -> create()   Schritt 1: Aufgabentyp wählen
- *     scheduler_edit.php    -> edit()     Schritt 2 und alles weitere
- *     scheduler_run.php     -> run()      "Jetzt ausführen" - als Hintergrundprozess
- *     scheduler_toggle.php  -> toggle()   deaktivieren / reaktivieren (vorübergehend
- *                                         aussetzen, Einstellungen bleiben)
+ *     scheduler_list.php    -> list()     task list with next and last run
+ *     scheduler_info.php    -> info()     detail view
+ *     scheduler_create.php  -> create()   step 1: choose task type
+ *     scheduler_edit.php    -> edit()     step 2 and everything else
+ *     scheduler_run.php     -> run()      "Run now" - as a background process
+ *     scheduler_toggle.php  -> toggle()   deactivate / reactivate (suspend
+ *                                         temporarily, settings remain)
  *
- * Aufbau wie StatusBackend (kurze Liste ohne Suche) mit der Typauswahl vorweg wie im
- * Modul Area: der Typ bestimmt die Eingabefelder und steht danach fest.
+ * Structure like StatusBackend (short list without search) with the type selection in front, as in the
+ * module Area: the type determines the input fields and is fixed afterwards.
  *
- * Die Zeiten (nächster/letzter Lauf) stehen in der Zeitzone des Systems, in der der
- * Cronjob läuft - sie werden so angezeigt, mit dem Namen der Zeitzone daneben.
+ * The times (next/last run) are in the time zone of the system in which the
+ * cron job runs - they are shown this way, with the name of the time zone next to them.
  *
  * @see Camindo\Core\Modules\Scheduler\Scheduler        Dataset/Model
- * @see Camindo\Core\Modules\Scheduler\SchedulerRunner  Ausführung
+ * @see Camindo\Core\Modules\Scheduler\SchedulerRunner  execution
  */
 namespace Camindo\Core\Modules\Scheduler;
 
@@ -54,7 +54,7 @@ class SchedulerBackend {
     {}
 
     /**
-     * Aufgabenliste (backend/scheduler_list.php).
+     * Task list (backend/scheduler_list.php).
      */
     public function list(): void
     {
@@ -106,7 +106,7 @@ class SchedulerBackend {
     }
 
     /**
-     * Detailansicht (backend/scheduler_info.php).
+     * Detail view (backend/scheduler_info.php).
      */
     public function info(): void
     {
@@ -144,7 +144,7 @@ class SchedulerBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log, Backend::infoAuditTabs())
+        // Tabs: Info | Changes (audit log, Backend::infoAuditTabs())
         if ($this->backend->infoAuditTabs("Scheduler/scheduler_info.php?id={$id}", 'scheduler', $id)) return;
 
         $yes = $this->backend->template('icon_checked');
@@ -152,7 +152,7 @@ class SchedulerBackend {
         $details = (array)($data['details'] ?? []);
 
         $this->backend->infoReset();
-        // Beschriftung: Text oder Snippet (#prefix.key, etwa die Vorgabe-Aufgaben)
+        // Label: text or snippet (#prefix.key, e.g. the default tasks)
         $this->backend->infoAdd($this->scheduler, 'label', $this->cms->textOrSnippet((string)$data['label']), ['primary']);
         $this->backend->infoAdd($this->scheduler, 'type', $this->cms->snippet('scheduler.label_type_' . $type));
         $adminId = (int)($data['admin_id'] ?? 0);
@@ -247,7 +247,7 @@ class SchedulerBackend {
     }
 
     /**
-     * Schritt 1 beim Anlegen: Aufgabentyp wählen (backend/scheduler_create.php).
+     * Step 1 when creating: choose task type (backend/scheduler_create.php).
      */
     public function create(): void
     {
@@ -269,15 +269,15 @@ class SchedulerBackend {
     }
 
     /**
-     * "Jetzt ausführen" (backend/scheduler_run.php): die Aufgabe als Hintergrundprozess
-     * des Admins starten - ihr Ergebnis erscheint danach in der Detailansicht, der
-     * Prozess selbst in der Liste der Hintergrundprozesse.
+     * "Run now" (backend/scheduler_run.php): start the task as a background process
+     * of the admin - its result then appears in the detail view, the
+     * process itself in the list of background processes.
      */
     public function run(): void
     {
         $id = (int)($_REQUEST['id'] ?? 0);
         echo $this->backend->template('container_header');
-        // Startet einen Hintergrundprozess - nur per POST (17-csrf.md §2.7)
+        // Starts a background process - only via POST (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
@@ -300,18 +300,18 @@ class SchedulerBackend {
     }
 
     /**
-     * Deaktivieren / reaktivieren (backend/scheduler_toggle.php, Request id, enabled
-     * 0|1): die Aufgabe vorübergehend aussetzen bzw. wieder nach Zeitplan laufen
-     * lassen - ohne die Maske, alle anderen Einstellungen bleiben. Gespeichert wird
-     * nur `enabled`; den nächsten Lauf rechnet Scheduler::hookOnSaved() neu (leer,
-     * solange ausgesetzt).
+     * Deactivate / reactivate (backend/scheduler_toggle.php, request id, enabled
+     * 0|1): suspend the task temporarily or let it run again per schedule
+     * - without the mask, all other settings remain. Only `enabled` is saved;
+     * Scheduler::hookOnSaved() recalculates the next run (empty
+     * while suspended).
      */
     public function toggle(): void
     {
         $id = (int)($_REQUEST['id'] ?? 0);
         $enabled = (int)!empty($_REQUEST['enabled']);
         echo $this->backend->template('container_header');
-        // Ändert die Aufgabe - nur per POST (17-csrf.md §2.7)
+        // Changes the task - only via POST (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
@@ -329,10 +329,10 @@ class SchedulerBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/scheduler_edit.php).
+     * Create / copy / change / delete (backend/scheduler_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen.
-     * Beim Anlegen kommt der Typ aus der Auswahl in create() (data[type]).
+     * State machine via $_REQUEST['function'] as in the other modules.
+     * On creation the type comes from the selection in create() (data[type]).
      */
     public function edit(): void
     {
@@ -375,7 +375,7 @@ class SchedulerBackend {
     }
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     private function _editCreate(): void
     {
@@ -419,8 +419,8 @@ class SchedulerBackend {
     }
 
     /**
-     * function=save: speichern - nur die Felder der Maske, der Laufzeitstand
-     * (next_run, last_*) gehört dem Runner (Scheduler::editableFields()).
+     * function=save: save - only the fields of the mask, the runtime state
+     * (next_run, last_*) belongs to the runner (Scheduler::editableFields()).
      */
     private function _editSave(): void
     {
@@ -451,8 +451,8 @@ class SchedulerBackend {
     }
 
     /**
-     * Das Eingabeformular: gemeinsame Felder, die sechs Cron-Felder, dann der Block
-     * des Aufgabentyps (scheduler.edit_form_{type}).
+     * The input form: common fields, the six cron fields, then the block
+     * of the task type (scheduler.edit_form_{type}).
      */
     private function _editForm(): void
     {
@@ -467,7 +467,7 @@ class SchedulerBackend {
             '{headline_type}' => '{#scheduler.label_type_' . $type . '}',
         ]);
 
-        // Typ steht fest
+        // Type is fixed
         $this->backend->formStatic($this->scheduler, 'type', $this->cms->snippet('scheduler.label_type_' . $type));
         $this->backend->formHidden('data[type]', $type);
 
@@ -479,9 +479,9 @@ class SchedulerBackend {
                 'primary' => ($name === 'label') ? true : false
             ]);
         }
-        // Admin, unter dem die Aufgabe läuft - nur solche mit der Oberfläche
-        // Kommandozeile; ein nicht (mehr) zulässiger bleibt sichtbar, damit der
-        // Fehler beim Speichern verständlich ist
+        // Admin under which the task runs - only those with the command-line interface;
+        // one that is (no longer) allowed stays visible, so that the
+        // error when saving is understandable
         $adminOptions = $this->scheduler->adminOptions();
         $adminId = (int)($this->data['admin_id'] ?? 0);
         if ($adminId > 0 && !isset($adminOptions[$adminId])) {
@@ -503,7 +503,7 @@ class SchedulerBackend {
             ]);
         }
 
-        // Typabhängige Felder
+        // Type-dependent fields
         if ($type === 'url') {
             $this->backend->formField($this->scheduler, ['name' => 'details.url', 'value' => $details['url'] ?? '', 'id' => $this->id]);
             $this->backend->formField($this->scheduler, ['name' => 'details.auth', 'value' => (int)($details['auth'] ?? 0), 'id' => $this->id]);
@@ -542,8 +542,8 @@ class SchedulerBackend {
                     'options' => array_map(fn($t) => $t['label'], $templates),
                     'selectPlease' => true
                 ]);
-                // Sprachen aller Instanzen mit wählbaren Templates; gespeichert wird nur
-                // eine Sprache der Instanz des Templates (Scheduler::hookOnSave())
+                // Languages of all instances with selectable templates; only one language
+                // of the template's instance is saved (Scheduler::hookOnSave())
                 $languages = [0 => $this->cms->snippet('scheduler.option_language_primary')];
                 foreach ($templates as $template) $languages += $template['languages'];
                 $this->backend->formField($this->scheduler, [
@@ -610,10 +610,10 @@ class SchedulerBackend {
     }
 
     // ====================
-    // Darstellung
+    // Display
 
     /**
-     * Die sechs Cron-Felder als eine Zeile "m h d M Y w".
+     * The six cron fields as one line "m h d M Y w".
      */
     private function _cronText(array $data): string
     {
@@ -625,7 +625,7 @@ class SchedulerBackend {
     }
 
     /**
-     * Aktiv: Haken, sonst "vorübergehend ausgesetzt".
+     * Active: checkbox, otherwise "temporarily suspended".
      */
     private function _enabledText(array $data): string
     {
@@ -655,8 +655,8 @@ class SchedulerBackend {
     }
 
     /**
-     * Vorhandene Sicherungen in var/dbbackup mit Datum und Größe; unbrauchbare
-     * (Backup::verify()) rot mit Grund.
+     * Existing backups in var/dbbackup with date and size; unusable
+     * (Backup::verify()) red with reason.
      */
     private function _backupFiles(): string
     {

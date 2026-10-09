@@ -2,27 +2,27 @@
 /**
  * Medien-Prozessor FFmpegVideo
  *
- * Erzeugt Video-Versionen mit dem Kommandozeilen-Werkzeug ffmpeg.
+ * Creates video versions with the command-line tool ffmpeg.
  *
- * Im Unterschied zu Magick laufen Video-Konvertierungen typischerweise Minuten bis
- * Stunden. Deshalb wird ffmpeg standardmäßig als HINTERGRUNDPROZESS gestartet
- * (siehe Feld details.background_process) und meldet seinen Fortschritt über
- * "-progress" in eine temporäre Datei unter paths.tmp_dir.
+ * In contrast to Magick, video conversions typically take minutes to
+ * hours. Therefore ffmpeg is started as a BACKGROUND PROCESS by default
+ * (see field details.background_process) and reports its progress via
+ * "-progress" into a temporary file under paths.tmp_dir.
  *
- * Der Cronjob trigger_ff.php liest diese Datei aus, vergleicht den aktuellen Frame
- * mit der Gesamtzahl der Frames (steht in `bgproc`.`message`) und trägt den
- * Fortschritt in Prozent in `bgproc`.`progress` ein.
+ * The cron job trigger_ff.php reads this file, compares the current frame
+ * with the total number of frames (stored in `bgproc`.`message`) and enters the
+ * progress in percent in `bgproc`.`progress`.
  *
  * Kommandozeile (Expertenmodus):
- *     ffmpeg [parameter1] -i QUELLE [erzeugte Parameter] [parameter2] ZIEL
- * parameter1 sind also Eingabe-Optionen, parameter2 Ausgabe-Optionen.
+ *     ffmpeg [parameter1] -i SOURCE [generated parameters] [parameter2] TARGET
+ * parameter1 are therefore input options, parameter2 output options.
  *
  * Voraussetzungen:
- *   - Konfiguration paths.ffmpeg  (Pfad zur ffmpeg-Binary)
- *   - Konfiguration paths.ffprobe (optional, sonst wird sie neben ffmpeg gesucht)
- *   - Konfiguration paths.tmp_dir (beschreibbares Verzeichnis für die Fortschrittsdateien)
+ *   - configuration paths.ffmpeg  (path to the ffmpeg binary)
+ *   - configuration paths.ffprobe (optional, otherwise it is searched for next to ffmpeg)
+ *   - configuration paths.tmp_dir (writable directory for the progress files)
  *   - MediaProcessor stellt $this->bgproc (Camindo\Core\BackgroundProcess) bereit.
- *     Fehlt die Eigenschaft, fällt der Prozessor automatisch auf den Vordergrund zurück.
+ *     If the property is missing, the processor automatically falls back to the foreground.
  */
 namespace Camindo\Core\Processors\FFmpegVideo;
 
@@ -31,24 +31,24 @@ use Camindo\Core\BackgroundProcess;
 
 class FFmpegVideo extends MediaProcessor {
 
-    /** Zeitlimits in Sekunden */
+    /** Time limits in seconds */
     protected const TIMEOUT_PROBE   = 30;
     protected const TIMEOUT_VERSION = 10;
 
-    /** Vorgabe für details.max_time_out, falls das Feld leer ist */
+    /** Default for details.max_time_out if the field is empty */
     protected const DEFAULT_TIMEOUT = 3600;
 
-    /** Typkennung in der Tabelle `bgproc`, danach sucht trigger_ff.php */
+    /** Type identifier in the table `bgproc`, which trigger_ff.php searches for */
     public const BGPROC_TYPE = 'ffmpeg';
 
-    /** Präfix und Endung der temporären Fortschrittsdatei */
+    /** Prefix and extension of the temporary progress file */
     public const PROGRESS_PREFIX    = 'ffmpeg-';
     public const PROGRESS_EXTENSION = '.progress';
 
     /**
-     * Zielcontainer: Auswahlwert => [ffmpeg-Formatname, MIME-Type]
-     * Der Formatname wird per "-f" explizit gesetzt, damit die Dateiendung
-     * nicht fehlinterpretiert wird.
+     * Target container: option value => [ffmpeg format name, MIME type]
+     * The format name is set explicitly via "-f" so that the file extension
+     * is not misinterpreted.
      */
     public const CONTAINERS = [
         'mp4'  => ['mp4',      'video/mp4'],
@@ -57,8 +57,8 @@ class FFmpegVideo extends MediaProcessor {
     ];
 
     /**
-     * Video-Codec: Auswahlwert => ffmpeg-Encoder
-     * 'copy' kopiert den Videostream unverändert, '' bedeutet "kein Video" (-vn).
+     * Video codec: option value => ffmpeg encoder
+     * 'copy' copies the video stream unchanged, '' means "no video" (-vn).
      */
     public const VIDEO_CODECS = [
         'h264' => 'libx264',
@@ -70,8 +70,8 @@ class FFmpegVideo extends MediaProcessor {
     ];
 
     /**
-     * Obergrenze des CRF-Werts je Encoder.
-     * x264/x265 arbeiten mit 0-51, VP9 und SVT-AV1 mit 0-63.
+     * Upper limit of the CRF value per encoder.
+     * x264/x265 work with 0-51, VP9 and SVT-AV1 with 0-63.
      */
     protected const CRF_MAX = [
         'libx264'    => 51,
@@ -81,30 +81,30 @@ class FFmpegVideo extends MediaProcessor {
     ];
 
     /**
-     * Geschwindigkeits-/Qualitäts-Voreinstellungen.
-     * x264 und x265 kennen diese Namen direkt, VP9 und SVT-AV1 brauchen Zahlen
-     * (siehe presetArguments()). Reihenfolge = Reihenfolge im Auswahlfeld.
+     * Speed/quality presets.
+     * x264 and x265 know these names directly, VP9 and SVT-AV1 need numbers
+     * (see presetArguments()). Order = order in the select field.
      */
     public const PRESETS = [
         'ultrafast', 'superfast', 'veryfast', 'faster', 'fast',
         'medium', 'slow', 'slower', 'veryslow',
     ];
 
-    /** Umrechnung der Presets auf "-cpu-used" von libvpx-vp9 (0 = langsam/gut) */
+    /** Conversion of the presets to "-cpu-used" of libvpx-vp9 (0 = slow/good) */
     protected const PRESET_VP9 = [
         'ultrafast' => 8, 'superfast' => 7, 'veryfast' => 6, 'faster' => 5,
         'fast' => 4, 'medium' => 3, 'slow' => 2, 'slower' => 1, 'veryslow' => 0,
     ];
 
-    /** Umrechnung der Presets auf "-preset" von libsvtav1 (0 = langsam/gut, 13 = schnell) */
+    /** Conversion of the presets to "-preset" of libsvtav1 (0 = slow/good, 13 = fast) */
     protected const PRESET_AV1 = [
         'ultrafast' => 12, 'superfast' => 11, 'veryfast' => 10, 'faster' => 9,
         'fast' => 8, 'medium' => 6, 'slow' => 5, 'slower' => 4, 'veryslow' => 2,
     ];
 
     /**
-     * Audio-Codec: Auswahlwert => ffmpeg-Encoder
-     * 'copy' kopiert den Audiostream, '' bedeutet "stumm" (-an).
+     * Audio codec: option value => ffmpeg encoder
+     * 'copy' copies the audio stream, '' means "mute" (-an).
      */
     public const AUDIO_CODECS = [
         'aac'  => 'aac',
@@ -114,14 +114,14 @@ class FFmpegVideo extends MediaProcessor {
         'mute' => '',
     ];
 
-    /** Kanalzahl: Auswahlwert => Argument für "-ac", '' = beibehalten */
+    /** Channel count: option value => argument for "-ac", '' = keep */
     public const AUDIO_CHANNELS = [
         'keep'   => '',
         'mono'   => '1',
         'stereo' => '2',
     ];
 
-    /** Deinterlacing: Auswahlwert => Filter, '' = nicht deinterlacen */
+    /** Deinterlacing: option value => filter, '' = do not deinterlace */
     public const DEINTERLACE = [
         'no'     => '',
         'auto'   => 'yadif=deint=interlaced',
@@ -129,16 +129,16 @@ class FFmpegVideo extends MediaProcessor {
     ];
 
     /**
-     * Options-Gruppen für den "intelligenten Merge" (Expertenmodus).
+     * Option groups for the "intelligent merge" (expert mode).
      *
-     * Belegt der Administrator in parameter1 / parameter2 eine Option aus einer
-     * Gruppe, dann erzeugt der Konverter die zugehörigen eigenen Parameter NICHT mehr.
-     * Der handgeschriebene Parameter gewinnt also immer, aber nur für "seinen" Bereich.
-     * Alle übrigen Formularwerte bleiben wirksam.
+     * If the administrator sets an option from a group in parameter1 / parameter2, the
+     * converter no longer generates the corresponding own parameters.
+     * The hand-written parameter therefore always wins, but only for "its" area.
+     * All other form values remain effective.
      *
-     * Ein angehängter Stream-Index wird vorher entfernt ("-c:v:0" -> "c:v"),
-     * die Einträge sind danach exakte Treffer. "-c" (gilt für alle Streams) steht
-     * deshalb bewusst sowohl bei video_codec als auch bei audio_codec.
+     * An appended stream index is removed beforehand ("-c:v:0" -> "c:v"),
+     * the entries are exact matches afterwards. "-c" (applies to all streams) is
+     * deliberately listed for both video_codec and audio_codec.
      */
     protected const OPTION_GROUPS = [
         // Zielformat / Container       -> ersetzt "-f"
@@ -148,14 +148,14 @@ class FFmpegVideo extends MediaProcessor {
         // Videofilterkette             -> ersetzt width, height, crop,
         //                                 prevent_upscaling, deinterlace, max_fps
         'video_filter'   => ['vf', 'filter', 'filter:v', 'filter_complex', 'lavfi'],
-        // Bildqualität                 -> ersetzt quality_mode, quality, bitrate
+        // Image quality                -> replaces quality_mode, quality, bitrate
         'video_quality'  => ['crf', 'cq', 'q:v', 'qscale:v', 'qp',
                              'b:v', 'vb', 'maxrate', 'minrate', 'bufsize'],
         // Encoder-Geschwindigkeit      -> ersetzt preset
         'preset'         => ['preset', 'cpu-used', 'deadline', 'speed'],
         // Farbmodell                   -> ersetzt compatible_pix_mode
         'pix_fmt'        => ['pix_fmt'],
-        // Bildrate                     -> ersetzt max_fps
+        // Frame rate                   -> replaces max_fps
         'framerate'      => ['r', 'fpsmax', 'framerate', 'vsync', 'fps_mode'],
         // Container-Feinheiten         -> ersetzt faststart
         'movflags'       => ['movflags'],
@@ -175,7 +175,7 @@ class FFmpegVideo extends MediaProcessor {
         'audio_filter'   => ['af', 'filter:a'],
         // Threads                      -> ersetzt threads
         'threads'        => ['threads', 'filter_threads', 'filter_complex_threads'],
-        // Überschreiben                -> ersetzt "-y"
+        // Overwrite                    -> replaces "-y"
         'overwrite'      => ['y', 'n'],
     ];
 
@@ -183,8 +183,8 @@ class FFmpegVideo extends MediaProcessor {
     // ====================
 
     /**
-     * Tabellenstruktur für den Konverter
-     * Darauf basierend kann mit $this->backend->formField() ein Eingabefeld erzeugt werden
+     * Table structure for the converter
+     * An input field can be created from it with $this->backend->formField()
      *
      * type:
      *     integer -> BIGINT
@@ -192,18 +192,18 @@ class FFmpegVideo extends MediaProcessor {
      *     bit -> BIT(1)
      * display_type:
      *     text:   einfaches Eingabefeld
-     *     select: Auswahl, Optionen werden am besten dynamisch erzeugt
+     *     select: selection, options are best generated dynamically
      *     label:  mehrsprachiges Snippet #proc.{processorname}.{snippetname}
      *     prefix,
-     *     suffix: erscheint vor / nach dem Eingabefeld
-     *     pattern: Javascript Pattern für Eingabevalidierung
-     *     min, max: Mindest- / Maximalwert, bei Text die Zeichenanzahl
+     *     suffix: appears before / after the input field
+     *     pattern: JavaScript pattern for input validation
+     *     min, max: minimum / maximum value, for text the number of characters
      */
     protected function hookDefinition(): void
     {
-        // Defaultwerte für Eingabefelder des Konverters.
-        // Welche Formate tatsächlich zur Verfügung stehen, hängt davon ab, mit
-        // welchen Bibliotheken ffmpeg übersetzt wurde ("ffmpeg -formats").
+        // Default values for input fields of the converter.
+        // Which formats are actually available depends on which
+        // libraries ffmpeg was built with ("ffmpeg -formats").
         $this->defaults['media_types_incl'] = implode("\n", [
             "video/mp4",
             "video/quicktime",
@@ -220,9 +220,9 @@ class FFmpegVideo extends MediaProcessor {
 
         $this->defaults['extension'] = 'mp4';
 
-        // Zusätzliche Eingabefelder für den Konverter
+        // Additional input fields for the converter
         $this->schema = [
-            // Container und Codec
+            // Container and codec
             // --------------------
             'details.container' => [
                 'type'  => 'chars',
@@ -270,7 +270,7 @@ class FFmpegVideo extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 1
             ],
-            // Qualität
+            // Quality
             // --------------------
             'details.quality_mode' => [
                 'type'  => 'chars',
@@ -306,7 +306,7 @@ class FFmpegVideo extends MediaProcessor {
                 'default' => 'medium',
                 'max' => 20
             ],
-            // Zeit und Bildrate
+            // Time and frame rate
             // --------------------
             'details.max_fps' => [
                 'type'  => 'integer',
@@ -324,7 +324,7 @@ class FFmpegVideo extends MediaProcessor {
                 'note' => '#proc.ffmpegvideo.note_start_time',
                 'tooltip' => '#proc.ffmpegvideo.tooltip_field_start_time',
                 'default' => '',
-                // Sekunden (12.5) oder [HH:]MM:SS[.mmm]
+                // seconds (12.5) or [HH:]MM:SS[.mmm]
                 'pattern' => '(\d+(\.\d+)?|(\d+:)?[0-5]?\d:[0-5]?\d(\.\d+)?)',
                 'max' => 20
             ],
@@ -337,7 +337,7 @@ class FFmpegVideo extends MediaProcessor {
                 'pattern' => '(\d+(\.\d+)?|(\d+:)?[0-5]?\d:[0-5]?\d(\.\d+)?)',
                 'max' => 20
             ],
-            // Kompatibilität
+            // Compatibility
             // --------------------
             'details.faststart' => [
                 'type'  => 'bit',
@@ -413,7 +413,7 @@ class FFmpegVideo extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 0
             ],
-            // Ausführung
+            // Execution
             // --------------------
             'details.threads' => [
                 'type'  => 'integer',
@@ -443,7 +443,7 @@ class FFmpegVideo extends MediaProcessor {
             ],
             // Expertenmodus
             // --------------------
-            // ffmpeg [parameter1] -i {Quelldatei} [parameter2] {Zieldatei}
+            // ffmpeg [parameter1] -i {source file} [parameter2] {target file}
             'details.parameter1' => [
                 'type'  => 'chars',
                 'label' => '#proc.ffmpegvideo.field_parameter1',
@@ -484,8 +484,8 @@ class FFmpegVideo extends MediaProcessor {
     {
         $details = (array)($data['details'] ?? []);
 
-        // Auswahlfelder auf gültige Werte zurechtbiegen, damit später in
-        // convert() keine unbekannten Schlüssel ankommen.
+        // Adjust selection fields to valid values, so that later in
+        // convert() no unknown keys arrive.
         $details['container']      = $this->pick($details['container']      ?? '', array_keys(self::CONTAINERS),      'mp4');
         $details['codec']          = $this->pick($details['codec']          ?? '', array_keys(self::VIDEO_CODECS),    'h264');
         $details['quality_mode']   = $this->pick($details['quality_mode']   ?? '', ['crf', 'bitrate'],                'crf');
@@ -494,21 +494,21 @@ class FFmpegVideo extends MediaProcessor {
         $details['audio_codec']    = $this->pick($details['audio_codec']    ?? '', array_keys(self::AUDIO_CODECS),    'aac');
         $details['audio_channels'] = $this->pick($details['audio_channels'] ?? '', array_keys(self::AUDIO_CHANNELS),  'keep');
 
-        // Zeitangaben normalisieren, ungültige Eingaben werden verworfen
+        // Normalize time values, invalid input is discarded
         $details['start_time'] = $this->normalizeTime((string)($details['start_time'] ?? ''));
         $details['duration']   = $this->normalizeTime((string)($details['duration'] ?? ''));
 
-        // CRF und Bitrate hängen am Modus: der jeweils andere Wert bleibt stehen,
-        // wird aber nicht verwendet. Nur der CRF-Bereich wird begrenzt.
+        // CRF and bit rate depend on the mode: the other value remains set,
+        // but is not used. Only the CRF range is limited.
         $quality = (int)($details['quality'] ?? 23);
         $details['quality'] = max(0, min(63, $quality));
 
-        // Ohne Zeitlimit könnte ein hängender ffmpeg unbegrenzt Rechenzeit belegen
+        // Without a time limit, a hanging ffmpeg could use computing time indefinitely
         $timeout = (int)($details['max_time_out'] ?? 0);
         $details['max_time_out'] = $timeout > 0 ? $timeout : self::DEFAULT_TIMEOUT;
 
-        // Expertenmodus: Zeilenumbrüche und Mehrfach-Leerzeichen entfernen,
-        // damit die gespeicherte Kommandozeile immer einzeilig bleibt.
+        // Expert mode: remove line breaks and multiple spaces,
+        // so that the stored command line always stays on one line.
         foreach (['parameter1', 'parameter2'] as $key) {
             $value = trim((string)($details[$key] ?? ''));
             $details[$key] = (string)preg_replace('/\s+/', ' ', $value);
@@ -540,24 +540,24 @@ class FFmpegVideo extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt eine Dateiversion basierend auf den übergebenen Parametern
+     * Creates a file version based on the passed parameters
      *
-     * @param string $srcPath   Pfad zur Quelldatei, relativ zu media_dir
-     * @param array  $srcData   Daten der Quell-Datei
+     * @param string $srcPath   path to the source file, relative to media_dir
+     * @param array  $srcData   data of the source file
      *      'extension' => $fileExtension,
      *      'mime_type' => $fileMime,
-     *      'filename'  => $fileOriginName,  // ursprünglicher Dateiname, gegen Injections gesäubert
-     *      'field_id'  => $fieldId,         // für Datei-Pfad / `data_fil`-Eintrag beim checkIn
-     * @param string $destPath  Pfad zur Zieldatei, relativ zu media_dir
+     *      'filename'  => $fileOriginName,  // original file name, sanitized against injections
+     *      'field_id'  => $fieldId,         // for file path / `data_fil` entry at check-in
+     * @param string $destPath  path to the target file, relative to media_dir
      * @param array  $details   Konfigurations-Array
-     * @param bool $forceBgproc true: erzwingt Ausführung als Hintergrundprozess
-     * @return array            Daten der Zieldatei, bzw ['size'=>0, 'errors'=>'...']
+     * @param bool $forceBgproc true: forces execution as a background process
+     * @return array            data of the target file, or ['size'=>0, 'errors'=>'...']
      *
-     * Im Hintergrundbetrieb ist die Zieldatei beim Rücksprung noch NICHT fertig.
-     * Die Rückgabe enthält dann 'size' => 0 und zusätzlich
+     * In background operation the target file is NOT finished yet on return.
+     * The return value then contains 'size' => 0 and additionally
      *     'pending' => true, 'bgproc_id' => int, 'pid' => int, 'token' => string
-     * Der Aufrufer sollte den Datensatz in diesem Fall als "in Arbeit" markieren
-     * und die endgültigen Werte nachtragen, sobald der Prozess beendet ist.
+     * In this case the caller should mark the record as "in progress"
+     * and add the final values once the process has ended.
      */
     public function convert(string $srcPath, array $srcData, string $destPath, array $details, bool $forceBgproc = false): array
     {
@@ -575,7 +575,7 @@ class FFmpegVideo extends MediaProcessor {
             'extension' => '',
         ];
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return $fileData + ['errors' => 'proc.ffmpegvideo.error_binary_missing'];
@@ -586,25 +586,25 @@ class FFmpegVideo extends MediaProcessor {
             return $fileData + ['errors' => 'proc.ffmpegvideo.error_probe_missing'];
         }
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return $fileData + ['errors' => 'error_file_not_found'];
         }
 
-        // Eigenschaften der Quelle ermitteln. Sie werden für die Zielabmessungen,
-        // die Bildrate und die Gesamtzahl der Frames gebraucht.
+        // Determine properties of the source. They are needed for the target dimensions,
+        // the frame rate and the total number of frames.
         $srcInfo = $this->probe($ffprobe, $srcFile);
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
-            // (kein lesbares Format: writeThumbnails() probiert den nächsten Konverter)
+            // (no readable format: writeThumbnails() tries the next converter)
             return $fileData + ['errors' => 'proc.ffmpegvideo.error_file_dimensions', 'unsupported' => true];
         }
 
-        // Expertenmodus: freie Parameter zerlegen und auswerten
+        // Expert mode: split and evaluate free parameters
         $params1 = $this->execute->tokenizeParameters((string)($details['parameter1'] ?? ''));
         $params2 = $this->execute->tokenizeParameters((string)($details['parameter2'] ?? ''));
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
-        // Nicht nur OB der Codec selbst gesetzt wurde, sondern auch WELCHER:
-        // davon hängen Qualitätsstufe, Preset und Filterkette ab.
+        // Not only WHETHER the codec itself was set, but also WHICH one:
+        // the quality level, preset and filter chain depend on it.
         $claimedCodec = $this->claimedCodecValue(array_merge($params1, $params2), self::OPTION_GROUPS['video_codec']);
         $claimedAudio = $this->claimedCodecValue(array_merge($params1, $params2), self::OPTION_GROUPS['audio_codec']);
 
@@ -612,20 +612,20 @@ class FFmpegVideo extends MediaProcessor {
         $timeout   = (int)($details['max_time_out'] ?? 0);
         if ($timeout <= 0) $timeout = self::DEFAULT_TIMEOUT;
 
-        // Aus den Formularwerten erzeugte Parameter
+        // Parameters generated from the form values
         $inputArgs  = $this->buildInputArguments($details, $claimed);
         $outputArgs = $this->buildOutputArguments($details, $srcInfo, $container, $claimed, $claimedCodec, $claimedAudio);
 
-        // Zielverzeichnis anlegen (ffmpeg tut das nicht von sich aus)
+        // Create target directory (ffmpeg does not do this by itself)
         $destDir = dirname($destFile);
         if (!is_dir($destDir)) @mkdir($destDir, 0775, true);
 
         $background = !empty($details['background_process']) || $forceBgproc;
 
-        // Fortschrittsdatei für den Hintergrundprozess.
+        // Progress file for the background process.
         $progressArgs = [];
         if ($background) {
-            // Token wird bis in den Hintergrundprozess weitergereicht!
+            // Token is passed on into the background process!
             $token = $this->crypt->randomKey(16);
             $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
             if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
@@ -638,8 +638,8 @@ class FFmpegVideo extends MediaProcessor {
             ];
         }
 
-        // ffmpeg [erzeugte Eingabe-Optionen] [parameter1] -i QUELLE
-        //        [erzeugte Ausgabe-Optionen] [parameter2] ZIEL
+        // ffmpeg [generated input options] [parameter1] -i SOURCE
+        //        [generated output options] [parameter2] TARGET
         $command = array_merge(
             [$ffmpeg, '-hide_banner', '-loglevel', 'error'],
             $progressArgs,
@@ -652,14 +652,14 @@ class FFmpegVideo extends MediaProcessor {
         );
 
         if ($background) {
-            // Gesamtzahl der Frames abschätzen und zusammen mit dem Zeitlimit ablegen.
-            // trigger_ff.php liest diese Werte aus `message` wieder aus.
-            // 'frames'  : Anzahl Frames die zu berechnen sind
-            // 'dur'     : Laufzeit der Zieldatei als Rückfallebene, falls die Framezahl
-            //             nicht ermittelbar war (Streams ohne nb_frames und ohne Bildrate)
-            // 'timeout' : Eintrag aus details.max_time_out
-            // 'dest'    : Pfad zur Date ab media-Verzeichnis
-            // ('proc' ergänzt startBackgroundProcess() selbst)
+            // Estimate the total number of frames and store it together with the time limit.
+            // trigger_ff.php reads these values back from `message`.
+            // 'frames'  : number of frames to be calculated
+            // 'dur'     : runtime of the target file as fallback, if the frame count
+            //             could not be determined (streams without nb_frames and without frame rate)
+            // 'timeout' : entry from details.max_time_out
+            // 'dest'    : path to the file from the media directory
+            // ('proc' is added by startBackgroundProcess() itself)
             $message = [
                 'frames'  => (string)$this->estimateFrames($details, $srcInfo),
                 'dur'     => (string)round($this->estimateDuration($details, $srcInfo), 2),
@@ -682,11 +682,11 @@ class FFmpegVideo extends MediaProcessor {
                 'filename'   => $srcData['filename'] ?? 'file',
                 'extension'  => $ext,
                 'data' => '{}',
-                // Infos zur Quell-Datei
+                // Info on the source file
                 'source_width'  => $srcInfo['width'],
                 'source_height' => $srcInfo['height'],
                 'source_data' => json_encode($srcData, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
-                // Infos zum Hintergrundprozess
+                // Info on the background process
                 'token'      => (string)$started['token'],
                 'bgproc_id'  => (int)$started['id'],
                 'pid'        => (int)$started['pid']
@@ -695,21 +695,21 @@ class FFmpegVideo extends MediaProcessor {
 
         $exitCode = $this->execute->execute($command, $stdout, $stderr, $timeout);
 
-        // Prüfen ob das Speichern erfolgreich war
+        // Check whether saving was successful
         if ($exitCode !== 0 || !is_file($destFile) || filesize($destFile) === 0) {
-            // Angefangene oder leere Zieldatei nicht liegen lassen
+            // Do not leave a started or empty target file behind
             if (is_file($destFile)) @unlink($destFile);
 
             return $fileData + [
                 'errors' => $exitCode === $this->execute::EXEC_TIMEOUT
                     ? 'proc.ffmpegvideo.error_timeout'
                     : 'error_file_conversion',
-                // Klartext-Meldung von ffmpeg, hilfreich für die Fehlersuche
+                // Plain-text message from ffmpeg, helpful for troubleshooting
                 'error_details' => trim((string)$stderr),
             ];
         }
 
-        // Fertige Zieldatei auslesen und Rückgabestruktur bauen
+        // Read the finished target file and build the return structure
         $destInfo = $this->probe($ffprobe, $destFile);
         
         // gleicher Dateiname
@@ -722,7 +722,7 @@ class FFmpegVideo extends MediaProcessor {
             'filename'      => $destFilename,
             'extension'     => $ext,
             'data'          => json_encode($destInfo, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
-            // Zusätzliche Infos zur Quell-Datei wurden ermittelt:
+            // Additional info on the source file was determined:
             'source_width'  => $srcInfo['width'],
             'source_height' => $srcInfo['height'],
             'source_data'   => json_encode($srcInfo, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
@@ -733,27 +733,27 @@ class FFmpegVideo extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt die Optionen, die VOR "-i" stehen müssen (Eingabe-Optionen).
+     * Creates the options that must come BEFORE "-i" (input options).
      *
      * @param array $details Konfigurations-Array
-     * @param array $claimed Ergebnis von claimedGroups()
+     * @param array $claimed result of claimedGroups()
      * @return array         Argumentliste
      */
     protected function buildInputArguments(array $details, array $claimed): array
     {
         $args = [];
 
-        // Vorhandene Zieldatei überschreiben, sonst wartet ffmpeg auf eine Eingabe
+        // Overwrite an existing target file, otherwise ffmpeg waits for input
         if (!$claimed['overwrite']) $args[] = '-y';
 
-        // Drehung aus den Metadaten anwenden. ffmpeg tut das von sich aus,
-        // abschalten lässt es sich nur ausdrücklich.
+        // Apply rotation from the metadata. ffmpeg does this by itself,
+        // it can only be switched off explicitly.
         if (!$claimed['orient'] && empty($details['auto_rotation'])) {
             $args[] = '-noautorotate';
         }
 
-        // Startzeit als Eingabe-Option: ffmpeg springt dann direkt an die Stelle,
-        // statt das Material bis dahin zu dekodieren.
+        // Start time as input option: ffmpeg then jumps directly to the position,
+        // instead of decoding the material up to that point.
         if (!$claimed['trim']) {
             $start = $this->normalizeTime((string)($details['start_time'] ?? ''));
             if ($start !== '') {
@@ -766,16 +766,16 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Erzeugt die Optionen, die NACH "-i" und vor der Zieldatei stehen (Ausgabe-Optionen).
-     * Bereits vom Administrator belegte Options-Gruppen werden übersprungen.
+     * Creates the options that come AFTER "-i" and before the target file (output options).
+     * Option groups already set by the administrator are skipped.
      *
      * @param array  $details   Konfigurations-Array
-     * @param array  $srcInfo   Ergebnis von probe() für die Quelldatei
+     * @param array  $srcInfo   result of probe() for the source file
      * @param string $container Zielcontainer
-     * @param array  $claimed   Ergebnis von claimedGroups()
-     * @param string $claimedCodec Ergebnis von claimedCodecValue(), '' wenn der
-     *                             Administrator den Video-Codec nicht selbst gesetzt hat
-     * @param string $claimedAudio dasselbe für den Audio-Codec
+     * @param array  $claimed   result of claimedGroups()
+     * @param string $claimedCodec result of claimedCodecValue(), '' if the
+     *                             administrator did not set the video codec themselves
+     * @param string $claimedAudio the same for the audio codec
      * @return array            Argumentliste
      */
     protected function buildOutputArguments(array $details, array $srcInfo, string $container, array $claimed, string $claimedCodec = '', string $claimedAudio = ''): array
@@ -785,15 +785,15 @@ class FFmpegVideo extends MediaProcessor {
         $codecKey = $this->pick((string)($details['codec'] ?? ''), array_keys(self::VIDEO_CODECS), 'h264');
         $encoder  = self::VIDEO_CODECS[$codecKey];
 
-        // Hat der Administrator den Codec im Expertenmodus selbst gesetzt, dann
-        // gilt seiner. Filterkette, Qualitätsstufe und Preset müssen zu DIESEM
-        // Encoder passen, sonst bricht ffmpeg ab ("-preset medium" kennt VP9
-        // nicht) oder die Angabe bleibt wirkungslos ("-crf" ohne "-b:v 0"
+        // If the administrator set the codec themselves in expert mode, then
+        // theirs applies. Filter chain, quality level and preset must match THIS
+        // encoder, otherwise ffmpeg aborts ("-preset medium" does not know VP9
+        // either) or the setting stays ineffective ("-crf" without "-b:v 0"
         // ignoriert VP9 stillschweigend).
         if ($claimedCodec !== '') $encoder = $claimedCodec;
 
-        // 'copy' und 'none' schließen jede Bearbeitung des Bildes aus:
-        // ohne Neukodierung gibt es weder Filter noch Qualitätsstufen.
+        // 'copy' and 'none' rule out any processing of the image:
+        // without re-encoding there are neither filters nor quality levels.
         $reencode = !in_array($encoder, ['', 'copy', 'none'], true);
 
         // ---- Video-Codec ----
@@ -809,7 +809,7 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // ---- Videofilter (Deinterlace, Skalierung, Beschnitt, Bildrate) ----
+        // ---- Video filter (deinterlace, scaling, cropping, frame rate) ----
         if ($reencode && !$claimed['video_filter']) {
             $filters = $this->buildFilterChain($details, $srcInfo, $claimed);
             if ($filters !== []) {
@@ -818,7 +818,7 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // ---- Qualität ----
+        // ---- Quality ----
         if ($reencode && !$claimed['video_quality']) {
             $args = array_merge($args, $this->qualityArguments($details, $encoder));
         }
@@ -828,14 +828,14 @@ class FFmpegVideo extends MediaProcessor {
             $args = array_merge($args, $this->presetArguments($details, $encoder));
         }
 
-        // ---- Farbmodell: yuv420p ist das, was jeder Browser und jedes
-        //      Endgerät sicher darstellen kann ----
+        // ---- Color model: yuv420p is what every browser and every
+        //      device can display safely ----
         if ($reencode && !$claimed['pix_fmt'] && !empty($details['compatible_pix_mode'])) {
             $args[] = '-pix_fmt';
             $args[] = 'yuv420p';
         }
 
-        // ---- Laufzeit begrenzen (z. B. für Kurz-Previews) ----
+        // ---- Limit runtime (e.g. for short previews) ----
         if (!$claimed['trim']) {
             $duration = $this->normalizeTime((string)($details['duration'] ?? ''));
             if ($duration !== '') {
@@ -844,8 +844,8 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // ---- Metadaten entfernen. Videos aus Mobiltelefonen enthalten
-        //      regelmäßig Geodaten, die nicht ins Web gehören. ----
+        // ---- Remove metadata. Videos from mobile phones regularly contain
+        //      geodata that does not belong on the web. ----
         if (!$claimed['metadata'] && !empty($details['strip_meta'])) {
             $args[] = '-map_metadata';
             $args[] = '-1';
@@ -865,15 +865,15 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // ---- Index an den Anfang der Datei: das Video kann dann abgespielt
-        //      werden, bevor es vollständig geladen ist (nur MP4/MOV) ----
+        // ---- Index at the start of the file: the video can then be played
+        //      before it is fully loaded (MP4/MOV only) ----
         if (!$claimed['movflags'] && !empty($details['faststart']) && $container === 'mp4') {
             $args[] = '-movflags';
             $args[] = '+faststart';
         }
 
-        // ---- Zielformat explizit vorgeben, damit die Endung nicht
-        //      fehlinterpretiert wird ----
+        // ---- Set the target format explicitly so that the extension is not
+        //      misinterpreted ----
         if (!$claimed['format']) {
             $args[] = '-f';
             $args[] = self::CONTAINERS[$container][0];
@@ -883,14 +883,14 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Baut die Videofilterkette auf.
+     * Builds the video filter chain.
      *
-     * Die Zielabmessungen werden hier in PHP ausgerechnet und nicht ffmpeg
-     * überlassen: die Abmessungen der Quelle sind durch probe() bekannt, und
-     * ausgerechnete Werte sind erheblich leichter nachzuvollziehen als
-     * verschachtelte scale-Ausdrücke.
+     * The target dimensions are calculated here in PHP and not left to ffmpeg:
+     * the dimensions of the source are known through probe(), and
+     * calculated values are considerably easier to follow than
+     * nested scale expressions.
      *
-     * @return array Liste einzelner Filter, z. B. ['yadif', 'scale=1280:720', 'fps=30']
+     * @return array list of individual filters, e.g. ['yadif', 'scale=1280:720', 'fps=30']
      */
     protected function buildFilterChain(array $details, array $srcInfo, array $claimed): array
     {
@@ -901,8 +901,8 @@ class FFmpegVideo extends MediaProcessor {
         if (self::DEINTERLACE[$mode] !== '') $filters[] = self::DEINTERLACE[$mode];
 
         // ---- Abmessungen ----
-        // Bei 90/270 Grad Drehung tauscht die Autorotation Breite und Höhe,
-        // die Filterkette sieht das gedrehte Bild.
+        // With 90/270 degree rotation, auto-rotation swaps width and height;
+        // the filter chain sees the rotated image.
         $srcW = $srcInfo['width'];
         $srcH = $srcInfo['height'];
         if (!empty($details['auto_rotation']) && in_array(abs($srcInfo['rotation']), [90, 270], true)) {
@@ -912,27 +912,27 @@ class FFmpegVideo extends MediaProcessor {
         $reqW = !empty($details['width'])  ? (int)$details['width']  : 0;
         $reqH = !empty($details['height']) ? (int)$details['height'] : 0;
 
-        // Beschneiden ist nur sinnvoll, wenn beide Maße vorgegeben sind.
-        // Fehlt eines, ergibt es sich aus dem Seitenverhältnis der Quelle,
-        // dann sind Einpassen und Ausfüllen identisch.
+        // Cropping only makes sense if both dimensions are specified.
+        // If one is missing, it results from the aspect ratio of the source,
+        // then fitting and filling are identical.
         $isCrop = !empty($details['crop']) && $reqW > 0 && $reqH > 0;
 
         $target = $this->targetSize($srcW, $srcH, $reqW, $reqH, $isCrop, !empty($details['prevent_upscaling']));
 
         if ($target !== null) {
             if ($isCrop) {
-                // CROP: erst so skalieren, dass die Box vollständig bedeckt ist,
-                // dann mittig auf das Zielformat beschneiden
+                // CROP: first scale so that the box is completely covered,
+                // then crop centered to the target format
                 $filters[] = 'scale=' . $target['scale_w'] . ':' . $target['scale_h'];
                 $filters[] = 'crop=' . $target['width'] . ':' . $target['height'];
             } else {
-                // FIT: skalieren, so dass das Bild in die Box passt
+                // FIT: scale so that the image fits into the box
                 $filters[] = 'scale=' . $target['width'] . ':' . $target['height'];
             }
         }
 
-        // ---- Bildrate begrenzen ----
-        // "max" heißt: nur herunterrechnen, niemals Frames erfinden.
+        // ---- Limit frame rate ----
+        // "max" means: only scale down, never invent frames.
         if (!$claimed['framerate']) {
             $maxFps = (int)($details['max_fps'] ?? 0);
             if ($maxFps > 0 && ($srcInfo['fps'] <= 0 || $srcInfo['fps'] > $maxFps)) {
@@ -944,23 +944,23 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Rechnet die Zielabmessungen aus.
+     * Calculates the target dimensions.
      *
-     * Alle Werte werden auf gerade Zahlen gebracht, weil yuv420p die Farbkanäle
-     * halbiert und ungerade Kantenlängen deshalb von vielen Encodern abgelehnt werden.
+     * All values are brought to even numbers, because yuv420p halves the color channels
+     * and odd edge lengths are therefore rejected by many encoders.
      *
-     * @param  int  $srcW              Breite der Quelle
-     * @param  int  $srcH              Höhe der Quelle
-     * @param  int  $reqW              gewünschte Breite, 0 = aus dem Seitenverhältnis
-     * @param  int  $reqH              gewünschte Höhe, 0 = aus dem Seitenverhältnis
-     * @param  bool $isCrop            Box ausfüllen statt einpassen
-     * @param  bool $preventUpscaling  nicht über die Originalgröße hinaus vergrößern
-     * @return array|null ['width'=>int,'height'=>int,'scale_w'=>int,'scale_h'=>int] oder null
+     * @param  int  $srcW              width of the source
+     * @param  int  $srcH              height of the source
+     * @param  int  $reqW              requested width, 0 = from the aspect ratio
+     * @param  int  $reqH              requested height, 0 = from the aspect ratio
+     * @param  bool $isCrop            fill the box instead of fitting
+     * @param  bool $preventUpscaling  do not enlarge beyond the original size
+     * @return array|null ['width'=>int,'height'=>int,'scale_w'=>int,'scale_h'=>int] or null
      */
     protected function targetSize(int $srcW, int $srcH, int $reqW, int $reqH, bool $isCrop, bool $preventUpscaling): ?array
     {
         if ($srcW <= 0 || $srcH <= 0) return null;
-        // Keine Vorgabe -> Originalgröße beibehalten
+        // No specification -> keep original size
         if ($reqW <= 0 && $reqH <= 0) return null;
 
         if ($reqW > 0 && $reqH > 0) {
@@ -975,13 +975,13 @@ class FFmpegVideo extends MediaProcessor {
         }
 
         if (!$isCrop && $reqW > 0 && $reqH > 0) {
-            // Einpassen: der kleinere der beiden Faktoren gewinnt
+            // Fit: the smaller of the two factors wins
             $factor = min($reqW / $srcW, $reqH / $srcH);
             if ($preventUpscaling) $factor = min($factor, 1.0);
             $width  = (int)round($srcW * $factor);
             $height = (int)round($srcH * $factor);
         } elseif ($preventUpscaling && ($width > $srcW || $height > $srcH)) {
-            // Nur verkleinern: auf die Originalgröße begrenzen
+            // Only downscale: limit to the original size
             $factor = min($srcW / max(1, $width), $srcH / max(1, $height), 1.0);
             $width  = (int)round($width * $factor);
             $height = (int)round($height * $factor);
@@ -990,8 +990,8 @@ class FFmpegVideo extends MediaProcessor {
         $width  = $this->evenValue($width);
         $height = $this->evenValue($height);
 
-        // Beim Beschneiden muss vor dem Schnitt so skaliert werden, dass die
-        // Box vollständig bedeckt ist (der größere der beiden Faktoren).
+        // When cropping, scaling must be done before the crop so that the
+        // box is completely covered (the larger of the two factors).
         $scaleW = $width;
         $scaleH = $height;
         if ($isCrop) {
@@ -999,7 +999,7 @@ class FFmpegVideo extends MediaProcessor {
             if ($preventUpscaling) $factor = min($factor, 1.0);
             $scaleW = $this->evenValue((int)ceil($srcW * $factor));
             $scaleH = $this->evenValue((int)ceil($srcH * $factor));
-            // Die Box kann nach dem Begrenzen größer sein als das skalierte Bild
+            // After limiting, the box can be larger than the scaled image
             $width  = min($width, $scaleW);
             $height = min($height, $scaleH);
         }
@@ -1013,7 +1013,7 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Nächstkleinere gerade Zahl, mindestens 2
+     * Next smaller even number, at least 2
      */
     protected function evenValue(int $value): int
     {
@@ -1023,10 +1023,10 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Qualitäts-Parameter je nach Modus und Encoder.
+     * Quality parameters depending on mode and encoder.
      *
-     * CRF ist ein Qualitätsziel, die Dateigröße ergibt sich daraus.
-     * Bitrate ist ein Größenziel, die Qualität ergibt sich daraus.
+     * CRF is a quality target, the file size results from it.
+     * Bit rate is a size target, the quality results from it.
      */
     protected function qualityArguments(array $details, string $encoder): array
     {
@@ -1039,18 +1039,18 @@ class FFmpegVideo extends MediaProcessor {
             return ['-b:v', $bitrate . 'k'];
         }
 
-        // Einen Encoder, den der Prozessor nicht kennt (z. B. ein hardware-
-        // beschleunigter wie h264_nvenc aus dem Expertenmodus), steuert man
-        // nicht zwingend über "-crf". Dann lieber gar keine Qualitätsangabe
-        // erzeugen als eine, die ffmpeg zurückweist. Die Datenrate oben ist
-        // davon nicht betroffen, "-b:v" versteht jeder Encoder.
+        // An encoder that the processor does not know (e.g. a hardware-
+        // accelerated one such as h264_nvenc from expert mode) is not
+        // necessarily controlled via "-crf". Then it is preferable to produce no quality setting at all
+        // rather than one that ffmpeg rejects. The bit rate above is
+        // not affected by this, "-b:v" is understood by every encoder.
         if (!isset(self::CRF_MAX[$encoder])) return [];
 
         $max = self::CRF_MAX[$encoder] ?? 51;
         $crf = (int)($details['quality'] ?? 23);
         $crf = max(0, min($max, $crf));
 
-        // VP9 wertet -crf nur aus, wenn die Zielbitrate ausdrücklich auf 0 steht
+        // VP9 only evaluates -crf if the target bit rate is explicitly set to 0
         if ($encoder === 'libvpx-vp9') {
             return ['-crf', (string)$crf, '-b:v', '0'];
         }
@@ -1059,7 +1059,7 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Geschwindigkeits-Voreinstellung in die Schreibweise des jeweiligen Encoders übersetzen
+     * Translate the speed preset into the notation of the respective encoder
      */
     protected function presetArguments(array $details, string $encoder): array
     {
@@ -1074,10 +1074,10 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Parameter für die Tonspur
+     * Parameters for the audio track
      *
-     * @param string $claimedCodec Ergebnis von claimedCodecValue() für die
-     *                             Gruppe audio_codec, '' wenn nicht gesetzt
+     * @param string $claimedCodec result of claimedCodecValue() for the
+     *                             group audio_codec, '' if not set
      */
     protected function audioArguments(array $details, array $claimed, string $claimedCodec = ''): array
     {
@@ -1085,10 +1085,10 @@ class FFmpegVideo extends MediaProcessor {
         $codecKey = $this->pick((string)($details['audio_codec'] ?? ''), array_keys(self::AUDIO_CODECS), 'aac');
         $encoder  = self::AUDIO_CODECS[$codecKey];
 
-        // Auch hier gilt der selbst gesetzte Codec. Sonst landet z. B. bei
-        // "-c:a copy" trotzdem ein "-af loudnorm" in der Kommandozeile,
-        // und daran bricht ffmpeg ab: filtern lässt sich nur, was auch
-        // neu kodiert wird.
+        // The codec set by the administrator applies here too. Otherwise, for example with
+        // "-c:a copy", a "-af loudnorm" still ends up in the command line,
+        // and ffmpeg aborts on it: only what is also
+        // re-encoded can be filtered.
         if ($claimedCodec !== '') $encoder = $claimedCodec;
 
         $reencode = !in_array($encoder, ['', 'copy', 'none'], true);
@@ -1105,7 +1105,7 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // Ohne Neukodierung sind Datenrate, Kanalzahl und Lautheit nicht beeinflussbar
+        // Without re-encoding, bit rate, channel count and loudness cannot be influenced
         if (!$reencode) return $args;
 
         if ($reencode && !$claimed['audio_bitrate']) {
@@ -1124,9 +1124,9 @@ class FFmpegVideo extends MediaProcessor {
             }
         }
 
-        // Lautheitsnormalisierung nach EBU R128.
-        // Einmaliger Durchlauf: ffmpeg misst und korrigiert gleichzeitig. Das ist
-        // etwas ungenauer als der Zwei-Pass-Betrieb, kostet aber keinen zweiten Lauf.
+        // Loudness normalization according to EBU R128.
+        // Single pass: ffmpeg measures and corrects at the same time. This is
+        // slightly less accurate than two-pass operation, but does not cost a second run.
         if ($reencode && !$claimed['audio_filter'] && !empty($details['audio_normalisation'])) {
             $args[] = '-af';
             $args[] = 'loudnorm=I=-23:LRA=7:TP=-2';
@@ -1136,9 +1136,9 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Ermittelt, welche Options-Gruppen der Administrator selbst belegt hat.
+     * Determines which option groups the administrator has set themselves.
      *
-     * @param array $tokens Argumente aus parameter1 und parameter2
+     * @param array $tokens arguments from parameter1 and parameter2
      * @return array        ['video_filter' => bool, 'video_quality' => bool, ...]
      */
     protected function claimedGroups(array $tokens): array
@@ -1146,10 +1146,10 @@ class FFmpegVideo extends MediaProcessor {
         $claimed = array_fill_keys(array_keys(self::OPTION_GROUPS), false);
 
         foreach ($tokens as $token) {
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:v:0" und "-b:a:1" auf die Grundform zurückführen
+            // reduce "-c:v:0" and "-b:a:1" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
@@ -1162,18 +1162,18 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Liest den Encoder aus, den der Administrator im Expertenmodus selbst
-     * gesetzt hat, z. B. 'libvpx-vp9' aus "-c:v libvpx-vp9" oder 'copy' aus
+     * Reads the encoder that the administrator set themselves in expert mode
+     * e.g. 'libvpx-vp9' from "-c:v libvpx-vp9" or 'copy' from
      * "-c copy".
      *
-     * claimedGroups() beantwortet nur die Frage OB eine Gruppe belegt ist. Für
-     * die Qualitätsstufe und das Preset reicht das nicht: beide sind in ihrer
-     * Schreibweise vom Encoder abhängig. Ohne diesen Wert würde der Prozessor
-     * seine Parameter weiterhin für den im Formular gewählten Encoder bauen.
+     * claimedGroups() only answers the question WHETHER a group is set. For
+     * the quality level and the preset, that is not enough: both are in their
+     * notation depending on the encoder. Without this value the processor
+     * would still build its parameters for the encoder chosen in the form.
      *
-     * @param array $tokens  Argumente aus parameter1 und parameter2
-     * @param array $options Optionsnamen der Codec-Gruppe, siehe OPTION_GROUPS
-     * @return string        Encoder, 'none' bei "-vn"/"-an", '' wenn nichts gesetzt wurde
+     * @param array $tokens  arguments from parameter1 and parameter2
+     * @param array $options option names of the codec group, see OPTION_GROUPS
+     * @return string        encoder, 'none' for "-vn"/"-an", '' if nothing was set
      */
     protected function claimedCodecValue(array $tokens, array $options): string
     {
@@ -1182,20 +1182,20 @@ class FFmpegVideo extends MediaProcessor {
         for ($i = 0; $i < $count; $i++) {
             $token = $tokens[$i];
 
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:v:0" auf die Grundform zurückführen
+            // reduce "-c:v:0" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
             if (!in_array($option, $options, true)) continue;
 
-            // "-vn" und "-an" stehen für sich, sie haben keinen Wert
+            // "-vn" and "-an" stand alone, they have no value
             if ($option === 'vn' || $option === 'an') return 'none';
 
-            // Der nächste Token ist der Encodername, sofern dort nicht schon
-            // die nächste Option beginnt
+            // The next token is the encoder name, unless
+            // the next option already starts there
             $value = $tokens[$i + 1] ?? '';
             if ($value !== '' && $value[0] !== '-') return strtolower($value);
         }
@@ -1204,28 +1204,28 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Öffentliche Methode, um die Parameter eines per Hintergrundprozess erzeugten Thumbnails
-     * in Tabelle `data_fil` nachzutragen
+     * Public method to add the parameters of a thumbnail created by a background process
+     * to table `data_fil`
      * 
-     * @param string $srcPath   Relativer Pfad zur Datei ab Medienverzeichnis
-     * @return array            mittels ffprobe ermittelte Daten + Dateigröße
+     * @param string $srcPath   relative path to the file from the media directory
+     * @return array            data determined via ffprobe + file size
      *                          width, height, extension, size
-     *                          (KEIN mime_type - den kennt ffprobe nicht; er steht
-     *                           bereits im `data_fil`-Eintrag des Feldes)
+     *                          (NO mime_type - ffprobe does not know it; it is
+     *                           already in the `data_fil` entry of the field)
      */
     public function rectifyParams(string $srcPath): array
     {
-        // Absoluter Pfad zur Datei
+        // Absolute path to the file
         $srcFile = $this->config->get('paths.media_dir') . '/' . $srcPath;
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return [
                 'error' => '#error_file_not_found'
             ];
         }
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return [
@@ -1240,7 +1240,7 @@ class FFmpegVideo extends MediaProcessor {
             ];
         }
 
-        // Eigenschaften der Datei ermitteln
+        // Determine properties of the file
         $srcInfo = $this->probe($ffprobe, $srcFile);
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
             return [
@@ -1257,10 +1257,10 @@ class FFmpegVideo extends MediaProcessor {
     // ====================
 
     /**
-     * Liest die Eigenschaften einer Datei mit ffprobe.
+     * Reads the properties of a file with ffprobe.
      *
      * @return array|null ['width'=>int, 'height'=>int, 'rotation'=>int, 'fps'=>float,
-     *                     'duration'=>float, 'frames'=>int, 'has_audio'=>bool] oder null bei Fehler
+     *                     'duration'=>float, 'frames'=>int, 'has_audio'=>bool] or null on error
      */
     protected function probe(string $ffprobe, string $file): ?array
     {
@@ -1283,9 +1283,9 @@ class FFmpegVideo extends MediaProcessor {
             'duration'  => 0.0,
             'frames'    => 0,
             'has_audio' => false,
-            // KEIN 'mime_type': ffprobe liefert keinen Mime-Typ, und ein leer
-            // vorbelegter Schlüssel würde beim Zusammenführen mit anderen
-            // Datenquellen den dort vorhandenen Wert verdrängen (vgl. TriggerMedia)
+            // NO 'mime_type': ffprobe returns no MIME type, and an empty
+            // preset key would, when merged with other
+            // data sources, displace the value present there (cf. TriggerMedia)
         ];
 
         foreach ($data['streams'] as $stream) {
@@ -1318,8 +1318,8 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Drehung aus den Stream-Informationen lesen.
-     * Je nach ffprobe-Version steht sie in side_data_list oder in tags.rotate.
+     * Read the rotation from the stream information.
+     * Depending on the ffprobe version it is in side_data_list or in tags.rotate.
      */
     protected function parseRotation(array $stream): int
     {
@@ -1336,7 +1336,7 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Bruchschreibweise von ffprobe auswerten, z. B. "30000/1001" -> 29.97
+     * Evaluate the fraction notation of ffprobe, e.g. "30000/1001" -> 29.97
      */
     protected function parseRational(string $value): float
     {
@@ -1354,13 +1354,13 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Schätzt die Gesamtzahl der Frames der ZIELdatei ab.
+     * Estimates the total number of frames of the TARGET file.
      *
-     * Grundlage ist die Laufzeit, begrenzt durch start_time und duration,
-     * multipliziert mit der Bildrate der Ausgabe. Der Wert landet in
-     * `bgproc`.`message` und ist der Nenner für die Prozentanzeige.
+     * Based on the runtime, limited by start_time and duration,
+     * multiplied by the frame rate of the output. The value ends up in
+     * `bgproc`.`message` and is the denominator for the percentage display.
      *
-     * @return int Anzahl Frames, 0 wenn nicht ermittelbar
+     * @return int number of frames, 0 if not determinable
      */
     protected function estimateFrames(array $details, array $srcInfo): int
     {
@@ -1373,7 +1373,7 @@ class FFmpegVideo extends MediaProcessor {
         $duration = $this->estimateDuration($details, $srcInfo);
 
         if ($duration <= 0) {
-            // Keine Laufzeit bekannt: auf die gemeldete Framezahl der Quelle ausweichen
+            // No runtime known: fall back to the reported frame count of the source
             return max(0, (int)$srcInfo['frames']);
         }
 
@@ -1381,8 +1381,8 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Schätzt die Laufzeit der ZIELdatei in Sekunden ab:
-     * Laufzeit der Quelle, gekürzt um start_time und begrenzt durch duration.
+     * Estimates the runtime of the TARGET file in seconds:
+     * runtime of the source, shortened by start_time and limited by duration.
      */
     protected function estimateDuration(array $details, array $srcInfo): float
     {
@@ -1398,10 +1398,10 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe prüfen und normalisieren.
-     * Erlaubt sind Sekunden ("12.5") und [HH:]MM:SS[.mmm] ("00:01:30.5").
+     * Check and normalize a time value.
+     * Allowed are seconds ("12.5") and [HH:]MM:SS[.mmm] ("00:01:30.5").
      *
-     * @return string normalisierte Angabe oder '' bei ungültiger Eingabe
+     * @return string normalized value or '' for invalid input
      */
     protected function normalizeTime(string $value): string
     {
@@ -1415,7 +1415,7 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe in Sekunden umrechnen
+     * Convert time value to seconds
      */
     protected function timeToSeconds(string $value): float
     {
@@ -1435,7 +1435,7 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Wert gegen eine Liste erlaubter Werte prüfen
+     * Check value against a list of allowed values
      */
     protected function pick(string $value, array $allowed, string $fallback): string
     {
@@ -1445,10 +1445,10 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Pfad zu ffprobe ermitteln: entweder ausdrücklich konfiguriert oder
-     * neben ffmpeg im selben Verzeichnis.
+     * Determine the path to ffprobe: either explicitly configured or
+     * next to ffmpeg in the same directory.
      *
-     * @return string Pfad oder '' wenn nicht auffindbar
+     * @return string path or '' if not found
      */
     protected function ffprobePath(string $ffmpeg): string
     {
@@ -1462,9 +1462,9 @@ class FFmpegVideo extends MediaProcessor {
     }
 
     /**
-     * Version des konfigurierten ffmpeg auslesen
+     * Read the version of the configured ffmpeg
      *
-     * @return string|null z. B. "6.1.1" oder null, wenn ffmpeg nicht läuft
+     * @return string|null e.g. "6.1.1" or null if ffmpeg is not running
      */
     public function getVersion(): ?string
     {

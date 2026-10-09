@@ -4,18 +4,18 @@ namespace Camindo\Core\Modules\Area;
 class FieldAjaxBackend extends FieldBackend {
 
     /**
-     * Ajax: eine der drei Sichtbarkeiten umschalten.
+     * Ajax: toggle one of the three visibilities.
      *
-     * Antwortet nicht mit einer Seite, sondern mit genau der Checkbox, die geklickt
-     * wurde - das Javascript ersetzt damit das angeklickte Element. Im onclick der
-     * neuen Checkbox steht bereits der umgekehrte Wert, der nächste Klick schaltet
-     * also zurück.
+     * It does not answer with a page, but with exactly the checkbox that was clicked -
+     * the JavaScript replaces the clicked element with it. In the onclick of the
+     * new checkbox the inverse value is already present, the next click switches
+     * back.
      *
-     * $name wird gegen $visibilityFields geprüft, bevor daraus ein Spaltenname wird -
-     * ohne diese Weißliste stünde ein Requestwert im Feldnamen von save().
+     * $name is checked against $visibilityFields before it becomes a column name -
+     * without this allowlist a request value would end up in the field name of save().
      *
-     * Request: id, name (input|search|list), value (0|1) - per POST, die Methode
-     * schreibt (17-csrf.md §2.7).
+     * Request: id, name (input|search|list), value (0|1) - via POST, the method
+     * writes (developer docs, chapter 14 (Security: web)).
      */
     public function updateVisibility():void
     {
@@ -29,7 +29,7 @@ class FieldAjaxBackend extends FieldBackend {
         $name = (string) ($_REQUEST['name'] ?? '');
         $value = (int) (bool) ($_REQUEST['value'] ?? 0);
 
-        // Parameter prüfen
+        // Check parameters
         if (empty($id) || !in_array($name, $this->visibilityFields, true)) {
             echo $this->backend->template('check_error');
             exit;

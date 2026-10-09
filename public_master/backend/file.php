@@ -10,7 +10,7 @@ require_once dirname(__DIR__, 3) . '/load_camindo.php';
 // Container laden
 $app = $GLOBALS['app'];
 
-// Klasse laden und Methode starten
+// Load class and start method
 $recordBackendServerFile = $app->get(RecordBackendServerFile::class);
 $recordBackendServerFile->filePreview();
 

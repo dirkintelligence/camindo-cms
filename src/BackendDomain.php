@@ -1,28 +1,28 @@
 <?php
 /**
- * Feste Backend-Domain (admin.backend_domain) - developer_docs/21-backend-domain.md.
+ * Fixed backend domain (admin.backend_domain) - developer docs, chapter 13 (Security: authentication).
  *
- * Ohne Eintrag läuft das Backend wie bisher unter jeder Domain der Installation
- * ({domain}/backend/). Mit Eintrag nur noch unter dieser einen:
+ * Without an entry the backend runs as before under every domain of the installation
+ * ({domain}/backend/). With an entry only under this one:
  *
- *     Backend-Einstiege (index.php, module.php, file.php, preview.php) unter einer
- *     anderen Domain                          -> 404, ohne Hinweis auf die richtige
- *     Frontend unter der Backend-Domain       -> 302 auf das Backend
+ *     Backend entry points (index.php, module.php, file.php, preview.php) under another
+ *     domain                                  -> 404, without a hint to the right one
+ *     Frontend under the backend domain       -> 302 to the backend
  *
- * Wozu: eine Subdomain, die niemand errät, hält Anmeldeversuche fern - die Websites
- * verraten sie nicht mehr. Und WebAuthn (Passkeys) bindet jeden Schlüssel an genau
- * eine Domain; das geht nur mit einer festen.
+ * Why: a subdomain nobody guesses keeps login attempts away - the websites no longer
+ * reveal it. And WebAuthn (passkeys) binds each key to exactly one domain; that only
+ * works with a fixed one.
  *
- * Statische Dateien unter /backend/assets und /backend/ext liefert der Webserver
- * weiter unter jeder Domain aus (z. B. die QR-Bibliothek für CMS:USER_2FA).
+ * Static files under /backend/assets and /backend/ext are still served by the web
+ * server under every domain (e.g. the QR library for CMS:USER_2FA).
  *
- * Vorschau und Frontend-Editing laufen dann über die Domain der Website: siehe
+ * Preview and frontend editing then run via the domain of the website: see
  * FrontendHandover.
  *
- * HINTER EINEM PROXY
+ * BEHIND A PROXY
  * --------------------
- * Verglichen wird HTTP_HOST; steht REMOTE_ADDR in security.trusted_proxies, der
- * erste Wert von X-Forwarded-Host.
+ * HTTP_HOST is compared; if REMOTE_ADDR is in security.trusted_proxies, the
+ * first value of X-Forwarded-Host.
  *
  * @see Camindo\Core\FrontendHandover
  */
@@ -32,28 +32,28 @@ class BackendDomain
 {
     public function __construct(private Config $config) {}
 
-    /** Eingetragene Backend-Domain (klein, ggf. mit Port), '' = keine */
+    /** Configured backend domain (lowercase, with port if any), '' = none */
     public function configured(): string
     {
         return self::normalize((string)$this->config->get('admin.backend_domain'));
     }
 
-    /** Ist eine feste Backend-Domain eingetragen? */
+    /** Is a fixed backend domain configured? */
     public function isFixed(): bool
     {
         return $this->configured() !== '';
     }
 
     /**
-     * Läuft dieser Request unter der Backend-Domain? Ohne Eintrag immer true
-     * (jede Domain ist dann Backend-Domain).
+     * Does this request run under the backend domain? Without an entry always true
+     * (every domain is then the backend domain).
      */
     public function isBackendHost(): bool
     {
         $domain = $this->configured();
         if ($domain === '') return true;
         $host = $this->requestHost();
-        // Ohne Port eingetragen: Port des Requests ignorieren
+        // Configured without port: ignore the port of the request
         if (!str_contains($domain, ':') && ($colon = strrpos($host, ':')) !== false && !str_contains($host, ']')) {
             $host = substr($host, 0, $colon);
         }
@@ -61,8 +61,8 @@ class BackendDomain
     }
 
     /**
-     * Backend-Einstieg unter einer fremden Domain: mit 404 beenden. Aufgerufen aus
-     * Core/Core.php für CAMINDO_BACKEND, nicht auf der Kommandozeile.
+     * Backend entry point under a foreign domain: terminate with 404. Called from
+     * Core/Core.php for CAMINDO_BACKEND, not on the command line.
      */
     public function enforce(): void
     {
@@ -77,21 +77,21 @@ class BackendDomain
     }
 
     /**
-     * Absolute Adresse im Backend, z. B. url('/index.php'). Ohne feste Domain die
-     * relative wie bisher (paths.backend + $path).
+     * Absolute address in the backend, e.g. url('/index.php'). Without a fixed domain the
+     * relative one as before (paths.backend + $path).
      */
     public function url(string $path = '/'): string
     {
         $relative = rtrim((string)$this->config->get('paths.backend'), '/') . $path;
         $domain = $this->configured();
         if ($domain === '') return $relative;
-        // Backend über http nur, wenn das Session-Cookie ausdrücklich ohne Secure läuft
-        // (lokaler Test ohne SSL, admin.cookie_secure = false)
+        // Backend over http only if the session cookie explicitly runs without Secure
+        // (local test without SSL, admin.cookie_secure = false)
         $scheme = $this->config->get('admin.cookie_secure') === false ? 'http' : 'https';
         return $scheme . '://' . $domain . $relative;
     }
 
-    /** Host des Requests, klein, mit Port wie gesendet */
+    /** Host of the request, lowercase, with port as sent */
     private function requestHost(): string
     {
         $host = (string)($_SERVER['HTTP_HOST'] ?? '');

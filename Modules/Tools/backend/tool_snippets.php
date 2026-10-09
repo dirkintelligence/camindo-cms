@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der IIFE der module.php
+ * We are inside the IIFE of module.php
  * @var Camindo\Core\Config $config
  * @var Camindo\Core\Database $db
  * @var Camindo\Core\System $system

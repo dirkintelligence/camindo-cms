@@ -1,58 +1,58 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `template` - die Frontend-Templates.
+ * Dataset child class for the table `template` - the frontend templates.
  *
- * Ein Template wird in der CMS-Befehlssprache geschrieben und beim Speichern zu PHP
- * kompiliert. Zur Laufzeit kommt kein Parser mehr zum Einsatz, das Frontend bindet
- * fertiges PHP ein.
+ * A template is written in the CMS command language and compiled to PHP on saving.
+ * At runtime no parser is used any more, the frontend includes finished
+ * PHP.
  *
- * DIE DATEI FÜHRT
+ * THE FILE LEADS
  * --------------------
- * Der Quelltext liegt als Datei unter var/templates/{instance_id}/{bereich}/{name}.cms.php
- * (TemplateFiles). Sie ist die einzige Quelle:
+ * The source code lies as a file under var/templates/{instance_id}/{bereich}/{name}.cms.php
+ * (TemplateFiles). It is the only source:
  *
- *     Datei         Quelltext in CMS-Syntax - das, was der Redakteur bearbeitet.
- *                   load() liest ihn von dort (hookOnLoaded()), save() schreibt ihn
- *                   dorthin zurück (hookOnSaved()).
- *     code          Kopie des Quelltexts in der Datenbank - NUR für die Suche im
- *                   Backend nach Code-Stellen
- *     styled_code   HTML mit Syntax-Highlighting - NUR für TemplateBackend::info()
- *     error_text    Meldungen des Parsers, mit Zeilennummern
- *     php_code      daraus kompiliertes PHP - erzeugt in hookOnSave(), nur als
- *                   Datei nach var/php/{area_id}/{name}.php geschrieben
- *                   (hookOnSaved()), nie in die Datenbank
+ *     file          source code in CMS syntax - what the editor works on.
+ *                   load() reads it from there (hookOnLoaded()), save() writes it
+ *                   back there (hookOnSaved()).
+ *     code          copy of the source code in the database - ONLY for searching in the
+ *                   backend for code locations
+ *     styled_code   HTML with syntax highlighting - ONLY for TemplateBackend::info()
+ *     error_text    messages of the parser, with line numbers
+ *     php_code      compiled PHP from it - created in hookOnSave(), only written as a
+ *                   file to var/php/{area_id}/{name}.php
+ *                   (hookOnSaved()), never into the database
  *
- * Aus der Datenbank gelangt nie Code ins Dateisystem: kompiliert wird immer aus dem
- * Quelltext, der gerade gespeichert wird (Formular oder Datei), und rebuildFiles()
- * liest die Dateien. Sicherheitsaspekt - wer in die Datenbank schreiben kann, darf
- * damit keinen PHP-Code ausführen können. Manuell geänderte, angelegte oder
- * gelöschte Dateien übernimmt TemplateFiles::sync().
+ * Code never gets from the database into the file system: compilation always happens from the
+ * source code that is being saved (form or file), and rebuildFiles()
+ * reads the files. Security aspect - whoever can write to the database must not be able to run
+ * PHP code with it. Manually changed, created or deleted
+ * files are taken over by TemplateFiles::sync().
  *
- * Von var/php bindet Page::resolveRequest() die kompilierte Datei ein.
+ * Page::resolveRequest() includes the compiled file from var/php.
  *
- * NAMEN SIND NUR JE BEREICH EINDEUTIG
+ * NAMES ARE UNIQUE ONLY PER AREA
  * --------------------
- * `name` trägt das Flag 'unique_in_area': derselbe Name darf in mehreren
- * Template-Bereichen vorkommen. Angesprochen wird ein Template deshalb wahlweise
- * als "name" oder als "bereichsname.name" (Cms::templateFile()). Ein bloßer Name,
- * der in mehreren Bereichen vorkommt, ist im Frontend ein Fehler (Exception) -
- * der Verzeichnisanteil {area_id} des Dateipfads hält die Dateien auseinander.
+ * `name` carries the flag 'unique_in_area': the same name may occur in several
+ * template areas. A template is therefore addressed either as "name" or as
+ * "areaname.name" (Cms::templateFile()). A bare name
+ * that occurs in several areas is an error in the frontend (exception) -
+ * the directory part {area_id} of the file path keeps the files apart.
  *
- * Syntaxfehler verhindern das Speichern NICHT. Sie landen in error_text und werden im
- * Backend angezeigt; der fehlerhafte Befehl bleibt im erzeugten PHP als Rohtext stehen.
- * So geht ein halbfertiges Template beim Zwischenspeichern nicht verloren.
+ * Syntax errors do NOT prevent saving. They end up in error_text and are shown in the
+ * backend; the faulty command remains in the generated PHP as raw text.
+ * So a half-finished template is not lost when saving intermediately.
  *
- * ZUWEISUNG AN INHALTSBEREICHE
+ * ASSIGNMENT TO CONTENT AREAS
  * --------------------
- * Welches Template für welchen Bereich gilt, steht nicht hier, sondern in
- * `rel_area_template` und `area`.`default_template_id` - gepflegt über saveAccess().
- * Diese Verknüpfungen (wie auch `area`.`list_template_id`) gibt es nur im Backend,
- * das Dateisystem kennt sie nicht.
+ * Which template applies to which area is not stated here, but in
+ * `rel_area_template` and `area`.`default_template_id` - maintained via saveAccess().
+ * These links (as well as `area`.`list_template_id`) exist only in the backend;
+ * the file system does not know them.
  *
- * @see Camindo\Core\Modules\Template\TemplateFiles         Quelltext-Dateien, Abgleich
- * @see Camindo\Core\Modules\Template\TemplateParserTrait   Parser und Code-Erzeugung
- * @see Camindo\Core\Modules\Template\TemplateBackend       Backend-Oberfläche
- * @see Camindo\Core\Page                                    Auslieferung im Frontend
+ * @see Camindo\Core\Modules\Template\TemplateFiles         source files, reconciliation
+ * @see Camindo\Core\Modules\Template\TemplateParserTrait   parser and code generation
+ * @see Camindo\Core\Modules\Template\TemplateBackend       backend interface
+ * @see Camindo\Core\Page                                    delivery in the frontend
  */
 namespace Camindo\Core\Modules\Template;
 
@@ -64,21 +64,21 @@ class Template extends Dataset {
     /** Verwendungen (`type`): '' = Seite/Baustein, 'scheduler' = zeitgesteuert */
     public const TYPES = ['', 'scheduler'];
 
-    // Audit-Log: styled_code entsteht beim Speichern aus `code` (parse()) - der
-    // Vergleich von `code` sagt alles; error_text bleibt (zeigt, was ein Speichern
-    // an Meldungen gebracht hat)
+    // Audit log: styled_code is created from `code` when saving (parse()) - the
+    // comparison of `code` says everything; error_text stays (shows what a save
+    // produced in messages)
     protected array $auditIgnore = ['styled_code'];
 
-    // Bringt parse() mit: CMS-Syntax -> PHP + styledCode + Fehlerliste.
-    // Als Trait und nicht als eigene Klasse, weil der Parser direkten Zugriff auf das
-    // Dataset braucht (u. a. $this->config für die Snippet-Verzeichnisse).
+    // Brings parse(): CMS syntax -> PHP + styledCode + error list.
+    // As a trait and not as its own class, because the parser needs direct access to the
+    // dataset (among others $this->config for the snippet directories).
     use TemplateParserTrait;
 
     protected function hookDefinition(): void
     {
         $this->tableName  = 'template';
         $this->moduleName = 'Template';
-        // Templates enthalten Script und Event-Handler als Inhalt - keine Bereinigung
+        // Templates contain script and event handlers as content - no sanitizing
         $this->sanitizeHtml = false;
         $this->defaultSortOrder = 'name ASC';
         $this->schema = [
@@ -87,22 +87,21 @@ class Template extends Dataset {
                 'label' => 'template_id'
             ],
             'area_id' => [
-                'type'  => 'integer', // kein foreign key
+                'type'  => 'integer', // no foreign key
                 'label' => 'area_id',
                 'min'   => 1
             ],
-            // Website, zu der das Template gehört. Kein Eingabefeld: der Wert kommt
-            // aus dem Container (`area`.`instance_id`) und wird von hookOnSave() bei
-            // jedem Speichern von dort geholt. Die Kopie in `template` trägt den
-            // Fremdschlüssel auf `instance` und erspart Cms::select() den JOIN über
-            // den Bereich (siehe Cms::$sqlAccess).
+            // Website to which the template belongs. Not an input field: the value comes
+            // from the container (`area`.`instance_id`) and is fetched from there by hookOnSave() on
+            // every save. The copy in `template` carries the foreign key to `instance` and saves
+            // Cms::select() the JOIN via the area (see Cms::$sqlAccess).
             'instance_id' => [
-                'type'  => 'integer', // FK auf `instance`, NOT NULL -> nicht 'id'
+                'type'  => 'integer', // FK to `instance`, NOT NULL -> not 'id'
                 'label' => '#template.field_instance_id',
                 'min'   => 0
             ],
-            // Verwendung: '' = Seite/Baustein, 'scheduler' = zeitgesteuert (Modul
-            // Scheduler, Aufgabentyp template) - nie per URL aufrufbar (Page)
+            // Usage: '' = page/component, 'scheduler' = time-controlled (module
+            // Scheduler, task type template) - never callable via URL (Page)
             'type' => [
                 'type'  => 'chars',
                 'display_type' => 'select',
@@ -123,7 +122,7 @@ class Template extends Dataset {
                 'note' => '#template.note_field_label',
                 'tooltip' => '#template.tooltip_field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
             ],
             'code' => [
                 'type'  => 'text',
@@ -172,25 +171,25 @@ class Template extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: CMS-Quelltext übersetzen.
+     * Before saving: compile the CMS source code.
      *
-     * Befüllt die drei abgeleiteten Spalten aus `code`. Sie sind damit immer konsistent
-     * zum Quelltext - php_code, styled_code und error_text sollten nie von Hand
-     * geschrieben werden.
+     * Fills the three derived columns from `code`. They are therefore always consistent
+     * with the source code - php_code, styled_code and error_text should never be
+     * written by hand.
      *
-     * Hinweis: $data['code'] und $data['area_id'] werden vorausgesetzt. Wird save() mit
-     * einer $fields-Liste aufgerufen, die 'code' nicht enthält, muss der Aufrufer die
-     * Werte trotzdem in $data mitgeben - und zwar aus dem Formular oder der Datei,
-     * nie aus der Spalte `code` (load() liefert ohnehin den Dateiinhalt).
+     * Note: $data['code'] and $data['area_id'] are required. If save() is called with
+     * a $fields list that does not contain 'code', the caller must still pass the
+     * values in $data - from the form or the file,
+     * never from the column `code` (load() supplies the file content anyway).
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         // instance_id
         // --------------------
-        // Kein Eingabefeld: das Template gehört zu der Website, zu der sein Container
-        // gehört. Bei JEDEM Speichern von dort geholt - so wandert ein Template, das
-        // den Container wechselt, gleich mit. (Area::hookOnSaved() deckt den
-        // umgekehrten Fall ab: der Container wechselt die Instanz.)
+        // Not an input field: the template belongs to the website to which its container
+        // belongs. Fetched from there on EVERY save - so a template that
+        // changes container moves along with it. (Area::hookOnSaved() covers
+        // the reverse case: the container changes the instance.)
         $areaId = (int)($data['area_id'] ?? $previousData['area_id'] ?? 0);
         if ($areaId > 0) {
             $data['instance_id'] = $this->areaInstanceId($areaId);
@@ -205,15 +204,15 @@ class Template extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: kompiliertes PHP als ausführbare Datei ablegen.
+     * After saving: store the compiled PHP as an executable file.
      *
-     * Ziel ist var/php/{area_id}/{name}.php - genau der Pfad, den
-     * Cms::templateFile() liefert und aus dem Page bzw. der include-Schnipsel der
-     * Templates laden. Geschrieben wird mit Dateisperre, damit ein gleichzeitiger
-     * Frontend-Request keine halb geschriebene Datei einbindet.
+     * The target is var/php/{area_id}/{name}.php - exactly the path that
+     * Cms::templateFile() returns and from which Page resp. the include snippets of the
+     * templates load. It is written with a file lock, so that a concurrent
+     * frontend request does not include a half-written file.
      *
-     * Wechselt Name oder Bereich (Umbenennen, Verschieben), wird die alte Datei
-     * entfernt.
+     * If the name or area changes (renaming, moving), the old file is
+     * removed.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
@@ -231,23 +230,23 @@ class Template extends Dataset {
             if (is_file($oldFile)) unlink($oldFile);
         }
 
-        // Quelltext als Datei (var/templates/{instance_id}/{bereich}/{name}.cms.php,
-        // siehe TemplateFiles) - das Backend überschreibt die Datei ohne Rücksicht
-        // auf ihren Zeitstempel; beim Abgleich aus der Datei ist der Inhalt ohnehin
-        // derselbe und die Datei bleibt unangetastet
+        // Source code as a file (var/templates/{instance_id}/{bereich}/{name}.cms.php,
+        // see TemplateFiles) - the backend overwrites the file regardless of
+        // its timestamp; when reconciling from the file the content is the same anyway
+        // and the file stays untouched
         $files = $this->templateFiles();
         if ($renamed) $files->removeTemplate($oldAreaId, $oldName);
         $files->writeTemplate($areaId, $name, (string)($data['code'] ?? $previousData['code'] ?? ''));
     }
 
     /**
-     * Nach dem Laden: Quelltext aus der Datei.
+     * After loading: source code from the file.
      *
-     * Die Spalte `code` ist nur die Suchkopie (siehe Klassenkommentar). Fehlt die
-     * Datei, ist der Quelltext leer - bewusst kein Rückgriff auf die Spalte, sonst
-     * käme über "Bearbeiten -> Speichern" doch Code aus der Datenbank ins
-     * Dateisystem. TemplateFiles::sync() löscht ein Template ohne Datei ohnehin
-     * beim nächsten Lauf.
+     * The column `code` is only the search copy (see class comment). If the
+     * file is missing, the source code is empty - deliberately no fallback to the column, otherwise
+     * "Edit -> Save" would bring code from the database into the
+     * file system. TemplateFiles::sync() deletes a template without a file
+     * anyway at the next run.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -257,17 +256,17 @@ class Template extends Dataset {
     }
 
     /**
-     * Vor dem (finalen) Löschen des Datenbank-Eintrags
+     * Before the (final) deletion of the database entry
      */
     protected function hookOnDelete(array $data): void
     {
         // Delete php file
-        // Wenn die Datei nicht gelöscht werden kann -> Exception -> Rollback
-        // Manuelles Eingreifen nötig (als Sicherheitsaspekt gewollt).
+        // If the file cannot be deleted -> exception -> rollback
+        // Manual intervention required (intended as a security aspect).
         $file = $this->templateDir() . '/' . self::fileName((int)$data['area_id'], (string)$data['name']);
         if (is_file($file)) unlink($file);
 
-        // Quelltext-Datei (var/templates/...)
+        // Source code file (var/templates/...)
         $this->templateFiles()->removeTemplate((int)$data['area_id'], (string)$data['name']);
     }
 
@@ -277,8 +276,8 @@ class Template extends Dataset {
     }
 
     /**
-     * Relativer Pfad der kompilierten Datei unterhalb von var/php:
-     * "{area_id}/{name}.php". Dieselbe Regel gilt in Cms::templateFile().
+     * Relative path of the compiled file below var/php:
+     * "{area_id}/{name}.php". The same rule applies in Cms::templateFile().
      */
     public static function fileName(int $areaId, string $name): string
     {
@@ -291,17 +290,17 @@ class Template extends Dataset {
     }
 
     /**
-     * Alle kompilierten Dateien neu schreiben (Werkzeuge > Entwickler).
+     * Rewrite all compiled files (Tools > Developer).
      *
-     * Kompiliert jedes Template aus seiner Quelltext-Datei (var/templates, nie aus
-     * der Spalte `code`) neu nach {area_id}/{name}.php, schreibt dazu styled_code
-     * und error_text (Parser-Meldungen, auch neue Hinweise nach einer Änderung am
-     * Compiler - Widget TemplateBackend::widget()) und räumt anschließend
-     * Dateien aus dem Wurzelverzeichnis von var/php weg - dort lagen die Dateien
-     * vor der Umstellung auf Bereichsverzeichnisse. Templates ohne Datei werden
-     * übergangen (TemplateFiles::sync() löscht sie).
+     * Recompiles each template from its source file (var/templates, never from
+     * the column `code`) to {area_id}/{name}.php, writes styled_code
+     * and error_text to it (parser messages, also new hints after a change to the
+     * compiler - widget TemplateBackend::widget()) and then removes
+     * files from the root directory of var/php - the files were there
+     * before the switch to area directories. Templates without a file are
+     * skipped (TemplateFiles::sync() deletes them).
      *
-     * @return int  Anzahl geschriebener Dateien
+     * @return int  number of files written
      */
     public function rebuildFiles(): int
     {
@@ -340,26 +339,26 @@ class Template extends Dataset {
     }
 
     /**
-     * Template in einen anderen Template-Bereich verschieben.
+     * Move a template to another template area.
      *
-     * Läuft über save(): load() bringt den Quelltext aus der Datei mit, hookOnSave()
-     * holt die instance_id des neuen Bereichs und kompiliert neu, hookOnSaved() legt
-     * die Dateien im neuen Bereichsverzeichnis ab und entfernt die alten. Die Eindeutigkeitsprüfung des Namens (unique_in_area)
-     * greift dabei für den Zielbereich; ein Fehler steht in Cms::errors.
+     * Runs via save(): load() brings the source code from the file, hookOnSave()
+     * fetches the instance_id of the new area and recompiles, hookOnSaved() stores
+     * the files in the new area directory and removes the old ones. The uniqueness check of the name (unique_in_area)
+     * applies to the target area; an error is in Cms::errors.
      *
-     * Die Zuweisungen an Inhaltsbereiche (`rel_area_template`,
-     * `area`.`default_template_id`) bleiben unberührt - sie hängen an der
-     * template_id, nicht am Bereich, in dem das Template liegt.
+     * The assignments to content areas (`rel_area_template`,
+     * `area`.`default_template_id`) remain untouched - they hang on the
+     * template_id, not on the area in which the template lies.
      *
      * @param int $id            template_id
-     * @param int $targetAreaId  Zielbereich (Typ 'template')
+     * @param int $targetAreaId  target area (type 'template')
      * @return bool
      */
     public function moveToArea(int $id, int $targetAreaId): bool
     {
         if (!$data = $this->load($id)) return false;
         if ((int)$data['area_id'] === $targetAreaId) return true;
-        // Rechte der Benutzergruppe: Schreiben in Quelle und Ziel
+        // Rights of the user group: write to source and target
         if (!$this->accessCheck('write', (int)$data['area_id']) || !$this->accessCheck('write', $targetAreaId)) return false;
 
         $this->db->query(
@@ -377,42 +376,42 @@ class Template extends Dataset {
     }
 
     /**
-     * Template-Zuweisungen (access) aktualisieren
+     * Update template assignments (access)
      *
-     * Schreibt in einem Durchgang beide Orte, an denen die Zuweisung hängt:
-     *   - `area`.`default_template_id`  (höchstens ein Default-Template je Bereich)
-     *   - `rel_area_template`           (selectable / override je Bereich)
-     * Bereiche, für die weder selectable noch override gesetzt ist, bekommen keine Zeile
-     * in rel_area_template - die Tabelle enthält also nur echte Zuweisungen.
+     * Writes both places where the assignment hangs in one pass:
+     *   - `area`.`default_template_id`  (at most one default template per area)
+     *   - `rel_area_template`           (selectable / override per area)
+     * Areas for which neither selectable nor override is set get no row
+     * in rel_area_template - the table therefore contains only real assignments.
      *
-     * Das Default-Template wird immer zusätzlich als "selectable" markiert; das
-     * vereinfacht die Zugriffsprüfung in Page::resolveRequest().
+     * The default template is always additionally marked as "selectable"; this
+     * simplifies the access check in Page::resolveRequest().
      * 
-     * VERBESSERUNGSBEDÜRFTIG:
-     * Wenn die Zuweisung zwischen Content-Bereich und Template entfernt wird,
-     * bleibt das Template dennoch in record.template_id bestehen.
-     * Der Aufruf des Datensatzes schlägt NICHT fehl, obwohl dies erwartbar wäre.
-     * Die Record-Daten überleben dafür ein Zuweisung-entfernen und -wiederherstellen.
+     * NEEDS IMPROVEMENT:
+     * If the assignment between content area and template is removed,
+     * the template still remains in record.template_id.
+     * Calling the record does NOT fail, although this would be expected.
+     * The record data survive removing and restoring the assignment.
      * 
      * TODO:
-     * Hinweis ausgeben, in wie viele Datensätzen das Template explizit gewählt ist,
-     * das von der Zweisung entfernt werden soll -> Alternativ-Template / (oder "Default") wählen
+     * Output a note on how many records explicitly select the template
+     * that is to be removed from the assignment -> choose an alternative template (or "Default")
      *
-     * @param int $id   Template-ID
-     * @param array $data Berechtigungen - key:area_id, val:
-     *                  default = true: Template ist Default-Template im Bereich
-     *                  selectable = true: Template ist wählbar im Bereich
-     *                  override = true: Templateangabe in der Url darf zugewiesenes Template im Bereich überschreiben
+     * @param int $id   template ID
+     * @param array $data permissions - key:area_id, val:
+     *                  default = true: template is the default template in the area
+     *                  selectable = true: template is selectable in the area
+     *                  override = true: template specification in the URL may override the assigned template in the area
      * @param bool|int $standalone
-     *                  true: Template darf ohne Datensatzinhalte verwendet werden
-     * @param ?string $type  Verwendung (self::TYPES), null = unverändert; ein
-     *                  zeitgesteuertes Template ist nie standalone
-     * @return bool     false bei Fehlern
+     *                  true: template may be used without record contents
+     * @param ?string $type  usage (self::TYPES), null = unchanged; a
+     *                  scheduled template is never standalone
+     * @return bool     false on errors
      */
     public function saveAccess(int $id, array $data, bool|int $standalone, ?string $type = null): bool
     {
-        // Rechte der Benutzergruppe: Schreiben im Template-Bereich, Lesen der
-        // Inhaltsbereiche, denen das Template zugewiesen wird (12-group-rights.md)
+        // Rights of the user group: write in the template area, read of the
+        // content areas to which the template is assigned (developer docs, chapter 11 (Permissions))
         $access = $this->container->get(\Camindo\Core\Access::class);
         if ($access->isLoaded() && !$access->isSuperuser()) {
             $template = $this->load($id);
@@ -426,23 +425,23 @@ class Template extends Dataset {
             }
         }
 
-        // Lade aktuelle Default-Templates aus den (in $data) angegebenen Inhaltsbreichen.
+        // Load current default templates from the content areas given (in $data).
         // Format: area_id => default_template_id
         $areaIds = $this->system->sanitizeIds(array_keys($data), true);
         $areaIdString = implode(',', $areaIds) ?: '0';
         $this->db->query("SELECT `area_id`,`default_template_id` FROM `area` WHERE `area_id` IN ($areaIdString) AND `deleted`=0");
         $defaultTemplate = $this->db->fetchPairs();
 
-        // Sammle Daten für `rel_area_template`
+        // Collect data for `rel_area_template`
         $i = 0;
         $sqlValues = [];
-        // Arbeite $data ab...
+        // Work through $data...
         foreach ($data as $areaId => $row) {
             $isCurrentlyDefault = ((int)($defaultTemplate[$areaId] ?? 0) === $id);
             $becomesDefault = (bool)($row['default'] ?? false);
 
             if ($isCurrentlyDefault != $becomesDefault) {
-                // Default-Template des Bereichs aktualisieren
+                // Update the default template of the area
                 if (!$becomesDefault) {
                     $sql = "UPDATE `area` SET `default_template_id`= NULL WHERE `area_id` = ?";
                     $this->db->query($sql, 'i', [$areaId]);
@@ -453,13 +452,13 @@ class Template extends Dataset {
                 }
             }
 
-            // Das Default-Template immer auch als "wählbar" markieren
-            // (erleichtert die Zugriffsprüfung in class Page)
+            // Always also mark the default template as "selectable"
+            // (eases the access check in class Page)
             if ($becomesDefault) {
                 $row['selectable'] = 1;
             }
 
-            // Daten für rel_area_template
+            // Data for rel_area_template
             $selectable = (int)($row['selectable'] ?? 0);
             $override = (int)($row['override'] ?? 0);
             if ($selectable || $override) {
@@ -473,10 +472,10 @@ class Template extends Dataset {
             }
         }
 
-        // Lösche alte Daten aus `rel_area_template`
+        // Delete old data from `rel_area_template`
         $this->db->query("DELETE FROM `rel_area_template` WHERE `template_id` = ?", 'i', [$id]);
 
-        // Trage neue Daten ein 
+        // Insert new data
         if ($i > 0) {
             $sqlCols = implode(', ', array_fill(0, $i, '(?, ?, ?, ?)'));
             $sql = "INSERT INTO `rel_area_template` (`area_id`, `template_id`, `selectable`, `override`)"
@@ -485,7 +484,7 @@ class Template extends Dataset {
             $this->db->query($sql, $sqlTypes, $sqlValues);
         }
 
-        // Aktualisiere standalone-Flag und Verwendung
+        // Update standalone flag and usage
         if ($type !== null) {
             $type = in_array($type, self::TYPES, true) ? $type : '';
             if ($type === 'scheduler') $standalone = 0;

@@ -3,30 +3,30 @@
  * audit verify [TYPE ID] | restore [--dry-run] | reseal TYPE ID [--reason=…] [--force] [--dry-run] | migrate
  *       | anonymize-ip [--dry-run] | strip-names | delete TYPE ID | delete --area=ID [--force] [--dry-run]
  *
- *     verify    HMAC-Kette der Dateien unter var/audit prüfen und mit den Metazeilen
- *               der Tabelle audit_log abgleichen (Camindo\Core\AuditStore) - alle
- *               Objekte oder eines ("record 4237"). Exit-Code 1 bei Befunden. Das
- *               Ergebnis ersetzt das der täglichen Prüfung (Hinweis auf der Startseite).
- *     restore   nach dem Zurückspielen einer Datenbanksicherung: Einträge der Dateien,
- *               die neuer sind als der Stand der Datenbank, entfernen (Kopie nach
- *               var/audit-restore-{Zeitpunkt}/, AuditLog::restoreToDatabase())
- *     reseal    gebrochene HMAC-Kette eines Objekts nach Prüfung neu verketten
- *               (AuditLog::resealObject()) - nur wenn jede Zeile einen gültigen HMAC
- *               hat, sonst mit --force; Kopie nach var/audit-reseal-{Zeitpunkt}/
- *     migrate   Einträge der früheren Spalte audit_log.changes in die Dateien
- *               übernehmen (einmalig, danach wird die Spalte entfernt)
- *     anonymize-ip  IP-Adressen in den Dateien kürzen (privacy.ip_v4_octets), die
- *               vor dem Update mit voller Adresse geschrieben wurden - einmalig nach
- *               dem Update (AuditLog::anonymizeFileIps()); Dateien mit gebrochener
- *               Kette bleiben unverändert und werden genannt
- *     strip-names  Namen der Handelnden (Benutzer, Website-User) aus älteren Einträgen
- *               entfernen - sie stehen nur noch als Id (AuditLog::stripActorNames());
- *               einmalig nach dem Update, wiederholbar
- *     delete    den ganzen Verlauf löschen - Datenbank und Dateien, bei Datensätzen
- *               auch ihre Aufträge der Lösch-Policies (PrivacyJobs::forget()): eines
- *               Objekts ("record 4237", "admin 34") oder mit --area=ID aller
- *               Datensätze eines Bereichs (auch gelöschter; verlangt --force).
- *               Für Ausnahmefälle - regulär löschen die Fristen und die Lösch-Policies
+ *     verify    check the HMAC chain of the files under var/audit and compare with the meta lines
+ *               of the table audit_log (Camindo\Core\AuditStore) - all
+ *               objects or one ("record 4237"). Exit code 1 on findings. The
+ *               result replaces that of the daily check (note on the start page).
+ *     restore   after restoring a database backup: remove entries of the files
+ *               that are newer than the state of the database (copy to
+ *               var/audit-restore-{time}/, AuditLog::restoreToDatabase())
+ *     reseal    re-chain a broken HMAC chain of an object after checking
+ *               (AuditLog::resealObject()) - only if every line has a valid HMAC
+ *               otherwise with --force; copy to var/audit-reseal-{time}/
+ *     migrate   take over entries of the former column audit_log.changes into the files
+ *               (once, afterwards the column is removed)
+ *     anonymize-ip  shorten IP addresses in the files (privacy.ip_v4_octets) that
+ *               were written with the full address before the update - once after
+ *               the update (AuditLog::anonymizeFileIps()); files with a broken
+ *               chain remain unchanged and are named
+ *     strip-names  remove names of the actors (users, website users) from older entries
+ *               - they are now only stored as an id (AuditLog::stripActorNames());
+ *               once after the update, repeatable
+ *     delete    delete the entire history - database and files, for records
+ *               also their jobs of the deletion policies (PrivacyJobs::forget()): one
+ *               object ("record 4237", "admin 34") or with --area=ID all
+ *               records of an area (also deleted ones; requires --force).
+ *               For exceptional cases - regularly the deadlines and the deletion policies delete
  */
 namespace Camindo\Core\Cli;
 
@@ -102,7 +102,7 @@ class AuditCommand extends Command {
                 return $check['ok'] ? Cli::OK : Cli::ERROR;
             }
             $result = $auditLog->verifyAll();
-            // die Startseite zeigt ab jetzt dieses Ergebnis (SystemHealth)
+            // the start page now shows this result (SystemHealth)
             $auditLog->storeVerifyResult($result);
             foreach ($result['failed'] as $object => $errors) {
                 $this->out("$object: FAILED");
@@ -115,7 +115,7 @@ class AuditCommand extends Command {
             . ' | delete TYPE ID | delete --area=ID [--force] [--dry-run]');
     }
 
-    /** audit delete TYPE ID | --area=ID (siehe Kopf) */
+    /** audit delete TYPE ID | --area=ID (see header) */
     private function delete(AuditLog $auditLog, array $args, array $options): int
     {
         $dryRun = !empty($options['dry-run']);

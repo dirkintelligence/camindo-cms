@@ -16,7 +16,7 @@ class Magick extends MediaProcessor {
         Crypt $crypt,
         Execute $execute,
         BackgroundProcess $bgproc,
-        /** Eigene policy.xml, vor jedem Aufruf aktiv (MagickPolicy, 18-imagemagick.md 2.2.2) */
+        /** Own policy.xml, active before each call (MagickPolicy, developer docs, chapter 14 (Security: web)) */
         protected MagickPolicy $policy,
     )
     {
@@ -32,35 +32,35 @@ class Magick extends MediaProcessor {
     protected const TIMEOUT_VERSION  = 10;
 
     /**
-     * Älteste ImageMagick-Version, die als unbedenklich gilt.
-     * Darunter markiert die Konverter-Infoseite die Version als veraltet
-     * (siehe developer_docs/18-imagemagick.md, 2.2.7).
+     * Oldest ImageMagick version that is considered harmless.
+     * Below it, the converter info page marks the version as outdated
+     * (see developer docs, chapter 14 (Security: web)).
      */
     public const MIN_VERSION = '7.1.1';
 
-    /** Anpassung an das Zielformat (details.crop) */
-    public const FIT     = 0;   // ganz einpassen
-    public const CROP    = 1;   // ausfüllen und beschneiden (^ + -extent)
-    public const FILL    = 2;   // ausfüllen, überstehen lassen (^)
-    public const DISTORT = 3;   // exakt auf das Format, Seitenverhältnis ignorieren (!)
+    /** Adjustment to the target format (details.crop) */
+    public const FIT     = 0;   // fit entirely
+    public const CROP    = 1;   // fill and crop (^ + -extent)
+    public const FILL    = 2;   // fill, let overhang (^)
+    public const DISTORT = 3;   // exactly to the format, ignore aspect ratio (!)
 
-    /** Bedingung (details.resize_when) -> Kennzeichen der Geometrie */
+    /** Condition (details.resize_when) -> flags of the geometry */
     protected const RESIZE_FLAGS = ['always' => '', 'shrink' => '>', 'enlarge' => '<'];
 
-    /** EXIF-Ausrichtungen, bei denen -auto-orient um 90° dreht (Breite und Höhe tauschen) */
+    /** EXIF orientations for which -auto-orient rotates by 90° (width and height swap) */
     protected const ORIENTATION_ROTATED = ['LeftTop', 'RightTop', 'RightBottom', 'LeftBottom'];
 
-    /** Typkennung in der Tabelle `bgproc`, danach sucht trigger_magick.php */
+    /** Type identifier in the table `bgproc`, which trigger_magick.php searches for */
     public const BGPROC_TYPE = 'magick';
 
-    /** Präfix und Endung der temporären Fortschrittsdatei */
+    /** Prefix and extension of the temporary progress file */
     public const PROGRESS_PREFIX    = 'magick-';
     public const PROGRESS_EXTENSION = '.progress';
 
     /**
-     * Zuordnung Dateiendung -> MIME-Type des Zielformats.
-     * Wird auch benutzt, um zu entscheiden, ob dem Zielpfad ein
-     * explizites Format-Prefix (z. B. "webp:/pfad/datei.webp") vorangestellt wird.
+     * Mapping file extension -> MIME type of the target format.
+     * Also used to decide whether an explicit format prefix
+     * (e.g. "webp:/path/file.webp") is put in front of the target path.
      */
     protected const MIME_TYPES = [
         'jpg'  => 'image/jpeg',
@@ -87,22 +87,22 @@ class Magick extends MediaProcessor {
     ];
 
     /**
-     * Zulässige QUELLFORMATE: serverseitig erkannter MIME-Typ -> ImageMagick-Coder.
+     * Allowed SOURCE FORMATS: server-side detected MIME type -> ImageMagick coder.
      *
-     * ImageMagick bestimmt das Format sonst am INHALT der Datei, nicht an der Endung:
-     * eine "bild.jpg", die in Wahrheit MVG- oder MSL-Text enthält, wird als Skript
-     * ausgeführt (ImageTragick, CVE-2016-3714 ff.). Mit vorangestelltem Coder
-     * ("jpeg:/pfad/bild.jpg") liest ImageMagick die Datei nur noch mit diesem einen
-     * Coder; passt der Inhalt nicht, bricht es ab, statt in einen Skript- oder
+     * Otherwise ImageMagick determines the format by the CONTENT of the file, not by the extension:
+     * a "bild.jpg" that is in truth MVG or MSL text is executed as a script
+     * executed as a script (ImageTragick, CVE-2016-3714 ff.). With a coder prefixed
+     * ("jpeg:/path/bild.jpg") ImageMagick reads the file only with this one
+     * coder; if the content does not match, it aborts instead of running a script or
      * Pseudo-Coder (MVG, MSL, TEXT, URL, FILE, EPHEMERAL ...) zu fallen.
      *
-     * Ein MIME-Typ, der hier fehlt, wird nicht verarbeitet: convert() meldet
-     * 'unsupported', writeThumbnails() nimmt den nächsten Konverter.
+     * A MIME type that is missing here is not processed: convert() reports
+     * 'unsupported', writeThumbnails() takes the next converter.
      *
-     * SVG und PDF stehen bewusst NICHT in den Defaults von media_types_incl und
-     * laufen nur, wenn security.magick_allow sie freigibt (MagickPolicy). SVG geht
-     * über den internen Renderer 'msvg' - der Coder 'svg' riefe zuerst inkscape bzw.
-     * rsvg-convert als Delegate auf, und Delegates sperrt die Policy.
+     * SVG and PDF are deliberately NOT in the defaults of media_types_incl and
+     * only run if security.magick_allow releases them (MagickPolicy). SVG goes
+     * via the internal renderer 'msvg' - the coder 'svg' would first call inkscape or
+     * rsvg-convert as a delegate, and the policy blocks delegates.
      *
      * @see developer_docs/18-imagemagick.md
      */
@@ -142,10 +142,10 @@ class Magick extends MediaProcessor {
     /**
      * Dateiendung -> ImageMagick-Coder.
      *
-     * Zwei Aufgaben: Ersatz für CODER_BY_MIME, wenn zu einer Quelldatei kein
-     * (brauchbarer) MIME-Typ vorliegt - der Coder wird trotzdem erzwungen, also
-     * bleibt das Sniffing aus; und Format-Präfix der ZIELdatei, damit die Ausgabe
-     * nicht anhand der Endung in einem fremden Coder landet.
+     * Two tasks: replacement for CODER_BY_MIME if a source file has no
+     * (usable) MIME type - the coder is still enforced, so sniffing stays off;
+     * and format prefix of the TARGET file, so that the output does not end up
+     * in a foreign coder based on the extension.
      */
     protected const CODER_BY_EXTENSION = [
         'jpg'  => 'jpeg', 'jpeg' => 'jpeg', 'jpe' => 'jpeg',
@@ -167,34 +167,33 @@ class Magick extends MediaProcessor {
     ];
 
     /**
-     * Options-Gruppen für den "intelligenten Merge" (Expertenmodus).
+     * Option groups for the "intelligent merge" (expert mode).
      *
-     * Belegt der Administrator in parameters1 / parameters2 eine Option aus einer
-     * Gruppe, dann erzeugt der Konverter die zugehörigen eigenen Parameter NICHT mehr.
-     * Der handgeschriebene Parameter gewinnt also immer, aber nur für "seinen" Bereich.
-     * Alle übrigen Formularwerte bleiben wirksam.
+     * If the administrator sets an option from a group in parameters1 / parameters2, the converter
+     * no longer generates the corresponding own parameters. The hand-written parameter therefore
+     * always wins, but only for "its" area. All other form values remain effective.
      */
     protected const OPTION_GROUPS = [
-        // Zielabmessungen / Beschnitt  -> ersetzt width, height, crop
+        // Target dimensions / cropping -> replaces width, height, crop
         'geometry'   => ['resize', 'thumbnail', 'sample', 'scale', 'adaptive-resize',
                          'crop', 'extent', 'geometry', 'distort', 'liquid-rescale',
                          'trim', 'shave'],
-        // Ausrichtung des Beschnitts   -> ersetzt nur "-gravity center"
+        // Crop alignment              -> replaces only "-gravity center"
         'gravity'    => ['gravity'],
-        // Hintergrundfarbe             -> ersetzt bgcolor
+        // Background color             -> replaces bgcolor
         'background' => ['background'],
         // Transparenz                  -> ersetzt alpha
         'alpha'      => ['alpha', 'flatten', 'matte', 'transparent', 'opaque'],
         // Farbreduktion                -> ersetzt indexed_colors
         'colors'     => ['colors', 'remap', 'map', 'monochrome', 'type', 'dither', 'posterize'],
-        // Qualität                     -> ersetzt quality
+        // Quality                      -> replaces quality
         'quality'    => ['quality'],
         // Metadaten                    -> ersetzt "-strip"
         'strip'      => ['strip', 'profile', 'thumbnail'],
         // Drehung                      -> ersetzt "-auto-orient"
         'orient'     => ['auto-orient', 'orient', 'rotate', 'flip', 'flop',
                          'transpose', 'transverse'],
-        // Einzelbilder / Animation     -> unterdrückt die Frame-Auswahl "[0]" an der Quelle
+        // Single images / animation    -> suppresses the frame selection "[0]" at the source
         'frames'     => ['coalesce', 'layers', 'delete', 'scene', 'adjoin',
                          'deconstruct', 'flatten', 'append', 'duplicate'],
     ];
@@ -203,8 +202,8 @@ class Magick extends MediaProcessor {
     // ====================
 
     /**
-     * Tabellenstruktur für den Konverter
-     * Darauf basierend kann mit $this->backend->formField() ein Eingabefeld erzeugt werden
+     * Table structure for the converter
+     * An input field can be created from it with $this->backend->formField()
      *
      * type:
      *     integer -> BIGINT
@@ -212,25 +211,25 @@ class Magick extends MediaProcessor {
      *     bit -> BIT(1)
      * display_type:
      *     text:   einfaches Eingabefeld
-     *     select: Auswahl, Optionen werden am besten dynamisch erzeugt
+     *     select: selection, options are best generated dynamically
      *     label:  mehrsprachiges Snippet #proc.{processorname}.{snippetname}
      *     prefix,
-     *     suffix: erscheint vor / nach dem Eingabefeld
-     *     pattern: Javascript Pattern für Eingabevalidierung
-     *     min, max: Mindest- / Maximalwert, bei Text die Zeichenanzahl
+     *     suffix: appears before / after the input field
+     *     pattern: JavaScript pattern for input validation
+     *     min, max: minimum / maximum value, for text the number of characters
      */
     protected function hookDefinition(): void
     {
-        // Defaultwerte für Eingabefelder des Konverters
-        // ImageMagick verarbeitet deutlich mehr Formate als GD.
-        // Welche davon tatsächlich zur Verfügung stehen, hängt von den
-        // installierten Delegates ab ("magick -list format").
+        // Default values for input fields of the converter
+        // ImageMagick processes significantly more formats than GD.
+        // Which of them are actually available depends on the
+        // installed delegates ("magick -list format").
         //
-        // NICHT vorbelegt sind "image/svg+xml" und "application/pdf": beide werden
-        // nicht von ImageMagick selbst gelesen, sondern an librsvg bzw. Ghostscript
-        // weitergereicht - die gefährlichsten Delegationen (XXE, -dSAFER-Umgehungen).
-        // Wer sie braucht, trägt sie bewusst ein; der Hinweis dazu steht unter den
-        // Medientypen im Konverter-Formular (#proc.magick.note_media_types).
+        // NOT preset are "image/svg+xml" and "application/pdf": both are
+        // not read by ImageMagick itself, but passed on to librsvg or Ghostscript -
+        // the most dangerous delegations (XXE, -dSAFER bypasses).
+        // Whoever needs them adds them deliberately; the note on this is below the
+        // media types in the converter form (#proc.magick.note_media_types).
         // Siehe developer_docs/18-imagemagick.md
         $this->defaults['media_types_incl'] = implode("\n", [
             "image/jpeg",
@@ -249,7 +248,7 @@ class Magick extends MediaProcessor {
             "image/vnd.adobe.photoshop"
         ]);
 
-        // Zusätzliche Eingabefelder für den Konverter
+        // Additional input fields for the converter
         $this->schema = [
             'details.width' => [
                 'type'  => 'integer',
@@ -265,9 +264,9 @@ class Magick extends MediaProcessor {
                 'min' => 0,
                 'suffix' => 'px'
             ],
-            // Größe: Anpassung an das Zielformat, Bedingung, Einheit, Höchstzahl Pixel -
-            // die Kennzeichen der Geometrie (^ ! > < % @), die an der Zielgröße hängen
-            // und sich deshalb nicht über parameters1/2 ergänzen lassen (buildArguments())
+            // Size: adjustment to the target format, condition, unit, maximum pixels -
+            // the geometry flags (^ ! > < % @) that depend on the target size
+            // and therefore cannot be supplemented via parameters1/2 (buildArguments())
             'details.crop' => [
                 'type'  => 'integer',
                 'label' => '#proc.magick.field_crop',
@@ -390,7 +389,7 @@ class Magick extends MediaProcessor {
      */
     public function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
-        // Auswahlfelder: nur die Werte aus dem Schema (auch über die API)
+        // Selection fields: only the values from the schema (also via the API)
         foreach (['crop', 'resize_when', 'unit'] as $key) {
             if (!isset($data['details'][$key]) || $data['details'][$key] === '') continue;
             $allowed = array_map('strval', array_keys($this->schema['details.' . $key]['options']));
@@ -407,17 +406,17 @@ class Magick extends MediaProcessor {
         $indexedColors = $data['details']['indexed_colors'] ?? '';
         if ($indexedColors === 'TrueColor') $data['details']['indexed_colors'] = '';
 
-        // Expertenmodus: Zeilenumbrüche und Mehrfach-Leerzeichen entfernen,
-        // damit die gespeicherte Kommandozeile immer einzeilig bleibt.
+        // Expert mode: remove line breaks and multiple spaces,
+        // so that the stored command line always stays on one line.
         foreach (['parameters1', 'parameters2'] as $key) {
             $value = trim((string) ($data['details'][$key] ?? ''));
             $data['details'][$key] = (string) preg_replace('/\s+/', ' ', $value);
         }
 
-        // Läuft unter paths.magick überhaupt ein ImageMagick? Der Konverter wäre sonst
-        // von vornherein wirkungslos - wie bei den FFmpeg-Prozessoren bricht das
-        // Speichern deshalb ab. Eine zu ALTE Version blockiert dagegen nicht: sie
-        // arbeitet ja, sie ist nur ungepatcht. Darauf weist die Infoseite des
+        // Is there an ImageMagick running under paths.magick at all? Otherwise the converter
+        // would be ineffective from the start - as with the FFmpeg processors, saving
+        // therefore aborts. A version that is too OLD, by contrast, does not block: it
+        // works, it is just unpatched. The info page of the
         // Konverters hin (backend/info.php, versionState()).
         if ($this->getVersion() === null) {
             throw new \Exception($this->cms->snippet('proc.magick.error_binary_missing'));
@@ -442,27 +441,27 @@ class Magick extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt eine Dateiversion basierend auf den übergebenen Parametern
+     * Creates a file version based on the passed parameters
      *
-     * @param string $srcPath   Pfad zur Quelldatei, relativ zu media_dir
-     * @param array  $srcData   Daten der Quell-Datei
+     * @param string $srcPath   path to the source file, relative to media_dir
+     * @param array  $srcData   data of the source file
      *      'extension' => $fileExtension,
      *      'mime_type' => $fileMime,
      *      'size'      => $fileSize,        // in bytes
-     *      'filename'  => $fileOriginName,  // ursprünglicher Dateiname, gegen Injections gesäubert
-     *      'field_id'  => $fieldId,         // für Datei-Pfad / `data_fil`-Eintrag beim checkIn
-     * @param string $destPath  Pfad zur Zieldatei, relativ zu media_dir
+     *      'filename'  => $fileOriginName,  // original file name, sanitized against injections
+     *      'field_id'  => $fieldId,         // for file path / `data_fil` entry at check-in
+     * @param string $destPath  path to the target file, relative to media_dir
      * @param array  $details   Konfigurations-Array
-     * @param bool $forceBgproc true: erzwingt Ausführung als Hintergrundprozess
-     * @return array            Daten der Zieldatei, bzw ['size'=>0, 'errors'=>'...']
+     * @param bool $forceBgproc true: forces execution as a background process
+     * @return array            data of the target file, or ['size'=>0, 'errors'=>'...']
      */
     public function convert(string $srcPath, array $srcData, string $destPath, array $details, bool $forceBgproc): array
     {
         $mediaDir = $this->config->get('paths.media_dir');
         $srcFile = $mediaDir . DIRECTORY_SEPARATOR . ltrim($srcPath, '/\\');
         $destFile =  $mediaDir . DIRECTORY_SEPARATOR . ltrim($destPath, '/\\');
-        // Endung der ZIELdatei: der Konverter gibt sie vor, sonst erbt sie die
-        // Quelldatei (writeThumbnails() legt $details['extension'] dazu).
+        // Extension of the TARGET file: the converter specifies it, otherwise it inherits the
+        // source file (writeThumbnails() adds $details['extension'] to it).
         $srcExt = strtolower((string)pathinfo($srcPath, PATHINFO_EXTENSION));
         $ext = strtolower((string)($details['extension'] ?: pathinfo($destPath, PATHINFO_EXTENSION)));
 
@@ -475,9 +474,9 @@ class Magick extends MediaProcessor {
             'extension' => '',
         ];
 
-        // ImageMagick (Version 7, Kommando "magick") muss verfügbar sein.
-        // Enthält der konfigurierte Wert keinen Pfadtrenner, wird er als
-        // Kommando im PATH betrachtet und nicht weiter geprüft.
+        // ImageMagick (version 7, command "magick") must be available.
+        // If the configured value contains no path separator, it is treated as a
+        // command in PATH and not checked any further.
         $magick = $this->config->get('paths.magick') ?? '';
         if ($magick === '') {
             return $fileData + ['errors' => 'proc.magick.error_binary_missing'];
@@ -486,20 +485,20 @@ class Magick extends MediaProcessor {
             return $fileData + ['errors' => 'proc.magick.error_binary_missing'];
         }
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return $fileData + ['errors' => 'error_file_not_found'];
         }
 
-        // Eigene policy.xml aktivieren. Lässt sie sich nicht schreiben, läuft
-        // ImageMagick nicht - ohne Policy fehlen die Sperren und Grenzen.
+        // Activate our own policy.xml. If it cannot be written, ImageMagick
+        // does not run - without the policy the blocks and limits are missing.
         if (!$this->policy->apply()) {
             return $fileData + ['errors' => 'proc.magick.error_policy_file'];
         }
 
-        // Coder der Quelldatei festlegen (siehe CODER_BY_MIME). Ohne passenden Coder
-        // wird die Datei gar nicht erst geöffnet - writeThumbnails() probiert dann den
-        // nächsten Konverter des Thumbnail-Feldes.
+        // Set the coder of the source file (see CODER_BY_MIME). Without a matching coder
+        // the file is not opened at all - writeThumbnails() then tries the
+        // next converter of the thumbnail field.
         $srcCoder = $this->coderFor((string)($srcData['mime_type'] ?? ''), $srcExt);
         if ($srcCoder === '') {
             return $fileData + [
@@ -507,8 +506,8 @@ class Magick extends MediaProcessor {
                 'unsupported' => true,
             ];
         }
-        // SVG/PDF nur mit security.magick_allow - als Quelle wie als Ziel. Gesperrt
-        // gilt als "nicht unterstützt": writeThumbnails() nimmt den nächsten Konverter.
+        // SVG/PDF only with security.magick_allow - as source as well as target. Blocked
+        // counts as "not supported": writeThumbnails() takes the next converter.
         foreach ([$srcCoder, self::CODER_BY_EXTENSION[$ext] ?? ''] as $coder) {
             $format = MagickPolicy::formatOfCoder($coder);
             if ($format !== '' && !$this->policy->isAllowed($format)) {
@@ -519,9 +518,9 @@ class Magick extends MediaProcessor {
             }
         }
 
-        // Expertenmodus: freie Parameter zerlegen und auswerten.
-        // Die Limits stehen bewusst ganz vorne, eine eigene Angabe des
-        // Administrators kommt danach und gewinnt.
+        // Expert mode: split and evaluate free parameters.
+        // The limits deliberately stand at the very front; a specification of the
+        // administrator comes afterwards and wins.
         $params1 = array_merge(
             $this->limitArguments(),
             $this->execute->tokenizeParameters((string) ($details['parameters1'] ?? ''))
@@ -529,28 +528,28 @@ class Magick extends MediaProcessor {
         $params2 = $this->execute->tokenizeParameters((string) ($details['parameters2'] ?? ''));
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
 
-        // Quelle: standardmäßig nur das erste Einzelbild verarbeiten
-        // (mehrseitige PDFs, animierte GIFs, ICO mit mehreren Größen ...).
-        // Arbeitet der Administrator bewusst mit Frames (-coalesce, -layers ...),
-        // wird die Auswahl nicht gesetzt.
+        // Source: by default only process the first single image
+        // (multi-page PDFs, animated GIFs, ICO with several sizes ...).
+        // If the administrator deliberately works with frames (-coalesce, -layers ...),
+        // the selection is not set.
         $srcArg = $this->fileArgument($srcCoder, $srcFile, !$claimed['frames']);
 
-        // Abmessungen der Quelldatei ermitteln
+        // Determine dimensions of the source file
         $srcInfo = $this->identify($magick, $srcFile, $srcCoder);
         if ($srcInfo === null) {
-            // (kein lesbares Bildformat: writeThumbnails() probiert den nächsten Konverter)
+            // (no readable image format: writeThumbnails() tries the next converter)
             return $fileData + ['errors' => 'proc.magick.error_file_dimensions', 'unsupported' => true];
         }
         $srcW = $srcInfo['width'];
         $srcH = $srcInfo['height'];
 
-        // Aus den Formularwerten erzeugte Parameter - mit den Abmessungen, wie
-        // -auto-orient sie ausrichtet (EXIF-Drehung um 90°: Breite und Höhe tauschen)
+        // Parameters generated from the form values - with the dimensions as
+        // -auto-orient aligns them (EXIF rotation by 90°: width and height swap)
         $rotated = !$claimed['orient'] && in_array($srcInfo['orientation'], self::ORIENTATION_ROTATED, true);
         $args = $this->buildArguments($details, $ext, $claimed, $rotated ? $srcH : $srcW, $rotated ? $srcW : $srcH);
 
-        // Zieldatei: Format explizit vorgeben, damit die Endung nicht
-        // fehlinterpretiert wird (z. B. ".jpg" mit PNG-Inhalt).
+        // Target file: specify the format explicitly so that the extension is not
+        // misinterpreted (e.g. ".jpg" with PNG content).
         $destCoder = self::CODER_BY_EXTENSION[$ext] ?? '';
         $destArg = $this->fileArgument($destCoder, $destFile, false);
 
@@ -558,14 +557,14 @@ class Magick extends MediaProcessor {
         $magickPath = dirname($magick);
         $magickVersion = $magickExec == 'magick' ? 7 : 6;
 
-        // magick [parameters1] {Quelldatei} [erzeugte Parameter] [parameters2] {Zieldatei}
+        // magick [parameters1] {source file} [generated parameters] [parameters2] {target file}
         if ($magickVersion >= 7) $call = [$magick, 'convert'];
         else $call = [$magick];
 
-        // Fortschrittsdatei für den Hintergrundprozess.
+        // Progress file for the background process.
         $progressArgs = [];
         if ($forceBgproc) {
-            // Token wird bis in den Hintergrundprozess weitergereicht!
+            // Token is passed on into the background process!
             $token = $this->crypt->randomKey(16);
             $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
             if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
@@ -588,12 +587,12 @@ class Magick extends MediaProcessor {
         );
 
         if ($forceBgproc) {
-            // Token wird bis in den Hintergrundprozess weitergereicht!
-            // magick schreibt seinen Fortschritt (-monitor) nach stderr.
-            // 'timeout' : Zeitlimit in Sekunden, danach greift TriggerMagick ein
-            //             (magick kennt keine Konverter-Einstellung dafür)
-            // 'dest'    : Pfad zur Datei ab media-Verzeichnis
-            // ('proc' ergänzt startBackgroundProcess() selbst)
+            // Token is passed on into the background process!
+            // magick writes its progress (-monitor) to stderr.
+            // 'timeout' : time limit in seconds, after which TriggerMagick intervenes
+            //             (magick has no converter setting for this)
+            // 'dest'    : path to the file from the media directory
+            // ('proc' is added by startBackgroundProcess() itself)
             $message = [
                 'timeout' => (string)self::TIMEOUT_CONVERT,
                 'dest'    => $destPath,
@@ -612,17 +611,17 @@ class Magick extends MediaProcessor {
                 'width' => 0,
                 'height' => 0,
                 'size' => 0,
-                // mime_type neutral setzen: Das Thumbnail soll im Backend vorerst
-                // nur mit Platzhalter-Symbol angezeigt werden
+                // set mime_type neutrally: the thumbnail should in the backend for now
+                // only shown with a placeholder symbol
                 'mime_type'  => 'image/unknown',
                 'filename'   => $srcData['filename'] ?? 'file',
                 'extension'  => $ext,
                 'data' => '{}',
-                // Infos zur Quell-Datei
+                // Info on the source file
                 'source_width'  => $srcW,
                 'source_height' => $srcH,
-                // 'data' => '{}' könnte JSON-String mit weiteren Infos sein (flaches assoziatives Array)
-                // Infos zum Hintergrundprozess
+                // 'data' => '{}' could be a JSON string with further info (flat associative array)
+                // Info on the background process
                 'token'      => (string)$started['token'],
                 'bgproc_id'  => (int)$started['id'],
                 'pid'        => (int)$started['pid']
@@ -632,27 +631,27 @@ class Magick extends MediaProcessor {
             $exitCode = $this->execute->execute($command, $stdout, $stderr, self::TIMEOUT_CONVERT);
         }
 
-        // Prüfen ob das Speichern erfolgreich war
+        // Check whether saving was successful
         if ($exitCode !== 0 || !is_file($destFile) || filesize($destFile) === 0) {
-            // Angefangene oder leere Zieldatei nicht liegen lassen
+            // Do not leave a started or empty target file behind
             if (is_file($destFile)) @unlink($destFile);
 
             return $fileData + [
                 'errors' => $exitCode === $this->execute::EXEC_TIMEOUT
                     ? 'proc.magick.error_timeout'
                     : 'error_file_conversion',
-                // Klartext-Meldung von ImageMagick, hilfreich für die Fehlersuche
+                // Plain-text message from ImageMagick, helpful for troubleshooting
                 'error_details' => trim($stderr),
             ];
         }
 
-        // Tatsächliche Abmessungen der Zieldatei auslesen.
-        // Sie werden nicht berechnet, weil die freien Parameter das Ergebnis
-        // beliebig verändern können.
+        // Read the actual dimensions of the target file.
+        // They are not calculated, because the free parameters can change
+        // the result arbitrarily.
         $destInfo = $this->identify($magick, $destFile, $destCoder);
 
         /**
-         * Die folgende Rückgabestruktur ist bei allen Medien-Konvertern gleich.
+         * The following return structure is the same for all media converters.
          */
         $fileData = [
             'width'     => $destInfo['width'] ?? 0,
@@ -661,36 +660,36 @@ class Magick extends MediaProcessor {
             'size'      => filesize($destFile),
             'filename'  => $srcData['filename'] ?? 'file',
             'extension' => $ext,
-            // Zusätzliche Infos zur Quell-Datei wurden ermittelt:
+            // Additional info on the source file was determined:
             'source_width' => $srcW,
             'source_height' => $srcH,
-            // 'data' => '{}' könnte JSON-String mit weiteren Infos sein (flaches assoziatives Array)
+            // 'data' => '{}' could be a JSON string with further info (flat associative array)
         ];
         return $fileData;
     }
 
     /**
-     * Erzeugt die Parameter, die sich aus den Formularfeldern ergeben.
-     * Bereits vom Administrator belegte Options-Gruppen werden übersprungen.
+     * Creates the parameters that result from the form fields.
+     * Option groups already set by the administrator are skipped.
      *
      * @param array  $details  Konfigurations-Array
-     * @param string $ext      Endung / Format der Zieldatei
-     * @param array  $claimed  Ergebnis von claimedGroups()
-     * @param int    $srcW     Breite der Quelle (ausgerichtet; 0 = unbekannt)
-     * @param int    $srcH     Höhe der Quelle (ausgerichtet; 0 = unbekannt)
-     * @return array           Argumentliste für die Kommandozeile
+     * @param string $ext      extension / format of the target file
+     * @param array  $claimed  result of claimedGroups()
+     * @param int    $srcW     width of the source (aligned; 0 = unknown)
+     * @param int    $srcH     height of the source (aligned; 0 = unknown)
+     * @return array           argument list for the command line
      */
     protected function buildArguments(array $details, string $ext, array $claimed, int $srcW = 0, int $srcH = 0): array
     {
         $args = [];
 
-        // EXIF-Ausrichtung anwenden (GD kennt das nicht, das Ergebnis
-        // entspricht aber dem, was der Benutzer im Bild sieht)
+        // Apply EXIF orientation (GD does not know this, but the result
+        // corresponds to what the user sees in the image)
         if (!$claimed['orient']) {
             $args[] = '-auto-orient';
         }
 
-        // Alpha-Channel (Transparenz) oder Hintergrundfarbe anwenden
+        // Apply alpha channel (transparency) or background color
         $keepAlpha = !empty($details['alpha']);
         if ($keepAlpha) {
             // Transparenz erhalten
@@ -703,9 +702,9 @@ class Magick extends MediaProcessor {
                 $args[] = 'on';
             }
         } else {
-            // Hintergrund mit der konfigurierten Farbe füllen.
-            // "-alpha remove" vor dem Skalieren vermeidet Farbsäume an
-            // transparenten Kanten.
+            // Fill the background with the configured color.
+            // "-alpha remove" before scaling avoids color fringes at
+            // transparent edges.
             if (!$claimed['background']) {
                 $args[] = '-background';
                 $args[] = $this->evaluateBgColor($details);
@@ -723,7 +722,7 @@ class Magick extends MediaProcessor {
             array_push($args, ...$this->geometryArguments($details, $claimed, $srcW, $srcH));
         }
 
-        // Farbtiefe anpassen (nur wenn eine Farbanzahl vorgegeben ist)
+        // Adjust color depth (only if a number of colors is specified)
         if (!$claimed['colors']) {
             $colors = (int) ($details['indexed_colors'] ?? 0);
             if ($colors > 0) {
@@ -737,15 +736,15 @@ class Magick extends MediaProcessor {
             $args[] = '-strip';
         }
 
-        // Qualität
+        // Quality
         if (!$claimed['quality']) {
             $quality = isset($details['quality']) ? (int) $details['quality'] : 80;
             $quality = max(0, min(100, $quality));
 
             if ($ext === 'png') {
-                // Bei PNG bedeutet -quality etwas anderes als bei JPEG:
+                // For PNG, -quality means something different than for JPEG:
                 // Zehnerstelle = zlib-Kompression (0-9), Einerstelle = Filtertyp.
-                // Wir rechnen die Prozentangabe wie beim GD-Konverter um,
+                // we convert the percentage as in the GD converter,
                 // Filtertyp 5 = adaptiv.
                 $pngCompression = (int) round(9 - ($quality * 9 / 100));
                 $pngCompression = max(0, min(9, $pngCompression));
@@ -755,32 +754,32 @@ class Magick extends MediaProcessor {
                 $args[] = '-quality';
                 $args[] = (string) $quality;
             }
-            // GIF, BMP und Konsorten kennen keine verlustbehaftete Qualität
+            // GIF, BMP and the like know no lossy quality
         }
 
         return $args;
     }
 
     /**
-     * Die Größenänderung aus Zielbreite/-höhe und den Kennzeichen der Geometrie:
+     * The size change from target width/height and the geometry flags:
      *
      *     crop         FIT      einpassen                 -resize 440x300
-     *                  CROP     ausfüllen, beschneiden    -resize 440x300^ -extent 440x300
-     *                  FILL     ausfüllen, überstehen     -resize 440x300^
-     *                  DISTORT  Seitenverhältnis ignor.   -resize 440x300!
-     *     resize_when  shrink   nur verkleinern (>), enlarge nur vergrößern (<)
-     *     unit         percent  Breite/Höhe in Prozent (%) - nur Einpassen/Verzerren
-     *     max_pixels   Höchstzahl Pixel (@), danach, mit derselben Bedingung
+     *                  CROP     fill, crop                -resize 440x300^ -extent 440x300
+     *                  FILL     fill, overhang            -resize 440x300^
+     *                  DISTORT  ignore aspect ratio      -resize 440x300!
+     *     resize_when  shrink   only downscale (>), enlarge only upscale (<)
+     *     unit         percent  width/height in percent (%) - fit/distort only
+     *     max_pixels   maximum pixels (@), afterwards, with the same condition
      *
-     * ">" und "<" taugen nur fürs Einpassen und Verzerren: beim Ausfüllen vergrößert
-     * der Faktor, sobald eine Seite zu kurz ist. Dort entscheidet der Faktor aus den
-     * Quellmaßen: ist keine Änderung erlaubt, wird bei CROP nur mittig auf das
-     * Zielformat zugeschnitten, soweit das Bild reicht (ohne Rand in der Hintergrund-
-     * farbe), bei FILL bleibt das Bild, wie es ist. Beschnitt und Ausfüllen brauchen
-     * beide Maße; fehlt eines, wird eingepasst (das Ergebnis ist dasselbe).
+     * ">" and "<" are only suitable for fitting and distorting: when filling, the factor
+     * enlarges as soon as one side is too short. There the factor from the source
+     * dimensions decides: if no change is allowed, CROP only crops centered to the
+     * target format, as far as the image reaches (without a border in the background
+     * color), FILL leaves the image as it is. Cropping and filling both need
+     * both dimensions; if one is missing, fitting is used (the result is the same).
      *
-     * @param int $srcW  Breite der Quelle (ausgerichtet; 0 = unbekannt)
-     * @param int $srcH  Höhe der Quelle (ausgerichtet; 0 = unbekannt)
+     * @param int $srcW  width of the source (aligned; 0 = unknown)
+     * @param int $srcH  height of the source (aligned; 0 = unknown)
      */
     protected function geometryArguments(array $details, array $claimed, int $srcW, int $srcH): array
     {
@@ -791,13 +790,13 @@ class Magick extends MediaProcessor {
         $flag = self::RESIZE_FLAGS[(string)($details['resize_when'] ?? 'always')] ?? '';
         $mode = (int)($details['crop'] ?? self::FIT);
         if (!in_array($mode, [self::FIT, self::CROP, self::FILL, self::DISTORT], true)) $mode = self::FIT;
-        // Ausfüllen, Beschneiden, Verzerren brauchen beide Maße; Prozent nur Einpassen
-        // oder Verzerren
+        // Filling, cropping, distorting need both dimensions; percent only fitting
+        // or distorting
         if ($reqW < 1 || $reqH < 1 || ($percent && $mode !== self::DISTORT)) $mode = self::FIT;
 
         if ($reqW > 0 || $reqH > 0) {
             if ($percent) {
-                // 50% (beide Seiten), 50x30% (je Seite)
+                // 50% (both sides), 50x30% (per side)
                 $geometry = $reqW > 0 && $reqH > 0 ? $reqW . 'x' . $reqH . '%' : max($reqW, $reqH) . '%';
             }
             else {
@@ -805,7 +804,7 @@ class Magick extends MediaProcessor {
             }
 
             if ($mode === self::CROP || $mode === self::FILL) {
-                // Faktor zum Ausfüllen - ohne Quellmaße gilt die Bedingung nicht
+                // Factor for filling - without source dimensions the condition does not apply
                 $scale = $srcW > 0 && $srcH > 0 ? max($reqW / $srcW, $reqH / $srcH) : 0.0;
                 $blocked = $scale > 0 && (($flag === '>' && $scale >= 1) || ($flag === '<' && $scale <= 1));
                 if ($blocked) {
@@ -833,19 +832,19 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Hintergrundfarbe auswerten und als '#rrggbb' zurückgeben
+     * Evaluate the background color and return it as '#rrggbb'
      */
     protected function evaluateBgColor(array $details): string
     {
         $bgColorHex = isset($details['bgcolor']) ? trim((string) $details['bgcolor']) : '';
-        $bgColorHex = ltrim($bgColorHex, '#'); // Führende Raute entfernen, falls vorhanden
+        $bgColorHex = ltrim($bgColorHex, '#'); // Remove leading hash, if present
 
-        // Prüfung mit regulärem Ausdruck auf 3 oder 6 gültige Hex-Zeichen
+        // Check with a regular expression for 3 or 6 valid hex characters
         if (!preg_match('/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $bgColorHex)) {
-            $bgColorHex = 'FFF'; // Fallback bei ungültiger oder leerer Eingabe
+            $bgColorHex = 'FFF'; // Fallback for invalid or empty input
         }
 
-        // Kurzschreibweise auf 6 Zeichen aufziehen
+        // expand the short notation to 6 characters
         if (strlen($bgColorHex) === 3) {
             $bgColorHex = str_repeat($bgColorHex[0], 2)
                         . str_repeat($bgColorHex[1], 2)
@@ -856,9 +855,9 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Ermittelt, welche Options-Gruppen der Administrator selbst belegt hat.
+     * Determines which option groups the administrator has set themselves.
      *
-     * @param array $tokens Argumente aus parameters1 und parameters2
+     * @param array $tokens arguments from parameters1 and parameters2
      * @return array        ['geometry' => bool, 'quality' => bool, ...]
      */
     protected function claimedGroups(array $tokens): array
@@ -866,7 +865,7 @@ class Magick extends MediaProcessor {
         $claimed = array_fill_keys(array_keys(self::OPTION_GROUPS), false);
 
         foreach ($tokens as $token) {
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || ($token[0] !== '-' && $token[0] !== '+')) continue;
 
             $option = strtolower(ltrim($token, '-+'));
@@ -879,18 +878,18 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Coder für eine Quelldatei bestimmen: zuerst über den serverseitig erkannten
-     * MIME-Typ, ersatzweise über die Dateiendung.
+     * Determine the coder for a source file: first via the server-side detected
+     * MIME type, alternatively via the file extension.
      *
-     * Die Endung ist der schwächere, aber immer noch sichere Weg: Sie legt nur fest,
-     * WELCHER Coder erzwungen wird - passt der Inhalt nicht dazu, scheitert
-     * ImageMagick, statt das Format am Inhalt zu erraten. Gebraucht wird sie für
-     * Dateien ohne verlässliche MIME-Angabe, etwa ein im Hintergrund erzeugtes
-     * Thumbnail, das selbst wieder Quelle eines Thumbnails ist.
+     * The extension is the weaker, but still safe, path: it only determines
+     * WHICH coder is enforced - if the content does not match, ImageMagick
+     * fails instead of guessing the format from the content. It is needed for
+     * files without a reliable MIME specification, such as a thumbnail created in the
+     * background that is itself the source of a thumbnail.
      *
-     * @param string $mime       MIME-Typ der Quelldatei (kann leer sein)
-     * @param string $extension  Endung der Quelldatei, ohne Punkt
-     * @return string            Coder oder '' , wenn das Format nicht zugelassen ist
+     * @param string $mime       MIME type of the source file (may be empty)
+     * @param string $extension  extension of the source file, without dot
+     * @return string            coder, or '' if the format is not allowed
      */
     protected function coderFor(string $mime, string $extension): string
     {
@@ -901,11 +900,11 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Dateiargument für die Kommandozeile: Coder-Präfix, Pfad und Frame-Auswahl.
+     * File argument for the command line: coder prefix, path and frame selection.
      *
-     * @param string $coder       Coder, z. B. 'jpeg'; leer = kein Präfix
-     * @param string $file        Absoluter Pfad
-     * @param bool   $firstFrame  true: nur das erste Einzelbild ("[0]")
+     * @param string $coder       coder, e.g. 'jpeg'; empty = no prefix
+     * @param string $file        absolute path
+     * @param bool   $firstFrame  true: only the first single image ("[0]")
      */
     protected function fileArgument(string $coder, string $file, bool $firstFrame = true): string
     {
@@ -913,12 +912,12 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Ressourcen-Limits, die für JEDEN Aufruf gelten - auch für identify().
+     * Resource limits that apply to EVERY call - also for identify().
      *
-     * Eine Dekompressionsbombe (winziges PNG, Gigapixel im Speicher) oder ein
-     * präpariertes Bild mit Endlosschleife belegt sonst schon beim Auslesen der
-     * Abmessungen den ganzen Server. Die Werte stehen vorne in der Kommandozeile,
-     * eigene Angaben im Expertenmodus kommen danach und gewinnen.
+     * A decompression bomb (tiny PNG, gigapixels in memory) or a
+     * crafted image with an endless loop would otherwise tie up the whole server
+     * already when reading the dimensions. The values stand at the front of the command line,
+     * own specifications in expert mode come afterwards and win.
      */
     protected function limitArguments(): array
     {
@@ -931,12 +930,12 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Liest Breite, Höhe und Format einer Datei mit "magick identify"
+     * Reads width, height and format of a file with "magick identify"
      *
-     * @param string $magick  Pfad zum Programm
-     * @param string $file    Absoluter Pfad zur Datei, OHNE Coder-Präfix und "[0]"
-     * @param string $coder   Erzwungener Coder (siehe coderFor()); leer = kein Präfix
-     * @return array|null ['width'=>int, 'height'=>int, 'orientation'=>string, 'mime_type'=>string] oder null bei Fehler
+     * @param string $magick  path to the program
+     * @param string $file    absolute path to the file, WITHOUT coder prefix and "[0]"
+     * @param string $coder   enforced coder (see coderFor()); empty = no prefix
+     * @return array|null ['width'=>int, 'height'=>int, 'orientation'=>string, 'mime_type'=>string] or null on error
      */
     protected function identify(string $magick, string $file, string $coder = ''): ?array
     {
@@ -958,7 +957,7 @@ class Magick extends MediaProcessor {
         );
         if ($exitCode !== 0) return null;
 
-        // Bei mehreren Einzelbildern kommt pro Bild eine Zeile zurück
+        // With several single images, one line is returned per image
         $line  = strtok(trim($stdout), "\n");
         $parts = preg_split('/\s+/', trim((string) $line));
         if (!is_array($parts) || count($parts) < 2) return null;
@@ -966,34 +965,34 @@ class Magick extends MediaProcessor {
         return [
             'width'       => (int) $parts[0],
             'height'      => (int) $parts[1],
-            // EXIF-Ausrichtung (TopLeft, RightTop ...; ohne Angabe: Undefined)
+            // EXIF orientation (TopLeft, RightTop ...; without specification: Undefined)
             'orientation' => (string)($parts[2] ?? ''),
-            // %[mime] ist bei manchen Formaten leer, dann fehlt der vierte Teil
+            // %[mime] is empty for some formats, then the fourth part is missing
             'mime_type'   => (string)($parts[3] ?? '')
         ];
     }
 
     /**
-     * Öffentliche Methode, um die Parameter eines per Hintergrundprozess erzeugten Thumbnails
-     * in Tabelle `data_fil` nachzutragen
+     * Public method to add the parameters of a thumbnail created by a background process
+     * to table `data_fil`
      * 
-     * @param string $srcPath   Relativer Pfad zur Datei ab Medienverzeichnis
-     * @return array            mittels identify ermittelte Daten + Dateigröße
+     * @param string $srcPath   relative path to the file from the media directory
+     * @return array            data determined via identify + file size
      *                          width, height, mime_type, extension, size
      */
     public function rectifyParams(string $srcPath): array
     {
-        // Absoluter Pfad zur Datei
+        // Absolute path to the file
         $srcFile = $this->config->get('paths.media_dir') . '/' . $srcPath;
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return [
                 'error' => '#error_file_not_found'
             ];
         }
 
-        // magick/convert muss verfügbar sein
+        // magick/convert must be available
         $magick = $this->config->get('paths.magick') ?? '';
         if ($magick === '') {
             return ['error' => 'proc.magick.error_binary_missing'];
@@ -1002,9 +1001,9 @@ class Magick extends MediaProcessor {
             return ['error' => 'proc.magick.error_binary_missing'];
         }
 
-        // Eigenschaften der Datei ermitteln.
-        // Die Datei hat der Konverter selbst erzeugt, ihre Endung gibt also das
-        // Format vor - der Coder wird trotzdem erzwungen (kein Sniffing).
+        // Determine properties of the file.
+        // The converter created the file itself, so its extension specifies the
+        // format - the coder is enforced anyway (no sniffing).
         $extension = strtolower((string)pathinfo($srcFile, PATHINFO_EXTENSION));
         $srcInfo = $this->identify($magick, $srcFile, self::CODER_BY_EXTENSION[$extension] ?? '');
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
@@ -1013,22 +1012,22 @@ class Magick extends MediaProcessor {
             ];
         }
 
-        // identify liefert: width, height, mime_type
+        // identify returns: width, height, mime_type
         $srcInfo['size'] = filesize($srcFile);
         $srcInfo['extension'] = $extension;
         return $srcInfo;
     }
 
     /**
-     * Läuft ein freischaltbares Format (MagickPolicy::ALLOWABLE) auf diesem Server
-     * tatsächlich? Für die Infoseite des Konverters: die camindo-Policy gibt es frei,
-     * die des Systems kann es trotzdem sperren (Debian sperrt PDF), oder Ghostscript
-     * fehlt. Ein kleiner Probelauf klärt das, statt die Policys auszulegen:
-     *   svg  eine Mini-SVG schreiben und mit msvg: lesen
-     *   pdf  eine Mini-PDF erzeugen (ImageMagick schreibt PDF selbst) und mit gs lesen
+     * Does a releasable format (MagickPolicy::ALLOWABLE) actually run on this server?
+     * For the info page of the converter: the camindo policy releases it, but the
+     * system's policy can still block it (Debian blocks PDF), or Ghostscript is
+     * missing. A small test run clarifies this instead of interpreting the policies:
+     *   svg  write a mini SVG and read it with msvg:
+     *   pdf  create a mini PDF (ImageMagick writes PDF itself) and read it with gs
      *
      * @param string $format  'svg' | 'pdf'
-     * @return array ['ok' => bool, 'error' => string] - error: erste Zeile von ImageMagick
+     * @return array ['ok' => bool, 'error' => string] - error: first line of ImageMagick
      */
     public function probeFormat(string $format): array
     {
@@ -1064,17 +1063,17 @@ class Magick extends MediaProcessor {
         return ['ok' => $ok, 'error' => $ok ? '' : (string)strtok(trim((string)$stderr), "\n")];
     }
 
-    /** Die Policy des Prozessors (Infoseite) */
+    /** The policy of the processor (info page) */
     public function policy(): MagickPolicy
     {
         return $this->policy;
     }
 
     /**
-     * Version des konfigurierten ImageMagick auslesen.
+     * Read the version of the configured ImageMagick.
      *
-     * @return string|null z. B. "7.1.1-39", null wenn unter paths.magick kein
-     *                     lauffähiges ImageMagick liegt
+     * @return string|null e.g. "7.1.1-39", null if no
+     *                     working ImageMagick is installed under paths.magick
      */
     public function getVersion(): ?string
     {
@@ -1090,14 +1089,14 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * Zustand der installierten ImageMagick-Version für die Anzeige im Backend.
+     * State of the installed ImageMagick version for display in the backend.
      *
-     * ImageMagick vor MIN_VERSION ist nicht grundsätzlich unbrauchbar, aber ungepatcht:
-     * die -dSAFER-Umgehungen in Ghostscript und die Fuzzing-Funde in den Binärformaten
-     * sind erst in den neueren Ständen geschlossen (developer_docs/18-imagemagick.md).
+     * ImageMagick before MIN_VERSION is not fundamentally unusable, but unpatched:
+     * the -dSAFER bypasses in Ghostscript and the fuzzing findings in the binary formats
+     * were only closed in the newer releases (developer docs, chapter 14 (Security: web)).
      *
      * @return array ['version' => ?string, 'outdated' => bool, 'snippet' => string]
-     *               'snippet' ist die Snippet-Id der Warnung, '' wenn alles in Ordnung
+     *               'snippet' is the snippet id of the warning, '' if everything is in order
      */
     public function versionState(): array
     {

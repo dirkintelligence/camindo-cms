@@ -1,8 +1,8 @@
 <?php
-// Ansichten des Moduls, die ein Werkzeug öffnen darf (Core\BackendViews, z. B. der
-// Assistent des Moduls Ai mit ui__open): Script => Beschreibung (englisch, für das
-// Sprachmodell) und erlaubte Parameter ('int', 'string' oder Liste erlaubter Werte).
-// Nur Scripte, die beim Öffnen nichts ändern - keine Aktionen, keine ajax-Scripte.
+// Views of the module that a tool may open (Core\BackendViews, e.g. the
+// assistant of module Ai with ui__open): script => description (English, for the
+// language model) and allowed parameters ('int', 'string' or a list of allowed values).
+// Only scripts that change nothing when opened - no actions, no ajax scripts.
 return [
     'admin_list.php' => [
         'description' => 'List of all backend administrators with user group and status; starting point to create or open an administrator.',

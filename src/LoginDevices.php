@@ -1,45 +1,44 @@
 <?php
 /**
- * Anmeldegeräte: Wiedererkennen des Browsers und Hinweis bei einem neuen Gerät
- * (16-sicherheit.md §11). Für Admins (Backend) und Frontend-User.
+ * Login devices: recognizing the browser and a notice for a new device
+ * (developer docs, chapter 13 (Security: authentication)). For admins (backend) and frontend users.
  *
- * WIE EIN GERÄT ERKANNT WIRD
+ * HOW A DEVICE IS RECOGNIZED
  * --------------------
- * Nach jeder erfolgreichen Anmeldung bekommt der Browser ein Cookie
- * (security.device_cookie, Vorgabe 'c9dev') mit einem Zufallswert; `login_device`
- * speichert nur dessen hash() (HMAC mit .camindo.key) je Konto - wer die Tabelle
- * liest, kann damit kein Cookie bauen. Ein Cookie gilt für alle Konten, die sich
- * in diesem Browser anmelden; bekannt ist ein Gerät je Konto.
+ * After every successful login the browser gets a cookie
+ * (security.device_cookie, default 'c9dev') with a random value; `login_device`
+ * stores only its hash() (HMAC with .camindo.key) per account - whoever reads the table
+ * cannot build a cookie from it. A cookie applies to all accounts that log in
+ * in this browser; a device is known per account.
  *
- *     Cookie da, Zeile zum Konto da   bekanntes Gerät - last_seen_at, ip, label fortschreiben
- *     sonst                           neues Gerät - Zeile anlegen; hat das Konto
- *                                     schon andere Geräte, Benachrichtigung
- *                                     (LoginNotifierInterface, Ereignis 'new_device')
- * Die allererste Anmeldung eines Kontos (noch keine Zeile) meldet nichts: sonst bekäme
- * jeder nach der Registrierung bzw. nach dem Einführen dieser Tabelle einen Hinweis.
+ *     cookie present, row for the account present   known device - update last_seen_at, ip, label
+ *     otherwise                                     new device - create row; if the account
+ *                                                   already has other devices, notification
+ *                                                   (LoginNotifierInterface, event 'new_device')
+ * The very first login of an account (no row yet) reports nothing: otherwise everyone
+ * would get a notice after registration or after this table was introduced.
  *
- * Geräte, die security.device_days nicht benutzt wurden, werden gelöscht und gelten
- * danach wieder als neu; das Cookie läuft genauso lange und wird bei jeder
- * Anmeldung verlängert.
+ * Devices that were not used for security.device_days are deleted and count
+ * as new again afterwards; the cookie runs just as long and is extended with every
+ * login.
  *
- * Kein zweiter Faktor: ein bekanntes Gerät überspringt die Zwei-Faktor-Anmeldung
- * NICHT (Entscheidung 2026-09-24). Das Cookie ist ein Wiedererkennungsmerkmal, kein
- * Anmeldegeheimnis.
+ * No second factor: a known device does NOT skip the two-factor login
+ * (decision 2026-09-24). The cookie is a recognition feature, not a login secret.
  *
- * Wer Cookies löscht oder im privaten Fenster arbeitet, erscheint jedes Mal als
- * neues Gerät - das ist gewollt: genau so sähe auch ein Angreifer aus.
+ * Whoever deletes cookies or works in a private window appears as a
+ * new device every time - that is intended: an attacker would look exactly the same.
  *
- * Die Spalte `ip` hält die IP von Beginn an gekürzt (ClientIp::anonymize(),
- * privacy.ip_v4_octets) - für "von wo ungefähr" reicht das Netz. Die volle Adresse
- * steht nur in der Benachrichtigung an den Inhaber des Kontos.
+ * The column `ip` holds the IP truncated from the start (ClientIp::anonymize(),
+ * privacy.ip_v4_octets) - for "roughly from where" the network is enough. The full address
+ * is only in the notification to the owner of the account.
  *
- * GERÄTE VERWALTEN (Backend)
+ * MANAGING DEVICES (backend)
  * --------------------
- * Jede Admin-Session hängt an dem Gerät, von dem aus sie entstand
- * (admin_session.device_id, Admin::_loginComplete()). listFor() zeigt die Geräte
- * eines Kontos, remove()/removeAll() löschen sie - und mit ihnen per Fremdschlüssel
- * die Sessions darauf. Ein entferntes Gerät gilt bei der nächsten Anmeldung wieder
- * als neu (Hinweis per E-Mail). Oberfläche: AdminBackend::devices().
+ * Every admin session hangs on the device from which it was created
+ * (admin_session.device_id, Admin::_loginComplete()). listFor() shows the devices
+ * of an account, remove()/removeAll() delete them - and with them, via foreign key,
+ * the sessions on them. A removed device counts as new again at the next login
+ * (notice by email). Interface: AdminBackend::devices().
  */
 namespace Camindo\Core;
 
@@ -56,11 +55,11 @@ class LoginDevices {
     }
 
     /**
-     * Gerät, IP und Zeit des laufenden Requests - für eine Benachrichtigung
-     * (notify()) und register(). Die IP über ClientIp: hinter einem Proxy aus
-     * security.trusted_proxies die des Besuchers, nicht die des Proxys.
+     * Device, IP and time of the running request - for a notification
+     * (notify()) and register(). The IP via ClientIp: behind a proxy from
+     * security.trusted_proxies the one of the visitor, not that of the proxy.
      *
-     * @return array  label, ip (ungekürzt), time (UTC)
+     * @return array  label, ip (untruncated), time (UTC)
      */
     public function context(): array
     {
@@ -72,15 +71,15 @@ class LoginDevices {
     }
 
     /**
-     * Gerät zu einer erfolgreichen Anmeldung verbuchen, Cookie setzen, ggf.
-     * benachrichtigen. Muss laufen, bevor Ausgabe gesendet wurde (Cookie) - im
-     * Frontend also am Template-Anfang wie USER_LOGIN selbst.
+     * Record a device for a successful login, set the cookie, notify if needed.
+     * Must run before output is sent (cookie) - in the frontend therefore at the template
+     * start, just like USER_LOGIN itself.
      *
-     * @param string $kind       'admin' oder 'user'
-     * @param int    $accountId  admin_id bzw. record_id des Profils
-     * @param array  $account    Datensatz für den Notifier (E-Mail, Name, Einstellungen)
-     * @return array  new (bool: unbekanntes Gerät eines Kontos, das schon Geräte
-     *                hatte), first (bool: erstes Gerät des Kontos), label, ip, time
+     * @param string $kind       'admin' or 'user'
+     * @param int    $accountId  admin_id or record_id of the profile
+     * @param array  $account    record for the notifier (email, name, settings)
+     * @return array  new (bool: unknown device of an account that already had devices),
+     *                first (bool: first device of the account), label, ip, time
      */
     public function register(string $kind, int $accountId, array $account): array
     {
@@ -93,8 +92,8 @@ class LoginDevices {
         ] + $this->context();
         $device['time'] = $time;
         if ($accountId < 1) return $device;
-        // Gespeichert wird nur die gekürzte IP (privacy.ip_v4_octets) - die volle
-        // geht allein in die Benachrichtigung an den Inhaber des Kontos
+        // Only the truncated IP is stored (privacy.ip_v4_octets) - the full one
+        // goes solely into the notification to the owner of the account
         $storedIp = ClientIp::anonymize($device['ip'], ClientIp::v4Octets($this->config));
 
         $days = max(1, (int)$this->config->get('security.device_days'));
@@ -105,13 +104,13 @@ class LoginDevices {
 
         $this->db->pushResult();
         try {
-            // Verfallene Geräte (aller Konten) abräumen
+            // Clear out expired devices (of all accounts)
             $this->db->query(
                 "DELETE FROM `login_device` WHERE `last_seen_at` < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)",
                 'i', [$days]
             );
-            // Kennung unter allen Schlüsseln suchen (nach einer Schlüsselrotation
-            // steht noch der HMAC des alten da) und auf den aktuellen umschreiben
+            // Look up the identifier under all keys (after a key rotation the HMAC
+            // of the old key is still there) and rewrite it to the current one
             $hashes = $this->crypt->hashAll($token, true);
             $this->db->query(
                 "SELECT `device_id` FROM `login_device` WHERE `$column` = ? AND `token_hash` IN ("
@@ -148,11 +147,11 @@ class LoginDevices {
     }
 
     /**
-     * Kennt das Konto dieses Gerät (Cookie + Zeile, innerhalb von
-     * security.device_days)? Verbucht nichts - für die Entscheidung, ob eine
-     * Anmeldung einen zweiten Faktor braucht (Profil-Bereiche mit second_factor
-     * 'new_device', 20-frontend-schutz.md B). Auch das erste Gerät eines Kontos ist
-     * unbekannt.
+     * Does the account know this device (cookie + row, within
+     * security.device_days)? Records nothing - for the decision whether a
+     * login needs a second factor (profile areas with second_factor
+     * 'new_device', developer docs, chapter 14 (Security: web). The first device of an account
+     * is also unknown.
      */
     public function isKnown(string $kind, int $accountId): bool
     {
@@ -160,8 +159,8 @@ class LoginDevices {
     }
 
     /**
-     * Wie isKnown(), liefert aber die device_id (0 = unbekannt) - für einen eigenen
-     * Fehlversuchs-Zähler je Gerät (Admin::guardKey()).
+     * Like isKnown(), but returns the device_id (0 = unknown) - for a separate
+     * failed-attempt counter per device (Admin::guardKey()).
      */
     public function knownDeviceId(string $kind, int $accountId): int
     {
@@ -186,10 +185,10 @@ class LoginDevices {
     }
 
     /**
-     * Bekannte Geräte eines Kontos, zuletzt benutzte zuerst.
+     * Known devices of an account, most recently used first.
      *
-     * @param string $kind  'admin' oder 'user'
-     * @return array        Liste aus device_id, label, ip, created_at, last_seen_at (UTC)
+     * @param string $kind  'admin' or 'user'
+     * @return array        list of device_id, label, ip, created_at, last_seen_at (UTC)
      */
     public function listFor(string $kind, int $accountId): array
     {
@@ -214,9 +213,9 @@ class LoginDevices {
     }
 
     /**
-     * Ein Gerät eines Kontos entfernen - seine Sessions enden mit (Fremdschlüssel).
+     * Remove a device of an account - its sessions end with it (foreign key).
      *
-     * @return bool  false: gibt es nicht bzw. gehört einem anderen Konto
+     * @return bool  false: does not exist or belongs to another account
      */
     public function remove(string $kind, int $accountId, int $deviceId): bool
     {
@@ -233,9 +232,9 @@ class LoginDevices {
     }
 
     /**
-     * Alle Geräte eines Kontos entfernen.
+     * Remove all devices of an account.
      *
-     * @return int  Anzahl entfernter Geräte
+     * @return int  number of removed devices
      */
     public function removeAll(string $kind, int $accountId): int
     {
@@ -251,8 +250,8 @@ class LoginDevices {
     }
 
     /**
-     * Ereignis an den Notifier (security.login_notifier) weiterreichen. Fehler landen
-     * im Log 'security', die Anmeldung bzw. Speicherung läuft weiter.
+     * Pass the event on to the notifier (security.login_notifier). Errors end up
+     * in the log 'security', the login or storage continues.
      */
     public function notify(string $event, string $kind, array $account, array $context): void
     {
@@ -270,9 +269,9 @@ class LoginDevices {
     }
 
     /**
-     * Kurzbeschreibung aus dem User-Agent: "Firefox auf macOS". Grob mit Absicht -
-     * sie soll dem Empfänger der Benachrichtigung das Gerät erkennbar machen, nicht
-     * Versionen verfolgen.
+     * Short description from the User-Agent: "Firefox on macOS". Deliberately rough -
+     * it should make the device recognizable to the recipient of the notification, not
+     * track versions.
      */
     public static function label(string $userAgent): string
     {
@@ -301,7 +300,7 @@ class LoginDevices {
     }
 
     /**
-     * Wert des Geräte-Cookies, wenn er das Format eines randomKey(32) hat, sonst ''.
+     * Value of the device cookie if it has the format of a randomKey(32), otherwise ''.
      */
     private function cookieToken(): string
     {
@@ -316,8 +315,8 @@ class LoginDevices {
     }
 
     /**
-     * Geräte-Cookie setzen bzw. verlängern: HttpOnly, SameSite Lax, 'secure' wie das
-     * Session-Cookie des Bereichs (admin.cookie_secure / user.cookie_secure).
+     * Set or extend the device cookie: HttpOnly, SameSite Lax, 'secure' like the
+     * session cookie of the area (admin.cookie_secure / user.cookie_secure).
      */
     private function setCookie(string $token, string $kind, int $days): void
     {

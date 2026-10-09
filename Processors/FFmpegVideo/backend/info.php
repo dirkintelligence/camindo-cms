@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\Backend $this->backend
@@ -11,10 +11,10 @@
 $details = (array) ($data['details'] ?? []);
 
 /**
- * Auswahlwerte als Klartext ausgeben: gespeichert ist der Schlüssel ('h264'),
- * angezeigt wird das Snippet dazu ('H.264 / AVC').
+ * Output selection values as plain text: the key ('h264') is stored,
+ * the snippet for it ('H.264 / AVC') is shown.
  *
- * Sollte infoAdd() Referenzen mit führendem '#' nicht selbst auflösen, hier auf
+ * If infoAdd() does not resolve references with a leading '#' itself, switch here to
  * $this->cms->snippet('proc.ffmpegvideo.option_' . $value) umstellen.
  */
 $optionLabel = static function (string $value): string {
@@ -32,7 +32,7 @@ $this->backend->infoAdd($this->converter, 'details.height', $details['height'] ?
 $this->backend->infoAdd($this->converter, 'details.crop', ($details['crop'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.prevent_upscaling', ($details['prevent_upscaling'] ?? 0) ? 'yes' : 'no');
 
-// Qualität: nur den Wert zeigen, der im gewählten Modus auch wirkt
+// Quality: only show the value that is also effective in the chosen mode
 $qualityMode = (string) ($details['quality_mode'] ?? 'crf');
 $this->backend->infoAdd($this->converter, 'details.quality_mode', $optionLabel($qualityMode));
 if ($qualityMode === 'bitrate') {
@@ -42,12 +42,12 @@ if ($qualityMode === 'bitrate') {
 }
 $this->backend->infoAdd($this->converter, 'details.preset', $optionLabel((string) ($details['preset'] ?? 'medium')));
 
-// Zeit und Bildrate
+// Time and frame rate
 $this->backend->infoAdd($this->converter, 'details.max_fps', $details['max_fps'] ?? 0, ['notempty']);
 $this->backend->infoAdd($this->converter, 'details.start_time', htmlspecialchars((string) ($details['start_time'] ?? '')), ['notempty', 'monospace']);
 $this->backend->infoAdd($this->converter, 'details.duration', htmlspecialchars((string) ($details['duration'] ?? '')), ['notempty', 'monospace']);
 
-// Kompatibilität
+// Compatibility
 $this->backend->infoAdd($this->converter, 'details.faststart', ($details['faststart'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.compatible_pix_mode', ($details['compatible_pix_mode'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.deinterlace', $optionLabel((string) ($details['deinterlace'] ?? 'auto')));
@@ -63,7 +63,7 @@ if ($audioCodec !== 'mute' && $audioCodec !== 'copy') {
     $this->backend->infoAdd($this->converter, 'details.audio_normalisation', ($details['audio_normalisation'] ?? 0) ? 'yes' : 'no');
 }
 
-// Ausführung
+// Execution
 $this->backend->infoAdd($this->converter, 'details.threads', $details['threads'] ?? 0, ['notempty']);
 $this->backend->infoAdd($this->converter, 'details.background_process', ($details['background_process'] ?? 0) ? 'yes' : 'no');
 $this->backend->infoAdd($this->converter, 'details.max_time_out', (int) ($details['max_time_out'] ?? 3600) . ' s');

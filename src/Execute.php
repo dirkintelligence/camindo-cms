@@ -2,52 +2,52 @@
 /**
  * class Execute
  * 
- * Stellt eine robuste und sichere Methode zur Ausführung von CLI-Kommandos zur Verfügung.
- * Dieser Trait ist besonders für die Interaktion mit externen Tools (wie ImageMagick) 
- * optimiert und löst typische Probleme, die bei der Nutzung von `proc_open()` auftreten können.
- * 
- * Hauptmerkmale:
- * - Sicherheit: Kommandos werden als Array übergeben, wodurch Shell-Injection vermieden wird.
- * - Deadlock-Prävention: STDOUT und STDERR werden in temporäre Dateien umgeleitet. Das verhindert
- *   ein Blockieren des Prozesses (Deadlocks), wenn die Ausgabepuffer des Betriebssystems voll sind, 
- *   was auf Windows-Systemen bei fehlendem `stream_select()` oft passiert.
- * - Timeout-Management: Überwacht die Ausführungszeit aktiv. Bei Überschreitung wird der Prozess 
- *   zunächst regulär beendet (SIGTERM) und nach einer Nachfrist hart abgebrochen (SIGKILL).
- * - Speicherschutz: Die maximale Größe der eingelesenen Ausgaben (STDOUT/STDERR) ist limitiert,
- *   um Memory Exhaustion durch extrem lange Ausgaben (z. B. durch `-verbose`) zu verhindern.
- * - Encoding-Korrektur: Stellt sicher, dass die Fehlerausgabe im Backend immer als UTF-8 vorliegt
- *   (besonders relevant für Windows-Kommandozeilen).
- * - Hintergrundprozesse: executeBackground() startet ein Kommando abgekoppelt vom PHP-Prozess
- *   und liefert dessen PID zurück, processState() und terminateProcess() überwachen und beenden es.
- * - Token-Abgleich: Weil das Betriebssystem PIDs wiederverwendet (auf Shared Hosting oft schon
- *   nach Minuten), kann jedem Hintergrundprozess ein Token mitgegeben werden. Es steht in der
- *   Kommandozeile des Prozesses und wird bei der Überwachung wieder daraus gelesen. Passt es
- *   nicht, gehört die PID inzwischen einem fremden Prozess und gilt als beendet.
+ * Provides a robust and safe method for running CLI commands.
+ * This trait is optimized for interaction with external tools (such as ImageMagick)
+ * and solves typical problems that can occur when using `proc_open()`.
+ *
+ * Main features:
+ * - Safety: commands are passed as an array, which avoids shell injection.
+ * - Deadlock prevention: STDOUT and STDERR are redirected to temporary files. This prevents
+ *   the process from blocking (deadlocks) when the operating system's output buffers are full,
+ *   which often happens on Windows systems without `stream_select()`.
+ * - Timeout management: actively monitors the execution time. When it is exceeded, the process
+ *   is first terminated normally (SIGTERM) and, after a grace period, aborted hard (SIGKILL).
+ * - Memory protection: the maximum size of the read output (STDOUT/STDERR) is limited,
+ *   to prevent memory exhaustion from extremely long output (e.g. from `-verbose`).
+ * - Encoding correction: ensures that the error output in the backend is always UTF-8
+ *   (especially relevant for Windows command lines).
+ * - Background processes: executeBackground() starts a command detached from the PHP process
+ *   and returns its PID; processState() and terminateProcess() monitor and end it.
+ * - Token matching: because the operating system reuses PIDs (on shared hosting often
+ *   within minutes), each background process can be given a token. It appears in the
+ *   command line of the process and is read back from it during monitoring. If it does
+ *   not match, the PID now belongs to a foreign process and counts as ended.
  */
 namespace Camindo\Core;
 
 class Execute {
 
     /**
-     * Rückgabewerte von execute(), die kein Exit-Code eines Prozesses sind
-     * (public, weil BackgroundProcess sie auswertet)
+     * Return values of execute() that are not an exit code of a process
+     * (public, because BackgroundProcess evaluates them)
      */
-    public const EXEC_FAILED  = -1; // Prozess konnte nicht gestartet werden
-    public const EXEC_TIMEOUT = -2; // Zeitüberschreitung, Prozess wurde abgebrochen
+    public const EXEC_FAILED  = -1; // process could not be started
+    public const EXEC_TIMEOUT = -2; // timeout, process was aborted
 
     /**
-     * Zustände eines Prozesses, wie sie processState() / processStates() liefern.
-     * Die Werte 0/1/2 sind absichtlich identisch mit der Spalte `status` in `bgproc`.
+     * States of a process, as returned by processState() / processStates().
+     * The values 0/1/2 are deliberately identical to the column `status` in `bgproc`.
      */
-    public const STATE_UNKNOWN  = -1; // nicht ermittelbar (weder ps/tasklist noch posix_kill verfügbar)
-    public const STATE_FINISHED = 0;  // Prozess existiert nicht mehr
-    public const STATE_RUNNING  = 1;  // Prozess läuft
-    public const STATE_ZOMBIE   = 2;  // beendet, aber vom Elternprozess noch nicht eingesammelt
+    public const STATE_UNKNOWN  = -1; // cannot be determined (neither ps/tasklist nor posix_kill available)
+    public const STATE_FINISHED = 0;  // process no longer exists
+    public const STATE_RUNNING  = 1;  // process is running
+    public const STATE_ZOMBIE   = 2;  // ended, but not yet collected by the parent process
 
     /**
-     * Obergrenze für die eingelesenen Ausgaben.
-     * "-verbose" oder eine defekte Quelldatei können sonst Megabytes erzeugen,
-     * die über 'error_details' bis in die Datenbank wandern.
+     * Upper limit for the read output.
+     * "-verbose" or a defective source file could otherwise produce megabytes
+     * that travel via 'error_details' into the database.
      */
     private const MAX_STDOUT = 262144; // 256 KiB
     private const MAX_STDERR = 65536;  //  64 KiB
@@ -59,13 +59,13 @@ class Execute {
     }
 
     /**
-     * Zerlegt eine frei eingegebene Parameterzeile in einzelne Argumente.
-     * Anführungszeichen (einfach und doppelt) halten Werte mit Leerzeichen zusammen.
+     * Splits a freely entered parameter line into individual arguments.
+     * Quotation marks (single and double) keep values with spaces together.
      *
-     * Arbeitet rein auf Bytes und ist damit unabhängig von Betriebssystem,
-     * Locale und Zeichenkodierung (UTF-8 inklusive).
+     * Works purely on bytes and is therefore independent of operating system,
+     * locale and character encoding (UTF-8 included).
      *
-     * @return array Liste einzelner Argumente
+     * @return array list of individual arguments
      */
     public function tokenizeParameters(string $parameters): array
     {
@@ -83,9 +83,9 @@ class Execute {
                     $quote = '';
                     continue;
                 }
-                // Innerhalb doppelter Anführungszeichen ist der Backslash nur vor
-                // " und \ ein Escape. Sonst bleibt er stehen, damit Windows-Pfade
-                // wie "C:\temp\bild.png" nicht zerstört werden.
+                // Inside double quotation marks the backslash is an escape only before
+                // " and \. Otherwise it stays, so that Windows paths
+                // such as "C:\temp\bild.png" are not destroyed.
                 if ($char === '\\' && $quote === '"' && $i + 1 < $length
                     && ($parameters[$i + 1] === '"' || $parameters[$i + 1] === '\\')) {
                     $i++;
@@ -98,7 +98,7 @@ class Execute {
 
             if ($char === '"' || $char === "'") {
                 $quote   = $char;
-                $started = true; // ermöglicht auch leere Argumente ("")
+                $started = true; // also allows empty arguments ("")
                 continue;
             }
 
@@ -121,20 +121,20 @@ class Execute {
     }
 
     /**
-     * Führt ein Kommando ohne Shell aus (proc_open mit Argument-Array),
-     * dadurch sind Sonderzeichen in Datei- und Parameterwerten unkritisch.
+     * Runs a command without a shell (proc_open with an argument array),
+     * so special characters in file and parameter values are harmless.
      *
-     * stdout und stderr laufen in temporäre Dateien statt in Pipes. Das
-     * verhindert Deadlocks bei großen Ausgaben und kommt ohne stream_select()
-     * aus, das unter Windows auf Prozess-Pipes nicht arbeitet.
+     * stdout and stderr go to temporary files instead of pipes. This
+     * prevents deadlocks with large output and works without stream_select(),
+     * which does not work on process pipes under Windows.
      *
-     * @param array       $command Kommando inklusive aller Argumente
-     * @param string|null $stdout  Ausgabe
-     * @param string|null $stderr  Fehlerausgabe, im Fehlerfall auch der Grund von PHP
-     * @param int         $timeout Sekunden bis zum Abbruch, 0 = kein Abbruch
-     * @param array       $env     zusätzliche Umgebungsvariablen des Kindprozesses
-     *                             (zur eigenen Umgebung dazu), z. B. CAMINDO_API_SESSION
-     * @return int                 Exit-Code, EXEC_FAILED oder EXEC_TIMEOUT
+     * @param array       $command Command including all arguments
+     * @param string|null $stdout  output
+     * @param string|null $stderr  error output; on failure also the reason from PHP
+     * @param int         $timeout seconds until abort, 0 = no abort
+     * @param array       $env     additional environment variables of the child process
+     *                             (added to its own environment), e.g. CAMINDO_API_SESSION
+     * @return int                 exit code, EXEC_FAILED or EXEC_TIMEOUT
      */
     public function execute(array $command, ?string &$stdout = null, ?string &$stderr = null, int $timeout = 0, array $env = []): int
     {
@@ -143,8 +143,8 @@ class Execute {
 
         $outFile = @tmpfile();
         $errFile = @tmpfile();
-        // tmpfile() kann z. B. bei restriktivem open_basedir oder nicht
-        // beschreibbarem Temp-Verzeichnis fehlschlagen
+        // tmpfile() can fail, e.g. with a restrictive open_basedir or a
+        // temp directory that is not writable
         $useTempFiles = ($outFile !== false && $errFile !== false);
 
         if ($useTempFiles) {
@@ -163,9 +163,9 @@ class Execute {
             ];
         }
 
-        // Grund eines Fehlschlags festhalten, statt ihn mit @ zu verschlucken:
-        // "Datei nicht gefunden" und "keine Ausführungsrechte" sind die
-        // häufigsten Stolpersteine bei der Einrichtung.
+        // Keep the reason for a failure instead of swallowing it with @:
+        // "file not found" and "no execute permission" are the
+        // most common stumbling blocks during setup.
         $lastError = null;
         set_error_handler(function (int $errno, string $message) use (&$lastError): bool {
             $lastError = $message;
@@ -181,12 +181,12 @@ class Execute {
             return self::EXEC_FAILED;
         }
 
-        fclose($pipes[0]); // stdin schließen -> Kindprozess bekommt sofort EOF
+        fclose($pipes[0]); // close stdin -> child process gets EOF immediately
 
         if (!$useTempFiles) {
-            // Notlösung ohne Timeout-Überwachung: die Pipes müssen gelesen
-            // werden, solange der Prozess läuft. Praktisch nur für die kurzen
-            // Ausgaben von "identify" relevant.
+            // Fallback without timeout monitoring: the pipes must be read
+            // while the process is running. In practice only relevant for the short
+            // output of "identify".
             $stdout = (string) stream_get_contents($pipes[1]);
             $stderr = (string) stream_get_contents($pipes[2]);
             fclose($pipes[1]);
@@ -204,17 +204,17 @@ class Execute {
             while (true) {
                 $status = proc_get_status($process);
                 if (!$status['running']) {
-                    // Der Exit-Code muss hier abgegriffen werden, nach dem
-                    // Einsammeln des Prozesses liefert proc_close() ihn nicht
-                    // mehr zuverlässig.
+                    // The exit code must be taken here; after the process has
+                    // been collected, proc_close() no longer returns it
+                    // reliably.
                     $exitCode = (int) $status['exitcode'];
                     break;
                 }
                 if (microtime(true) >= $deadline) {
                     if (!$terminated) {
-                        proc_terminate($process);          // POSIX: SIGTERM, Windows: hart
+                        proc_terminate($process);          // POSIX: SIGTERM, Windows: hard
                         $terminated = true;
-                        $deadline   = microtime(true) + 5; // Nachfrist zum Aufräumen
+                        $deadline   = microtime(true) + 5; // grace period for cleanup
                         continue;
                     }
                     proc_terminate($process, 9);           // SIGKILL
@@ -228,8 +228,8 @@ class Execute {
         $closeCode = proc_close($process);
         if ($exitCode === null) $exitCode = $closeCode;
 
-        // PHP austricksen: Zeiger ans Ende setzen, damit die intern gecachte Dateigröße
-        // synchronisiert wird, danach mit rewind() zwingend wieder an den Anfang.
+        // Trick PHP: move the pointer to the end so that the internally cached file size
+        // is synchronized, then rewind() back to the start, which is mandatory.
         fseek($outFile, 0, SEEK_END);
         rewind($outFile);
         $stdout = (string) stream_get_contents($outFile, self::MAX_STDOUT);
@@ -238,7 +238,7 @@ class Execute {
         rewind($errFile);
         $stderr = (string) stream_get_contents($errFile, self::MAX_STDERR);
 
-        fclose($outFile); // tmpfile() löscht sich beim Schließen selbst
+        fclose($outFile); // tmpfile() deletes itself when closed
         fclose($errFile);
 
         $stderr = $this->toUtf8($stderr);
@@ -246,34 +246,34 @@ class Execute {
         return $exitCode;
     }
 
-    // ========== Hintergrundprozesse ==========
+    // ========== Background processes ==========
 
     /**
-     * Startet ein Kommando als eigenständigen Hintergrundprozess und liefert dessen PID.
+     * Starts a command as an independent background process and returns its PID.
      *
-     * Der Prozess ist vom PHP-Prozess abgekoppelt: er läuft weiter, wenn das Skript endet,
-     * hält keine Handles des Webservers offen (stdin/stdout/stderr werden umgeleitet) und
-     * hinterlässt keinen Zombie, weil er nach dem sofortigen Ende der Zwischenschale von
-     * init/PID 1 übernommen wird.
+     * The process is detached from the PHP process: it keeps running when the script ends,
+     * holds no handles of the web server open (stdin/stdout/stderr are redirected) and
+     * leaves no zombie, because it is taken over by init/PID 1 after the intermediate shell
+     * ends immediately.
      *
-     * Bewusst NICHT über proc_open() ohne Shell: der Ressourcen-Destruktor von proc_open()
-     * wartet am Skriptende auf das Kind, der Prozess wäre also gar nicht im Hintergrund.
+     * Deliberately NOT via proc_open() without a shell: the resource destructor of proc_open()
+     * waits for the child at the end of the script, so the process would not be in the background at all.
      *
-     * POSIX  : sh -c 'nohup KOMMANDO </dev/null >out 2>err & echo $!'
-     *          nohup ersetzt sich per exec() selbst durch das Zielprogramm, deshalb ist
-     *          die von $! gemeldete PID auch die PID des Zielprogramms.
-     * Windows: powershell Start-Process -PassThru, dessen .Id die PID ist.
-     *          (kein COM/WMI nötig, PowerShell ist ab Windows 7 fester Bestandteil)
+     * POSIX  : sh -c 'nohup COMMAND </dev/null >out 2>err & echo $!'
+     *          nohup replaces itself via exec() with the target program, so the
+     *          PID reported by $! is also the PID of the target program.
+     * Windows: powershell Start-Process -PassThru, whose .Id is the PID.
+     *          (no COM/WMI needed, PowerShell has been a fixed part of Windows since Windows 7)
      *
-     * Achtung: Ein Fehlschlag des Zielprogramms selbst (z. B. "not found") ist an dieser
-     * Stelle unter POSIX nicht erkennbar, da die Shell die PID sofort meldet. Dafür ist
-     * $stderrFile gedacht.
+     * Note: a failure of the target program itself (e.g. "not found") is not detectable
+     * here under POSIX, because the shell reports the PID immediately. That is what
+     * $stderrFile is for.
      *
-     * @param array       $command    Kommando inklusive aller Argumente
-     * @param string|null $stdoutFile Datei für die Ausgabe, null = verwerfen
-     * @param string|null $stderrFile Datei für die Fehlerausgabe, null = verwerfen
-     * @param string|null $error      Grund eines Fehlschlags
-     * @return int                    PID des Prozesses oder EXEC_FAILED
+     * @param array       $command    command including all arguments
+     * @param string|null $stdoutFile file for the output, null = discard
+     * @param string|null $stderrFile file for the error output, null = discard
+     * @param string|null $error      reason for a failure
+     * @return int                    PID of the process or EXEC_FAILED
      */
     public function executeBackground(array $command, ?string $stdoutFile = null, ?string $stderrFile = null, ?string &$error = null): int
     {
@@ -284,8 +284,8 @@ class Execute {
             $error = 'empty command';
             return self::EXEC_FAILED;
         }
-        // Beide Ströme in dieselbe Datei umzuleiten lehnt Start-Process ab,
-        // deshalb der Einheitlichkeit halber auf beiden Plattformen verboten.
+        // Start-Process rejects redirecting both streams into the same file,
+        // so for consistency this is forbidden on both platforms.
         if ($stdoutFile !== null && $stdoutFile === $stderrFile) {
             $error = 'stdout and stderr must not point to the same file';
             return self::EXEC_FAILED;
@@ -297,11 +297,11 @@ class Execute {
     }
 
     /**
-     * Ermittelt den Zustand eines einzelnen Prozesses.
+     * Determines the state of a single process.
      *
      * @param  int         $pid
-     * @param  string|null $token Token aus dem Start, null = ohne Abgleich
-     * @return int         STATE_FINISHED, STATE_RUNNING, STATE_ZOMBIE oder STATE_UNKNOWN
+     * @param  string|null $token token from the start, null = without matching
+     * @return int         STATE_FINISHED, STATE_RUNNING, STATE_ZOMBIE or STATE_UNKNOWN
      */
     public function processState(int $pid, ?string $token = null): int
     {
@@ -314,19 +314,19 @@ class Execute {
     }
 
     /**
-     * Ermittelt den Zustand mehrerer Prozesse mit einem einzigen Aufruf von
-     * ps bzw. tasklist/PowerShell. Für Übersichtslisten deutlich sparsamer als processState().
+     * Determines the state of several processes with a single call of
+     * ps or tasklist/PowerShell. Much more economical than processState() for overview lists.
      *
-     * Ist zu einer PID ein Token angegeben, wird zusätzlich die Kommandozeile des Prozesses
-     * gelesen. Kommt das Token darin nicht vor, wurde die PID inzwischen neu vergeben und der
-     * eigene Prozess gilt als beendet (STATE_FINISHED). Genau das ist auf Shared Hosting mit
-     * hoher PID-Fluktuation der Fall, den man sonst als "läuft noch" fehlinterpretiert.
+     * If a token is given for a PID, the command line of the process is additionally
+     * read. If the token does not appear in it, the PID has meanwhile been reassigned and the
+     * own process counts as ended (STATE_FINISHED). This is exactly the case on shared hosting with
+     * high PID turnover, which would otherwise be misread as "still running".
      *
-     * Ohne Token bleibt es beim reinen Existenztest, dann gilt weiterhin: "läuft" heißt nur
-     * "es gibt einen Prozess mit dieser PID".
+     * Without a token it remains a pure existence test; then "running" still only means
+     * "there is a process with this PID".
      *
-     * @param  array $pids   Liste von PIDs
-     * @param  array $tokens PID => Token, nur für die hier genannten PIDs wird abgeglichen
+     * @param  array $pids   list of PIDs
+     * @param  array $tokens PID => token; only the PIDs named here are matched
      * @return array         PID => STATE_*
      */
     public function processStates(array $pids, array $tokens = []): array
@@ -340,7 +340,7 @@ class Execute {
         );
         if ($pids === []) return [];
 
-        // Tokens normalisieren: nur PIDs aus der Liste, keine leeren Tokens
+        // Normalize tokens: only PIDs from the list, no empty tokens
         $check = [];
         foreach ($tokens as $pid => $token) {
             $pid   = (int) $pid;
@@ -348,12 +348,12 @@ class Execute {
             if ($pid > 0 && $token !== '') $check[$pid] = $token;
         }
 
-        // Grundannahme: nicht gefunden = beendet
+        // Default assumption: not found = ended
         $states = array_fill_keys($pids, self::STATE_FINISHED);
 
         if ($this->isWindows()) {
             if ($check !== []) {
-                // tasklist kennt die Kommandozeile nicht, dafür ist WMI/CIM nötig.
+                // tasklist does not know the command line; WMI/CIM is needed for that.
                 $commands = $this->commandLinesWindows($pids);
                 if ($commands !== null) {
                     foreach ($commands as $pid => $commandLine) {
@@ -364,12 +364,12 @@ class Execute {
                     }
                     return $states;
                 }
-                // PowerShell nicht verfügbar: lieber ohne Token-Abgleich weiter über
-                // tasklist als gar keine Aussage.
+                // PowerShell not available: better to continue without token matching
+                // via tasklist than to give no statement at all.
             }
 
-            // Eine einzige Abfrage der gesamten Prozessliste ist billiger als ein
-            // tasklist-Aufruf mit /FI je PID. Zombies kennt Windows nicht.
+            // A single query of the entire process list is cheaper than a
+            // tasklist call with /FI per PID. Windows does not know zombies.
             $code = $this->execute(['tasklist', '/NH', '/FO', 'CSV'], $stdout, $stderr, 20);
             if ($code !== 0) return array_fill_keys($pids, self::STATE_UNKNOWN);
 
@@ -383,12 +383,12 @@ class Execute {
             return $states;
         }
 
-        // "-o feld=" getrennt angeben: BSD/macOS würde bei "-o pid=,state="
-        // alles nach dem ersten "=" als Spaltenüberschrift interpretieren.
+        // Specify "-o field=" separately: BSD/macOS would interpret
+        // everything after the first "=" as a column heading with "-o pid=,state=".
         $arguments = ['ps'];
         if ($check !== []) {
-            // -ww hebt die Zeilenbreite auf. Ohne tty kürzt ps sonst auf 80 Zeichen,
-            // ein am Ende stehendes Token wäre dann abgeschnitten.
+            // -ww lifts the line width limit. Without a tty ps would otherwise cut at 80 characters,
+            // a token at the end would then be truncated.
             $arguments[] = '-ww';
         }
         array_push($arguments, '-o', 'pid=', '-o', 'state=');
@@ -397,9 +397,9 @@ class Execute {
 
         $code = $this->execute($arguments, $stdout, $stderr, 20);
 
-        // Exit-Code 1 heißt bei ps lediglich "keine der PIDs gefunden".
-        // Alles andere (fehlendes ps, Timeout, unbekannte Option bei abgespeckten
-        // ps-Varianten) darf nicht als "alle beendet" durchgehen.
+        // Exit code 1 from ps merely means "none of the PIDs found".
+        // Anything else (missing ps, timeout, unknown option in stripped-down
+        // ps variants) must not pass as "all ended".
         if ($code !== 0 && $code !== 1) {
             return $this->processStatesPosixFallback($pids);
         }
@@ -410,8 +410,8 @@ class Execute {
             if (!isset($states[$pid])) continue;
 
             if ($match[2][0] === 'Z') {
-                // Bei einem Zombie zeigt ps nur noch "<defunct>", das Token ist
-                // dort naturgemäß verschwunden - deshalb kein Abgleich.
+                // For a zombie ps only shows "<defunct>"; the token has naturally
+                // disappeared there - hence no matching.
                 $states[$pid] = self::STATE_ZOMBIE;
                 continue;
             }
@@ -425,30 +425,30 @@ class Execute {
     }
 
     /**
-     * Beendet einen Prozess.
+     * Ends a process.
      *
-     * Ist ein Token angegeben, wird vorher geprüft, ob die PID überhaupt noch zum eigenen
-     * Prozess gehört. Ohne diese Prüfung könnte nach einer PID-Wiederverwendung ein
-     * fremder Prozess abgeschossen werden.
+     * If a token is given, it is first checked whether the PID still belongs to the own
+     * process at all. Without this check a foreign process could be shot down after a
+     * PID reuse.
      *
      * @param int         $pid
-     * @param bool        $force true = SIGKILL bzw. taskkill /F, false = SIGTERM
-     * @param string|null $token Token aus dem Start, null = ohne Abgleich
+     * @param bool        $force true = SIGKILL or taskkill /F, false = SIGTERM
+     * @param string|null $token token from the start, null = without matching
      * @return bool
      */
     public function terminateProcess(int $pid, bool $force = false, ?string $token = null): bool
     {
-        if ($pid <= 1) return false; // PID 1 und ungültige Werte niemals anfassen
+        if ($pid <= 1) return false; // never touch PID 1 and invalid values
 
         if ($token !== null && $token !== '') {
             $state = $this->processState($pid, $token);
-            // Nur bei erwiesenem Fremdbesitz abbrechen. STATE_UNKNOWN bedeutet
-            // "nicht ermittelbar" und darf das Beenden nicht verhindern.
+            // Only abort when foreign ownership is proven. STATE_UNKNOWN means
+            // "cannot be determined" and must not prevent the termination.
             if ($state === self::STATE_FINISHED) return false;
         }
 
         if ($this->isWindows()) {
-            $command = ['taskkill', '/PID', (string) $pid, '/T']; // /T = inklusive Kindprozesse
+            $command = ['taskkill', '/PID', (string) $pid, '/T']; // /T = including child processes
             if ($force) $command[] = '/F';
             return $this->execute($command, $stdout, $stderr, 20) === 0;
         }
@@ -461,31 +461,31 @@ class Execute {
     }
 
     /**
-     * Beendet einen Prozess möglichst sauber: erst SIGTERM, damit das Programm
-     * aufräumen kann, nach Ablauf der Nachfrist SIGKILL.
-     * Unter Windows ist bereits der erste Versuch hart, sobald es sich nicht um
-     * eine Anwendung mit Fenster handelt.
+     * Ends a process as cleanly as possible: first SIGTERM so that the program
+     * can clean up, SIGKILL after the grace period has elapsed.
+     * Under Windows the first attempt is already hard, unless it is an
+     * application with a window.
      *
      * @param int         $pid
-     * @param int         $graceSeconds Nachfrist in Sekunden
-     * @param string|null $token        Token aus dem Start, null = ohne Abgleich
-     * @return bool true, wenn der Prozess anschließend nicht mehr läuft
+     * @param int         $graceSeconds grace period in seconds
+     * @param string|null $token        token from the start, null = without matching
+     * @return bool true if the process is no longer running afterwards
      */
     public function stopProcess(int $pid, int $graceSeconds = 3, ?string $token = null): bool
     {
         if ($pid <= 1) return false;
 
-        // Gehört die PID gar nicht mehr zum eigenen Prozess, ist dieser beendet
-        // und es gibt nichts abzuschießen.
+        // If the PID no longer belongs to the own process at all, that process has ended
+        // and there is nothing to shoot down.
         if ($token !== null && $token !== '' && $this->processState($pid, $token) === self::STATE_FINISHED) {
             return true;
         }
 
         $this->terminateProcess($pid, false, $token);
 
-        // Ab hier ohne Token weiterprüfen: die Zugehörigkeit ist oben einmal
-        // geklärt, und jede weitere Abfrage mit Token kostet unter Windows
-        // einen kompletten PowerShell-Start.
+        // From here on check without token: ownership was clarified once above,
+        // and every further query with a token costs a complete
+        // PowerShell start under Windows.
         $deadline = microtime(true) + max(0, $graceSeconds);
         while (microtime(true) < $deadline) {
             usleep(100000); // 100 ms
@@ -500,7 +500,7 @@ class Execute {
     }
 
     /**
-     * Läuft PHP unter Windows?
+     * Is PHP running under Windows?
      */
     public function isWindows(): bool
     {
@@ -508,11 +508,11 @@ class Execute {
     }
 
     /**
-     * Prüft, ob das Token in der Kommandozeile steht.
+     * Checks whether the token appears in the command line.
      *
-     * Eine leere Kommandozeile gilt als Treffer: unter Windows liefert WMI sie bei
-     * fehlenden Rechten leer, unter POSIX kann sie bei Kernel-Threads leer sein.
-     * "Nicht lesbar" darf nicht zu "Prozess beendet" werden.
+     * An empty command line counts as a match: under Windows WMI returns it empty
+     * when rights are missing, under POSIX it can be empty for kernel threads.
+     * "Not readable" must not become "process ended".
      */
     private function matchToken(string $commandLine, string $token): bool
     {
@@ -525,17 +525,17 @@ class Execute {
     }
 
     /**
-     * Liest die Kommandozeilen mehrerer Prozesse unter Windows über CIM/WMI aus.
+     * Reads the command lines of several processes under Windows via CIM/WMI.
      *
-     * tasklist gibt sie nicht her, deshalb PowerShell. Get-CimInstance ist der aktuelle
-     * Weg, Get-WmiObject die Rückfalloption für PowerShell 2.0 (Windows 7).
-     * Bewusst kein wmic: das Werkzeug ist ab Windows 11 24H2 / Server 2025 entfernt.
+     * tasklist does not provide them, hence PowerShell. Get-CimInstance is the current
+     * way, Get-WmiObject the fallback option for PowerShell 2.0 (Windows 7).
+     * Deliberately not wmic: the tool has been removed from Windows 11 24H2 / Server 2025.
      *
-     * Die Ausgabe kommt ohne doppelte Anführungszeichen aus ([char]9 = Tabulator),
-     * damit beim Durchreichen durch PHP und PowerShell nichts umgedeutet wird.
+     * The output comes without double quotation marks ([char]9 = tab),
+     * so that nothing is reinterpreted when passed through PHP and PowerShell.
      *
      * @param  array      $pids
-     * @return array|null PID => Kommandozeile, null wenn nicht ermittelbar
+     * @return array|null PID => command line, null if not determinable
      */
     private function commandLinesWindows(array $pids): ?array
     {
@@ -554,7 +554,7 @@ class Execute {
                 30
             );
 
-            if ($code === self::EXEC_FAILED) continue; // Shell nicht vorhanden
+            if ($code === self::EXEC_FAILED) continue; // shell not present
             if ($code !== 0) return null;
 
             $lines = [];
@@ -572,12 +572,12 @@ class Execute {
     }
 
     /**
-     * Startvariante für Linux, BSD und macOS.
+     * Start variant for Linux, BSD and macOS.
      */
     private function startPosix(array $command, ?string $stdoutFile, ?string $stderrFile, ?string &$error): int
     {
-        // Enthält das Programm einen Pfad, lässt sich vorab prüfen, ob es überhaupt
-        // startbar ist. Ohne Pfad übernimmt das die PATH-Suche der Shell.
+        // If the program contains a path, it can be checked beforehand whether it can
+        // be started at all. Without a path, the shell's PATH search takes over.
         if (str_contains($command[0], '/') && !is_executable($command[0])) {
             $error = 'not executable: ' . $command[0];
             return self::EXEC_FAILED;
@@ -610,8 +610,8 @@ class Execute {
         }
 
         fclose($pipes[0]);
-        // Die Zwischenschale beendet sich sofort nach dem "echo", die Pipes
-        // bleiben also klein und blockieren nicht.
+        // The intermediate shell ends immediately after the "echo", so the pipes
+        // stay small and do not block.
         $stdout = (string) stream_get_contents($pipes[1]);
         $stderr = (string) stream_get_contents($pipes[2]);
         fclose($pipes[1]);
@@ -629,21 +629,21 @@ class Execute {
     }
 
     /**
-     * Startvariante für Windows über PowerShell.
-     * Start-Process -PassThru liefert das Prozessobjekt, dessen Id ausgegeben wird.
+     * Start variant for Windows via PowerShell.
+     * Start-Process -PassThru returns the process object, whose id is output.
      */
     private function startWindows(array $command, ?string $stdoutFile, ?string $stderrFile, ?string &$error): int
     {
         $file      = array_shift($command);
         $arguments = implode(' ', array_map([$this, 'quoteWindowsArgument'], $command));
 
-        // Ausschließlich einfache Anführungszeichen verwenden, damit die
-        // Kommandozeile weder von PHP noch von PowerShell umgedeutet wird.
+        // Use only single quotation marks, so that the
+        // command line is reinterpreted neither by PHP nor by PowerShell.
         $script  = '$ErrorActionPreference = ' . $this->quotePowerShell('Stop') . '; ';
         $script .= '$p = Start-Process -FilePath ' . $this->quotePowerShell($file);
         if ($arguments !== '') {
-            // Als einzelne Zeichenkette übergeben, damit PowerShell die bereits
-            // korrekt gequoteten Argumente unverändert durchreicht.
+            // Passed as a single string, so that PowerShell passes the
+            // already correctly quoted arguments through unchanged.
             $script .= ' -ArgumentList ' . $this->quotePowerShell($arguments);
         }
         $script .= ' -WindowStyle Hidden -PassThru';
@@ -651,7 +651,7 @@ class Execute {
         if ($stderrFile !== null) $script .= ' -RedirectStandardError '  . $this->quotePowerShell($stderrFile);
         $script .= '; $p.Id';
 
-        // pwsh als Rückfalloption für Installationen ohne Windows PowerShell
+        // pwsh as fallback for installations without Windows PowerShell
         foreach (['powershell.exe', 'pwsh.exe'] as $shell) {
             $code = $this->execute(
                 [$shell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $script],
@@ -660,7 +660,7 @@ class Execute {
                 30
             );
 
-            if ($code === self::EXEC_FAILED) continue; // Shell nicht vorhanden
+            if ($code === self::EXEC_FAILED) continue; // shell not present
 
             $pid = (int) trim($stdout);
             if ($code === 0 && $pid > 0) return $pid;
@@ -675,8 +675,8 @@ class Execute {
     }
 
     /**
-     * Maskiert einen Wert als PowerShell-Zeichenkette in einfachen Anführungszeichen.
-     * Dort wird nichts interpretiert, lediglich ' muss verdoppelt werden.
+     * Escapes a value as a PowerShell string in single quotation marks.
+     * Nothing is interpreted there; only ' has to be doubled.
      */
     private function quotePowerShell(string $value): string
     {
@@ -684,9 +684,9 @@ class Execute {
     }
 
     /**
-     * Maskiert ein Argument nach den Regeln von CommandLineToArgvW:
-     * Backslashes vor einem Anführungszeichen werden verdoppelt, das
-     * Anführungszeichen selbst wird mit einem Backslash geschützt.
+     * Escapes an argument according to the rules of CommandLineToArgvW:
+     * backslashes before a quotation mark are doubled, the
+     * quotation mark itself is protected with a backslash.
      */
     private function quoteWindowsArgument(string $argument): string
     {
@@ -714,16 +714,16 @@ class Execute {
             $backslashes = 0;
         }
 
-        // Am Ende stehende Backslashes verdoppeln, sonst würden sie das
-        // abschließende Anführungszeichen entwerten.
+        // Double backslashes at the end, otherwise they would
+        // invalidate the closing quotation mark.
         return '"' . $escaped . str_repeat('\\', $backslashes * 2) . '"';
     }
 
     /**
-     * Notlösung, wenn ps nicht aufrufbar ist (z. B. minimaler Container).
-     * posix_kill() mit Signal 0 stellt lediglich die Existenz fest, ein
-     * Zombie ist damit nicht von einem laufenden Prozess zu unterscheiden.
-     * Ein Token-Abgleich ist hier ebenfalls nicht möglich.
+     * Fallback when ps cannot be called (e.g. a minimal container).
+     * posix_kill() with signal 0 merely establishes existence; a
+     * zombie cannot be told apart from a running process that way.
+     * A token match is not possible here either.
      */
     private function processStatesPosixFallback(array $pids): array
     {
@@ -737,7 +737,7 @@ class Execute {
                 $states[$pid] = self::STATE_RUNNING;
                 continue;
             }
-            // EPERM (1) = Prozess existiert, gehört aber einem anderen Benutzer
+            // EPERM (1) = process exists, but belongs to another user
             $states[$pid] = (function_exists('posix_get_last_error') && posix_get_last_error() === 1)
                 ? self::STATE_RUNNING
                 : self::STATE_FINISHED;
@@ -747,9 +747,9 @@ class Execute {
     }
 
     /**
-     * Das Commandline-Tool schreibt in der Kodierung des Systems. Unter Linux und macOS
-     * ist das praktisch immer UTF-8, unter Windows dagegen die aktive Codepage.
-     * Damit die Meldung im Backend lesbar bleibt, wird notfalls konvertiert.
+     * The command-line tool writes in the system's encoding. Under Linux and macOS
+     * that is practically always UTF-8, under Windows however the active code page.
+     * So that the message stays readable in the backend, it is converted if necessary.
      */
     private function toUtf8(string $text): string
     {

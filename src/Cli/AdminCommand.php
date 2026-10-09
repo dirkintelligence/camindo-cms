@@ -2,14 +2,14 @@
 /**
  * admin password NAME [--pass-file=…] | sign
  *
- *     password   Backend-Passwort eines Admins setzen - für den ersten Zugang nach
- *                `install --fixtures`, ein vergessenes Superuser-Passwort oder nach
- *                einem Wechsel des Hash-Verfahrens. Das Passwort kommt aus
- *                --pass-file, CAMINDO_ADMIN_PASS oder (interaktiv) verdeckt von STDIN;
- *                als Argument wäre es in der Shell-History.
- *     sign       alle Signaturen neu schreiben (Integrity::signAll()) - nach einem
- *                Wechsel von .camindo.key oder für Entwicklungsdaten, die mit einem
- *                anderen Schlüssel signiert wurden. Löscht alle Sessions.
+ *     password   set the backend password of an administrator - for the first access after
+ *                `install --fixtures`, a forgotten superuser password or after
+ *                a change of the hash method. The password comes from
+ *                --pass-file, CAMINDO_ADMIN_PASS or (interactively) hidden from STDIN;
+ *                as an argument it would be in the shell history.
+ *     sign       rewrite all signatures (Integrity::signAll()) - after a
+ *                change of .camindo.key or for development data signed with a
+ *                different key. Deletes all sessions.
  */
 namespace Camindo\Core\Cli;
 
@@ -37,7 +37,7 @@ class AdminCommand extends Command {
                 $this->err("admin '$name' not found");
                 return Cli::ERROR;
             }
-            // Länge und Richtlinie (security.password_policy) prüft save()
+            // Length and policy (security.password_policy) are checked by save()
             $password = $this->password($options);
             $update = ['admin_id' => (int)$data['admin_id'], 'password' => $password];
             $ok = $admin->save(['password'], $update);

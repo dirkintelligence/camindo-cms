@@ -1,55 +1,55 @@
 <?php
 /**
- * Stapelverarbeitung - die Masken (Erweiterung für RecordBackend).
+ * Batch processing - the masks (extension for RecordBackend).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
  *     record_batch.php  -> batch()
  *
- * Erreichbar über das Menü (more_vert) rechts in der Datensatzliste; der Aufruf
- * öffnet einen eigenen Layer über der Liste (cApp.layers.add) und bringt die
- * Seitenparameter der Liste mit (cApp.layers.queryString(): area_id, filter, sort,
- * ...). Die Arbeit selbst macht RecordBatch - im Request oder als
- * Hintergrundprozess.
+ * Reachable via the menu (more_vert) on the right of the record list; the call
+ * opens its own layer above the list (cApp.layers.add) and carries the
+ * page parameters of the list (cApp.layers.queryString(): area_id, filter, sort,
+ * ...). The work itself is done by RecordBatch - in the request or as
+ * a background process.
  *
- * NAVIGATION: Zur Liste geht es aus dem Layer nur mit cApp.layers.close() zurück
- * (nach dem Ausführen mit anschließendem refresh); innerhalb der Schritte wird der
- * Layer mit cApp.layers.replace() ersetzt.
+ * NAVIGATION: back to the list from the layer only works with cApp.layers.close()
+ * (after running, followed by a refresh); within the steps the
+ * layer is replaced with cApp.layers.replace().
  *
- * DREI SCHRITTE, EIN SCRIPT (function)
+ * THREE STEPS, ONE SCRIPT (function)
  * --------------------
- *     ''        Umfang und Funktion wählen. Umfang: das letzte Suchergebnis (wenn
- *               die Liste gefiltert war, vorgewählt) oder alle Datensätze des
- *               Bereichs. Funktion: Bearbeiten, Verschieben, Löschen. (Den
- *               Volltext baut die Zeitplaner-Aufgabe "Volltext neu aufbauen" neu
- *               auf, siehe SchedulerRunner::runFulltext().)
- *     select    die Maske zur Funktion:
- *                 edit    die Eingabemaske des Bereichs mit einer Checkbox vor jedem
- *                         Feld - nur angehakte Felder werden geändert (in ALLEN
- *                         Datensätzen). Ohne Baumfelder und Felder mit unique-Flag
- *                         (RecordBatch::batchFields()). Verknüpfungen mit
- *                         Suchfenster und Upload-Felder hängen an einer VORLAGE -
- *                         einer Arbeitskopie ohne Original (Record::tmpInit()), die
- *                         das Hiddenfeld batch_tmp_id durch die Schritte trägt und
- *                         wie beim Anlegen eines Datensatzes von den Ajax-Aufrufen
- *                         der Lookup- und Upload-Felder bedient wird (siehe
- *                         RecordBatch, DIE VORLAGE). Abbrechen verwirft sie
- *                         (record_cancel.php, schließt den Layer).
- *                 move    Zielbereich wählen, dann die Feldzuordnung wie beim
- *                         Verschieben eines einzelnen Datensatzes (RecordBackendMove)
- *                 delete  Rückfrage
- *               Dazu die Optionen Simulation und Hintergrund (ab
- *               admin.mass_delete_threshold Datensätzen fest, siehe RecordBatch).
- *     run       ausführen. Im Request: Ergebnis mit den Fehlermeldungen je Datensatz
- *               untereinander. Im Hintergrund: Prozess starten, Layer schließen -
- *               das Ergebnis kommt als interne Nachricht (Posteingang).
+ *     ''        choose scope and function. Scope: the last search result (if
+ *               the list was filtered, preselected) or all records of the
+ *               area. Function: Edit, Move, Delete. (The full text is rebuilt
+ *               by the scheduler task "Rebuild full text", see
+ *               SchedulerRunner::runFulltext().)
+ *     select    the mask for the function:
+ *                 edit    the input mask of the area with a checkbox in front of each
+ *                         field - only checked fields are changed (in ALL
+ *                         records). Without tree fields and fields with the unique flag
+ *                         (RecordBatch::batchFields()). Links with
+ *                         search windows and upload fields depend on a TEMPLATE -
+ *                         a working copy without original (Record::tmpInit()), which
+ *                         carries the hidden field batch_tmp_id through the steps and
+ *                         is served by the Ajax calls of the lookup and upload fields
+ *                         as when creating a record (see
+ *                         RecordBatch, THE TEMPLATE). Cancelling discards it
+ *                         (record_cancel.php, closes the layer).
+ *                 move    choose the target area, then the field mapping as in
+ *                         moving a single record (RecordBackendMove)
+ *                 delete  confirmation
+ *               In addition the options simulation and background (from
+ *               admin.mass_delete_threshold records fixed, see RecordBatch).
+ *     run       execute. In the request: result with the error messages per record
+ *               one below the other. In the background: start the process, close the layer -
+ *               the result comes as an internal message (inbox).
  *
- * Die Filterparameter der Liste reisen als Query-String (Hiddenfeld 'query') durch
- * die Schritte, die Ids werden erst bei 'run' ermittelt (RecordBatch::collectIds()).
+ * The filter parameters of the list travel as a query string (hidden field 'query') through
+ * the steps; the ids are only determined at 'run' (RecordBatch::collectIds()).
  *
- * @see Camindo\Core\Modules\Record\RecordBatch        die Arbeit
- * @see Camindo\Core\Modules\Record\RecordBackendEdit  Auswahllisten der Eingabemaske
- * @see Camindo\Core\Modules\Record\RecordBackendMove  Vorbild der Feldzuordnung
+ * @see Camindo\Core\Modules\Record\RecordBatch        the work
+ * @see Camindo\Core\Modules\Record\RecordBackendEdit  selection lists of the input mask
+ * @see Camindo\Core\Modules\Record\RecordBackendMove  model for the field mapping
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -66,13 +66,13 @@ use Camindo\Core\Modules\Area\Area;
 
 class RecordBackendBatch extends RecordBackendEdit {
 
-    /** Filterparameter der Liste (RecordBatch::filterParams()) */
+    /** filter parameters of the list (RecordBatch::filterParams()) */
     private array $filterParams = [];
-    /** dieselben als Query-String für die Hiddenfelder */
+    /** the same as query string for the hidden fields */
     private string $query = '';
-    /** Query-String der Liste (Hiddenfeld, für einen Rücksprung in Schritt 1) */
+    /** query string of the list (hidden field, for a return to step 1) */
     private string $listQuery = '';
-    /** 'filter' (letztes Suchergebnis) | 'all' */
+    /** 'filter' (last search result) | 'all' */
     private string $scope = 'all';
     private string $mode = '';
     private int $count = 0;
@@ -98,11 +98,11 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * Stapelverarbeitung (backend/record_batch.php).
+     * Batch processing (backend/record_batch.php).
      *
-     * Request: area_id, filter/filterop/filtermode (aus der Liste) bzw. query (ab
-     *          Schritt 2), list_query, function ('' | select | run), scope, mode,
-     *          batch_fields[] (name bzw. name:language_id), batch_tmp_id, data[...] (Uploads in $_FILES),
+     * Request: area_id, filter/filterop/filtermode (from the list) or query (from
+     *          step 2), list_query, function ('' | select | run), scope, mode,
+     *          batch_fields[] (name or name:language_id), batch_tmp_id, data[...] (uploads in $_FILES),
      *          target_area_id, mapping[...], simulate, background
      */
     public function batch(): void
@@ -118,14 +118,14 @@ class RecordBackendBatch extends RecordBackendEdit {
             echo $this->backend->template('container_footer');
             return;
         }
-        // Zusatzrecht batch und Leserecht auf den Bereich
+        // additional right batch and read right on the area
         if (!$this->batchAllowed() || !$this->backend->access()->areaRead($this->areaId)) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
             return;
         }
 
-        // Filterparameter: beim ersten Aufruf aus der Liste, danach aus 'query'
+        // filter parameters: on the first call from the list, afterwards from 'query'
         if ($function === '') {
             $this->filterParams = $this->batch->filterParams($_REQUEST);
             $listKeys = array_intersect_key($_REQUEST, array_flip(['area_id', 'filter', 'filterop', 'filtermode', 'sort', 'order', 'skip']));
@@ -151,14 +151,14 @@ class RecordBackendBatch extends RecordBackendEdit {
         ]);
         echo $this->backend->headline('#record.headline_batch');
 
-        // Schritt 3: ausführen
+        // Step 3: execute
         if ($function === 'run' && $this->mode !== '') {
             $this->_batchRun();
             echo $this->backend->template('container_footer');
             return;
         }
 
-        // Schritt 2: Maske zur Funktion
+        // Step 2: mask for the function
         if ($function === 'select' && $this->mode !== '') {
             match ($this->mode) {
                 'edit'   => $this->_batchEditForm(),
@@ -169,16 +169,16 @@ class RecordBackendBatch extends RecordBackendEdit {
             return;
         }
 
-        // Schritt 1: Umfang und Funktion
+        // Step 1: scope and function
         $this->_batchScopeForm($hasFilter);
         echo $this->backend->template('container_footer');
     }
 
     // ====================
-    // Schritt 1
+    // Step 1
 
     /**
-     * Umfang (Suchergebnis / alle) und Funktion wählen.
+     * Choose scope (search result / all) and function.
      */
     private function _batchScopeForm(bool $hasFilter): void
     {
@@ -206,7 +206,7 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * Die Hiddenfelder, die jeden Schritt begleiten.
+     * The hidden fields that accompany each step.
      */
     private function _batchHidden(string $function): void
     {
@@ -221,11 +221,11 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     // ====================
-    // Schritt 2
+    // Step 2
 
     /**
-     * Optionen unter jeder Maske: Simulation, Hintergrund
-     * (Checkbox oder - ab dem Schwellwert - Hinweis mit festem Hiddenfeld).
+     * Options below each mask: simulation, background
+     * (checkbox or - from the threshold on - a notice with a fixed hidden field).
      */
     private function _batchOptions(): string
     {
@@ -245,19 +245,19 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * edit: die Eingabemaske des Bereichs mit einer Checkbox vor jedem Feld.
+     * edit: the input mask of the area with a checkbox in front of each field.
      *
-     * Kein Feld ist Pflicht (kein `required`) - was nicht angehakt ist, bleibt
-     * unberührt; geprüft werden beim Speichern nur die angehakten Felder, nach den
-     * Felddefinitionen des Bereichs. Mehrsprachige Felder stehen mit allen Sprachen
-     * untereinander, jede Sprache mit eigener Checkbox ("name:language_id") - nur die
-     * angehakten Sprachen werden geschrieben.
+     * No field is required (no `required`) - what is not checked remains
+     * untouched; on save only the checked fields are validated, according to the
+     * field definitions of the area. Multilingual fields are shown with all languages
+     * one below the other, each language with its own checkbox ("name:language_id") - only the
+     * checked languages are written.
      *
-     * Lookup- und Upload-Felder arbeiten wie in RecordBackendEdit::_editForm() an
-     * einer Arbeitskopie - hier der Vorlage (Klassenkommentar): $this->id zeigt auf
-     * sie, damit die Ajax-URLs und Vorschaublöcke der Felder sie ansprechen. Eine
-     * vorhandene Vorlage (batch_tmp_id, nach einem Fehler in Schritt 3) wird
-     * weiterverwendet, sonst entsteht eine neue.
+     * Lookup and upload fields work as in RecordBackendEdit::_editForm() on
+     * a working copy - here the template (class comment): $this->id points to
+     * it, so that the Ajax URLs and preview blocks of the fields address it. An
+     * existing template (batch_tmp_id, after an error in step 3) is
+     * reused, otherwise a new one is created.
      */
     private function _batchEditForm(): void
     {
@@ -266,7 +266,7 @@ class RecordBackendBatch extends RecordBackendEdit {
         $this->data = (array)($_REQUEST['data'] ?? []);
         $checked = array_map('strval', (array)($_REQUEST['batch_fields'] ?? []));
 
-        // Die Vorlage
+        // The template
         $templateId = (int)($_REQUEST['batch_tmp_id'] ?? 0);
         if (!$this->batch->templateValid($templateId, $this->areaId)) {
             $templateData = $this->record->tmpInit(['area_id' => $this->areaId]);
@@ -290,7 +290,7 @@ class RecordBackendBatch extends RecordBackendEdit {
             $fieldId = (int)$colDef['field_id'];
             $isLookup = in_array($type, $this->cms->relationTypes, true) && $displayType === 'lookup';
 
-            // Auswahlmöglichkeiten wie in der Eingabemaske
+            // choices as in the input mask
             $options = null;
             if (in_array($type, $this->cms->relationTypes, true) && !$isLookup) {
                 $relAreaIds = str_starts_with($type, 'relation')
@@ -303,10 +303,10 @@ class RecordBackendBatch extends RecordBackendEdit {
             elseif ($name === 'template_id') $options = $this->_templateOptions();
             elseif ($name === 'status_id')   $options = $this->_statusOptions(settableOnly: true);
 
-            // Kein required: nur angehakte Felder zählen
+            // no required: only checked fields count
             $colDef['flags'] = array_values(array_diff((array)($colDef['flags'] ?? []), ['not_empty']));
 
-            // Checkbox: Wert "name", bei mehrsprachigen Feldern je Sprache "name:language_id"
+            // checkbox: value "name", for multilingual fields per language "name:language_id"
             $checkbox = fn(?int $languageId) => $this->backend->template('record.batch_field_checkbox', [
                 '{name}' => htmlspecialchars($name),
                 '{value}' => htmlspecialchars($languageId === null ? $name : "{$name}:{$languageId}"),
@@ -326,7 +326,7 @@ class RecordBackendBatch extends RecordBackendEdit {
 
             if ($isMultilingual && $this->cms->isMultilingualField($colDef)) {
                 $values = (array)($this->data[$name] ?? []);
-                // Upload-Feld: je Sprache die eigene Datei der Vorlage
+                // upload field: per language, the template's own file
                 $files = ($type === 'file' && isset($templateData[$name]))
                     ? $this->record->fileEntries((array)$templateData[$name]) : [];
                 foreach ($languageIds as $languageId) {
@@ -366,8 +366,8 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * Datei-Eintrag der Vorlage für die Vorschau: entfernte (x-Button) und leere
-     * Einträge zeigen nichts - wie RecordBackendEdit::_editRestoreSecuredFiles().
+     * File entry of the template for the preview: removed (x button) and empty
+     * entries show nothing - as in RecordBackendEdit::_editRestoreSecuredFiles().
      */
     private function _batchTemplateFile(array $fileData): array
     {
@@ -376,14 +376,14 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * delete: Rückfrage.
+     * delete: confirmation.
      */
     private function _batchDeleteForm(): void
     {
         echo '<form action="Record/record_batch.php" method="post">';
         $this->backend->formInit('record.record_batch_delete_form', [
             '{text}' => $this->cms->snippet('record.alert_batch_delete', ['count' => $this->count]),
-            // was die Lösch-Policy des Bereichs mit jedem Datensatz tut (Modul Privacy)
+            // what the deletion policy of the area does with each record (module Privacy)
             '{policy}' => $GLOBALS['app']->get(\Camindo\Core\Modules\Privacy\PrivacyBackend::class)->areaHintHtml($this->areaId),
         ]);
         $this->_batchHidden('run');
@@ -397,8 +397,8 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * move: Zielbereich wählen (2a), dann die Feldzuordnung (2b) - wie
-     * RecordBackendMove, nur ohne Datensatz und mit den Optionen darunter.
+     * move: choose the target area (2a), then the field mapping (2b) - as in
+     * RecordBackendMove, just without a record and with the options below.
      */
     private function _batchMoveForm(): void
     {
@@ -410,7 +410,7 @@ class RecordBackendBatch extends RecordBackendEdit {
 
         echo '<form action="Record/record_batch.php" method="post">';
         if ($targetData && in_array((string)$targetData['type'], Area::CONTENT_TYPES, true)) {
-            // 2b: Feldzuordnung
+            // 2b: field mapping
             $schemaSource = $this->record->virtualSchema($this->areaId, false);
             $schemaTarget = $this->record->virtualSchema($targetAreaId, false);
             $sourceFields = $this->record->moveFields($schemaSource);
@@ -462,7 +462,7 @@ class RecordBackendBatch extends RecordBackendEdit {
             ]);
         }
         else {
-            // 2a: Zielbereich wählen - die Auswahl schickt das Formular ab
+            // 2a: choose the target area - the selection submits the form
             $this->backend->formInit('record.record_move_area_form');
             $this->backend->formField($this->record, [
                 'name' => 'target_area_id',
@@ -486,7 +486,7 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     /**
-     * Zielbereiche: alle Datensatz-Bereiche außer dem eigenen (siehe
+     * Target areas: all record areas except the own one (see
      * RecordBackendMove::_moveAreaForm()).
      */
     private function _batchTargetAreas(): array
@@ -516,10 +516,10 @@ class RecordBackendBatch extends RecordBackendEdit {
     }
 
     // ====================
-    // Schritt 3
+    // Step 3
 
     /**
-     * Auftrag zusammenstellen und ausführen bzw. in den Hintergrund geben.
+     * Assemble the job and execute it or hand it to the background.
      */
     private function _batchRun(): void
     {
@@ -535,15 +535,15 @@ class RecordBackendBatch extends RecordBackendEdit {
             $data = (array)($_REQUEST['data'] ?? []);
             $allowed = $this->batch->batchFields($this->record->virtualSchema($this->areaId, false));
             [$fields, $languages] = $this->batch->checkedFields((array)($_REQUEST['batch_fields'] ?? []), $allowed);
-            // Die Vorlage: Uploads und Passwörter des Requests an sie binden - VOR
-            // jeder Fehlermeldung, damit sie in der erneut angezeigten Maske stehen
+            // The template: bind the uploads and passwords of the request to it - BEFORE
+            // any error message, so that they remain in the mask shown again
             $templateId = (int)($_REQUEST['batch_tmp_id'] ?? 0);
             if (!$this->batch->templateValid($templateId, $this->areaId)) {
                 $this->cms->error($this->cms->snippet('record.error_batch_template'));
                 unset($_REQUEST['batch_tmp_id']);
             }
             elseif (!$this->record->secureInputs($templateId, $data)) {
-                // Datei abgelehnt - Meldung steht in Cms::errors
+                // file rejected - the message is in Cms::errors
             }
             elseif (empty($fields)) {
                 $this->cms->error($this->cms->snippet('record.error_batch_no_fields'));
@@ -562,17 +562,17 @@ class RecordBackendBatch extends RecordBackendEdit {
                 $this->_batchEditForm();
                 return;
             }
-            // Der Auftrag ist in sich geschlossen - die Vorlage hat ausgedient
+            // The job is self-contained - the template has served its purpose
             $this->record->cancel($templateId);
-            // Die Uploads des Requests stecken als 'importfile' im Auftrag. Ein
-            // stehengebliebener $_FILES-Eintrag hätte beim Speichern jedes Datensatzes
-            // Vorrang (_saveUploadField()) und würde - längst verschoben - übersprungen
+            // The uploads of the request are part of the job as 'importfile'. A leftover
+            // $_FILES entry would take precedence when saving each record
+            // (_saveUploadField()) and would be skipped - already moved long ago
             $_FILES = [];
         }
         elseif ($this->mode === 'move') {
             $job['target_area_id'] = (int)($_REQUEST['target_area_id'] ?? 0);
             $job['mapping'] = (array)($_REQUEST['mapping'] ?? []);
-            // Abbildung einmal vorab prüfen - der Fehler gilt sonst für jeden Datensatz
+            // check the mapping once in advance - otherwise the error would apply to every record
             $sourceFields = $this->record->moveFields($this->record->virtualSchema($this->areaId, false));
             $targetFields = $this->record->moveFields($this->record->virtualSchema($job['target_area_id'], false));
             if ($job['target_area_id'] < 1 || $this->record->moveMapping($sourceFields, $targetFields, $job['mapping']) === null) {
@@ -585,7 +585,7 @@ class RecordBackendBatch extends RecordBackendEdit {
 
         $job['ids'] = $this->batch->collectIds($this->areaId, $this->scope === 'filter' ? $this->filterParams : []);
 
-        // Hintergrund
+        // Background
         // --------------------
         if ($background) {
             $error = '';
@@ -601,11 +601,11 @@ class RecordBackendBatch extends RecordBackendEdit {
             return;
         }
 
-        // Im Request
+        // In the request
         // --------------------
         $result = $this->batch->run($job);
-        // die Liste darunter hat sich geändert: beim Wiederanzeigen neu laden
-        // (Schließen-Knopf, Breadcrumb-Navi, "Zurück" des Browsers)
+        // the list below has changed: reload when it is shown again
+        // (close button, breadcrumb navigation, browser "Back")
         $this->backend->script('cApp.layers.invalidate();');
         $items = '';
         $tplRow = $this->backend->template('record.batch_result_row');

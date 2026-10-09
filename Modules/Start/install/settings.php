@@ -8,8 +8,8 @@ return [
 'description' => '#start.module_description',
 'icon' => 'home',
 'listed' => false,
-// Zusätzliche Modulrechte:
-// keine
+ // Additional module rights:
+ // none
 'access' => [
 ]
 

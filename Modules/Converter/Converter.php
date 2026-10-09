@@ -1,56 +1,56 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `converter` - die konfigurierten Medienkonverter.
+ * Dataset child class for the table `converter` - the configured media converters.
  *
- * Ein Konverter ist eine benannte Einstellung EINES Prozessors: "ImageGd, 800x600, JPEG,
- * Qualität 85". Der Prozessor ist der Programmcode (Core/Processors/ImageGd, Magick,
- * FFmpegVideo, …), der Konverter die Konfiguration dazu. Zu einem Prozessor kann es
- * beliebig viele Konverter geben; ein Upload-Feld vom display_type 'thumbnail' verweist
- * über converter_ids auf die, die es benutzen soll.
- * converter_ids selbst speichert (sortierbar) in `rel_field_converter`
+ * A converter is a named setting of ONE processor: "ImageGd, 800x600, JPEG,
+ * Quality 85". The processor is the program code (Core/Processors/ImageGd, Magick,
+ * FFmpegVideo, …), the converter is the configuration for it. A processor can have
+ * any number of converters; an upload field with display_type 'thumbnail' refers
+ * via converter_ids to the ones it should use.
+ * converter_ids itself is stored (sortable) in `rel_field_converter`
  *
- * DAS SCHEMA STEHT ERST NACH DEM LADEN DES PROZESSORS FEST
+ * THE SCHEMA IS ONLY FIXED AFTER THE PROCESSOR HAS BEEN LOADED
  * --------------------
- * Das ist die Besonderheit dieser Klasse. hookDefinition() beschreibt nur die
- * gemeinsamen Spalten (processor, label, extension, Mime-Filter, details). Welche
- * Einstellungen darüber hinaus möglich sind, weiß nur der Prozessor - er liefert sie
- * über MediaProcessor::getSchema(), und loadProcessor() hängt sie an:
+ * This is the special feature of this class. hookDefinition() describes only the
+ * shared columns (processor, label, extension, MIME filter, details). Which
+ * settings are possible beyond that only the processor knows - it supplies them
+ * via MediaProcessor::getSchema(), and loadProcessor() attaches them:
  *
  *     $this->schema = $this->schema + $this->processor->getSchema();
  *
- * Diese zusätzlichen Felder landen in der JSON-Spalte `details`. Deshalb überschreiben
- * init() und save() die Basisklasse: sie müssen den Prozessor kennen, BEVOR das Schema
- * gebraucht wird - erst danach rufen sie parent::init() bzw. parent::save() auf. Beim
- * Laden erledigt das hookOnLoaded(), das den Prozessornamen aus der geladenen Zeile
- * nimmt.
+ * These additional fields end up in the JSON column `details`. That is why init()
+ * and save() override the base class: they must know the processor BEFORE the schema
+ * is needed - only afterwards do they call parent::init() or parent::save(). On
+ * loading, hookOnLoaded() takes the processor name from the loaded
+ * row.
  *
- * Aus demselben Grund reichen alle Hooks an den Prozessor weiter: der Prozessor bringt
- * eigene Feldnamen mit und muss sie selbst prüfen und aufbereiten.
+ * For the same reason, all hooks pass through to the processor: the processor brings its own
+ * field names and must check and prepare them itself.
  *
- * KENNUNG FÜR EXPORT UND IMPORT (settingsHash)
+ * KEY FOR EXPORT AND IMPORT (settingsHash)
  * --------------------
- * Ein Thumbnail-Feld verweist per converter_id auf seine Konverter. In einer
- * Exportdatei (RecordExport, <converters>) ist die Id nur innerhalb derselben Datenbank
- * etwas wert - in einer fremden Datenbank gehört sie einem beliebigen anderen
- * Konverter. Deshalb bekommt jeder exportierte Konverter einen Hash seiner
- * EINSTELLUNGEN (Prozessor, Erweiterung, Medientypen, details - nicht die
- * Bezeichnung): settingsHash(). Der Import (RecordImport::_importConverters())
- * gleicht aus derselben Datenbank nach Id ab, sonst nach diesem Hash
- * (findByHash()), legt den Konverter neu an oder lässt den Redakteur einen
- * vorhandenen wählen. Der Hash wird nicht gespeichert, sondern bei Bedarf aus
- * den Zeilen berechnet - die Tabelle ist klein.
+ * A thumbnail field refers to its converters via converter_id. In an
+ * export file (RecordExport, <converters>) the ID is only meaningful within the same
+ * database - in a foreign database it belongs to some other converter.
+ * Therefore each exported converter gets a hash of its
+ * SETTINGS (processor, extension, media types, details - not the
+ * label): settingsHash(). The import (RecordImport::_importConverters())
+ * matches by ID within the same database, otherwise by this hash
+ * (findByHash()), creates the converter anew or lets the editor choose an
+ * existing one. The hash is not stored; it is computed as needed from
+ * the rows - the table is small.
  *
- * WELCHE PROZESSOREN ES GIBT
+ * WHICH PROCESSORS EXIST
  * --------------------
- * Nicht aus der Tabelle `component`, sondern aus der von ComponentBackend generierten
- * Datei var/config/components/processors.php. hookDefinition() bindet sie per include
- * ein - die Zuweisungen darin füllen $this->processors. Die Datei muss also nach jeder
- * Änderung an den Prozessor-Verzeichnissen neu erzeugt werden.
+ * Not from the table `component`, but from the file generated by ComponentBackend
+ * file var/config/components/processors.php. hookDefinition() loads it via include -
+ * the assignments in it fill $this->processors. The file must therefore be regenerated after each
+ * change to the processor directories.
  *
- * @see Camindo\Core\MediaProcessor                       Basisklasse aller Prozessoren
- * @see Camindo\Core\ProcessorFactory                     erzeugt die Prozessor-Instanz
- * @see Camindo\Core\Modules\Converter\ConverterBackend  Backend-Oberfläche
- * @see Camindo\Core\Modules\Component\ComponentBackend  erzeugt processors.php
+ * @see Camindo\Core\MediaProcessor                       base class of all processors
+ * @see Camindo\Core\ProcessorFactory                     creates the processor instance
+ * @see Camindo\Core\Modules\Converter\ConverterBackend  Backend UI
+ * @see Camindo\Core\Modules\Component\ComponentBackend  generates processors.php
  * @see Camindo\Core\Dataset
  */
 namespace Camindo\Core\Modules\Converter;
@@ -60,32 +60,32 @@ use Camindo\Core\MediaProcessor;
 
 class Converter extends Dataset {
 
-    // Grobeinteilung der Prozessoren; der tatsächliche Wert steht in der settings.php
-    // des Prozessors und landet beim Speichern in der Spalte `type`.
+    // Coarse classification of the processors; the actual value is in the settings.php
+    // of the processor and is stored in the column `type` when saving.
     public array $processorTypes = ['image', 'audio', 'video', 'document', 'other'];
 
-    // Aktive Prozessoren - Cms::$processors aus var/config/components/processors.php
-    // (ComponentManager). Schlüssel ist der Verzeichnis-/Klassenname, Wert die
-    // settings.php dazu plus 'path', 'namespace', 'core'.
+    // Active processors - Cms::$processors from var/config/components/processors.php
+    // (ComponentManager). Key is the directory/class name, value the
+    // settings.php for it plus 'path', 'namespace', 'core'.
     public array $processors = [];
 
-    /** Schema ohne Prozessor-Felder (loadProcessor()) */
+    /** Schema without processor fields (loadProcessor()) */
     private ?array $baseSchema = null;
 
-    // Prozessor des gerade bearbeiteten Konverters. Muss gesetzt sein, bevor
-    // loadProcessor() das Schema erweitern kann.
+    // Processor of the converter currently being edited. Must be set before
+    // loadProcessor() can extend the schema.
     public string $processorName = '';
 
     /**
-     * Tabellenschema bereitstellen.
+     * Provide the table schema.
      *
-     * Nur der gemeinsame Teil - die prozessorspezifischen Felder kommen später in
-     * loadProcessor() dazu (siehe Klassenkommentar).
+     * Only the shared part - the processor-specific fields are added later in
+     * loadProcessor() (see class comment).
      *
-     * Am Ende werden die aktiven Prozessoren aus Cms übernommen (Laufzeitliste des
-     * ComponentManagers). Ist die Liste leer, scheitert jeder Zugriff an der Prüfung
-     * "nicht installiert" - `camindo.php refresh` bzw. der Refresh im Modul Component
-     * muss dann laufen.
+     * At the end, the active processors are taken over from Cms (runtime list of the
+     * ComponentManager). If the list is empty, every access fails the check
+     * "not installed" - `camindo.php refresh` or the refresh in the module Component
+     * must then run.
      */
     protected function hookDefinition(): void
     {
@@ -115,7 +115,7 @@ class Converter extends Dataset {
                 'label' => '#converter.field_label',
                 'max'   => 255,
                 'flags' => ['trim', 'not_empty'],
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
             ],
             'media_types_incl' => [
                 'type'  => 'text',
@@ -148,18 +148,18 @@ class Converter extends Dataset {
             ]
         ];
 
-        // Aktive Prozessoren, auch für Frontend-Funktionen
+        // Active processors, also for frontend functions
         $this->processors = $this->cms->processors;
     }
 
     /**
-     * Überschreibe init() der Dataset Parent-Klasse:
-     * Zuerst Prozessor laden dann eigentliche parent::init() aufrufen.
+     * Override init() of the Dataset parent class:
+     * First load the processor, then call the actual parent::init().
      *
-     * Ohne den Prozessor kennt das Schema seine Felder nicht, und init() würde für die
-     * prozessorspezifischen Einstellungen keine Defaults liefern. Deshalb ist
-     * $defaults['processor'] hier Pflicht - anders als bei allen anderen Datasets kann
-     * init() nicht ohne Argument aufgerufen werden.
+     * Without the processor, the schema does not know its fields, and init() would not supply
+     * defaults for the processor-specific settings. That is why $defaults['processor'] is required
+     * here - unlike all other datasets, init() cannot be called without an
+     * argument.
      */
     public function init(array $defaults = []): ?array
     {
@@ -177,46 +177,46 @@ class Converter extends Dataset {
         // load processor
         $this->loadProcessor();
 
-        // jetzt ist das Schema vollständig, lade die eigentliche init() function
+        // now the schema is complete, load the actual init() function
         return parent::init($defaults);
     }
 
     /**
-     * Vor dem Erstellen: Vorbelegungen des Prozessors übernehmen.
+     * Before creating: apply the processor's default values.
      *
-     * Zuerst darf der Prozessor seinen eigenen Hook ausführen, danach überschreiben
-     * seine deklarierten $defaults die Werte aus dem Schema - der Prozessor hat also
-     * das letzte Wort über die Vorbelegung seiner Felder.
+     * First the processor may run its own hook; then its declared $defaults overwrite
+     * the values from the schema - so the processor has
+     * the last word on the default values of its fields.
      */
     protected function hookOnCreate(array &$data): void
     {
-        // erweitere Hook durch den Prozessor
+        // extend hook by the processor
         $this->processor->hookOnCreate($data);
 
-        // Überschreibe Default-Werte der Konverter-Eingabefelder
+        // Override default values of the converter input fields
         foreach (($this->processor->defaults ?? []) as $key => $val) {
             $data[$key] = $val;
         }
     }
 
     /**
-     * INSERT / UPDATE abhängig von $data["{$tableName}_id"]
+     * INSERT / UPDATE depending on $data["{$tableName}_id"]
      *
-     * Überschreibt Dataset::save() aus demselben Grund wie init(): der Prozessor muss
-     * geladen sein, bevor die Validierung über das Schema läuft, sonst wären seine
-     * Felder unbekannt und würden verworfen.
+     * Overrides Dataset::save() for the same reason as init(): the processor must
+     * be loaded before validation runs against the schema, otherwise its
+     * fields would be unknown and discarded.
      *
-     * Der Prozessorname wird vorher gesäubert und gegen die Liste der installierten
-     * Prozessoren geprüft - aus ihm wird ein Klassenname, er darf also nicht ungeprüft
-     * aus dem Formular durchgereicht werden.
+     * The processor name is cleaned up beforehand and checked against the list of installed
+     * processors - a class name is built from it, so it must not be passed through unchecked
+     * from the form.
      *
-     * $stayTemporary wird entgegengenommen, aber nicht weitergegeben (parent::save()
-     * bekommt fest false): Konverter kennen keine Arbeitskopien.
+     * $stayTemporary is accepted but not passed on (parent::save() always gets false):
+     * converters know no working copies.
      *
-     * @param array $fields         Namen der Felder, die geschrieben werden
-     *                              (leeres Array: alle Felder sind gemeint)
-     * @param array $data           Inhalte
-     * @return int|null             Id des erstellten/geändeten Datensatzes
+     * @param array $fields         Names of the fields that are written
+     *                              (empty array: all fields are meant)
+     * @param array $data           Contents
+     * @return int|null             ID of the created/changed record
      */
     public function save(array $fields, array &$data, bool $stayTemporary = false): ?int
     {
@@ -234,44 +234,44 @@ class Converter extends Dataset {
         // load processor
         $this->loadProcessor();
 
-        // jetzt ist das Schema vollständig, lade die eigentliche save() function
+        // now the schema is complete, load the actual save() function
         return parent::save($fields, $data, false);
     }
 
     /**
-     * Vor dem Speichern.
+     * Before saving.
      *
-     * `type` ist kein Eingabefeld - es folgt immer dem Prozessor und wird deshalb hier
-     * aus dessen settings.php gesetzt. So bleibt die Spalte auch dann richtig, wenn ein
-     * Prozessor später einer anderen Art zugeordnet wird.
+     * `type` is not an input field - it always follows the processor and is therefore set here
+     * from its settings.php. This way the column stays correct even if a
+     * processor is later assigned to a different kind.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
-        // Ziehe 'type' aus der settings.php des verwendeten Prozessors
+        // Take 'type' from the settings.php of the processor used
         $data['type'] = $this->processors[$data['processor']]['type'] ?? 'other';
         
-        // erweitere Hook durch den Prozessor
+        // extend hook by the processor
         $this->processor->hookOnSave($fields, $data, $previousData);
     }
 
     /**
-     * Nach dem Speichern...
+     * After saving...
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
         // Dataset::hookOnSave() has been called before
         // -> processor is loaded
 
-        // erweitere Hook durch den Prozessor
+        // extend hook by the processor
         $this->processor->hookOnSaved($fields, $data, $previousData);
     }
 
     /**
-     * Nach dem Laden: Prozessor nachziehen.
+     * After loading: pick up the processor.
      *
-     * Hier - und nicht schon in load() - weil der Prozessorname erst mit der geladenen
-     * Zeile bekannt ist. Ab diesem Punkt ist das Schema vollständig, weshalb die
-     * folgenden Hooks (hookOnDelete) den Prozessor bereits vorfinden.
+     * Here - and not already in load() - because the processor name is only known with the loaded
+     * row. From this point on the schema is complete, so the following
+     * hooks (hookOnDelete) find the processor already loaded.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -280,31 +280,31 @@ class Converter extends Dataset {
         // load processor
         $this->loadProcessor();
 
-        // erweitere Hook durch den Prozessor
+        // extend hook by the processor
         $this->processor->hookOnLoaded($data);
     }
 
     /**
-     * Vor dem Löschen...
+     * Before deleting...
      */
     protected function hookOnDelete(array $data): void
     {
         // Dataset::load() has been called before
         // -> processor is loaded
 
-        // erweitere Hook durch den Prozessor
+        // extend hook by the processor
         $this->processor->hookOnDelete($data);
     }
 
     /**
-     * Medien-Prozessor bereitstellen und das Schema um seine Felder erweitern.
+     * Provide the media processor and extend the schema with its fields.
      *
-     * Der Zusammenbau per '+' (Array-Union) statt array_merge(): bei gleichen
-     * Schlüsseln gewinnt die linke Seite, die Grunddefinition des Konverters lässt sich
-     * von einem Prozessor also nicht überschreiben.
+     * The assembly via '+' (array union) instead of array_merge(): on identical
+     * keys the left side wins, so the basic definition of the converter cannot be
+     * overridden by a processor.
      *
-     * Die Prüfungen davor sind kein Luxus - aus $processorName wird in der Factory ein
-     * Klassenname.
+     * The checks before it are no luxury - a $processorName becomes a
+     * class name in the factory.
      */
     protected function loadProcessor(): void
     {
@@ -317,28 +317,28 @@ class Converter extends Dataset {
         
         $this->processor = $this->factory->create($this->processorName);
 
-        // Schema des Konverters um Eingabefelder des Prozessors erweitern - immer vom
-        // Grundschema aus: lädt dieselbe Instanz nacheinander verschiedene Konverter
-        // (API, Import), darf kein Feld des vorigen Prozessors stehen bleiben
+        // Extend the converter's schema with the processor's input fields - always from the base schema:
+        // if the same instance loads different converters one after another (API, import),
+        // no field of the previous processor may remain
         $this->baseSchema ??= $this->schema;
         $this->schema = $this->baseSchema + $this->processor->getSchema();
     }
 
     /**
-     * Hash der Einstellungen eines Konverters (siehe Klassenkommentar).
+     * Hash of a converter's settings (see class comment).
      *
-     * Bezeichnung und Id gehen nicht ein - zwei Konverter mit denselben Einstellungen
-     * sind für den Import derselbe. Die Eingaben werden vor dem Hashen vereinheitlicht,
-     * damit ein aus dem Formular (Strings) und ein aus der Datenbank (JSON mit Zahlen)
-     * stammender Konverter denselben Hash bekommen: Medientypen zeilenweise getrimmt,
-     * kleingeschrieben und sortiert; details rekursiv nach Schlüssel sortiert, Skalare
-     * als String.
+     * Label and ID are not included - two converters with the same settings
+     * are the same for the import. The inputs are normalized before hashing,
+     * so that a converter from the form (strings) and one from the database (JSON with numbers)
+     * get the same hash: media types trimmed per line,
+     * lowercased and sorted; details recursively sorted by key, scalars
+     * as strings.
      *
-     * @param array $row  Zeile der Tabelle `converter` in GESPEICHERTER Form (details als
-     *                    JSON-String oder Array) - nicht das Ergebnis von load():
-     *                    hookOnLoaded() der Prozessoren verändert Werte (ImageGd/Magick
-     *                    stellen bgcolor ein '#' voran), der Hash wäre ein anderer
-     * @return string     40 Hex-Zeichen (sha1)
+     * @param array $row  Row of the table `converter` in STORED form (details as
+     *                    JSON string or array) - not the result of load():
+     *                    hookOnLoaded() of the processors changes values (ImageGd/Magick
+     *                    set bgcolor with a leading '#'), the hash would be a different one
+     * @return string     40 hex characters (sha1)
      */
     public static function settingsHash(array $row): string
     {
@@ -367,9 +367,9 @@ class Converter extends Dataset {
     }
 
     /**
-     * Vorhandenen Konverter mit diesen Einstellungen suchen.
+     * Look up an existing converter with these settings.
      *
-     * @return int  converter_id, 0 wenn keiner passt
+     * @return int  converter_id, 0 if none matches
      */
     public function findByHash(string $hash): int
     {
@@ -385,8 +385,8 @@ class Converter extends Dataset {
     }
 
     /**
-     * Ist der Prozessor installiert? Für den Import: ein Konverter eines fehlenden
-     * Prozessors lässt sich nicht anlegen.
+     * Is the processor installed? For the import: a converter of a missing
+     * processor cannot be created.
      */
     public function isProcessorInstalled(string $name): bool
     {
@@ -395,17 +395,17 @@ class Converter extends Dataset {
     }
 
     /**
-     * Verzeichnis des Prozessors liefern ('path' aus der Laufzeitliste:
-     * Core/Processors/{Name} oder Processors/{Name}).
+     * Return the directory of the processor ('path' from the runtime list:
+     * Core/Processors/{Name} or Processors/{Name}).
      *
-     * @return string|null  absoluter Pfad
+     * @return string|null  absolute path
      */
     /**
-     * Prozessor-Instanz des geladenen Konverters.
+     * Processor instance of the loaded converter.
      *
-     * Für die eingebundenen Prozessor-Dateien (backend/form.php, backend/info.php):
-     * sie laufen im Gültigkeitsbereich von ConverterBackend und kommen an das
-     * geschützte Property der Dataset-Basisklasse sonst nicht heran.
+     * For the included processor files (backend/form.php, backend/info.php):
+     * they run in the scope of ConverterBackend and otherwise cannot reach
+     * the protected property of the Dataset base class.
      */
     public function getProcessor(): ?MediaProcessor {
         return $this->processor;
@@ -417,14 +417,14 @@ class Converter extends Dataset {
     }
 
     /**
-     * Prozessorname säubern.
+     * Clean up the processor name.
      *
-     * Der Name wird zu einem Verzeichnis- und Klassennamen; alles außerhalb von
-     * [a-zA-Z0-9_-] fliegt heraus, damit aus einer Formulareingabe kein Pfad werden
-     * kann. Der so gesäuberte Name wird zusätzlich gegen $processors geprüft.
+     * The name becomes a directory and class name; everything outside
+     * [a-zA-Z0-9_-] is removed, so that a form input cannot become a path.
+     * The name cleaned up this way is additionally checked against $processors.
      *
      * @param string $name  Usereingabe
-     * @return string       Name in erlaubten Zeichen
+     * @return string       name made of allowed characters
      */
     public function cleanProcessorName($name)
     {
@@ -434,9 +434,9 @@ class Converter extends Dataset {
     /**
      * Installierte Prozessoren einer Art liefern.
      *
-     * Für die Auswahllisten im Backend: beim Anlegen eines Konverters stehen nur die
-     * Prozessoren zur Wahl, die zur gewünschten Medienart passen. Ohne Angabe in der
-     * settings.php gilt 'other'.
+     * For the selection lists in the backend: when creating a converter, only the
+     * processors that match the desired media kind are offered. Without a specification
+     * settings.php defines 'other'.
      *
      * @param string $type  'image', 'audio', ...
      */

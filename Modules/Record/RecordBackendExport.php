@@ -1,45 +1,45 @@
 <?php
 /**
- * Export von Datensätzen - die Masken (Erweiterung für RecordBackend).
+ * Export of records - the masks (extension for RecordBackend).
  *
- * Einstiegspunkte (Scripts in backend/):
+ * Entry points (scripts in backend/):
  *
- *     record_export.php    -> export()    Maske, Ausführen, Ergebnis
- *     record_download.php  -> download()  Zip-Datei aus var/export ausliefern
+ *     record_export.php    -> export()    mask, run, result
+ *     record_download.php  -> download()  deliver the zip file from var/export
  *
- * Erreichbar über das Menü (more_vert) rechts in der Datensatzliste (global: in der
- * Ordnerliste); der Aufruf öffnet einen eigenen Layer über der Liste
- * (cApp.layers.add) und bringt die Seitenparameter der Liste mit
- * (cApp.layers.queryString(): area_id, filter, sort, ...). Die Arbeit macht
+ * Reachable via the menu (more_vert) on the right of the record list (global: in the
+ * folder list); the call opens its own layer above the list
+ * (cApp.layers.add) and carries the page parameters of the list
+ * (cApp.layers.queryString(): area_id, filter, sort, ...). The work is done by
  * RecordExport.
  *
- * NAVIGATION: Zur Liste geht es aus dem Layer nur mit cApp.layers.close() zurück;
- * der Reiterwechsel ersetzt den Layer mit cApp.layers.replace().
+ * NAVIGATION: back to the list from the layer only works with cApp.layers.close();
+ * switching tabs replaces the layer with cApp.layers.replace().
  *
- * DREI REITER, EIN SCRIPT (type)
+ * THREE TABS, ONE SCRIPT (type)
  * --------------------
- *     xml    Backup-Format, einzige Einstellung: Upload-Dateien mit exportieren
- *     csv    CSV-Einstellungen (Kopfzeile, Trenn-, Einfassungszeichen, Zeilenumbruch),
- *            Sprachen der Instanz, Felder mit aufklappbaren Unterfeldern
+ *     xml    backup format, only setting: export upload files as well
+ *     csv    CSV settings (header row, separator, enclosure character, line break),
+ *            languages of the instance, fields with expandable subfields
  *            (RecordExport::csvFields())
- *     docx   Übersetzung: Quell- und Zielsprache, alle Datensätze in einer Datei
- *            oder ein Datensatz je Datei, mehrsprachige Felder
+ *     docx   translation: source and target language, all records in one file
+ *            or one record per file, multilingual fields
  *
- * Über allen Reitern der Umfang: das letzte Suchergebnis (wenn die Liste gefiltert
- * war, vorgewählt) oder alle Datensätze des Bereichs - wie bei der
- * Stapelverarbeitung, die Filterparameter reisen als Query-String (Hiddenfeld
- * 'query') mit, die Ids ermittelt RecordBatch::collectIds() erst beim Ausführen.
+ * Above all tabs the scope: the last search result (if the list was filtered,
+ * preselected) or all records of the area - as with
+ * batch processing, the filter parameters travel along as a query string (hidden field
+ * 'query'); the ids are determined by RecordBatch::collectIds() only when running.
  *
- * Unter jeder Maske die Option Hintergrundprozess (ab
- * admin.export_background_threshold Datensätzen fest): der Download-Link kommt dann
- * als interne Nachricht. Sonst führt function = 'run' im Request aus und zeigt das
- * Ergebnis mit dem Download-Link (öffnet record_download.php in einem neuen
- * Fenster - eine Zip-Datei lässt sich nicht in den Layer laden) und dem Hinweis,
- * wie lange er gilt. Die Datei wird beim Download gelöscht, sonst nach Ablauf der
- * Verweildauer (RecordExport::cleanup()).
+ * Below each mask the option background process (from
+ * admin.export_background_threshold records fixed): the download link then comes
+ * as an internal message. Otherwise function = 'run' executes in the request and shows the
+ * result with the download link (opens record_download.php in a new
+ * window - a zip file cannot be loaded into the layer) and the note
+ * how long it is valid. The file is deleted on download, otherwise after the
+ * retention period has expired (RecordExport::cleanup()).
  *
- * @see Camindo\Core\Modules\Record\RecordExport        die Arbeit
- * @see Camindo\Core\Modules\Record\RecordBackendBatch  gleiches Muster für den Umfang
+ * @see Camindo\Core\Modules\Record\RecordExport        the work
+ * @see Camindo\Core\Modules\Record\RecordBackendBatch  same pattern for the scope
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -56,16 +56,16 @@ use Camindo\Core\Modules\Area\Area;
 
 class RecordBackendExport extends RecordBackend {
 
-    /** Filterparameter der Liste (RecordBatch::filterParams()) */
+    /** filter parameters of the list (RecordBatch::filterParams()) */
     private array $filterParams = [];
-    /** dieselben als Query-String für die Hiddenfelder */
+    /** the same as query string for the hidden fields */
     private string $query = '';
-    /** Query-String der Liste (Hiddenfeld, für den Reiterwechsel) */
+    /** query string of the list (hidden field, for switching tabs) */
     private string $listQuery = '';
-    /** 'filter' (letztes Suchergebnis) | 'all' */
+    /** 'filter' (last search result) | 'all' */
     private string $scope = 'all';
     private string $type = 'xml';
-    /** Formate, die die Gruppe exportieren darf (allowedTypes()) */
+    /** formats the group may export (allowedTypes()) */
     private array $allowedTypes = [];
     private int $count = 0;
     private bool $hasFilter = false;
@@ -94,8 +94,8 @@ class RecordBackendExport extends RecordBackend {
     /**
      * Export (backend/record_export.php).
      *
-     * Request: area_id, filter/filterop/filtermode (aus der Liste) bzw. query (beim
-     *          Ausführen), list_query, type (xml|csv|docx), function ('' | run),
+     * Request: area_id, filter/filterop/filtermode (from the list) or query (when
+     *          running), list_query, type (xml|csv|docx), function ('' | run),
      *          scope, files, data[csv][...], languages[], fields[], data[docx][from|to|split]
      */
     public function export(): void
@@ -105,7 +105,7 @@ class RecordBackendExport extends RecordBackend {
         $this->_resolveParams();
         $function = (string)($_REQUEST['function'] ?? '');
 
-        // Zusatzrechte: erlaubte Formate (XML nur Superuser)
+        // additional rights: allowed formats (XML superuser only)
         $allowedTypes = $this->allowedTypes('export');
         if (empty($allowedTypes)) {
             echo $this->backend->access()->deniedHtml();
@@ -113,7 +113,7 @@ class RecordBackendExport extends RecordBackend {
             return;
         }
 
-        // Global (Startseite des Moduls): nur XML, Auswahl der Bereiche
+        // Global (start page of the module): XML only, selection of areas
         if (!empty($_REQUEST['global']) && $this->areaId < 1 && $this->function === 'list') {
             if (!in_array('xml', $allowedTypes, true)) {
                 echo $this->backend->access()->deniedHtml();
@@ -131,15 +131,15 @@ class RecordBackendExport extends RecordBackend {
             echo $this->backend->template('container_footer');
             return;
         }
-        // Leserecht der Benutzergruppe auf den Bereich
+        // read right of the user group on the area
         if (!$this->backend->access()->areaRead($this->areaId)) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
             return;
         }
 
-        // Filterparameter: beim Aufruf aus der Liste bzw. Reiterwechsel aus dem
-        // Request, beim Ausführen aus 'query'
+        // filter parameters: on the call from the list or tab switch from the
+        // request, when running from 'query'
         if ($function === '') {
             $this->filterParams = $this->batch->filterParams($_REQUEST);
             $listKeys = array_intersect_key($_REQUEST, array_flip(['area_id', 'filter', 'filterop', 'filtermode', 'sort', 'order', 'skip']));
@@ -159,7 +159,7 @@ class RecordBackendExport extends RecordBackend {
         $this->scope = ($this->hasFilter && (string)($_REQUEST['scope'] ?? 'filter') === 'filter') ? 'filter' : 'all';
         $this->count = $this->batch->count($this->areaId, $this->scope === 'filter' ? $this->filterParams : []);
 
-        // Bread crum navi, Bereich, H1
+        // Bread crum navi, area, H1
         $this->backend->setNaviLabel('#record.headline_export');
         echo $this->backend->template('record.prefix_content_area', [
             '{text}' => str_replace('{area_label}', $this->cms->textOrSnippet((string)$this->areaData['label']), $this->cms->snippet('area.headline_area_label'))
@@ -172,7 +172,7 @@ class RecordBackendExport extends RecordBackend {
             return;
         }
 
-        // Reiter (nur die erlaubten Formate)
+        // tabs (only the allowed formats)
         $this->backend->tabBarReset();
         foreach ($this->allowedTypes as $type) {
             $link = "cApp.layers.replace('Record/record_export.php?{$this->listQuery}&type={$type}');";
@@ -192,7 +192,7 @@ class RecordBackendExport extends RecordBackend {
     // Masken
 
     /**
-     * Umfang: Auswahl (wenn die Liste gefiltert war) oder Hinweis.
+     * Scope: selection (if the list was filtered) or a note.
      */
     private function _scopeHtml(): string
     {
@@ -210,7 +210,7 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Die Hiddenfelder, die jedes Formular begleiten.
+     * The hidden fields that accompany each form.
      */
     private function _exportHidden(): void
     {
@@ -223,8 +223,8 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Optionen unter jeder Maske: Hintergrund (Checkbox oder - ab dem Schwellwert -
-     * Hinweis mit festem Hiddenfeld), dazu die Verweildauer der Datei.
+     * Options below each mask: background (checkbox or - from the threshold on -
+     * a notice with a fixed hidden field), plus the retention period of the file.
      */
     private function _exportOptions(): string
     {
@@ -246,7 +246,7 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * xml: Umfang und die Option "Upload-Dateien mit exportieren".
+     * xml: scope and the option "export upload files as well".
      */
     private function _exportFormXml(): void
     {
@@ -261,7 +261,7 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * csv: CSV-Einstellungen, Sprachen, Felder.
+     * csv: CSV settings, languages, fields.
      */
     private function _exportFormCsv(): void
     {
@@ -297,13 +297,13 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Sprachen der Instanz als Checkboxen; vorgewählt die Hauptsprache bzw. die
-     * Auswahl des Requests.
+     * Languages of the instance as checkboxes; the primary language or the
+     * selection of the request is preselected.
      */
     private function _languageCheckboxes(): string
     {
         $instanceId = (int)($this->areaData['instance_id'] ?? 0);
-        // nur lesbare Sprachen der Benutzergruppe
+        // only readable languages of the user group
         $languages = $this->record->readableLanguages($this->instanceCache->languages($instanceId));
         $primaryId = $this->instanceCache->primaryLanguageId($instanceId);
         if (!isset($languages[$primaryId])) $primaryId = (int)(array_key_first($languages) ?? 0);
@@ -324,9 +324,9 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Felder für den CSV-Export als Tabelle: Checkbox | Name | Beschriftung | Typ.
-     * Verknüpfungs- und Datei-Felder haben darunter einen Mehr-Link, der die
-     * Unterfelder aufklappt (Bootstrap collapse auf einem eigenen tbody).
+     * Fields for the CSV export as a table: checkbox | name | label | type.
+     * Link and file fields have a more link below them, which expands the
+     * subfields (Bootstrap collapse on a separate tbody).
      */
     private function _csvFieldList(): string
     {
@@ -342,7 +342,7 @@ class RecordBackendExport extends RecordBackend {
             if (!empty($entry['multilingual'])) $type .= ' &middot; ' . $this->cms->snippet('record.label_move_multilingual');
 
             if (!empty($entry['relation'])) {
-                // Hauptzeile: die record_id der Zieldatensätze, darunter deren Felder
+                // main row: the record_id of the target records, below it their fields
                 $rows .= $this->_fieldRow("$name.record_id", $isChecked("$name.record_id", true), $name . '.record_id', $label, $type, $name);
                 $rows .= $this->_subRows($name, $entry, $isChecked, ['record_id'], $label . '.');
             }
@@ -358,8 +358,8 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Die Feldtabelle mit der Checkbox "alle" darüber (cApp.ui.checkAll()) - gesetzt,
-     * wenn alle Hauptzeilen gewählt sind (die zugeklappten Unterfelder zählen nicht).
+     * The field table with the "all" checkbox above it (cApp.ui.checkAll()) - set
+     * if all main rows are selected (the collapsed subfields do not count).
      */
     private function _fieldTable(string $rows): string
     {
@@ -373,8 +373,8 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Eine Zeile der Feldtabelle; mit $moreName bekommt sie den Mehr-Link auf den
-     * zugehörigen tbody der Unterfelder. $sub = Zeile eines Unterfeldes.
+     * One row of the field table; with $moreName it gets the more link to the
+     * associated tbody of the subfields. $sub = row of a subfield.
      */
     private function _fieldRow(string $key, bool $checked, string $name, string $label, string $type, string $moreName, bool $sub = false): string
     {
@@ -395,14 +395,14 @@ class RecordBackendExport extends RecordBackend {
             '{more}' => $more,
             '{class}' => $sub ? 'c9-export-sub' : '',
         ]);
-        // Hauptzeilen in einem eigenen tbody - die Unterfelder folgen als
-        // eingeklappter tbody (export_field_subrows), Zeilen direkt in <table>
-        // wären kein gültiges HTML
+        // main rows in their own tbody - the subfields follow as a
+        // collapsed tbody (export_field_subrows); rows directly in <table>
+        // would not be valid HTML
         return $sub ? $row : "<tbody>\n" . $row . "</tbody>\n";
     }
 
     /**
-     * Die Unterfelder eines Feldes als eingeklappter tbody (ohne die in $skip).
+     * The subfields of a field as a collapsed tbody (without those in $skip).
      */
     private function _subRows(string $name, array $entry, callable $isChecked, array $skip, string $labelPrefix): string
     {
@@ -429,7 +429,7 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * docx: Quell- und Zielsprache, mehrsprachige Felder.
+     * docx: source and target language, multilingual fields.
      */
     private function _exportFormDocx(): void
     {
@@ -488,12 +488,12 @@ class RecordBackendExport extends RecordBackend {
     }
 
     // ====================
-    // Global (Startseite)
+    // Global (start page)
 
     /**
-     * Globaler Export: nur der XML-Reiter. Auswahl der Bereiche aller Typen als
-     * Baum mit Checkboxen (ein Ordner wählt seine Elemente mit, siehe
-     * export_area_tree.html), Optionen Struktur / Inhalte / Dateien.
+     * Global export: only the XML tab. Selection of the areas of all types as a
+     * tree with checkboxes (a folder selects its elements too, see
+     * export_area_tree.html), options structure / content / files.
      *
      * Request: global=1, function ('' | run), areas[], structure, content, files, background
      */
@@ -520,7 +520,7 @@ class RecordBackendExport extends RecordBackend {
                 'files' => !empty($_REQUEST['files']),
                 'portable' => !empty($_REQUEST['portable']),
             ];
-            // Umfang für den Schwellwert: Datensätze der gewählten Inhaltsbereiche
+            // scope for the threshold: records of the selected content areas
             $count = 0;
             if ($job['content']) {
                 $placeholders = implode(',', array_fill(0, count($areaIds), '?'));
@@ -563,13 +563,13 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Die Maske des globalen Exports: Bereichsbaum, Optionen.
+     * The mask of the global export: area tree, options.
      *
-     * Der Baum steht je Instanz unter einer eigenen Zeile mit der Bezeichnung der
-     * Instanz - wie ein Ordner: ein Klick wählt alle Bereiche der Instanz. Die Zeile
-     * ist kein Bereich (Checkbox ohne name, data-parent der Wurzelelemente
-     * "i{instance_id}"). Auf der Wurzelebene liegen die Bereiche aller Instanzen in
-     * einer gemeinsamen Reihenfolge (lft) - je Instanz bleibt sie erhalten.
+     * The tree is shown per instance under its own row with the label of the
+     * instance - like a folder: one click selects all areas of the instance. The row
+     * is not an area (checkbox without name, data-parent of the root elements
+     * "i{instance_id}"). At root level the areas of all instances share a
+     * common order (lft) - within each instance it is kept.
      */
     private function _exportGlobalForm(): void
     {
@@ -581,7 +581,7 @@ class RecordBackendExport extends RecordBackend {
             $byInstance[(int)$areaRow['instance_id']][] = $areaRow;
         }
         $rows = '';
-        // Reihenfolge der Instanzen wie überall im Backend (Standard-Instance zuletzt)
+        // order of the instances as everywhere in the backend (default instance last)
         foreach (array_keys($this->instanceCache->instanceLabels()) as $instanceId) {
             $areaRows = $byInstance[$instanceId] ?? [];
             if (!$areaRows) continue;
@@ -626,15 +626,15 @@ class RecordBackendExport extends RecordBackend {
     }
 
     // ====================
-    // Ausführen
+    // Run
 
     /**
-     * Auftrag zusammenstellen, ausführen, Ergebnis mit Download-Link zeigen. Bei
-     * einem Fehler erscheint die Maske erneut mit der Meldung.
+     * Assemble the job, run it, show the result with the download link. On
+     * an error the mask appears again with the message.
      */
     private function _exportRun(): void
     {
-        // in der Reihenfolge der Baumstruktur bzw. der Handsortierung (exportSort())
+        // in the order of the tree structure or the manual sorting (exportSort())
         [$sort, $order] = $this->export->exportSort($this->areaId);
         $ids = $this->batch->collectIds($this->areaId, $this->scope === 'filter' ? $this->filterParams : [], $sort, $order);
         $csv = (array)($_REQUEST['data']['csv'] ?? []);
@@ -658,7 +658,7 @@ class RecordBackendExport extends RecordBackend {
             return;
         }
 
-        // Hintergrund
+        // Background
         // --------------------
         $background = !empty($_REQUEST['background']) || $this->export->needsBackground(count($job['ids']));
         if ($background) {
@@ -672,7 +672,7 @@ class RecordBackendExport extends RecordBackend {
             return;
         }
 
-        // Im Request
+        // In the request
         // --------------------
         $result = $this->export->run($job);
         if (!empty($result['error'])) {
@@ -689,7 +689,7 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Fehler beim Ausführen: Meldung, dann die Maske erneut.
+     * Error when running: message, then the mask again.
      */
     private function _exportRunError(string $error): void
     {
@@ -712,11 +712,11 @@ class RecordBackendExport extends RecordBackend {
     // Download
 
     /**
-     * Zip-Datei aus var/export ausliefern (backend/record_download.php).
+     * Deliver the zip file from var/export (backend/record_download.php).
      *
-     * Die Session hat Backend::backendPath() bereits geprüft. Erlaubt ist nur ein
-     * Dateiname (kein Pfad) mit der Endung .zip, der in var/export liegt. Nach dem
-     * Senden wird die Datei gelöscht - der Link gilt genau einmal.
+     * The session has already checked Backend::backendPath(). Only a file name
+     * (no path) with the extension .zip that lies in var/export is allowed. After
+     * sending, the file is deleted - the link is valid exactly once.
      *
      * Request: file
      */

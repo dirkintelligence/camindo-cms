@@ -1,31 +1,31 @@
 <?php
 /**
- * Grafischer Vergleich eines Audit-Log-Eintrags: vorher / nachher je Feld.
- * Instanzname im Code: $auditDiff.
+ * Visual comparison of an audit log entry: before / after per field.
+ * Instance name in the code: $auditDiff.
  *
- * TEXTE WERDEN JE ABSATZ VERGLICHEN
+ * TEXTS ARE COMPARED PER PARAGRAPH
  * --------------------
- * Ein Text zerfällt an Zeilenumbrüchen (\r\n, \n, \r) und nach schließenden
- * Block-Tags (</p>, </li>, </h1> …, <br>) in Absätze. paragraphs() gleicht beide
- * Folgen ab (längste gemeinsame Teilfolge): Unveränderte Absätze stehen grau in
- * beiden Spalten, entfernte rot links, hinzugekommene grün rechts. Steht einem
- * entfernten Absatz ein hinzugekommener gegenüber, gilt er als geändert: dann
- * markiert words() innerhalb des Absatzes die einzelnen Wörter - sofern beide
- * Fassungen genug gemeinsam haben (MIN_WORD_SIMILARITY), sonst den ganzen Absatz.
+ * A text splits into paragraphs at line breaks (\r\n, \n, \r) and after closing
+ * block tags (</p>, </li>, </h1> …, <br>). paragraphs() matches both
+ * sequences (longest common subsequence): unchanged paragraphs are shown in grey in
+ * both columns, removed ones in red on the left, added ones in green on the right. If a
+ * removed paragraph faces an added one, it counts as changed: then
+ * words() marks the individual words within the paragraph - provided both
+ * versions have enough in common (MIN_WORD_SIMILARITY), otherwise the whole paragraph.
  *
- * Bei sehr langen Texten (mehr als MAX_CELLS Vergleiche) wird nicht gerechnet,
- * sondern beide Stände ganz gezeigt - die Seite soll nicht hängen.
+ * For very long texts (more than MAX_CELLS comparisons) nothing is computed;
+ * instead both versions are shown in full - the page must not hang.
  *
- * ALLES IST FREMDER TEXT
+ * EVERYTHING IS FOREIGN TEXT
  * --------------------
- * Inhalte werden als Text gezeigt (htmlspecialchars), auch HTML aus Editoren: Der
- * Vergleich zeigt, was gespeichert wurde, nicht, wie es aussieht.
+ * Contents are shown as text (htmlspecialchars), including HTML from editors: the
+ * comparison shows what was stored, not how it looks.
  *
- * HTML AUS VORLAGEN
+ * HTML FROM TEMPLATES
  * --------------------
- * Das Markup steht in backend/html/audit_*.html. Backend wird erst beim Rendern
- * geholt (LazyServicesTrait) - die APIs brauchen nur die Text-Methoden
- * (actorLabel(), plainChanges()) und laden Backend gar nicht erst.
+ * The markup is in backend/html/audit_*.html. Backend is only fetched when rendering
+ * (LazyServicesTrait) - the APIs only need the text methods
+ * (actorLabel(), plainChanges()) and do not load Backend at all.
  *
  * @see Camindo\Core\AuditLog
  *
@@ -37,13 +37,13 @@ class AuditDiff {
 
     use LazyServicesTrait;
 
-    /** Obergrenze für die Vergleichstabelle (Absätze bzw. Wörter: n × m) */
+    /** Upper limit for the comparison table (paragraphs or words: n × m) */
     public const MAX_CELLS = 250000;
 
-    /** Anteil gleicher Wörter, ab dem ein Absatz wortweise statt ganz markiert wird */
+    /** Share of identical words from which a paragraph is marked word by word instead of as a whole */
     public const MIN_WORD_SIMILARITY = 0.4;
 
-    /** Feldtypen, die absatzweise verglichen werden */
+    /** Field types that are compared paragraph by paragraph */
     private const TEXT_TYPES = ['text', 'chars', 'json', 'html', 'textarea', 'code'];
 
     public function __construct(
@@ -52,22 +52,22 @@ class AuditDiff {
         protected ContainerInterface $container,
     )
     {
-        // Zuweisung statt Startwert am Property - wie in Backend (LazyServicesTrait)
+        // Assignment instead of a start value on the property - as in Backend (LazyServicesTrait)
         $this->lazyServices = ['backend' => Backend::class];
     }
 
-    /** IP-Adresse eines Eintrags zum Anzeigen: gekürzte Stellen als "xxx" (ClientIp::display()) */
+    /** IP address of an entry for display: shortened parts as "xxx" (ClientIp::display()) */
     public function displayIp(string $ip): string
     {
         return ClientIp::display($ip, ClientIp::v4Octets($this->container->get(Config::class)));
     }
 
     /**
-     * Die Änderungen eines Eintrags als Tabelle Feld | vorher | nachher.
+     * The changes of an entry as a table field | before | after.
      *
-     * @param array $changes      Liste aus AuditLog::diff()
-     * @param bool  $showSecrets  false: verschlüsselte Werte nicht entschlüsseln
-     * @return string             HTML ('' ohne Änderungen)
+     * @param array $changes      list from AuditLog::diff()
+     * @param bool  $showSecrets  false: do not decrypt encrypted values
+     * @return string             HTML ('' without changes)
      */
     public function table(array $changes, bool $showSecrets = true): string
     {
@@ -89,12 +89,12 @@ class AuditDiff {
     }
 
     /**
-     * Ein Eintrag als Karte: Kopfzeile (Zeitpunkt, Aktion, wer, woher) und die
-     * Vergleichstabelle.
+     * An entry as a card: header (time, action, who, where from) and the
+     * comparison table.
      *
-     * @param array  $row          Zeile aus AuditLog::search()
-     * @param bool   $superuser    IP-Adresse zeigen
-     * @param string $objectLink   HTML hinter der Kopfzeile (z. B. Verweis aufs Objekt)
+     * @param array  $row          row from AuditLog::search()
+     * @param bool   $superuser    show the IP address
+     * @param string $objectLink   HTML after the header (e.g. link to the object)
      */
     public function entry(array $row, bool $superuser, string $objectLink = ''): string
     {
@@ -129,22 +129,22 @@ class AuditDiff {
     }
 
     /**
-     * Beschriftung einer Aktion (Snippet audit_action_{action}).
+     * Label of an action (snippet audit_action_{action}).
      */
     public function actionLabel(string $action): string
     {
         return $this->cms->snippet('audit_action_' . $action);
     }
 
-    /** admin_id => Name, je Request (actorLabel()) */
+    /** admin_id => name, per request (actorLabel()) */
     private array $adminNames = [];
 
     /**
-     * Wer hat gehandelt - Benutzername, Website-User #Id, Besucher oder System.
+     * Who acted - user name, website user #id, visitor or system.
      *
-     * Benutzer stehen im Audit-Log nur als Id (AuditLog, Klassenkommentar): der Name
-     * kommt aus `admin` - der heutige, bei einem anonymisierten Konto also admin_{id}.
-     * Ältere Einträge mit Namen: der gespeicherte, wenn es das Konto nicht mehr gibt.
+     * Users appear in the audit log only as an id (AuditLog, class comment): the name
+     * comes from `admin` - the current one, so for an anonymized account admin_{id}.
+     * Older entries with names: the stored one, if the account no longer exists.
      */
     public function actorLabel(array $row): string
     {
@@ -157,7 +157,7 @@ class AuditDiff {
         };
     }
 
-    /** Name eines Benutzers (auch gelöscht), null = gibt es nicht */
+    /** Name of a user (also deleted), null = does not exist */
     private function adminName(int $adminId): ?string
     {
         if ($adminId < 1) return null;
@@ -177,7 +177,7 @@ class AuditDiff {
     }
 
     /**
-     * UTC-Zeitpunkt aus der Datenbank in Zeitzone und Format des Admins.
+     * UTC point in time from the database in the admin's time zone and format.
      */
     public function localTime(string $utc): string
     {
@@ -187,12 +187,12 @@ class AuditDiff {
     }
 
     /**
-     * Die Änderungen eines Eintrags als Daten (API: record.info history, audit.history):
-     * je Feld field, label, language, before, after. Passwörter nur als ***,
-     * verschlüsselte Werte entschlüsselt.
+     * The changes of an entry as data (API: record.info history, audit.history):
+     * per field field, label, language, before, after. Passwords only as ***,
+     * encrypted values decrypted.
      *
-     * @param int $truncate  Werte ab so vielen Zeichen kürzen (0 = nie); gekürzte
-     *                       Änderungen tragen truncated = true
+     * @param int $truncate  truncate values from this many characters (0 = never); truncated
+     *                       changes carry truncated = true
      */
     public function plainChanges(array $changes, int $truncate = 0): array
     {
@@ -227,9 +227,9 @@ class AuditDiff {
     }
 
     /**
-     * Vorher- und Nachher-Zelle einer Änderung.
+     * Before and after cell of a change.
      *
-     * @return string[]  [html vorher, html nachher]
+     * @return string[]  [html before, html after]
      */
     public function cells(array $change, bool $showSecrets = true): array
     {
@@ -261,7 +261,7 @@ class AuditDiff {
         if (in_array($type, self::TEXT_TYPES, true) || $type === 'encrypted') {
             return $this->paragraphs($before, $after);
         }
-        // Einzelwerte: ganz ersetzt
+        // Single values: replaced entirely
         return [
             $before === '' ? $this->empty() : $this->mark($before, 'del'),
             $after === '' ? $this->empty() : $this->mark($after, 'ins'),
@@ -269,9 +269,9 @@ class AuditDiff {
     }
 
     /**
-     * Zwei Texte absatzweise vergleichen (siehe Klassenkommentar).
+     * Compare two texts paragraph by paragraph (see class comment).
      *
-     * @return string[]  [html vorher, html nachher]
+     * @return string[]  [html before, html after]
      */
     public function paragraphs(string $before, string $after): array
     {
@@ -283,7 +283,7 @@ class AuditDiff {
 
         $ops = $this->lcs($a, $b);
         if ($ops === null) {
-            // zu groß zum Rechnen: beide ganz
+            // too large to compute: both in full
             return [
                 $this->join(array_map(fn($p) => $this->mark($p, 'del'), $a)),
                 $this->join(array_map(fn($p) => $this->mark($p, 'ins'), $b)),
@@ -300,7 +300,7 @@ class AuditDiff {
                 $right[] = $this->same($text);
                 continue;
             }
-            // Block aus Entfernen/Hinzufügen sammeln
+            // Collect a block of removals/additions
             $dels = [];
             $inss = [];
             while ($i < $count && $ops[$i][0] !== '=') {
@@ -309,7 +309,7 @@ class AuditDiff {
                 $i++;
             }
             $i--;
-            // Paarweise gegenüberstellen: geänderte Absätze wortweise markieren
+            // Pair them up: mark changed paragraphs word by word
             $pairs = max(count($dels), count($inss));
             for ($k = 0; $k < $pairs; $k++) {
                 $d = $dels[$k] ?? null;
@@ -331,9 +331,9 @@ class AuditDiff {
     }
 
     /**
-     * Zwei Absätze wortweise vergleichen.
+     * Compare two paragraphs word by word.
      *
-     * @return string[]  [html vorher, html nachher] - je ein Absatz
+     * @return string[]  [html before, html after] - one paragraph each
      */
     public function words(string $before, string $after): array
     {
@@ -342,7 +342,7 @@ class AuditDiff {
         $ops = $this->lcs($a, $b);
         if ($ops === null) return [$this->mark($before, 'del'), $this->mark($after, 'ins')];
 
-        // Kaum Gemeinsames: der Absatz ist neu geschrieben - ganz markieren
+        // Hardly anything in common: the paragraph was rewritten - mark it entirely
         $same = 0;
         foreach ($ops as [$op, $token]) {
             if ($op === '=' && trim($token) !== '') $same++;
@@ -367,7 +367,7 @@ class AuditDiff {
                 $right .= trim($token) === '' ? $html : $this->backend->template('audit_word_ins', ['{text}' => $html]);
             }
         }
-        // Benachbarte Markierungen (nur durch Leerraum getrennt) zusammenfassen
+        // Merge adjacent marks (separated only by whitespace)
         $left = preg_replace('~</del>(\s+)<del\b[^>]*>~u', '$1', $left) ?? $left;
         $right = preg_replace('~</ins>(\s+)<ins\b[^>]*>~u', '$1', $right) ?? $right;
         return [
@@ -379,7 +379,7 @@ class AuditDiff {
     // ====================
 
     /**
-     * Text in Absätze zerlegen: Zeilenumbrüche und schließende Block-Tags.
+     * Split a text into paragraphs: line breaks and closing block tags.
      *
      * @return string[]
      */
@@ -391,13 +391,13 @@ class AuditDiff {
     }
 
     /**
-     * Längste gemeinsame Teilfolge als Operationsliste.
+     * Longest common subsequence as a list of operations.
      *
-     * @return array|null  Liste aus [op, element] mit op '=', '-', '+'; null wenn zu groß
+     * @return array|null  list of [op, element] with op '=', '-', '+'; null if too large
      */
     private function lcs(array $a, array $b): ?array
     {
-        // Gemeinsamen Anfang und gemeinsames Ende abtrennen - spart fast immer das meiste
+        // Split off the common start and the common end - this almost always saves most of the work
         $head = [];
         while ($a && $b && $a[0] === $b[0]) {
             $head[] = ['=', array_shift($a)];
@@ -412,7 +412,7 @@ class AuditDiff {
         $m = count($b);
         if ($n * $m > self::MAX_CELLS) return null;
 
-        // Tabelle der Längen (von hinten)
+        // Table of lengths (from the back)
         $len = array_fill(0, $n + 1, array_fill(0, $m + 1, 0));
         for ($i = $n - 1; $i >= 0; $i--) {
             for ($j = $m - 1; $j >= 0; $j--) {
@@ -464,7 +464,7 @@ class AuditDiff {
         return $this->backend->template($value === '1' ? 'audit_bit_on' : 'audit_bit_off');
     }
 
-    /** Grauer Text (Vorlage text-body-secondary) */
+    /** Grey text (template text-body-secondary) */
     private function secondary(string $text): string
     {
         return $this->backend->template('text-body-secondary', ['{text}' => $this->backend->escape($text)]);

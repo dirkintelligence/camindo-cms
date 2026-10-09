@@ -1,43 +1,43 @@
 <?php
 /**
- * Einstieg der API: Methoden finden, aufrufen, beschreiben.
+ * Entry point of the API: find methods, call them, describe them.
  *
- *     $app->get(ApiSession::class)->resume($sessionId);          // oder login(), attach() …
+ *     $app->get(ApiSession::class)->resume($sessionId);          // or login(), attach() …
  *     $result = $app->get(Api::class)->call('system.whoami');
  *     // ['ok' => true, 'data' => [...], 'warnings' => []]
  *     // ['ok' => false, 'error' => 'access_denied', 'message' => '…', 'errors' => [...], 'warnings' => []]
  *
- * WOHER DIE METHODEN KOMMEN
+ * WHERE THE METHODS COME FROM
  * --------------------
- * Aus den API-Klassen des Cores (CORE_CLASSES) und der aktiven Module: deren
- * install/settings.php nennt sie unter 'api' relativ zum Modul-Namespace
- * ('api' => ['RecordApi']). Aufrufbar ist jede öffentliche Methode mit dem Attribut
- * #[ApiMethod('name')]. Die Klassen kommen aus dem Container (Autowiring).
+ * From the API classes of the core (CORE_CLASSES) and the active modules: their
+ * install/settings.php names them under 'api' relative to the module namespace
+ * ('api' => ['RecordApi']). Any public method with the attribute
+ * #[ApiMethod('name')] can be called. The classes come from the container (autowiring).
  *
- * PARAMETER
+ * PARAMETERS
  * --------------------
- * Die Parameter eines Aufrufs sind die der PHP-Methode, in snake_case benannt
- * ($areaId -> area_id). Typen kommen aus der Signatur und werden geprüft bzw.
- * behutsam umgewandelt ("12" -> 12 bei int, "true" -> true bei bool); unbekannte,
- * fehlende oder unpassende Parameter sind ein Fehler (invalid_param).
- * describe() liefert dazu ein JSON-Schema samt Beschreibungen.
+ * The parameters of a call are those of the PHP method, named in snake_case
+ * ($areaId -> area_id). Types come from the signature and are checked or
+ * gently converted ("12" -> 12 for int, "true" -> true for bool); unknown,
+ * missing or unsuitable parameters are an error (invalid_param).
+ * describe() returns a JSON schema with descriptions for this.
  *
- * BESCHREIBUNGEN
+ * DESCRIPTIONS
  * --------------------
- * Die Beschreibung im Attribut ist ein Snippet ('#record.api_search') oder Text.
- * Bei einem Snippet stehen auch die Parameter in Snippets - zuerst
- * {schlüssel}__{parameter} ('record.api_search__filter'), dann die für alle
- * Methoden der Komponente gemeinsamen api__{parameter} ('record.api__record_id');
- * fehlen beide, gilt die @param-Zeile des Docblocks. So erscheinen die Texte in der
- * Sprache des Admins bzw. in der, die describe() verlangt (der Assistent des Moduls
- * Ai gibt dem Sprachmodell die englischen).
+ * The description in the attribute is a snippet ('#record.api_search') or text.
+ * For a snippet, the parameters also come from snippets - first
+ * {key}__{parameter} ('record.api_search__filter'), then the api__{parameter}
+ * shared by all methods of the component ('record.api__record_id');
+ * if both are missing, the @param line of the docblock applies. The texts thus appear in the
+ * language of the admin, or in the one describe() asks for (the assistant of the module
+ * Ai gives the language model the English ones).
  *
- * Jeder Aufruf setzt eine Session voraus (ApiContext::require()); die Methoden
- * werfen ApiException, call() macht daraus die Fehlerantwort. Unerwartete Fehler
- * landen in var/log/{Datum}_api-errors.log, die Antwort nennt nur 'internal'.
+ * Every call requires a session (ApiContext::require()); the methods
+ * throw ApiException, call() turns it into the error response. Unexpected errors
+ * end up in var/log/{date}_api-errors.log, the response names only 'internal'.
  *
- * @see Camindo\Core\Api\ApiSession   Anmeldung
- * @see Camindo\Core\Api\ApiMethod    das Attribut
+ * @see Camindo\Core\Api\ApiSession   login
+ * @see Camindo\Core\Api\ApiMethod    the attribute
  */
 namespace Camindo\Core\Api;
 
@@ -48,10 +48,10 @@ use Camindo\Core\System;
 
 class Api
 {
-    /** API-Klassen des Cores außerhalb der Module */
+    /** API classes of the core outside the modules */
     public const CORE_CLASSES = [SystemApi::class];
 
-    /** name => ['class', 'method', 'description', 'write', 'level'] - je Prozess einmal gebaut */
+    /** name => ['class', 'method', 'description', 'write', 'level'] - built once per process */
     private ?array $methods = null;
 
     public function __construct(
@@ -65,15 +65,15 @@ class Api
     }
 
     // ====================
-    // Aufrufen
+    // Calling
 
     /**
-     * Eine API-Methode aufrufen.
+     * Call an API method.
      *
-     * @param string $method  Name, z. B. 'record.search'
-     * @param array  $params  Parameter (snake_case)
-     * @return array          ['ok' => true, 'data' => …, 'warnings' => [...]] bzw.
-     *                        ['ok' => false, 'error' => Code, 'message' => Text,
+     * @param string $method  name, e.g. 'record.search'
+     * @param array  $params  parameters (snake_case)
+     * @return array          ['ok' => true, 'data' => …, 'warnings' => [...]] or
+     *                        ['ok' => false, 'error' => code, 'message' => text,
      *                         'errors' => [...], 'warnings' => [...]]
      */
     public function call(string $method, array $params = []): array
@@ -99,7 +99,7 @@ class Api
             return $this->failure(ApiException::INTERNAL, 'internal error');
         }
         finally {
-            // eine offen gebliebene Transaktion nicht in den nächsten Aufruf tragen
+            // do not carry an open transaction over into the next call
             while ($this->db->inTransaction()) $this->db->rollback();
             $this->cms->errorsReset();
         }
@@ -117,11 +117,11 @@ class Api
     }
 
     // ====================
-    // Verzeichnis
+    // Directory
 
     /**
-     * Alle Methoden: name => ['class', 'method', 'description', 'write'], nach Namen
-     * sortiert.
+     * All methods: name => ['class', 'method', 'description', 'write'], by name
+     * sorted.
      */
     public function methods(): array
     {
@@ -164,10 +164,10 @@ class Api
     }
 
     /**
-     * Beschreibung einer Methode mit JSON-Schema der Parameter.
+     * Description of a method with the JSON schema of its parameters.
      *
-     * @param string $lang  Sprache der Texte (Backend-Sprache, z. B. 'en_US'); leer = die des Admins
-     * @return array  name, description, write, level (ApiMethod::LEVEL_*), parameters (JSON-Schema 'object')
+     * @param string $lang  language of the texts (backend language, e.g. 'en_US'); empty = that of the admin
+     * @return array  name, description, write, level (ApiMethod::LEVEL_*), parameters (JSON schema 'object')
      */
     public function describe(string $method, string $lang = ''): array
     {
@@ -203,18 +203,18 @@ class Api
         ];
     }
 
-    /** Text oder #snippet in der Sprache $lang ('' = die des Admins) */
+    /** Text or #snippet in the language $lang ('' = that of the admin) */
     private function text(string $text, string $lang): string
     {
         return str_starts_with($text, '#') ? $this->cms->snippet(substr($text, 1), [], $lang) : $text;
     }
 
     /**
-     * Beschreibung eines Parameters aus den Snippets (siehe Klassenkommentar) -
-     * null, wenn die Methode keine Snippets nutzt oder keins passt.
+     * Description of a parameter from the snippets (see class comment) -
+     * null if the method uses no snippets or none fits.
      *
-     * @param string $description  Beschreibung der Methode aus dem Attribut
-     * @param string $param        Parametername (snake_case)
+     * @param string $description  description of the method from the attribute
+     * @param string $param        parameter name (snake_case)
      */
     private function paramText(string $description, string $param, string $lang): ?string
     {
@@ -230,12 +230,12 @@ class Api
     }
 
     // ====================
-    // Parameter
+    // Parameters
 
     /**
-     * Aufruf-Parameter auf die Parameter der Methode abbilden (siehe Klassenkommentar).
+     * Map call parameters to the parameters of the method (see class comment).
      *
-     * @return array  Argumente in der Reihenfolge der Signatur
+     * @return array  arguments in the order of the signature
      */
     private function arguments(\ReflectionMethod $reflection, array $params): array
     {
@@ -261,7 +261,7 @@ class Api
     }
 
     /**
-     * Wert auf den Typ des Parameters bringen - nur verlustfreie Umwandlungen.
+     * Bring a value to the type of the parameter - only lossless conversions.
      */
     private function coerce(string $name, mixed $value, ?\ReflectionType $type): mixed
     {
@@ -300,7 +300,7 @@ class Api
         throw new ApiException(ApiException::INVALID_PARAM, "parameter \"{$name}\" must be of type " . implode('|', $types));
     }
 
-    /** JSON-Schema zu einem PHP-Typ */
+    /** JSON schema for a PHP type */
     private function typeSchema(?\ReflectionType $type): array
     {
         if ($type === null) return [];
@@ -319,10 +319,10 @@ class Api
     }
 
     /**
-     * Beschreibungen aus den @param-Zeilen eines Docblocks (Folgezeilen gehören
-     * dazu, bis zur nächsten @-Zeile oder einer Leerzeile).
+     * Descriptions from the @param lines of a docblock (continuation lines belong
+     * to it, up to the next @ line or an empty line).
      *
-     * @return array  Parametername (ohne $) => Text
+     * @return array  parameter name (without $) => text
      */
     private function paramDocs(string $doc): array
     {

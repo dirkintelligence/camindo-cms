@@ -1,26 +1,26 @@
 <?php
 /**
- * Entfernt aktiven Inhalt aus HTML - beim Schreiben und beim Lesen von
- * Datenbankinhalten (16-sicherheit.md §6, 17-csrf.md §3). Instanzname: $htmlSanitizer.
+ * Removes active content from HTML - when writing and when reading
+ * database content (developer docs, chapter 14 (Security: web)). Instance name: $htmlSanitizer.
  *
- * Aufrufer: Cms::_sanitize_html() / Cms::_sanitizeValue() (Dataset::validateValue(),
- * Snippets::save(), Cms::fetch(), VirtualFieldsTrait::virtualSchema()) und
- * InstanceCache (Instanz- und Sprachbezeichnungen) - dort ohne Cms, weil Cms
- * selbst InstanceCache braucht.
+ * Callers: Cms::_sanitize_html() / Cms::_sanitizeValue() (Dataset::validateValue(),
+ * Snippets::save(), Cms::fetch(), VirtualFieldsTrait::virtualSchema()) and
+ * InstanceCache (instance and language labels) - there without Cms, because Cms
+ * itself needs InstanceCache.
  */
 namespace Camindo\Core;
 
 class HtmlSanitizer {
 
-    // Tags, die clean() IMMER entfernt. Mit Inhalt: der Inhalt ist Code
-    // bzw. ein eigenes Dokument. Nur das Tag: leer oder ohne sinnvollen Inhalt.
-    // SVG-Animationen (set, animate…) können über attributeName Event-Handler und
-    // href setzen, ohne dass ein on…-Attribut dasteht.
+    // Tags that clean() ALWAYS removes. With content: the content is code
+    // or a document of its own. Tag only: empty or without meaningful content.
+    // SVG animations (set, animate…) can set event handlers and
+    // href via attributeName without an on… attribute being present.
     private const DROP_WITH_CONTENT = ['script', 'iframe', 'object', 'applet', 'frameset', 'noembed', 'noframes'];
     private const DROP_TAG = ['embed', 'base', 'meta', 'frame', 'set', 'animate', 'animatetransform', 'animatemotion', 'handler', 'listener'];
-    // Diese Attribute fallen immer weg (srcdoc: ein Dokument im selben Ursprung)
+    // These attributes are always dropped (srcdoc: a document in the same origin)
     private const DROP_ATTRIBUTES = ['srcdoc', 'formaction', 'xlink:href'];
-    /** Cache der Whitelist system.html_allowed_tags (null = noch nicht gelesen) */
+    /** Cache of the whitelist system.html_allowed_tags (null = not read yet) */
     private ?array $allowedTags = null;
 
     public function __construct(private Config $config)
@@ -28,29 +28,29 @@ class HtmlSanitizer {
     }
 
     /**
-     * Entfernt aktiven Inhalt aus HTML, lässt Formatierung stehen.
+     * Removes active content from HTML, leaves formatting in place.
      *
-     * Beim SCHREIBEN: Dataset::validateValue() für jeden Textwert (Ausnahme: Modul
-     * Template, siehe Dataset::$sanitizeHtml), Snippets::save().
-     * Beim LESEN: Cms::fetch() für jede Zeile (außer `template`) - gegen Inhalte, die
-     * an der Anwendung vorbei in die Datenbank kamen (16-sicherheit.md §6).
+     * When WRITING: Dataset::validateValue() for every text value (exception: module
+     * Template, see Dataset::$sanitizeHtml), Snippets::save().
+     * When READING: Cms::fetch() for every row (except `template`) - against content that
+     * reached the database past the application (developer docs, chapter 14 (Security: web)).
      *
-     * Gelöscht wird - nicht maskiert:
-     *  - script, iframe, object, applet, frameset, noembed, noframes samt Inhalt
-     *  - embed, base, meta, frame und die SVG-Animationen set/animate… (nur das Tag)
-     *  - Event-Handler (on…), srcdoc, formaction, xlink:href
-     *  - javascript:/vbscript:-URLs in jedem Attributwert, data:-URLs außer
-     *    data:image/(png|gif|jpeg|webp|avif|bmp) - auch mit Entities/Steuerzeichen
-     *  - mit system.html_allowed_tags (Liste von Tag-Namen): jedes andere Tag (der
-     *    Inhalt bleibt)
+     * Removed - not masked:
+     *  - script, iframe, object, applet, frameset, noembed, noframes including content
+     *  - embed, base, meta, frame and the SVG animations set/animate… (tag only)
+     *  - event handlers (on…), srcdoc, formaction, xlink:href
+     *  - javascript:/vbscript: URLs in every attribute value, data: URLs except
+     *    data:image/(png|gif|jpeg|webp|avif|bmp) - also with entities/control characters
+     *  - with system.html_allowed_tags (list of tag names): every other tag (the
+     *    content stays)
      *
-     * Attribute trennt der Browser auch mit "/" (<img/onerror=…>), und ein ">" in
-     * einem Attributwert beendet das Tag nicht - beides beachtet die Tag-Erkennung.
-     * Läuft, bis sich nichts mehr ändert (<scr<script>ipt> ergäbe sonst <script>).
-     * Ohne "<" kehrt die Funktion sofort zurück; für sauberes HTML liefert sie den
-     * Text unverändert (kein Umformatieren), sie ist also beliebig oft anwendbar.
+     * The browser also separates attributes with "/" (<img/onerror=…>), and a ">" in
+     * an attribute value does not end the tag - the tag detection respects both.
+     * Runs until nothing changes anymore (<scr<script>ipt> would otherwise yield <script>).
+     * Without "<" the function returns immediately; for clean HTML it returns the
+     * text unchanged (no reformatting), so it can be applied any number of times.
      *
-     * @param string $text  Text mit HTML
+     * @param string $text  text with HTML
      */
     public function clean(string $text): string
     {
@@ -65,10 +65,10 @@ class HtmlSanitizer {
     }
 
     /**
-     * Schneller Vorab-Check: nichts, was round() ändern würde? Keine Whitelist,
-     * keines der Signalwörter (Tags der Sperrliste, on…=, srcdoc, formaction,
-     * xlink:href, script:, data:, Entities in Zahlform) und jedes "<"+Buchstabe
-     * beginnt ein vollständiges Tag. Trifft das zu, bleibt der Text wörtlich.
+     * Quick pre-check: nothing that round() would change? No whitelist,
+     * none of the signal words (tags of the block list, on…=, srcdoc, formaction,
+     * xlink:href, script:, data:, entities in numeric form) and every "<"+letter
+     * starts a complete tag. If that holds, the text stays verbatim.
      */
     private function harmless(string $text): bool
     {
@@ -84,25 +84,25 @@ class HtmlSanitizer {
 
     private function round(string $text): string
     {
-        // Elemente samt Inhalt; ohne schließendes Tag bei script bis zum Ende
+        // Elements including content; without a closing tag, script runs to the end
         $withContent = implode('|', self::DROP_WITH_CONTENT);
         $text = preg_replace('!<(' . $withContent . ')\b[^>]*>.*?</\1\s*>!is', '', $text);
         $text = preg_replace('!<script\b.*$!is', '', $text);
-        // Übrige öffnende/schließende Tags dieser Elemente und die Tag-Liste
+        // Remaining opening/closing tags of these elements and the tag list
         $tags = implode('|', array_merge(self::DROP_WITH_CONTENT, self::DROP_TAG));
         $text = preg_replace('!</?(' . $tags . ')\b(?:[^>"\']|"[^"]*"|\'[^\']*\')*>?!i', '', $text);
 
-        // Unvollständiges Tag (kein ">" oder ein unpaariges Anführungszeichen): im
-        // Browser schlösse es das nächste ">" der umgebenden Seite - samt allen
-        // Attributen darin. Das "<" wird maskiert, der Text bleibt ("a<b dann" ->
-        // "a&lt;b dann").
+        // Incomplete tag (no ">" or an unpaired quotation mark): in the
+        // browser it would close at the next ">" of the surrounding page - including all
+        // attributes in it. The "<" is escaped, the text remains ("a<b then" ->
+        // "a&lt;b then").
         $text = preg_replace_callback('~<(/?[a-z][a-z0-9:-]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)(>)?~i',
             fn(array $m) => isset($m[3]) ? $m[0] : '&lt;' . substr($m[0], 1), $text);
 
-        // Whitelist
+        // Allowlist
         $allowed = $this->allowedTags();
-        // Jedes Tag: zuerst quote-bewusst (">" im Attributwert), danach einfach bis
-        // zum ersten ">" (fängt Tags mit unpaarigen Anführungszeichen)
+        // Each tag: first quote-aware (">" in an attribute value), then simply up to
+        // the first ">" (catches tags with unpaired quotation marks)
         foreach (['!<(/?)([a-z][a-z0-9:-]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>!i', '!<(/?)([a-z][a-z0-9:-]*)([^>]*)>!i'] as $pattern) {
             $text = preg_replace_callback($pattern, function (array $m) use ($allowed): string {
                 $name = strtolower($m[2]);
@@ -116,12 +116,12 @@ class HtmlSanitizer {
     }
 
     /**
-     * Attribute eines Tags prüfen. null = alles in Ordnung (Tag bleibt wörtlich),
-     * sonst der neu zusammengesetzte Attribut-Teil.
+     * Check the attributes of a tag. null = all fine (tag stays verbatim),
+     * otherwise the newly assembled attribute part.
      */
     private function attributes(string $attrText): ?string
     {
-        // Trenner sind Whitespace UND "/" (wie im Browser)
+        // Separators are whitespace AND "/" (as in the browser)
         preg_match_all('!([^\s"\'>/=]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]*))?|(/\s*$)!', $attrText, $all, PREG_SET_ORDER);
         $changed = false;
         $out = '';
@@ -144,8 +144,8 @@ class HtmlSanitizer {
     }
 
     /**
-     * Enthält ein Attributwert eine gefährliche URL? Entities (auch ohne ";") und
-     * Steuer-/Leerzeichen werden vorher aufgelöst bzw. entfernt ("java&#9;script:").
+     * Does an attribute value contain a dangerous URL? Entities (also without ";") and
+     * control/whitespace characters are resolved or removed beforehand ("java&#9;script:").
      */
     private function dangerousUrl(string $raw): bool
     {
@@ -161,7 +161,7 @@ class HtmlSanitizer {
         return false;
     }
 
-    /** Whitelist aus system.html_allowed_tags (Array oder Kommaliste), [] = aus */
+    /** Whitelist from system.html_allowed_tags (array or comma list), [] = off */
     private function allowedTags(): array
     {
         if ($this->allowedTags === null) {
@@ -174,8 +174,8 @@ class HtmlSanitizer {
     }
 
     /**
-     * clean() auf einen Wert beliebiger Tiefe (Strings in Arrays, z. B. json,
-     * Datei-Angaben, ganze Zeilen). Andere Typen bleiben unverändert.
+     * clean() on a value of any depth (strings in arrays, e.g. json,
+     * file data, whole rows). Other types remain unchanged.
      */
     public function cleanValue(mixed $value): mixed
     {

@@ -8,10 +8,10 @@ return [
 'description' => '#instance.module_description',
 'icon' => 'language',
 'listed' => true,
-// API: lesen und anlegen/ändern (InstanceApi)
+ // API: read and create/change (InstanceApi)
 'api' => ['InstanceApi'],
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+ // Additional module rights:
+ // none (superuser-only module)
 'access' => [
 ]
 

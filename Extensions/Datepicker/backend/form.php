@@ -1,12 +1,12 @@
 <?php
 /**
- * Optionen der Extension Datepicker in der Feld-Eingabemaske (13 §3.3).
+ * Options of the extension Datepicker in the field input mask (developer docs, chapter 08 (Components and extensions)).
  *
- * Eingebunden von FieldBackend::_extensionOptionsHtml() mit
- *     $backend  Camindo\Core\Backend      Vorlagen
- *     $cms      Camindo\Core\Cms          Snippets
- *     $options  array                     bisherige Werte (details.extension_options)
- *     $name     string                    Namenspräfix der Eingaben: data[details][extension_options]
+ * Included by FieldBackend::_extensionOptionsHtml() with
+ *     $backend  Camindo\Core\Backend      templates
+ *     $cms      Camindo\Core\Cms          snippets
+ *     $options  array                     current values (details.extension_options)
+ *     $name     string                    name prefix of the inputs: data[details][extension_options]
  */
 $mode = (string)($options['mode'] ?? 'auto');
 $modeOptions = [];

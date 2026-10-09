@@ -1,24 +1,24 @@
 <?php
 /**
- * API-Methoden des Audit-Logs: Einträge suchen und den Verlauf eines Objekts lesen -
- * auch von Datensätzen, die im Papierkorb liegen oder endgültig gelöscht sind (der
- * Verlauf wird nicht über den Datensatz geladen, sondern aus dem Protokoll).
+ * API methods of the audit log: search entries and read the history of an object -
+ * also for records that are in the trash or permanently deleted (the
+ * history is not loaded via the record, but from the log).
  *
- * RECHTE
+ * PERMISSIONS
  * --------------------
- * Superuser (Modul Audit, Access::script()) sehen alles wie in der Oberfläche,
- * samt IP-Adressen. Alle anderen sehen - wie im Reiter "Änderungen" der
- * Datensatz-Info - nur Einträge zu Datensätzen in Bereichen, die sie lesen dürfen;
- * maßgeblich ist der Bereich aus der Audit-Zeile, damit die Prüfung auch nach dem
- * Löschen greift. Anmeldungen, Admins, Gruppen & Co. bleiben dem Superuser.
+ * Superusers (module Audit, Access::script()) see everything as in the UI,
+ * including IP addresses. Everyone else sees - as in the "Changes" tab of the
+ * record info - only entries for records in areas they may read;
+ * the area from the audit line is authoritative, so the check still applies after
+ * deletion. Logins, administrators, groups & co. remain reserved for superusers.
  *
- * ZUSTAND
+ * STATE
  * --------------------
- * Zu Datensätzen und Bereichen nennt jede Antwort den heutigen Zustand: active,
- * trash (im Papierkorb, mit restorable und expires_at) oder purged (endgültig
- * gelöscht - es bleibt nur der Verlauf). area_in_trash: Der Bereich eines
- * Datensatzes liegt selbst im Papierkorb - dann kommt der Datensatz nur mit ihm
- * zurück (Modul Papierkorb, Superuser).
+ * For records and areas, every response gives the current state: active,
+ * trash (in the trash, with restorable and expires_at) or purged (permanently
+ * deleted - only the history remains). area_in_trash: the area of a
+ * record is itself in the trash - then the record only comes back with it
+ * (module Trash, superuser).
  *
  * @see Camindo\Core\AuditLog
  * @see Camindo\Core\AuditDiff::plainChanges()
@@ -38,10 +38,10 @@ use Camindo\Core\Modules\Trash\Trash;
 
 class AuditApi
 {
-    /** Höchstzahl Einträge je Seite */
+    /** Maximum number of entries per page */
     private const LIMIT_MAX = 100;
 
-    /** Objekttypen mit Zustand (Tabelle mit `deleted`) */
+    /** Object types with state (table with `deleted`) */
     private const STATE_TYPES = ['record', 'area'];
 
     public function __construct(
@@ -58,21 +58,21 @@ class AuditApi
     }
 
     /**
-     * Einträge suchen, neueste zuerst - knapp, ohne Werte (die liefert audit.history).
+     * Search entries, newest first - compact, without values (those are returned by audit.history).
      *
-     * @param string $action      create | update | delete | restore | purge (Superuser auch login, login_failed, logout, export)
-     * @param string $objectType  record, area, field, template, admin … ('' = alle; ohne Superuser nur record)
-     * @param int    $objectId    Id des Objekts (0 = alle)
-     * @param int    $areaId      Bereich (0 = alle)
-     * @param int    $adminId     wer gehandelt hat (0 = alle)
-     * @param string $origin      Herkunft: backend, frontend, api, llm, cli, cron … ('' = alle)
-     * @param string $from        ab (Y-m-d oder Y-m-d H:i, Zeitzone des Admins)
-     * @param string $to          bis einschließlich (Y-m-d = ganzer Tag, oder Y-m-d H:i)
-     * @param string $search      Teilwort in Bezeichnung oder Name des Handelnden
-     * @param string $field       Feldname oder -beschriftung unter den geänderten Feldern
-     * @param bool   $oldestFirst älteste zuerst
-     * @param int    $skip        überspringen (Blättern: next_skip)
-     * @param int    $limit       Höchstzahl (1-100)
+     * @param string $action      create | update | delete | restore | purge (superusers also login, login_failed, logout, export)
+     * @param string $objectType  record, area, field, template, admin … ('' = all; without superuser only record)
+     * @param int    $objectId    Id of the object (0 = all)
+     * @param int    $areaId      area (0 = all)
+     * @param int    $adminId     who acted (0 = all)
+     * @param string $origin      origin: backend, frontend, api, llm, cli, cron … ('' = all)
+     * @param string $from        from (Y-m-d or Y-m-d H:i, time zone of the administrator)
+     * @param string $to          up to and including (Y-m-d = whole day, or Y-m-d H:i)
+     * @param string $search      partial word in the label or name of the actor
+     * @param string $field       field name or label among the changed fields
+     * @param bool   $oldestFirst oldest first
+     * @param int    $skip        skip (paging: next_skip)
+     * @param int    $limit       maximum number (1-100)
      * @return array  total, items (audit_id, time, action, object_type, object_id, area_id, label, actor, origin, fields, state), next_skip
      */
     #[ApiMethod('audit.search', '#audit.api_search')]
@@ -111,16 +111,16 @@ class AuditApi
     }
 
     /**
-     * Der Verlauf eines Objekts mit Vorher/Nachher je Feld - von der Erstellung an
-     * (älteste zuerst) oder die neuesten zuerst; auch für gelöschte Datensätze.
+     * The history of an object with before/after per field - from creation on
+     * (oldest first) or newest first; also for deleted records.
      *
-     * @param int    $objectId     Id (z. B. record_id)
-     * @param string $objectType   record (Standard), area, field, template …
-     * @param bool   $oldestFirst  älteste zuerst (Standard) - false: neueste zuerst
-     * @param int    $skip         überspringen (Blättern: next_skip)
-     * @param int    $limit        Höchstzahl (1-100)
-     * @param int    $truncate     Werte ab so vielen Zeichen kürzen (0 = nie)
-     * @param bool   $verify       dazu die Prüfung der Hash-Kette des Verlaufs (nur Superuser)
+     * @param int    $objectId     Id (e.g. record_id)
+     * @param string $objectType   record (default), area, field, template …
+     * @param bool   $oldestFirst  oldest first (default) - false: newest first
+     * @param int    $skip         skip (paging: next_skip)
+     * @param int    $limit        maximum number (1-100)
+     * @param int    $truncate     truncate values after this many characters (0 = never)
+     * @param bool   $verify       also verify the hash chain of the history (superusers only)
      * @return array  object (type, id, label, area_id, state …), total, entries (audit_id, time, action, actor, origin, changes), next_skip, verify
      */
     #[ApiMethod('audit.history', '#audit.api_history')]
@@ -137,7 +137,7 @@ class AuditApi
         $latest = $total > 0 ? ($this->auditLog->search($filter, 1, 0)[0] ?? null) : null;
         $state = $this->states([['object_type' => $objectType, 'object_id' => $objectId]])[$objectType . ':' . $objectId] ?? null;
 
-        // ohne Superuser: nur Datensätze eines lesbaren Bereichs (heutiger bzw. letzter bekannter)
+        // without superuser: only records of a readable area (current or last known)
         if (!$superuser) {
             $areaId = (int)($state['area_id'] ?? $latest['area_id'] ?? 0);
             if ($objectType !== 'record' || $areaId < 1 || !$this->access->areaRead($areaId)) {
@@ -185,7 +185,7 @@ class AuditApi
         return $this->access->script('Audit', 'index.php');
     }
 
-    /** Filter-Einschränkung ohne Superuser: nur Datensätze lesbarer Bereiche */
+    /** Filter restriction without superuser: only records of readable areas */
     private function restriction(): array
     {
         if ($this->superuser()) return [];
@@ -193,7 +193,7 @@ class AuditApi
         return ['object_types' => ['record']] + ($areaIds !== null ? ['area_ids' => $areaIds] : []);
     }
 
-    /** Kopf eines Eintrags (ohne Werte) */
+    /** Header of an entry (without values) */
     private function head(array $row): array
     {
         $item = [
@@ -212,8 +212,8 @@ class AuditApi
     }
 
     /**
-     * Heutiger Zustand der Datensätze und Bereiche in den Zeilen:
-     * "type:id" => state (active | trash | purged), area_id, im Papierkorb dazu
+     * Current state of the records and areas in the rows:
+     * "type:id" => state (active | trash | purged), area_id, plus for the trash
      * deleted_at, expires_at, restorable.
      */
     private function states(array $rows): array
@@ -230,7 +230,7 @@ class AuditApi
             try {
                 $in = implode(',', array_map('intval', $list));
                 $this->db->query($type === 'record'
-                    // mit dem Bereich: liegt er selbst im Papierkorb, kommt der Datensatz nur mit ihm zurück
+                    // with the area: if the area itself is in the trash, the record only comes back with it
                     ? "SELECT `r`.`record_id` AS `id`, `r`.`deleted`, `r`.`tmp`, `r`.`changed_at`, `r`.`area_id`, `a`.`deleted` AS `area_deleted`"
                         . " FROM `record` `r` LEFT JOIN `area` `a` ON `a`.`area_id` = `r`.`area_id` WHERE `r`.`record_id` IN ({$in})"
                     : "SELECT `area_id` AS `id`, `deleted`, 0 AS `tmp`, `changed_at` FROM `area` WHERE `area_id` IN ({$in})");
@@ -263,7 +263,7 @@ class AuditApi
         return $states;
     }
 
-    /** Wann der Papierkorb-Cronjob endgültig löscht (wie Trash::expiresAt(), als ISO 8601) */
+    /** When the trash cron job permanently deletes (as Trash::expiresAt(), as ISO 8601) */
     private function expiresAt(string $changedAt): ?string
     {
         $days = max(0, (int)($this->config->get('admin.trash_retention_days') ?? 7));
@@ -272,8 +272,8 @@ class AuditApi
     }
 
     /**
-     * Zeitangabe des Admins (Y-m-d oder Y-m-d H:i[:s], seine Zeitzone) nach UTC;
-     * $end: ein reines Datum meint das Ende des Tages (exklusiv: nächster Tag 0 Uhr).
+     * Time given by the administrator (Y-m-d or Y-m-d H:i[:s], their time zone) converted to UTC;
+     * $end: a plain date means the end of the day (exclusive: next day 00:00).
      *
      * @throws ApiException
      */
@@ -286,7 +286,7 @@ class AuditApi
         }
         $timezone = new \DateTimeZone($this->cms->userTZ !== '' ? $this->cms->userTZ : date_default_timezone_get());
         $date = new \DateTimeImmutable(str_replace('T', ' ', $value), $timezone);
-        // "bis" schließt den Tag bzw. die Minute/Sekunde ein
+        // "to" includes the whole day, or the minute/second
         if ($end) $date = $date->modify(empty($match[1]) ? '+1 day' : (empty($match[2]) ? '+1 minute' : '+1 second'));
         return $date->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
     }

@@ -1,27 +1,27 @@
 <?php
 /**
- * Backend-Oberfläche des Papierkorbs.
+ * Backend UI of the trash.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     index.php   -> list()      eigene gelöschte Datensätze; Superuser zusätzlich
- *                                gelöschte Bereiche und auf Wunsch (?all=1) die
- *                                Datensätze aller Admins
- *                 -> restore()   function=restore, table=record|area, id - nur POST
+ *     index.php   -> list()      own deleted records; superusers additionally
+ *                                deleted areas and, on request (?all=1), the
+ *                                records of all administrators
+ *                 -> restore()   function=restore, table=record|area, id - POST only
  *
- * Dazu das Startseiten-Widget widget() (settings.php 'widget'): die Anzahl der
- * Einträge und ein Knopf in die Liste.
+ * Also the start page widget widget() (settings.php 'widget'): the number of
+ * entries and a button to the list.
  *
- * FÜR JEDEN ADMIN
+ * FOR EVERY ADMINISTRATOR
  * --------------------
- * Das Modul ist nicht 'listed' und damit nicht Teil der Rechteverwaltung
- * (Access::module() sagt jeder Gruppe ja) - jeder Admin hat seinen Papierkorb.
- * Was darin steht und was er wiederherstellen darf, entscheidet Trash nach
- * `changed_by`, Bereichsrechten und Superuser-Status; das Löschrecht je Datensatz
- * prüft Dataset::restore() noch einmal.
+ * The module is not 'listed' and therefore not part of the permission management
+ * (Access::module() says yes to every group) - every administrator has their own trash.
+ * Trash decides what is in it and what they may restore by
+ * `changed_by`, area permissions and superuser status; Dataset::restore() checks
+ * the delete permission per record once more.
  *
- * @see Camindo\Core\Modules\Trash\Trash  Abfragen und Wiederherstellen
- * @see Camindo\Core\Widgets              Startseiten-Widgets der Module
+ * @see Camindo\Core\Modules\Trash\Trash  queries and restoring
+ * @see Camindo\Core\Widgets              start page widgets of the modules
  */
 namespace Camindo\Core\Modules\Trash;
 
@@ -32,7 +32,7 @@ use Camindo\Core\Database;
 
 class TrashBackend {
 
-    /** admin_id => Anzeigename, je Request gemerkt */
+    /** admin_id => display name, remembered per request */
     private array $adminNames = [];
 
     public function __construct(
@@ -45,9 +45,9 @@ class TrashBackend {
     {}
 
     /**
-     * Liste (backend/index.php), vorher ggf. die Wiederherstellung.
+     * List (backend/index.php), beforehand the restore if applicable.
      *
-     * Request: all=1 (nur Superuser) - Datensätze aller Admins statt der eigenen.
+     * Request: all=1 (superusers only) - records of all administrators instead of own.
      */
     public function list(): void
     {
@@ -66,7 +66,7 @@ class TrashBackend {
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         if ($isSuperuser) {
-            // Umschalter eigene / alle Datensätze - ersetzt den Layer (GET)
+            // Toggle own / all records - replaces the layer (GET)
             $this->backend->buttonAdd(
                 'button_secondary',
                 $all ? "cApp.layers.replace('Trash/index.php');" : "cApp.layers.replace('Trash/index.php?all=1');",
@@ -82,13 +82,13 @@ class TrashBackend {
             ])),
         ]);
 
-        // Datensätze
+        // Records
         echo $this->backend->template('headline4_mt', [
             '{text}' => htmlspecialchars($this->cms->snippet($all ? 'trash.headline_records_all' : 'trash.headline_records')),
         ]);
         echo $this->_recordTable($this->trash->records($all, Trash::MAX_ENTRIES + 1), $all);
 
-        // Bereiche (Superuser)
+        // Areas (superusers)
         if ($isSuperuser) {
             echo $this->backend->template('headline4_mt', [
                 '{text}' => htmlspecialchars($this->cms->snippet('trash.headline_areas')),
@@ -100,7 +100,7 @@ class TrashBackend {
     }
 
     /**
-     * Widget für die Startseite (settings.php 'widget'): Anzahl der Einträge.
+     * Widget for the start page (settings.php 'widget'): number of entries.
      */
     public function widget(): string
     {
@@ -125,8 +125,8 @@ class TrashBackend {
     // ====================
 
     /**
-     * function=restore: Eintrag wiederherstellen, Ergebnis als Balloon bzw. roter
-     * Kasten über der Liste. Nur per POST (17-csrf.md) - ein GET zeigt nur die Liste.
+     * function=restore: restore the entry, result as balloon or red
+     * box above the list. POST only (developer docs, chapter 14 (Security: web)) - a GET only shows the list.
      */
     private function _restore(): void
     {
@@ -157,11 +157,11 @@ class TrashBackend {
     }
 
     /**
-     * Tabelle der gelöschten Datensätze.
+     * Table of the deleted records.
      *
-     * @param array $rows  Trash::records() - eine Zeile mehr als MAX_ENTRIES heißt
-     *                     "es gibt mehr"
-     * @param bool  $all   Spalte "Gelöscht von" zeigen
+     * @param array $rows  Trash::records() - one row more than MAX_ENTRIES means
+     *                     "there are more"
+     * @param bool  $all   show column "Deleted by"
      */
     private function _recordTable(array $rows, bool $all): string
     {
@@ -176,7 +176,7 @@ class TrashBackend {
         $columns = ['column_deleted_at', 'column_record', 'column_area'];
         if ($all) $columns[] = 'column_deleted_by';
         $columns[] = 'column_expires';
-        $columns[] = '';   // Knopf "Wiederherstellen"
+        $columns[] = '';   // "Restore" button
 
         $access = $this->backend->access();
         $tableRows = '';
@@ -211,7 +211,7 @@ class TrashBackend {
     }
 
     /**
-     * Tabelle der gelöschten Bereiche (nur Superuser).
+     * Table of the deleted areas (superusers only).
      */
     private function _areaTable(array $rows, bool $all): string
     {
@@ -253,9 +253,9 @@ class TrashBackend {
     }
 
     /**
-     * Knopf "Wiederherstellen" als eigenes kleines POST-Formular: der Layer bleibt
-     * dabei auf Trash/index.php (die Formularantwort ersetzt nur den Inhalt), ein
-     * späteres "Aktualisieren" löst also nichts noch einmal aus.
+     * "Restore" button as its own small POST form: the layer stays
+     * on Trash/index.php (the form response only replaces the content), so a
+     * later "refresh" does not trigger anything again.
      */
     private function _restoreForm(string $table, int $id, bool $all, string $confirmSnippet): string
     {
@@ -268,8 +268,8 @@ class TrashBackend {
     }
 
     /**
-     * Bezeichnung eines gelöschten Datensatzes: Inhalt des Default-Feldes seines
-     * Bereichs (wie Backend::teaser(), das gelöschte Datensätze nicht liefert).
+     * Label of a deleted record: content of the default field of its
+     * area (like Backend::teaser(), which does not return deleted records).
      */
     private function _recordLabel(int $recordId, array $areaData): string
     {
@@ -292,7 +292,7 @@ class TrashBackend {
     }
 
     /**
-     * Löschzeitpunkt in Zeitzone und Locale des Admins.
+     * Deletion time in the time zone and locale of the administrator.
      */
     private function _date(string $changedAt): string
     {
@@ -317,7 +317,7 @@ class TrashBackend {
     }
 
     /**
-     * instance_id => Beschriftung
+     * instance_id => label
      */
     private function _instanceLabels(): array
     {
@@ -332,7 +332,7 @@ class TrashBackend {
     }
 
     /**
-     * Tabellenzeile aus fertigem HTML je Zelle.
+     * Table row from finished HTML per cell.
      */
     private function _row(array $cells): string
     {
@@ -344,9 +344,9 @@ class TrashBackend {
     }
 
     /**
-     * Tabelle mit Kopfzeile; bei $more der Hinweis auf die Obergrenze.
+     * Table with header row; with $more the note about the upper limit.
      *
-     * @param string[] $columns  Snippet-Schlüssel (trash.{key}) der Spalten, '' = leer
+     * @param string[] $columns  snippet keys (trash.{key}) of the columns, '' = empty
      */
     private function _table(array $columns, string $rows, bool $more): string
     {

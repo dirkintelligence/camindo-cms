@@ -1,9 +1,9 @@
 <?php
 /**
- * Basis der CLI-Befehle (Cli::COMMANDS).
+ * Base of the CLI commands (Cli::COMMANDS).
  *
- * run() bekommt Argumente und Optionen, wie Cli::parse() sie liefert, und gibt den
- * Exit-Code zurück. Dienste kommen aus dem Container ($this->get()), Ausgabe über
+ * run() receives arguments and options as Cli::parse() delivers them, and returns the
+ * exit code. Services come from the container ($this->get()), output via
  * $this->cli->out()/err().
  */
 namespace Camindo\Core\Cli;
@@ -46,7 +46,7 @@ abstract class Command {
     }
 
     /**
-     * Bedienfehler: Meldung + Exit-Code 2
+     * Usage error: message + exit code 2
      */
     protected function usage(string $message): int
     {

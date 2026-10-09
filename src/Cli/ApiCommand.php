@@ -1,18 +1,18 @@
 <?php
 /**
- * api login|logout|whoami|call|methods|describe - die API auf der Kommandozeile
+ * api login|logout|whoami|call|methods|describe - the API on the command line
  *
- *     api login --admin=NAME|ID [--lifetime=SEK]     Session anlegen (Oberfläche cli, ohne
- *                                                    Passwort - siehe ApiSession::runAs())
+ *     api login --admin=NAME|ID [--lifetime=SEK]     create session (interface cli, without
+ *                                                    password - see ApiSession::runAs())
  *     api call METHODE ['{"param": …}'] [--params-file=DATEI]
  *     api whoami | methods | describe METHODE
  *     api logout                                     Session beenden, Arbeitskopien verwerfen
  *
- * Außer login brauchen alle Befehle die Session: --session=ID oder die
- * Umgebungsvariable CAMINDO_API_SESSION. Ausgabe ist JSON (bei call die ganze
- * Antwort von Api::call()); Exit-Code 1, wenn die API einen Fehler meldet.
+ * Except for login, all commands need the session: --session=ID or the
+ * environment variable CAMINDO_API_SESSION. Output is JSON (for call the whole
+ * response of Api::call()); exit code 1 if the API reports an error.
  *
- * Die Gruppe des Admins muss die Oberfläche "Kommandozeile" benutzen dürfen.
+ * The group of the administrator must be allowed to use the interface "Command line".
  */
 namespace Camindo\Core\Cli;
 
@@ -61,7 +61,7 @@ class ApiCommand extends Command {
     }
 
     /**
-     * Parameter von call: JSON als zweites Argument oder aus --params-file.
+     * Parameters of call: JSON as second argument or from --params-file.
      */
     private function params(array $args, array $options): array
     {
@@ -77,7 +77,7 @@ class ApiCommand extends Command {
         return $params;
     }
 
-    /** Antwort als JSON ausgeben; Exit-Code nach 'ok' */
+    /** Output the response as JSON; exit code according to 'ok' */
     private function json(array $result): int
     {
         $this->out((string)json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));

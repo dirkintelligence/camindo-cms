@@ -1,42 +1,42 @@
 <?php
 /**
- * Kollation (Collation) für Textvergleiche und Sortierung je Inhaltssprache.
+ * Collation for text comparisons and sorting per content language.
  *
- * NEUTRAL UND JE SPRACHE
+ * NEUTRAL AND PER LANGUAGE
  * --------------------
- * Die Textspalten stehen auf einer neutralen Unicode-Kollation: utf8mb4_0900_ai_ci,
- * unabhängig von Akzenten und Groß-/Kleinschreibung, dazu ß = ss, æ = ae. Sprachen,
- * deren Regeln davon abweichen, vergleicht und sortiert Cms::select() mit ihrer
- * eigenen Kollation (COLLATE im Ausdruck) - gesucht wird immer in der Sprachversion
- * des Aufrufs, also nach deren Regeln:
+ * The text columns use a neutral Unicode collation: utf8mb4_0900_ai_ci,
+ * independent of accents and upper/lower case, plus ß = ss, æ = ae. Languages
+ * whose rules differ from this are compared and sorted by Cms::select() with their
+ * own collation (COLLATE in the expression) - searching always happens in the language
+ * version of the call, i.e. according to its rules:
  *
- *     de   ä = ae, ö = oe, ü = ue (Telefonbuch-Regel)    utf8mb4_de_pb_0900_ai_ci
- *     sv   å, ä, ö sind eigene Buchstaben (o ≠ ö)        utf8mb4_sv_0900_ai_ci
+ *     de   ä = ae, ö = oe, ü = ue (phonebook rule)       utf8mb4_de_pb_0900_ai_ci
+ *     sv   å, ä, ö are separate letters (o ≠ ö)          utf8mb4_sv_0900_ai_ci
  *     da   aa = å                                        utf8mb4_da_0900_ai_ci
- *     tr   i und ı, İ und I sind verschieden             utf8mb4_tr_0900_ai_ci
+ *     tr   i and ı, İ and I are different                utf8mb4_tr_0900_ai_ci
  *
- * Abgeleitet wird aus dem Sprachkürzel (`language`.`code`, de_AT -> de); einzutragen
- * ist nichts. Nur akzent-unabhängige Varianten (ai_ci) - für Chinesisch und Japanisch
- * kennt MySQL nur akzentgenaue, dort bleibt es bei der neutralen.
+ * Derived from the language code (`language`.`code`, de_AT -> de); nothing has to
+ * be entered. Only accent-insensitive variants (ai_ci) - MySQL only knows
+ * accent-sensitive ones for Chinese and Japanese, there the neutral one is kept.
  *
  * SERVER
  * --------------------
- * Welche Kollationen es gibt, hängt vom Server ab: MySQL 8 kennt die *_0900_ai_ci,
- * MariaDB ab 10.10 die uca1400-Varianten, ältere MariaDB nur die UCA-4.0-Namen
- * (utf8mb4_german2_ci …). forLocale() nimmt die erste vorhandene, neutral() ebenso.
- * schema.sql nennt utf8mb4_0900_ai_ci; kennt der Server sie nicht, setzt SqlFile beim
- * Einspielen die neutrale des Servers ein (portable()).
+ * Which collations exist depends on the server: MySQL 8 knows the *_0900_ai_ci,
+ * MariaDB from 10.10 the uca1400 variants, older MariaDB only the UCA 4.0 names
+ * (utf8mb4_german2_ci …). forLocale() takes the first one available, neutral() likewise.
+ * schema.sql names utf8mb4_0900_ai_ci; if the server does not know it, SqlFile inserts
+ * the server's neutral one when importing (portable()).
  *
- * InstanceCache legt das Ergebnis je Sprache ab (collation()), die Abfragen kosten
- * also nur beim Neuaufbau des Caches etwas.
+ * InstanceCache stores the result per language (collation()), so the queries only
+ * cost something when the cache is rebuilt.
  *
- * VOLLTEXT
+ * FULL TEXT
  * --------------------
- * MATCH() kennt kein COLLATE je Abfrage, es vergleicht mit der Kollation der Spalte.
- * Deshalb steht `data_ftx`.`data` auf einer akzentgenauen Kollation (0900_as_ci), und
- * fold() bringt Text und Suchbegriff vorher nach den Regeln der Sprache in dieselbe
- * Form - mit ICU, das dieselben Regeln (CLDR) kennt wie MySQL: im Deutschen wird
- * „Müller“ zu „mueller“, neutral zu „muller“, im Schwedischen bleibt „förvaring“.
+ * MATCH() has no COLLATE per query, it compares with the collation of the column.
+ * Therefore `data_ftx`.`data` uses an accent-sensitive collation (0900_as_ci), and
+ * fold() first brings text and search term into the same form according to the rules
+ * of the language - with ICU, which knows the same rules (CLDR) as MySQL: in German
+ * „Müller“ becomes „mueller“, neutral „muller“, in Swedish „förvaring“ stays.
  *
  * @see Camindo\Core\Cms::textCollation()
  * @see Camindo\Core\InstanceCache::collation()
@@ -45,16 +45,16 @@ namespace Camindo\Core;
 
 final class Collation {
 
-    /** Neutrale Kollation der Textspalten, nach Vorrang: MySQL 8, MariaDB ≥ 10.10, ältere */
+    /** Neutral collation of the text columns, by priority: MySQL 8, MariaDB ≥ 10.10, older */
     public const NEUTRAL = ['utf8mb4_0900_ai_ci', 'utf8mb4_uca1400_ai_ci', 'utf8mb4_unicode_520_ci', 'utf8mb4_unicode_ci'];
 
-    /** Akzentgenaue Kollation der Volltextspalte, nach Vorrang (siehe fold()) */
+    /** Accent-sensitive collation of the full-text column, by priority (see fold()) */
     public const FULLTEXT = ['utf8mb4_0900_as_ci', 'utf8mb4_uca1400_as_ci', 'utf8mb4_bin'];
 
     /**
-     * Sprachen mit eigenen Regeln: Sprache (ISO 639-1) => [MySQL-Kürzel, UCA-Name].
-     * Daraus werden, in dieser Reihenfolge, utf8mb4_{kürzel}_0900_ai_ci (MySQL 8),
-     * utf8mb4_uca1400_{name}_ai_ci (MariaDB ≥ 10.10) und utf8mb4_{name}_ci versucht.
+     * Languages with their own rules: language (ISO 639-1) => [MySQL code, UCA name].
+     * From these, in this order, utf8mb4_{code}_0900_ai_ci (MySQL 8),
+     * utf8mb4_uca1400_{name}_ai_ci (MariaDB ≥ 10.10) and utf8mb4_{name}_ci are tried.
      */
     private const TAILORINGS = [
         'bg' => ['bg', ''],
@@ -90,7 +90,7 @@ final class Collation {
     ];
 
     /**
-     * Kollationen des Servers für utf8mb4.
+     * Collations of the server for utf8mb4.
      *
      * @return string[]
      */
@@ -107,7 +107,7 @@ final class Collation {
         }
     }
 
-    /** Neutrale Kollation aus der Liste des Servers ('' wenn keine bekannt ist) */
+    /** Neutral collation from the server's list ('' if none is known) */
     public static function neutral(array $available): string
     {
         foreach (self::NEUTRAL as $name) {
@@ -117,9 +117,9 @@ final class Collation {
     }
 
     /**
-     * Kollation für ein Sprachkürzel: die sprachspezifische, sonst die neutrale.
+     * Collation for a language code: the language-specific one, otherwise the neutral one.
      *
-     * @param string   $code       Sprachkürzel (de, de_AT, sr_Latn_RS …)
+     * @param string   $code       language code (de, de_AT, sr_Latn_RS …)
      * @param string[] $available  available()
      */
     public static function forLocale(string $code, array $available): string
@@ -128,7 +128,7 @@ final class Collation {
         $language = strtolower((string)\Locale::getPrimaryLanguage($locale));
         $script   = (string)\Locale::getScript($locale);
         [$mysql, $uca] = self::TAILORINGS[$language] ?? ['', ''];
-        // Serbisch nur in lateinischer, Mongolisch nur in kyrillischer Schrift
+        // Serbian only in Latin script, Mongolian only in Cyrillic script
         if ($language === 'sr' && $script !== 'Latn') $mysql = '';
         if ($language === 'mn' && $script !== '' && $script !== 'Cyrl') $mysql = '';
 
@@ -145,22 +145,22 @@ final class Collation {
     }
 
     /**
-     * Schreibvarianten eines Suchwerts für LIKE.
+     * Spelling variants of a search value for LIKE.
      *
-     * LIKE vergleicht Zeichen für Zeichen: ein Zeichen kann dort nie zweien
-     * entsprechen, `weiß` LIKE 'weiss%' ist in jeder Kollation falsch, im Deutschen
-     * (ä = ae) auch `Müller` LIKE 'Mue%'. Deshalb wird der Suchwert um die Varianten
-     * erweitert, die die Kollation gleichsetzt - `weiss*` sucht zusätzlich `weiß*`,
-     * im Deutschen `Mue*` zusätzlich `Mü*` (und umgekehrt). Akzente und Groß-/
-     * Kleinschreibung erledigt LIKE selbst.
+     * LIKE compares character by character: one character can never match two
+     * there, `weiß` LIKE 'weiss%' is false in every collation, in German
+     * (ä = ae) also `Müller` LIKE 'Mue%'. Therefore the search value is extended by the variants
+     * that the collation treats as equal - `weiss*` additionally searches `weiß*`,
+     * in German `Mue*` additionally `Mü*` (and vice versa). LIKE itself handles accents and
+     * upper/lower case.
      *
-     *     alle Sprachen            ß = ss, æ = ae, œ = oe
-     *     Deutsch (de_pb, german2) ä = ae, ö = oe, ü = ue
-     *     Dänisch, Norwegisch      å = aa
+     *     all languages            ß = ss, æ = ae, œ = oe
+     *     German (de_pb, german2)  ä = ae, ö = oe, ü = ue
+     *     Danish, Norwegian        å = aa
      *
-     * @param string $value      Suchwert (mit * als Platzhalter)
-     * @param string $collation  Kollation des Vergleichs ('' = neutral)
-     * @param int    $max        höchstens so viele Varianten (der Suchwert selbst zuerst)
+     * @param string $value      search value (with * as wildcard)
+     * @param string $collation  collation of the comparison ('' = neutral)
+     * @param int    $max        at most this many variants (the search value itself first)
      * @return string[]
      */
     public static function likeVariants(string $value, string $collation, int $max = 16): array
@@ -171,13 +171,13 @@ final class Collation {
         } elseif (preg_match('/_(da|nb|nn)_|danish/', $collation)) {
             $classes[] = ['å', 'aa'];
         }
-        // Schreibweise (klein) => ihre Klasse
+        // Spelling (lowercase) => its class
         $map = [];
         foreach ($classes as $class) {
             foreach ($class as $spelling) $map[$spelling] = $class;
         }
 
-        // Suchwert zerlegen: feste Teile und austauschbare Stellen (je eine Klasse)
+        // Split the search value: fixed parts and interchangeable positions (one class each)
         $chars = mb_str_split($value);
         $lower = mb_str_split(mb_strtolower($value));
         $pieces = [];
@@ -192,7 +192,7 @@ final class Collation {
             if ($text !== '') $pieces[] = $text;
             $text = '';
             $length = mb_strlen($key);
-            // die Schreibweise des Suchwerts zuerst, dann die übrigen der Klasse
+            // the spelling of the search value first, then the other ones of the class
             $own = implode('', array_slice($chars, $i, $length));
             $pieces[] = array_merge([$own], array_values(array_diff($map[$key], [$key])));
             $i += $length - 1;
@@ -214,9 +214,9 @@ final class Collation {
     }
 
     /**
-     * SQL-Text (schema.sql, Migrationen) für den Server anpassen: kennt er
-     * utf8mb4_0900_ai_ci bzw. utf8mb4_0900_as_ci nicht (MariaDB), steht dort die
-     * nächstbeste (NEUTRAL, FULLTEXT).
+     * Adapt SQL text (schema.sql, migrations) for the server: if it does not know
+     * utf8mb4_0900_ai_ci or utf8mb4_0900_as_ci (MariaDB), the closest available one
+     * (NEUTRAL, FULLTEXT) is put there.
      */
     public static function portable(string $sql, array $available): string
     {
@@ -234,29 +234,29 @@ final class Collation {
     }
 
     /**
-     * Text für den Volltextindex nach den Regeln einer Sprache falten: klein
-     * geschrieben, jedes Zeichen durch das ersetzt, was die Sprache ihm gleichsetzt
-     * (Stufe primär: ohne Akzente und Groß-/Kleinschreibung).
+     * Fold text for the full-text index according to the rules of a language: lowercased,
+     * each character replaced by what the language treats as equal to it
+     * (primary level: without accents and upper/lower case).
      *
      *     neutral    Müller -> muller    Café -> cafe    Straße -> strasse   Ørsted -> orsted
-     *     Deutsch    Müller -> mueller   Café -> cafe    Straße -> strasse
-     *     Schwedisch Förvaring -> förvaring (ö ist ein eigener Buchstabe)
-     *     Dänisch    Ålesund -> aalesund, Ørsted -> ørsted
+     *     German     Müller -> mueller   Café -> cafe    Straße -> strasse
+     *     Swedish    Förvaring -> förvaring (ö is a separate letter)
+     *     Danish     Ålesund -> aalesund, Ørsted -> ørsted
      *
-     * Je Zeichen außerhalb von ASCII werden Kandidaten geprüft - die Grundform ohne
-     * Akzente bzw. ihre lateinische Umschrift, dieselbe mit angehängtem e und doppelt
-     * (ä: a, ae, aa) - und der erste genommen, den die Sprache gleichsetzt; sonst
-     * bleibt das Zeichen. Text und Suchbegriff müssen mit derselben Sprache gefaltet
-     * werden.
+     * For each non-ASCII character, candidates are checked - the base form without
+     * accents or its Latin transliteration, the same with an appended e and doubled
+     * (ä: a, ae, aa) - and the first one that the language treats as equal is taken;
+     * otherwise the character stays. Text and search term must be folded with
+     * the same language.
      *
-     * @param string $text  Text (bereits in Wörter zerlegt, Cms::indexText())
-     * @param string $code  Sprachkürzel (`language`.`code`)
+     * @param string $text  text (already split into words, Cms::indexText())
+     * @param string $code  language code (`language`.`code`)
      */
     public static function fold(string $text, string $code): string
     {
         $locale = self::icuLocale($code);
         $text = \Normalizer::normalize($text, \Normalizer::FORM_C) ?: $text;
-        // Türkisch: I -> ı, İ -> i
+        // Turkish: I -> ı, İ -> i
         static $turkish = null;
         if ($locale === 'tr') $turkish ??= \Transliterator::create('tr-Lower');
         $text = ($locale === 'tr' && $turkish) ? $turkish->transliterate($text) : mb_strtolower($text);
@@ -264,15 +264,15 @@ final class Collation {
     }
 
     /**
-     * Falten zwei Sprachen gleich (fold())? Wenn nicht, passt der Volltext der einen
-     * nicht zur Suche in der anderen.
+     * Do two languages fold the same (fold())? If not, the full text of one does not
+     * match the search in the other.
      */
     public static function sameRules(string $codeA, string $codeB): bool
     {
         return self::icuLocale($codeA) === self::icuLocale($codeB);
     }
 
-    /** ICU-Locale mit den Regeln, die forLocale() in MySQL wählt ('root' = neutral) */
+    /** ICU locale with the rules that forLocale() chooses in MySQL ('root' = neutral) */
     private static function icuLocale(string $code): string
     {
         $locale   = str_replace('-', '_', trim($code));
@@ -288,7 +288,7 @@ final class Collation {
         };
     }
 
-    /** Ein Zeichen falten (fold()), je Locale zwischengespeichert */
+    /** Fold one character (fold()), cached per locale */
     private static function foldChar(string $char, string $locale): string
     {
         static $cache = [], $collators = [], $latin = null;
@@ -303,7 +303,7 @@ final class Collation {
             preg_replace('/\p{Mn}+/u', '', \Normalizer::normalize($char, \Normalizer::FORM_D) ?: $char) ?? '',
             $latin ? mb_strtolower((string)$latin->transliterate($char)) : '',
         ];
-        // für die Sprache bedeutungslos (etwa der Punkt aus İ -> i̇): entfällt
+        // meaningless for the language (e.g. the dot from İ -> i̇): dropped
         if ($collators[$locale]->compare($char, '') === 0) return $cache[$locale][$char] = '';
         $result = $char;
         foreach (array_unique($bases) as $base) {

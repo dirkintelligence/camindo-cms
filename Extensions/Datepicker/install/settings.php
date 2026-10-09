@@ -1,7 +1,7 @@
 <?php
-// Core-Extension Datepicker: Kalender-Auswahl (vanillajs-datepicker) neben einem
-// Textfeld der Typen datetime und timestampl - Monatsnamen, Wochenbeginn und
-// Datumsformat nach der Locale des Admins (docs/developers/13-component-management.md, 3.7)
+// Core extension Datepicker: calendar picker (vanillajs-datepicker) next to a
+// text field of the types datetime and timestampl - month names, first day of the week and
+// date format per the locale of the administrator (developer docs, chapter 08 (Components and extensions))
 return [
     'version'       => '9.0.0',
     'type'          => 'picker',

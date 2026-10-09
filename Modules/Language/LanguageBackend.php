@@ -1,24 +1,24 @@
 <?php
 /**
- * Backend-Oberfläche für die Frontend-Sprachen (Tabelle `language`).
+ * Backend UI for the frontend languages (table `language`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     language_list.php  -> list()   Sprachliste
- *     language_info.php  -> info()   Detailansicht
- *     language_edit.php  -> edit()   anlegen / kopieren / ändern / löschen
+ *     language_list.php  -> list()   language list
+ *     language_info.php  -> info()   detail view
+ *     language_edit.php  -> edit()   create / copy / change / delete
  *
- * Keine Suchmaske - die Liste ist kurz und wird ungeblättert ausgegeben (limit -1).
+ * No search mask - the list is short and is output without paging (limit -1).
  *
- * BESONDERHEIT: LÖSCHEN
+ * SPECIAL CASE: DELETING
  * --------------------
- * Mit der Sprache verschwinden ihre Inhalte in allen Instanzen
- * (Language::hookOnDelete()). Das Löschformular nennt deshalb die Instanzen, die sie
- * führen; ist sie irgendwo Hauptsprache, bietet es das Löschen gar nicht erst an.
+ * Deleting the language removes its content from all instances
+ * (Language::hookOnDelete()). The delete form therefore names the instances that use it;
+ * if it is the main language somewhere, the form does not offer deletion at all.
  *
  * @see Camindo\Core\Modules\Language\Language          Dataset/Model
- * @see Camindo\Core\Modules\Instance\InstanceBackend   fast wortgleiche Schwesterklasse
- * @see Camindo\Core\Page                                 wertet den Sprachcode in der URL aus
+ * @see Camindo\Core\Modules\Instance\InstanceBackend   almost identical sister class
+ * @see Camindo\Core\Page                                 evaluates the language code in the URL
  */
 namespace Camindo\Core\Modules\Language;
 
@@ -43,18 +43,18 @@ class LanguageBackend {
     {}
 
     /**
-     * Sprachliste (backend/language_list.php).
+     * Language list (backend/language_list.php).
      *
-     * limit -1 heißt: keine Paginierung, alle Sprachen auf einer Seite. Sortiert nach
-     * `position` - das ist die Reihenfolge, in der die Sprachen später im
-     * Sprachumschalter erscheinen sollen.
+     * limit -1 means: no pagination, all languages on one page. Sorted by
+     * `position` - this is the order in which the languages should later appear in the
+     * language switcher.
      */
     public function list()
     {
-        // Seitenelemente
+        // Page elements
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#language.module_label');
         
         // Container header
@@ -69,7 +69,7 @@ class LanguageBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Language-Liste
+        // Language list
         // --------------------
         $f = $this->cms->select([
             'request' => 'all',
@@ -86,7 +86,7 @@ class LanguageBackend {
 
             $tableRows = '';
 
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+            // Fetch results (Dataset::fetch: with post-processing)
             while ($data = $this->language->fetch()) {
                 // language Icon + Label
                 $iconHtml = $this->backend->template('language.icon_language', [
@@ -123,26 +123,25 @@ class LanguageBackend {
     }
 
     /**
-     * Detailansicht einer Sprache (backend/language_info.php).
+     * Detail view of a language (backend/language_info.php).
      *
-     * Die Überschrift baut _editHeadline() - dieselbe Methode wie im Formular; damit
-     * die dortige Fallunterscheidung greift, wird $this->function vorher auf 'info'
-     * gesetzt.
+     * The headline is built by _editHeadline() - the same method as in the form; so that
+     * its case distinction applies there, $this->function is set to 'info' beforehand.
      */
     public function info()
     {
         $id = (int)($_REQUEST['id'] ?? 0);
 
-        // Seitenelemente
+        // Page elements
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
 
         // Container header
         echo $this->backend->template('container_header');
 
-        // Language-Data
+        // Language data
         // ---------------  
         // Load Language Data
         if (!$data = $this->language->load($id)) {
@@ -169,7 +168,7 @@ class LanguageBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log, Backend::infoAuditTabs())
+        // Tabs: Info | Changes (audit log, Backend::infoAuditTabs())
         if ($this->backend->infoAuditTabs("Language/language_info.php?id={$id}", 'language', $id)) return;
 
         // Data
@@ -179,7 +178,7 @@ class LanguageBackend {
         $this->backend->infoAdd($this->language, 'endonym', $data['endonym']);
         $backendOptions = $this->backend->backendLanguageOptions();
         $this->backend->infoAdd($this->language, 'backend_code', $backendOptions[$this->cms->resolveBackendLang((string)$data['backend_code'])] ?? $data['backend_code']);
-        // Ohne eigene Zeitzone gilt die aus der Konfiguration
+        // Without its own time zone, the one from the configuration applies
         $timezone = (string)$data['timezone'];
         if ($timezone === '') {
             $timezone = $this->cms->serverTZ . ' ' . $this->cms->snippet('language.note_timezone_default');
@@ -191,21 +190,21 @@ class LanguageBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/language_edit.php).
+     * Create / copy / change / delete (backend/language_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md).
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)).
      */
     public function edit(): void
     {
-        // Seiten-Parameter
+        // Page parameters
         $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->function = (string)($_REQUEST['function'] ?? '');
         if ($this->function == '') $this->function = 'edit';
         $this->data = (array)($_REQUEST['data'] ?? []);
         $this->data['language_id'] = $this->id;
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_' . $this->function);
 
         // Container header
@@ -252,7 +251,7 @@ class LanguageBackend {
     }
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     private function _editCreate(): void
     {
@@ -261,19 +260,19 @@ class LanguageBackend {
     }
 
     /**
-     * function=edit|copy|delete: Sprache laden.
+     * function=edit|copy|delete: load the language.
      *
-     * Beim Kopieren wird die Id verworfen und die Position um eins erhöht, damit die
-     * Kopie hinter dem Original einsortiert wird.
+     * When copying, the id is discarded and the position is increased by one, so that the
+     * copy is sorted after the original.
      */
     private function _editLoad(): void
     {
         $this->data = $this->language->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the id now
         if ($this->function == 'copy') {
             $this->id = 0;
             $this->data['position']++;
@@ -281,13 +280,13 @@ class LanguageBackend {
     }
 
     /**
-     * Überschrift für Formular und Detailansicht.
+     * Headline for form and detail view.
      *
-     * Nur beim Löschen und in der Detailansicht steht die Sprache selbst darüber -
-     * dort ist sie die eigentliche Information.
+     * Only when deleting and in the detail view is the language itself shown above it -
+     * there it is the actual information.
      *
-     * Die Platzhalter {icon} und {color_class} bleiben leer: die Spalten gibt es nicht
-     * (siehe Klassenkommentar).
+     * The placeholders {icon} and {color_class} stay empty: the columns do not exist
+     * (see class comment).
      */
     private function _editHeadline() {
         if (in_array($this->function, ['delete', 'info'])) {
@@ -304,18 +303,18 @@ class LanguageBackend {
     }
 
     /**
-     * function=save: speichern. $fields leer = alle Schema-Felder aus $data.
+     * function=save: save. $fields empty = all schema fields from $data.
      */
     private function _editSave(): void
     {
-        // Prüfe Daten und speichere
+        // Check data and save
         $fields= [];
         if ($this->language->save($fields, $this->data)) {
             // Balloon Message
             $msg = $this->cms->snippet('language.message_language_saved');
             $this->backend->balloon('success', $msg);
 
-            // Referer aktualisieren und Fenster schließen
+            // Refresh referer and close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -327,7 +326,7 @@ class LanguageBackend {
     }
 
     /**
-     * function=delete_confirm: löschen - die Inhalte der Sprache löscht
+     * function=delete_confirm: delete - the contents of the language are deleted by
      * Language::hookOnDelete().
      */
     private function _editDeleteConfirm(): void
@@ -337,7 +336,7 @@ class LanguageBackend {
             $msg = $this->cms->snippet('language.message_language_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -356,13 +355,13 @@ class LanguageBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Drei einfache Felder und die Position. Bei der Position wählt der Redakteur den
-     * VORGÄNGER; der Optionsschlüssel ist deshalb dessen position + 1, also die
-     * Zielposition. Der Eintrag "an den Anfang" trägt den Schlüssel 5, weil die
-     * Positionen 1 bis 4 den mitgelieferten Sprachen vorbehalten sind - aus demselben
-     * Grund führt die Abfrage nur Sprachen ab language_id 4 auf.
+     * Three simple fields and the position. For the position, the editor chooses the
+     * PREDECESSOR; the option key is therefore its position + 1, i.e. the
+     * target position. The entry "at the beginning" has the key 5, because
+     * positions 1 to 4 are reserved for the bundled languages - for the same
+     * reason the query only lists languages from language_id 4 on.
      */
     private function _editForm(): void
     {
@@ -378,10 +377,10 @@ class LanguageBackend {
         $this->backend->formField($this->language, ['name' => 'code', 'value' => $this->data['code'] ?? '', 'id' => $this->id]);
         $this->backend->formField($this->language, ['name' => 'endonym', 'value' => $this->data['endonym'] ?? '', 'id' => $this->id]);
 
-        // backend_code: Backend-Sprache der Snippets (Cms::backendLanguages())
-        // Vorbelegung bei einer neuen Sprache: aus dem Sprachteil des Codes
-        // (de_AT -> de_DE), sofern es dafür Snippets gibt; ein früheres Kürzel
-        // wie "de" erscheint als "de_DE"
+        // backend_code: backend language of the snippets (Cms::backendLanguages())
+        // Default for a new language: from the language part of the code
+        // (de_AT -> de_DE), if there are snippets for it; an earlier code
+        // like "de" appears as "de_DE"
         $backendCode = (string)($this->data['backend_code'] ?? '');
         if ($this->id < 1 && $backendCode === '' && (string)($this->data['code'] ?? '') !== '') {
             $backendCode = $this->cms->resolveBackendLang((string)$this->data['code']);
@@ -397,7 +396,7 @@ class LanguageBackend {
             'selectPlease' => true,
         ]);
 
-        // timezone: leer = Vorgabe aus der Konfiguration (system.timezone)
+        // timezone: empty = default from the configuration (system.timezone)
         $defaultLabel = str_replace('{timezone}', $this->cms->serverTZ, $this->cms->snippet('language.option_timezone_default'));
         $timezoneOptions = ['' => $defaultLabel] + $this->backend->timezoneOptions();
         $this->backend->formField($this->language, [
@@ -438,10 +437,10 @@ class LanguageBackend {
     }
 
     /**
-     * function=delete: Löschbestätigung mit den Instanzen, die die Sprache führen.
+     * function=delete: deletion confirmation with the instances that use the language.
      *
-     * Ist sie Hauptsprache einer Instanz, gibt es keinen Löschknopf - erst dort eine
-     * andere Hauptsprache wählen (Language::hookOnDelete() weist es ohnehin ab).
+     * If it is the main language of an instance, there is no delete button - first choose
+     * another main language there (Language::hookOnDelete() rejects it anyway).
      */
     private function _editDeleteForm(): void
     {

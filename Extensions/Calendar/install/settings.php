@@ -1,7 +1,7 @@
 <?php
-// Core-Extension Calendar: native Datums-/Zeitauswahl (<input type="date|datetime-local|time">)
-// neben einem Textfeld der Typen datetime, timestampl und time
-// (docs/developers/13-component-management.md, 3.7)
+// Core extension Calendar: native date/time picker (<input type="date|datetime-local|time">)
+// next to a text field of the types datetime, timestampl and time
+// (developer docs, chapter 08 (Components and extensions))
 return [
     'version'       => '9.0.0',
     'type'          => 'picker',

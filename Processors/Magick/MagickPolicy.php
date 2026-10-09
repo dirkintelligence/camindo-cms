@@ -1,39 +1,39 @@
 <?php
 /**
- * Eigene ImageMagick-Policy des Prozessors Magick (developer_docs/18-imagemagick.md, 2.2.2).
+ * Own ImageMagick policy of the processor Magick (developer docs, chapter 14 (Security: web)).
  *
- * camindo CMS erzeugt die Datei var/config/magick/policy.xml aus der Konfiguration
- * und setzt vor jedem ImageMagick-Aufruf MAGICK_CONFIGURE_PATH darauf (apply()). Die
- * Kindprozesse erben die Variable, auch Hintergrundprozesse, und PHP setzt sie am Ende
- * des Requests zurück. Root-Rechte oder Zugriff auf /etc sind nicht nötig, das
- * funktioniert auch auf Shared Hosting (getestet mit 6.9.11-60, dem Stand bei Strato).
+ * camindo CMS generates the file var/config/magick/policy.xml from the configuration
+ * and sets MAGICK_CONFIGURE_PATH to it before each ImageMagick call (apply()). The
+ * child processes inherit the variable, including background processes, and PHP resets it at the end
+ * of the request. Root rights or access to /etc are not needed, this
+ * also works on shared hosting (tested with 6.9.11-60, the version at Strato).
  *
- * VERSCHÄRFEN, NIE LOCKERN
+ * TIGHTEN, NEVER LOOSEN
  * --------------------
- * ImageMagick liest seine eigene Policy UND die des Systems; ein Verbot gewinnt,
- * gleich in welcher Datei es steht. Die camindo-Policy kann also nichts freigeben, was
- * der Provider gesperrt hat (typisch: PDF in der Debian-Policy) - sie legt nur
- * zusätzliche Sperren und Grenzen darüber. Deshalb ist sie immer aktiv und nicht
+ * ImageMagick reads its own policy AND the system's; a prohibition wins,
+ * regardless of the file it is in. The camindo policy therefore cannot release anything that
+ * the provider has blocked (typically: PDF in the Debian policy) - it only adds
+ * additional blocks and limits on top. Therefore it is always active and not
  * abschaltbar.
  *
  * INHALT
  * --------------------
- *   Grenzen      Speicher, Plattencache, Laufzeit, Breite/Höhe, Fläche, Einzelbilder
- *                (Dekompressionsbomben, animierte GIFs, mehrseitige Dateien)
- *   Coder        gesperrt: Skript- und Pseudoformate (MSL, MVG, TEXT, LABEL, URL,
- *                FILE, EPHEMERAL, INLINE …) und die PostScript-Familie (PS, EPS, XPS …)
- *   Delegates    alle gesperrt - ImageMagick ruft keine fremden Programme auf (gs,
+ *   Limits       memory, disk cache, runtime, width/height, area, single images
+ *                (decompression bombs, animated GIFs, multi-page files)
+ *   Coder        blocked: script and pseudo formats (MSL, MVG, TEXT, LABEL, URL,
+ *                FILE, EPHEMERAL, INLINE …) and the PostScript family (PS, EPS, XPS …)
+ *   Delegates    all blocked - ImageMagick calls no foreign programs (gs,
  *                curl, libreoffice, inkscape, html2ps …). WebP, HEIC, AVIF, JPEG 2000
- *                sind eingebaute Bibliotheken, keine Delegates, und laufen weiter.
- *   @-Pfade      gesperrt (Dateilisten wie "@/etc/passwd")
+ *                are built-in libraries, not delegates, and continue to run.
+ *   @-paths      blocked (file lists such as "@/etc/passwd")
  *
  * security.magick_allow schaltet zwei Formate frei:
- *   'svg'  SVG über den internen Renderer (Coder msvg, kein inkscape/rsvg). Der
- *          zeichnet intern mit MVG, deshalb wird MVG mit freigegeben; eingebettete
- *          Verweise wie text:, msl: oder lokale Dateien bleiben gesperrt, externe
- *          XML-Entities lädt libxml nicht.
- *   'pdf'  PDF, dafür der Delegate Ghostscript (gs). Ghostscript war wiederholt
- *          Einfallstor (-dSAFER-Umgehungen) - nur einschalten, wenn gebraucht.
+ *   'svg'  SVG via the internal renderer (coder msvg, no inkscape/rsvg). It
+ *          draws internally with MVG, therefore MVG is released as well; embedded
+ *          references such as text:, msl: or local files remain blocked, external
+ *          libxml does not load XML entities.
+ *   'pdf'  PDF, via the delegate Ghostscript (gs). Ghostscript has repeatedly been
+ *          an entry point (-dSAFER bypasses) - only enable if needed.
  */
 namespace Camindo\Core\Processors\Magick;
 
@@ -42,24 +42,24 @@ use Camindo\Core\System;
 
 class MagickPolicy
 {
-    /** Formate, die security.magick_allow freischalten kann */
+    /** Formats that security.magick_allow can release */
     public const ALLOWABLE = ['svg', 'pdf'];
 
-    /** MIME-Typ je freischaltbarem Format (Infoseite, Abgleich mit den Medientypen) */
+    /** MIME type per releasable format (info page, comparison with the media types) */
     public const FORMAT_MIME = ['svg' => 'image/svg+xml', 'pdf' => 'application/pdf'];
 
-    /** Coder je freischaltbarem Format - gesperrt, solange das Format nicht erlaubt ist */
+    /** Coder per releasable format - blocked as long as the format is not allowed */
     public const FORMAT_CODERS = [
         'svg' => ['SVG', 'SVGZ', 'MSVG', 'MVG'],
         'pdf' => ['PDF', 'PDFA'],
     ];
 
-    /** Delegates je freischaltbarem Format (alle übrigen bleiben gesperrt) */
+    /** Delegates per releasable format (all others remain blocked) */
     private const FORMAT_DELEGATES = ['pdf' => ['gs']];
 
     /** Immer gesperrte Coder */
     private const BLOCKED_CODERS = [
-        // Skript- und Pseudoformate (ImageTragick, Dateizugriff, SSRF)
+        // Script and pseudo formats (ImageTragick, file access, SSRF)
         'MSL', 'TEXT', 'LABEL', 'CAPTION', 'PANGO', 'URL', 'HTTP', 'HTTPS', 'FTP', 'FILE',
         'EPHEMERAL', 'INLINE', 'SHOW', 'WIN', 'X', 'PLASMA',
         // PostScript-Familie (Ghostscript)
@@ -68,22 +68,22 @@ class MagickPolicy
     ];
 
     /**
-     * Obergrenzen. Die Kommandozeile (-limit, Magick::limitArguments()) kann sie
-     * senken, aber nicht überschreiten - auch nicht mit eigenen Parametern im
-     * Expertenmodus eines Konverters.
+     * Upper limits. The command line (-limit, Magick::limitArguments()) can
+     * lower, but not exceed - not even with own parameters in
+     * override them in expert mode of a converter.
      */
     private const RESOURCES = [
         'memory'      => '256MiB',
         'map'         => '512MiB',
         'disk'        => '1GiB',
-        'time'        => '120',     // Sekunden, = Magick::TIMEOUT_CONVERT
+        'time'        => '120',     // seconds, = Magick::TIMEOUT_CONVERT
         'width'       => '16KP',
         'height'      => '16KP',
         'area'        => '128MP',
-        'list-length' => '128',     // Einzelbilder (Frames, Seiten)
+        'list-length' => '128',     // single images (frames, pages)
     ];
 
-    /** Pfad unterhalb von paths.var_dir */
+    /** Path below paths.var_dir */
     private const RELATIVE_DIR = 'config/magick';
 
     private ?bool $applied = null;
@@ -95,7 +95,7 @@ class MagickPolicy
     {}
 
     /**
-     * Freigeschaltete Formate aus security.magick_allow (nur bekannte, klein).
+     * Released formats from security.magick_allow (only known, small).
      * @return string[]
      */
     public function allowed(): array
@@ -110,8 +110,8 @@ class MagickPolicy
     }
 
     /**
-     * Freischaltbares Format, zu dem ein Coder gehört ('svg', 'pdf'), sonst ''.
-     * Coder, die weder dazu gehören noch immer gesperrt sind, brauchen keine Freigabe.
+     * Releasable format to which a coder belongs ('svg', 'pdf'), otherwise ''.
+     * Coders that belong to neither and are never blocked need no release.
      */
     public static function formatOfCoder(string $coder): string
     {
@@ -121,13 +121,13 @@ class MagickPolicy
         return '';
     }
 
-    /** Verzeichnis der erzeugten policy.xml (Wert für MAGICK_CONFIGURE_PATH) */
+    /** Directory of the generated policy.xml (value for MAGICK_CONFIGURE_PATH) */
     public function dir(): string
     {
         return rtrim((string)$this->config->get('paths.var_dir'), '/\\') . '/' . self::RELATIVE_DIR;
     }
 
-    /** Inhalt der policy.xml für die aktuelle Konfiguration */
+    /** Content of the policy.xml for the current configuration */
     public function xml(): string
     {
         $allowed = $this->allowed();
@@ -151,7 +151,7 @@ class MagickPolicy
         }
         $lines[] = '  <policy domain="path" rights="none" pattern="@*"/>';
         $lines[] = '  <policy domain="coder" rights="none" pattern="{' . implode(',', $coders) . '}"/>';
-        // Reihenfolge: erst alles sperren, dann einzelne Delegates freigeben
+        // Order: first block everything, then release individual delegates
         $lines[] = '  <policy domain="delegate" rights="none" pattern="*"/>';
         foreach ($delegates as $delegate) {
             $lines[] = '  <policy domain="delegate" rights="execute" pattern="' . $delegate . '"/>';
@@ -161,11 +161,11 @@ class MagickPolicy
     }
 
     /**
-     * policy.xml schreiben (nur wenn sich der Inhalt geändert hat) und
-     * MAGICK_CONFIGURE_PATH setzen. Einmal je Request.
+     * Write policy.xml (only if the content has changed) and
+     * Set MAGICK_CONFIGURE_PATH. Once per request.
      *
-     * @return bool  false: die Datei ließ sich nicht schreiben - dann darf ImageMagick
-     *               nicht laufen (Magick::convert() bricht ab, statt ohne Policy zu arbeiten)
+     * @return bool  false: the file could not be written - then ImageMagick must not
+     *               run (Magick::convert() aborts instead of working without a policy)
      */
     public function apply(): bool
     {
@@ -184,7 +184,7 @@ class MagickPolicy
     }
 
     /**
-     * Fällt ein MIME-Typ unter die Medientypen eines Konverters (Muster wie
+     * Does a MIME type fall under the media types of a converter (patterns like
      * VirtualFieldsTrait::_matchMediaType(): 'image/svg+xml', 'image/*', '.svg')?
      *
      * @param string $mime        z. B. 'application/pdf'

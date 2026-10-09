@@ -1,6 +1,6 @@
 <?php
 /**
- * camindo.php - Kommandozeile des CMS
+ * camindo.php - command line of the CMS
  *
  *     php Core/cron/camindo.php install [--no-interaction --fixtures ...]
  *     php Core/cron/camindo.php status
@@ -15,15 +15,15 @@
  *     php Core/cron/camindo.php refresh snippets | html [--prefix=…]
  *     php Core/cron/camindo.php api login --admin=NAME | call METHOD '{…}' --session=ID | logout
  *
- * Befehle: Camindo\Core\Cli\Cli (Dispatcher) und Camindo\Core\Cli\{Name}Command.
- * Läuft ohne Session (CAMINDO_CLI); Hintergrundjobs prüfen den Wartungsmodus,
- * dieser Einstieg nicht - er ist der Grund dafür.
+ * Commands: Camindo\Core\Cli\Cli (dispatcher) and Camindo\Core\Cli\{Name}Command.
+ * Runs without session (CAMINDO_CLI); background jobs check the maintenance mode,
+ * this entry point does not - that is the reason for it.
  *
- * @see docs/developers/14-installation-und-update.md, Kapitel 8
+ * @see developer docs, chapter 09 (Installation and update)
  */
 use Camindo\Core\Cli\Cli;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -33,7 +33,7 @@ set_time_limit(0);
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 exit((new Cli($GLOBALS['app']))->run($argv));

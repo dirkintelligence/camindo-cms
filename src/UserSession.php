@@ -1,74 +1,74 @@
 <?php
 /**
- * Frontend-Sessions der Community (Tabelle `user_session`). Instanzname: $userSession.
+ * Frontend sessions of the community (table `user_session`). Instance name: $userSession.
  *
- * Das Gegenstück zu Camindo\Core\Session, die nur Administratoren im Backend kennt.
- * Ein "User" ist hier ein Website-Besucher; sein Profil ist ein `record` in einem
- * Bereich vom Typ 'profile' (siehe Modules\Area\Area). Die Session hält die Id
- * dieses Profils und wird über ein Cookie oder - für Aufrufe ohne Cookie, z. B. aus
- * einer App - über eine explizit übergebene Session-Id wieder aufgenommen
- * (Parameter 'sessionid' von CMS:USER_AUTH / CMS:USER_PROTECT).
+ * The counterpart to Camindo\Core\Session, which only knows administrators in the backend.
+ * A "user" here is a website visitor; their profile is a `record` in an
+ * area of type 'profile' (see Modules\Area\Area). The session holds the id of
+ * this profile and is resumed via a cookie or - for calls without a cookie, e.g. from
+ * an app - via an explicitly passed session id
+ * (parameter 'sessionid' of CMS:USER_AUTH / CMS:USER_PROTECT).
  *
- * ZWEI ARTEN VON SESSIONS
+ * TWO KINDS OF SESSIONS
  * --------------------
- *     angemeldet   record_id > 0: CMS:USER_LOGIN hat Name und Passwort geprüft
- *     anonym       record_id NULL: nur ein Warenkorb (CMS:USER_BASKET legt sie bei
- *                  Bedarf an, damit auch ein nicht angemeldeter Besucher sammeln
- *                  kann). isLoggedIn() unterscheidet beides; USER_AUTH und
- *                  USER_PROTECT akzeptieren nur angemeldete Sessions.
+ *     signed in    record_id > 0: CMS:USER_LOGIN has checked name and password
+ *     anonymous    record_id NULL: only a basket (CMS:USER_BASKET creates it when
+ *                  needed, so that a visitor who is not signed in can also collect
+ *                  items). isLoggedIn() tells them apart; USER_AUTH and
+ *                  USER_PROTECT only accept signed-in sessions.
  *
  * COOKIE
  * --------------------
- * Der Cookiename ist je Befehl wählbar ('cookiename', Standard 'usess'), damit zwei
- * Auftritte unter derselben Domain getrennte Anmeldungen führen können. Erlaubt sind
- * nur [a-z0-9]. Das Cookie ist HttpOnly; 'secure' und SameSite kommen aus der
- * Konfiguration (user.cookie_secure, user.cookie_samesite).
+ * The cookie name can be chosen per command ('cookiename', default 'usess'), so that two
+ * sites under the same domain can keep separate sign-ins. Only
+ * [a-z0-9] are allowed. The cookie is HttpOnly; 'secure' and SameSite come from the
+ * configuration (user.cookie_secure, user.cookie_samesite).
  *
- * Cookies müssen VOR der ersten Ausgabe gesetzt werden. Die CMS:USER_*-Befehle
- * stehen deshalb sinnvollerweise am Anfang eines Templates; setCookie() prüft
- * headers_sent() und lässt die Session sonst ohne Cookie stehen - der Aufrufer
- * bekommt die Session-Id trotzdem und kann sie weiterreichen.
+ * Cookies must be set BEFORE the first output. The CMS:USER_* commands
+ * therefore belong sensibly at the start of a template; setCookie() checks
+ * headers_sent() and otherwise leaves the session without a cookie - the caller
+ * still gets the session id and can pass it on.
  *
- * LEBENSDAUER
+ * LIFETIME
  * --------------------
- * Eine Session verfällt nach user.max_inactive_sec ohne Zugriff (load() zählt als
- * Zugriff und schreibt access_date fort). Verfallene Sessions räumt create() mit
- * ab - einmal je neuer Session, dieselbe Überlegung wie bei Session::create().
- * Anonyme Warenkorb-Sessions bekommen ihre eigene Frist (basket_expires in
- * `details`, CMS:USER_BASKET 'duration'); sie fallen erst dann.
+ * A session expires after user.max_inactive_sec without access (load() counts as
+ * access and updates access_date). Expired sessions are cleaned up by create() -
+ * once per new session, the same reasoning as with Session::create().
+ * Anonymous basket sessions get their own time limit (basket_expires in
+ * `details`, CMS:USER_BASKET 'duration'); they only expire after that.
  *
  * DETAILS
  * --------------------
- * `details` (JSON) hält, was die Befehle je Request brauchen, ohne den
- * Profil-Datensatz erneut zu laden: den Bereich des Profils (area_id steht auch als
- * Spalte) und beliebige Zusatzangaben der Befehle (Warenkorb-Frist, Anmeldezeit).
+ * `details` (JSON) holds what the commands need per request without
+ * loading the profile record again: the area of the profile (area_id also exists as a
+ * column) and any additional data of the commands (basket time limit, sign-in time).
  *
- * @see Camindo\Core\Modules\Record\RecordUser   die CMS:USER_*-Befehle
- * @see Camindo\Core\MediaDelivery                prüft die Session vor der Dateiausgabe
- * @see Camindo\Core\Session                      Admin-Sessions (Backend)
+ * @see Camindo\Core\Modules\Record\RecordUser   the CMS:USER_* commands
+ * @see Camindo\Core\MediaDelivery                checks the session before file delivery
+ * @see Camindo\Core\Session                      admin sessions (backend)
  */
 namespace Camindo\Core;
 
 class UserSession {
 
-    /** Standard-Cookiename, siehe Parameter 'cookiename' der CMS:USER_*-Befehle */
+    /** Default cookie name, see parameter 'cookiename' of the CMS:USER_* commands */
     public const COOKIE_DEFAULT = 'usess';
 
-    /** Cookie, aus dem das CSRF-Token der Frontend-Formulare abgeleitet wird */
+    /** Cookie from which the CSRF token of the frontend forms is derived */
     public const CSRF_COOKIE = 'ucsrf';
 
-    /** Länge einer Session-Id (Crypt::randomKey(32) -> 43 Zeichen) */
+    /** Length of a session id (Crypt::randomKey(32) -> 43 characters) */
     private const ID_LENGTH = 43;
 
     /*
         data[
             'session_id'
-            'record_id'     Profil-Datensatz, 0 = anonym
-            'area_id'       Bereich des Profils
-            'instance_id'   Instanz, auf der die Session entstand
+            'record_id'     profile record, 0 = anonymous
+            'area_id'       area of the profile
+            'instance_id'   instance on which the session was created
             'created_at'
             'access_date'
-            'details'       Array
+            'details'       array
         ]
     */
     private array $data = [];
@@ -86,13 +86,13 @@ class UserSession {
     // Zustand
     // ====================
 
-    /** Ist eine Session geladen (angemeldet oder anonym)? */
+    /** Is a session loaded (signed in or anonymous)? */
     public function isActive(): bool
     {
         return !empty($this->data['session_id']);
     }
 
-    /** Ist ein User angemeldet (Session mit Profil-Datensatz)? */
+    /** Is a user signed in (session with a profile record)? */
     public function isLoggedIn(): bool
     {
         return $this->isActive() && (int)($this->data['record_id'] ?? 0) > 0;
@@ -103,13 +103,13 @@ class UserSession {
         return (string)($this->data['session_id'] ?? '');
     }
 
-    /** Profil-Datensatz des angemeldeten Users, 0 wenn nicht angemeldet */
+    /** Profile record of the signed-in user, 0 if not signed in */
     public function recordId(): int
     {
         return (int)($this->data['record_id'] ?? 0);
     }
 
-    /** Bereich (type 'profile') des angemeldeten Users, 0 wenn nicht angemeldet */
+    /** Area (type 'profile') of the signed-in user, 0 if not signed in */
     public function areaId(): int
     {
         return (int)($this->data['area_id'] ?? 0);
@@ -121,7 +121,7 @@ class UserSession {
     }
 
     /**
-     * Wert aus der Session: eine Spalte oder ein Eintrag aus `details`.
+     * Value from the session: a column or an entry from `details`.
      */
     public function get(string $key): mixed
     {
@@ -130,7 +130,7 @@ class UserSession {
     }
 
     /**
-     * Eintrag in `details` schreiben (sofort in die Datenbank).
+     * Write an entry in `details` (straight to the database).
      */
     public function setDetail(string $key, mixed $value): void
     {
@@ -148,15 +148,15 @@ class UserSession {
     // ====================
 
     /**
-     * Session wieder aufnehmen - aus der übergebenen Id, sonst aus dem Cookie.
+     * Resume a session - from the passed id, otherwise from the cookie.
      *
-     * Verfallene Sessions (access_date älter als user.max_inactive_sec) gelten als
-     * ungültig; eine anonyme Warenkorb-Session mit eigener Frist (details.basket_expires)
-     * bleibt bis dahin gültig. Jeder erfolgreiche Zugriff schreibt access_date fort.
+     * Expired sessions (access_date older than user.max_inactive_sec) count as
+     * invalid; an anonymous basket session with its own limit (details.basket_expires)
+     * stays valid until then. Every successful access updates access_date.
      *
-     * @param string $sessionId   explizite Session-Id ('' = Cookie)
-     * @param string $cookieName  Cookiename ('' = Standard)
-     * @return bool               true, wenn eine Session geladen ist
+     * @param string $sessionId   explicit session id ('' = cookie)
+     * @param string $cookieName  cookie name ('' = default)
+     * @return bool               true if a session is loaded
      */
     public function load(string $sessionId = '', string $cookieName = ''): bool
     {
@@ -198,34 +198,34 @@ class UserSession {
     }
 
     /**
-     * Neue Session anlegen und als laufende Session übernehmen.
+     * Create a new session and take it over as the running session.
      *
-     * Es entsteht IMMER eine neue Id - auch wenn schon eine Session läuft (gegen
-     * Session-Fixation: wer dem Opfer ein Cookie mit bekannter Id unterschiebt,
-     * darf nach dessen Anmeldung nicht in einer angemeldeten Session sitzen; vgl.
-     * Session::create() im Backend, developer_docs/16-sicherheit.md §3 und §9).
+     * A NEW id is ALWAYS created - even if a session is already running (against
+     * session fixation: whoever slips the victim a cookie with a known id
+     * must not end up in a signed-in session after the victim signs in; cf.
+     * Session::create() in the backend, developer docs, chapter 13 (Security: authentication).
      *
-     * Ist die laufende Session (aus diesem Request oder dem Cookie) anonym oder
-     * gehört sie demselben Profil, zieht ihr Inhalt in die neue um: Warenkorb
-     * (`user_basket`) und `details` - der Warenkorb überlebt so die Anmeldung. Die
-     * alte Zeile wird gelöscht, ihre Id ist danach wertlos. Eine Session eines
-     * ANDEREN Profils bleibt unberührt (sie gehört nicht zu dieser Anmeldung) und
-     * verfällt nach ihrer Frist.
+     * If the running session (from this request or the cookie) is anonymous or
+     * belongs to the same profile, its content moves into the new one: basket
+     * (`user_basket`) and `details` - so the basket survives the sign-in. The
+     * old row is deleted, its id is worthless afterwards. A session of a
+     * DIFFERENT profile remains untouched (it does not belong to this sign-in) and
+     * expires after its time limit.
      *
-     * @param int    $recordId    Profil-Datensatz, 0 = anonyme Session
-     * @param int    $areaId      Bereich des Profils
-     * @param int    $instanceId  Instanz des Aufrufs
-     * @param array  $details     Zusatzangaben (werden mit übernommenen zusammengeführt)
-     * @param bool   $setCookie   Cookie setzen?
-     * @param string $cookieName  Cookiename ('' = Standard)
-     * @return string             Session-Id
+     * @param int    $recordId    profile record, 0 = anonymous session
+     * @param int    $areaId      area of the profile
+     * @param int    $instanceId  instance of the call
+     * @param array  $details     additional data (merged with the ones taken over)
+     * @param bool   $setCookie   set the cookie?
+     * @param string $cookieName  cookie name ('' = default)
+     * @return string             session id
      */
     public function create(int $recordId, int $areaId, int $instanceId, array $details = [], bool $setCookie = true, string $cookieName = ''): string
     {
         $this->purge();
 
-        // Laufende Session: aus diesem Request, sonst aus dem Cookie - USER_LOGIN
-        // steht oft vor jedem USER_BASKET/USER_AUTH des Templates
+        // Running session: from this request, otherwise from the cookie - USER_LOGIN
+        // often comes before every USER_BASKET/USER_AUTH of the template
         if (!$this->isActive()) $this->load('', $cookieName);
         $previousId = '';
         if ($this->isActive() && ($this->recordId() === 0 || $this->recordId() === $recordId)) {
@@ -243,8 +243,8 @@ class UserSession {
                 [$sessionId, $recordId > 0 ? $recordId : null, $areaId, $instanceId, $this->encodeDetails($details)]
             );
             if ($previousId !== '') {
-                // Warenkorb umhängen (der Fremdschlüssel kennt kein ON UPDATE
-                // CASCADE), dann die alte Session löschen
+                // Re-link the basket (the foreign key has no ON UPDATE
+                // CASCADE), then delete the old session
                 $this->db->query(
                     'UPDATE `user_basket` SET `session_id` = ? WHERE `session_id` = ?',
                     'ss',
@@ -269,10 +269,10 @@ class UserSession {
     }
 
     /**
-     * Anonyme Session sicherstellen (Warenkorb ohne Anmeldung): die laufende, wenn
-     * es eine gibt, sonst eine neue.
+     * Ensure an anonymous session (basket without sign-in): the running one if
+     * there is one, otherwise a new one.
      *
-     * @return string  Session-Id
+     * @return string  session id
      */
     public function ensure(int $instanceId, string $cookieName = ''): string
     {
@@ -281,10 +281,10 @@ class UserSession {
     }
 
     /**
-     * Session beenden: Zeile löschen (samt Warenkorb per Fremdschlüssel), Cookie
-     * löschen.
+     * End the session: delete the row (including the basket via the foreign key),
+     * delete the cookie.
      *
-     * @param bool   $deleteCookie  false: nur serverseitig beenden
+     * @param bool   $deleteCookie  false: end it on the server side only
      * @param string $cookieName
      */
     public function close(bool $deleteCookie = true, string $cookieName = ''): void
@@ -303,12 +303,12 @@ class UserSession {
     }
 
     /**
-     * Alle Sessions eines Profils beenden - nach dem Löschen des Profils, einem
-     * Passwortwechsel oder wenn ein Administrator den User sperrt.
+     * End all sessions of a profile - after deleting the profile, a password
+     * change, or when an administrator locks the user.
      *
-     * @param int    $recordId  Profil-Datensatz
-     * @param string $exceptId  diese Session bestehen lassen (Passwortwechsel: die
-     *                          Session, in der er geschah)
+     * @param int    $recordId  profile record
+     * @param string $exceptId  keep this session alive (password change: the
+     *                          session in which it happened)
      */
     public function closeAllOf(int $recordId, string $exceptId = ''): void
     {
@@ -326,23 +326,23 @@ class UserSession {
     // ====================
     // Cookie
     // ====================
-    // CSRF-Token der Frontend-Formulare (17-csrf.md §2.5)
+    // CSRF token of the frontend forms (developer docs, chapter 14 (Security: web))
     // ====================
 
     /**
-     * Token für ein Formular (CMS:USER_TOKEN) - HMAC über das Cookie 'ucsrf'.
+     * Token for a form (CMS:USER_TOKEN) - HMAC over the cookie 'ucsrf'.
      *
-     * Bewusst NICHT an die Session gebunden: Anmeldung, Registrierung und
-     * Passwort-Reset laufen ohne Session, und USER_LOGIN vergibt eine neue Id -
-     * ein zweiter, noch offener Tab hätte danach ein totes Token. Das Cookie ist
-     * ein Zufallswert (HttpOnly, SameSite wie usess), das Token lässt sich ohne
-     * .camindo.key nicht daraus berechnen; eine fremde Website kennt weder das
-     * Cookie noch das Token (signiertes Double-Submit).
+     * Deliberately NOT bound to the session: sign-in, registration and
+     * password reset run without a session, and USER_LOGIN issues a new id -
+     * a second tab that is still open would then hold a dead token. The cookie is
+     * a random value (HttpOnly, SameSite like usess); the token cannot be computed
+     * from it without .camindo.key; a foreign website knows neither the
+     * cookie nor the token (signed double submit).
      *
-     * Legt das Cookie beim ersten Aufruf an - also VOR der ersten Ausgabe aufrufen
-     * (CMS:USER_TOKEN set=… am Template-Anfang). Spätere Aufrufe im selben Request
-     * lesen das Cookie aus $_COOKIE. Fehlt es und sind die Header schon gesendet,
-     * gibt es kein Token ('') - ein ausgedachtes wäre ohne Cookie wertlos.
+     * Creates the cookie on the first call - so call it BEFORE the first output
+     * (CMS:USER_TOKEN set=… at the start of the template). Later calls in the same request
+     * read the cookie from $_COOKIE. If it is missing and the headers have already been sent,
+     * there is no token ('') - a made-up one would be worthless without the cookie.
      */
     public function csrfToken(): string
     {
@@ -351,9 +351,9 @@ class UserSession {
     }
 
     /**
-     * Zufallswert aus dem Cookie 'ucsrf' - Grundlage des CSRF-Tokens und des
-     * Zeitstempels von FormGuard. $create: fehlt er, einen neuen anlegen (nur vor
-     * der ersten Ausgabe möglich). '' = keiner.
+     * Random value from the cookie 'ucsrf' - basis of the CSRF token and of the
+     * timestamp of FormGuard. $create: if it is missing, create a new one (only possible
+     * before the first output). '' = none.
      */
     public function csrfSeed(bool $create = false): string
     {
@@ -367,9 +367,9 @@ class UserSession {
     }
 
     /**
-     * Enthält der Request ein gültiges Token? Quelle: POST-Feld '_token' oder
-     * Header X-Camindo-Token (Ajax), nie der Query-String (Logs, Referer).
-     * Fehlschlag -> Log 'security'.
+     * Does the request contain a valid token? Source: POST field '_token' or
+     * header X-Camindo-Token (Ajax), never the query string (logs, referer).
+     * Failure -> log 'security'.
      */
     public function verifyCsrfRequest(): bool
     {
@@ -384,7 +384,7 @@ class UserSession {
     }
 
     /**
-     * Cookiename bereinigen: nur [a-z0-9], leer = Standard.
+     * Sanitize the cookie name: only [a-z0-9], empty = default.
      */
     public function cookieName(string $name = ''): string
     {
@@ -393,11 +393,11 @@ class UserSession {
     }
 
     /**
-     * Session-Cookie setzen bzw. löschen (Wert '' und $delete).
+     * Set or delete the session cookie (value '' and $delete).
      *
-     * Kein Ablaufdatum: das Cookie lebt bis zum Schließen des Browsers, serverseitig
-     * gilt user.max_inactive_sec. Nach headers_sent() geht nichts mehr - dann bleibt
-     * die Session ohne Cookie (siehe Klassenkommentar).
+     * No expiry date: the cookie lives until the browser is closed, on the server
+     * user.max_inactive_sec applies. Nothing works after headers_sent() - then the
+     * session stays without a cookie (see class comment).
      */
     private function setCookie(string $value, string $cookieName = '', bool $delete = false): void
     {
@@ -425,8 +425,8 @@ class UserSession {
     }
 
     /**
-     * Verfallen? Angemeldete Sessions nach user.max_inactive_sec, anonyme mit
-     * eigener Warenkorb-Frist erst danach.
+     * Expired? Signed-in sessions after user.max_inactive_sec, anonymous ones with
+     * their own basket time limit only after that.
      */
     private function isExpired(array $row): bool
     {
@@ -442,8 +442,8 @@ class UserSession {
     }
 
     /**
-     * Verfallene Sessions aller User löschen (siehe isExpired()). Anonyme Sessions
-     * mit Warenkorb-Frist bleiben bis zu ihrer Frist stehen.
+     * Delete expired sessions of all users (see isExpired()). Anonymous sessions
+     * with a basket time limit stay until their limit is reached.
      */
     private function purge(): void
     {

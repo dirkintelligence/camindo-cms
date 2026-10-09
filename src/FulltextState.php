@@ -1,32 +1,32 @@
 <?php
 /**
- * Stand des Volltexts je Bereich: "veraltet"-Markierung und Sperre des Neuaufbaus.
+ * Status of the full text per area: "stale" marker and lock on the rebuild.
  *
- * VERALTET STATT SOFORT NEU
+ * STALE INSTEAD OF REBUILDING AT ONCE
  * --------------------
- * Strukturänderungen, nach denen der Volltext eines Bereichs nicht mehr zu den
- * Quellfeldern passt (Quellen eines Volltextfeldes geändert, neues Volltextfeld,
- * Quellfeld gelöscht oder umgewandelt, andere Faltungsregeln einer Sprache ...),
- * bauen ihn nicht sofort für alle Datensätze neu auf - das hielte den Request und
- * bei großen Bereichen den Betrieb auf. Sie setzen `area`.`fulltext_stale_at`
- * (markStale()). Die Detailansicht und die Feldliste des Bereichs zeigen dann den
- * Hinweis mit "Jetzt aktualisieren" (Hintergrundprozess, CLI-Befehl `fulltext`),
- * sonst erledigt es die Zeitplaner-Aufgabe `fulltext`.
+ * Structural changes after which the full text of an area no longer matches the
+ * source fields (sources of a full-text field changed, new full-text field,
+ * source field deleted or converted, other folding rules of a language ...)
+ * do not rebuild it at once for all records - that would tie up the request and,
+ * for large areas, the operation. They set `area`.`fulltext_stale_at`
+ * (markStale()). The detail view and the field list of the area then show the
+ * note with "Update now" (background process, CLI command `fulltext`);
+ * otherwise the scheduler task `fulltext` takes care of it.
  *
- * Ausnahme: die Umwandlung in 'encrypted' baut sofort neu auf (Field::convert()) -
- * sonst stünde der Klartext bis dahin im Suchindex.
+ * Exception: the conversion to 'encrypted' rebuilds at once (Field::convert()) -
+ * otherwise the plain text would sit in the search index until then.
  *
- * Die Markierung hält den FRÜHESTEN Zeitpunkt. RecordService::rebuildFulltext()
- * löscht sie nach einem vollständigen Lauf nur, wenn sie nicht jünger ist als dessen
- * Beginn (clear()) - eine Änderung während des Laufs bleibt also stehen.
+ * The marker holds the EARLIEST point in time. RecordService::rebuildFulltext()
+ * only clears it after a complete run if it is not younger than that run's
+ * start (clear()) - a change during the run therefore stays.
  *
- * SPERRE
+ * LOCK
  * --------------------
- * Je Bereich läuft höchstens ein Neuaufbau: var/tmp/fulltext-{area_id}.lock, exklusiv
- * angelegt (fopen 'x' - flock() sperrt auf dem Bind-Mount von Docker Desktop nicht
- * prozessübergreifend). Der Lauf frischt die Datei regelmäßig auf (touch()); bleibt
- * sie LOCK_STALE Sekunden unberührt, gilt der Prozess als abgebrochen und die Sperre
- * wird übernommen.
+ * At most one rebuild runs per area: var/tmp/fulltext-{area_id}.lock, created
+ * exclusively (fopen 'x' - flock() does not lock across processes on the bind mount
+ * of Docker Desktop). The run refreshes the file regularly (touch()); if it stays
+ * untouched for LOCK_STALE seconds, the process counts as aborted and the lock
+ * is taken over.
  *
  * @see Camindo\Core\Modules\Record\RecordService::rebuildFulltext()
  * @see Camindo\Core\Cli\FulltextCommand
@@ -35,10 +35,10 @@ namespace Camindo\Core;
 
 class FulltextState {
 
-    /** Sekunden ohne touch(), nach denen eine Sperre als verwaist gilt */
+    /** Seconds without touch() after which a lock counts as orphaned */
     public const LOCK_STALE = 900;
 
-    /** Gehaltene Sperren dieses Prozesses: area_id => Pfad */
+    /** Locks held by this process: area_id => path */
     private array $locks = [];
 
     public function __construct(
@@ -47,11 +47,11 @@ class FulltextState {
     ) {}
 
     // ====================
-    // Markierung
+    // Marker
 
     /**
-     * Volltext der Bereiche als veraltet markieren (nur Datensatzbereiche; eine
-     * bestehende Markierung behält ihren Zeitpunkt).
+     * Mark the full text of the areas as stale (record areas only; an
+     * existing marker keeps its point in time).
      *
      * @param int[] $areaIds
      */
@@ -72,7 +72,7 @@ class FulltextState {
         }
     }
 
-    /** Alle Datensatzbereiche einer Instanz als veraltet markieren */
+    /** Mark all record areas of an instance as stale */
     public function markStaleInstance(int $instanceId): void
     {
         $this->db->pushResult();
@@ -87,13 +87,13 @@ class FulltextState {
     }
 
     /**
-     * Bereiche, deren Volltext ein Feld als Quelle haben kann: sein eigener Bereich
-     * (Standard-Volltext), die Bereiche der Volltextfelder, in die es eingeht (auch
-     * über ein link-Feld), und die Bereiche mit einem link-Feld auf seinen Bereich
-     * (deren Standard-Volltext nimmt die Textfelder der Zielbereiche auf).
+     * Areas whose full text may have a field as source: its own area
+     * (standard full text), the areas of the full-text fields it feeds into (also
+     * via a link field), and the areas with a link field pointing to its area
+     * (their standard full text takes in the text fields of the target areas).
      *
-     * Vor dem Löschen des Feldes aufzurufen - danach fehlen `field` und
-     * `rel_fulltext_text`.
+     * Call before the field is deleted - afterwards `field` and
+     * `rel_fulltext_text` are missing.
      *
      * @return int[]
      */
@@ -118,7 +118,7 @@ class FulltextState {
         }
     }
 
-    /** Seit wann (UTC, 'Y-m-d H:i:s') der Volltext veraltet ist - null: aktuell */
+    /** Since when (UTC, 'Y-m-d H:i:s') the full text is stale - null: current */
     public function staleSince(int $areaId): ?string
     {
         $this->db->pushResult();
@@ -132,7 +132,7 @@ class FulltextState {
         }
     }
 
-    /** Veraltete Bereiche (für `fulltext --stale`) */
+    /** Stale areas (for `fulltext --stale`) */
     public function staleAreaIds(): array
     {
         $this->db->pushResult();
@@ -146,10 +146,10 @@ class FulltextState {
     }
 
     /**
-     * Markierung nach einem vollständigen Neuaufbau löschen - nur wenn sie nicht
-     * jünger ist als dessen Beginn.
+     * Delete the marker after a complete rebuild - only if it is not
+     * younger than the start of that rebuild.
      *
-     * @param string $startedAt  Beginn des Laufs (UTC, 'Y-m-d H:i:s')
+     * @param string $startedAt  start of the run (UTC, 'Y-m-d H:i:s')
      */
     public function clear(int $areaId, string $startedAt): void
     {
@@ -166,7 +166,7 @@ class FulltextState {
     }
 
     // ====================
-    // Sperre
+    // Lock
 
     private function lockFile(int $areaId): string
     {
@@ -174,9 +174,9 @@ class FulltextState {
     }
 
     /**
-     * Sperre für den Neuaufbau eines Bereichs nehmen.
+     * Take the lock for rebuilding an area.
      *
-     * @return bool  false: ein anderer Prozess baut den Bereich gerade neu auf
+     * @return bool  false: another process is currently rebuilding the area
      */
     public function lock(int $areaId): bool
     {
@@ -191,14 +191,14 @@ class FulltextState {
                 return true;
             }
             if ($this->lockInfo($areaId) !== null) return false;
-            // verwaist: übernehmen (umbenennen, damit nur EIN Prozess sie bekommt)
+            // orphaned: take over (rename, so that only ONE process gets it)
             $stale = $file . '.' . getmypid() . '.stale';
             if (@rename($file, $stale)) @unlink($stale);
         }
         return false;
     }
 
-    /** Laufende Sperre auffrischen (während eines langen Laufs) */
+    /** Refresh a running lock (during a long run) */
     public function touch(int $areaId): void
     {
         if (isset($this->locks[$areaId])) @touch($this->locks[$areaId]);
@@ -212,9 +212,9 @@ class FulltextState {
     }
 
     /**
-     * Läuft gerade ein Neuaufbau des Bereichs?
+     * Is a rebuild of the area running at the moment?
      *
-     * @return array|null  ['touched' => Unix-Zeit der letzten Auffrischung] oder null
+     * @return array|null  ['touched' => Unix time of the last refresh] or null
      */
     public function lockInfo(int $areaId): ?array
     {

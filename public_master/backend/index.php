@@ -15,52 +15,52 @@
 
     // Load Config
     $app = $GLOBALS['app'];
-    // Nie installiert (keine .camindo.php, keine Datenbank): Hinweis auf den Installer
+    // Never installed (no .camindo.php, no database): note about the installer
     $app->get(SystemState::class)->guardNotInstalled();
     $config = $app->get(Config::class);
     $cms = $app->get(Cms::class);
     $backend = $app->get(Backend::class);
 
-    // Session laden, sofern angemeldet: stellt Backend-Sprache und Zeitzone des
-    // Admins ein (Session::load() -> Cms::applyAdminSettings()), damit die
-    // statischen Teile der Oberfläche in seiner Sprache erscheinen. Ohne Session
-    // bleibt es bei 'en_US' - der Anmeldedialog lädt sich in der gemerkten Sprache.
+    // Load the session, if logged in: sets the backend language and time zone of the
+    // administrator (Session::load() -> Cms::applyAdminSettings()), so that the
+    // static parts of the UI appear in their language. Without a session
+    // it stays at 'en_US' - the login dialog loads in the remembered language.
     $session = $app->get(Session::class);
     $session->load();
 
-    // Wartungsmodus / Datenbank nicht auf dem Stand der Dateien (SystemState):
-    // Superuser sehen einen Hinweisbalken und können weiterarbeiten, alle anderen
-    // die Wartungsseite. Ohne Session bleibt der Login erreichbar.
+    // Maintenance mode / database not at the state of the files (SystemState):
+    // superusers see a notice bar and can keep working, all others
+    // the maintenance page. Without a session the login remains reachable.
     $state = $app->get(SystemState::class);
     $blockReason = $state->blockReason();
     if ($blockReason !== null && $session->get('admin_id') && !$backend->isSuperuser()) {
         $state->sendUnavailable();
     }
 
-    // Ungelesene interne Nachrichten für das Abzeichen am Brief-Symbol (0 ohne
-    // Anmeldung; danach hält cApp.mail den Wert aktuell)
+    // Unread internal messages for the badge on the mail icon (0 without
+    // login; afterwards cApp.mail keeps the value up to date)
     $unreadCount = $session->get('admin_id') ? $app->get(MessagingBackend::class)->badgeCount() : 0;
     $unreadCount = min($unreadCount, 99);
     
-    // In der Entwicklungsumgebung immer neusten Stand der Scripte laden
+    // In the development environment, always load the latest state of the scripts
     $developmentVersion = (bool)($config->get('system.development_version') ?? false);
     $nocache = $developmentVersion ? '?nocache' . time() : '';
 
-    // Nonce der Seite (Script-Policy, developer_docs/19-csp.md): für die Inline-Scripts
-    // hier und als cConfig.nonce für alles, was das Javascript nachlädt
+    // Nonce of the page (script policy, developer docs, chapter 14 (Security: web)): for the inline scripts
+    // here and as cConfig.nonce for everything that the JavaScript loads
     $nonceAttr = $app->get(SecurityHeaders::class)->nonceAttr();
 
-    // Schreibrichtung der Backend-Sprache (Cms::RTL_LANGUAGES): bei rtl die gespiegelte
-    // Fassung von Bootstrap (ms-/me-, text-start, float-end, ... tauschen die Seiten);
-    // backend.css und die Extensions arbeiten mit logischen Properties und brauchen keine
-    // eigene Fassung. Fehlt bootstrap.rtl.min.css, bleibt es bei der normalen Datei.
+    // Writing direction of the backend language (Cms::RTL_LANGUAGES): for rtl the mirrored
+    // version of Bootstrap (ms-/me-, text-start, float-end, ... swap the sides);
+    // backend.css and the extensions work with logical properties and need no
+    // own version. If bootstrap.rtl.min.css is missing, the normal file stays.
     $dir = $cms->textDirection();
     $bootstrapCss = ($dir === 'rtl' && is_file(__DIR__ . '/assets/bootstrap/bootstrap.rtl.min.css'))
         ? 'bootstrap.rtl.min.css' : 'bootstrap.min.css';
 
-    // Assets der aktiven Module (settings.php 'assets', publiziert nach mod/{name}/):
-    // Stylesheets im Kopf, Scripte vor backend-init.js. Sie kommen auf jede Seite,
-    // auch ohne Modulrecht - die Rechte prüft der Server.
+    // Assets of the active modules (settings.php 'assets', published to mod/{name}/):
+    // Stylesheets in the head, scripts before backend-init.js. They come on every page,
+    // also without module permission - the server checks the permissions.
     $moduleAssets = ['js' => [], 'css' => []];
     foreach ($cms->modules as $moduleSettings) {
         foreach (['js', 'css'] as $assetType) {

@@ -1,10 +1,10 @@
 <?php
 /**
- * Basisklasse der Trigger-Templates (`rel_area_trigger`).
+ * Base class of the trigger templates (`rel_area_trigger`).
  *
- * Ein Trigger-Template enthält nur Methoden-Definitionen. TriggerTemplates packt
- * den kompilierten Code in eine anonyme Klasse, die von dieser Klasse erbt - die
- * Methoden des Templates werden so zu Methoden eines Objekts:
+ * A trigger template contains only method definitions. TriggerTemplates puts
+ * the compiled code into an anonymous class that inherits from this class - the
+ * methods of the template thus become methods of an object:
  *
  *     function onSave(array &$affectedFields, array &$data, array &$previousData): void
  *     {
@@ -12,20 +12,20 @@
  *         if (!in_array('title', $affectedFields, true)) $affectedFields[] = 'title';
  *     }
  *
- * Im Template stehen damit bereit:
+ * The template can use the following:
  *
  *     $this->cms        Cms (snippet(), error(), select() ...)
  *     $this->db         Database
- *     $this->record     Record - der Dataset, der das Ereignis auslöst
- *     $this->areaId     Bereich, für den das Template geladen wurde (ist es
- *                       mehreren zugewiesen: der erste im Request)
- *     $this->temporary  true: Zwischenspeichern einer Arbeitskopie (Reiterwechsel,
- *                       stayTemporary) - onSave/onSaved laufen dann ebenfalls
- *     $this->...        die nachladbaren Dienste von Page (email, pagination ...)
+ *     $this->record     Record - the dataset that triggers the event
+ *     $this->areaId     Area for which the template was loaded (if it is
+ *                       assigned to several: the first one in the request)
+ *     $this->temporary  true: saving a working copy temporarily (tab switch,
+ *                       stayTemporary) - onSave/onSaved then run as well
+ *     $this->...        the lazily loadable services of Page (email, pagination ...)
  *
- * Hilfsmethoden können frei ergänzt werden (private function ...). Die
- * Ereignis-Methoden sind optional - fehlt eine, passiert bei dem Ereignis nichts.
- * Die Liste der Ereignisse und ihre Signaturen: TriggerTemplates::EVENTS.
+ * Helper methods can be added freely (private function ...). The
+ * event methods are optional - if one is missing, nothing happens for that event.
+ * The list of events and their signatures: TriggerTemplates::EVENTS.
  *
  * @see Camindo\Core\TriggerTemplates
  */
@@ -35,7 +35,7 @@ use Camindo\Core\Modules\Record\Record;
 
 abstract class TriggerTemplate
 {
-    /** Zwischenspeichern einer Arbeitskopie (siehe Klassenkommentar) */
+    /** Temporarily saving a working copy (see class comment) */
     public bool $temporary = false;
 
     public function __construct(
@@ -47,8 +47,8 @@ abstract class TriggerTemplate
     ) {}
 
     /**
-     * Nachladbare Dienste von Page ($this->email, $this->pagination ...) - dieselben
-     * Namen, unter denen der kompilierte Template-Code sie anspricht.
+     * Lazily loadable services of Page ($this->email, $this->pagination ...) - the same
+     * names under which the compiled template code addresses them.
      */
     public function __get(string $name)
     {

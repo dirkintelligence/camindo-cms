@@ -1,10 +1,10 @@
 <?php
-// Kompilierte Frontend-Templates neu schreiben (var/php/{area_id}/{name}.php) und
-// die Quelltext-Dateien abgleichen (var/templates/{instance_id}/{bereich}/{name}.cms.php).
-// Beides liest die Dateien in var/templates - nie die Spalte `template`.`code`.
-// Normalerweise nicht nötig: Template::hookOnSaved() schreibt beide Dateien bei jedem
-// Speichern, TemplateFiles::sync() läuft minütlich über Core/cron. Gedacht für die
-// Umstellung des Bestands und für den Fall, dass Dateien von Hand verändert wurden.
+// Rewrite the compiled frontend templates (var/php/{area_id}/{name}.php) and
+// reconcile the source files (var/templates/{instance_id}/{area}/{name}.cms.php).
+// Both read the files in var/templates - never the column `template`.`code`.
+// Normally not needed: Template::hookOnSaved() writes both files on every
+// saving, TemplateFiles::sync() runs every minute via Core/cron. Intended for the
+// conversion of the existing stock and for the case that files were edited by hand.
 use Camindo\Core\Modules\Template\Template;
 use Camindo\Core\Modules\Template\TemplateFiles;
 

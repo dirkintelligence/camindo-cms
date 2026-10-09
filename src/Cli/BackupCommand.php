@@ -2,9 +2,9 @@
 /**
  * backup [--reason=…] | list | prune [--keep=N]
  *
- * mysqldump nach var/dbbackup/{reason}-{Ymd-His}.sql (Backup::beforeChange()).
- * prune behält die N jüngsten Änderungs-Sicherungen; die rotierenden backup-N.sql
- * des Schedulers bleiben unberührt.
+ * mysqldump to var/dbbackup/{reason}-{Ymd-His}.sql (Backup::beforeChange()).
+ * prune keeps the N most recent change backups; the rotating backup-N.sql
+ * of the scheduler remain untouched.
  */
 namespace Camindo\Core\Cli;
 

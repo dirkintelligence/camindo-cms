@@ -1,41 +1,41 @@
 <?php
 /**
- * Snippet-Sets der Instanzen: var/custom/snippets/{instance_id}/lang/{code}.ini.
+ * Snippet sets of the instances: var/custom/snippets/{instance_id}/lang/{code}.ini.
  *
- * Jede Instanz hat genau ein Set (Unterverzeichnis = instance_id), je Backend-Sprache
- * (Cms::backendLanguages()) eine Datei schluessel = "Text" - dasselbe Format wie die
- * lang/-Dateien der Komponenten (SnippetIni). SnippetCache sammelt die Sets
- * als Präfix custom.{instance_id} ein. In Templates heißen die Snippets
- * `custom.{schlüssel}` (Cms::snippet() ergänzt die aktuelle Instanz) oder ausdrücklich
- * `custom.{instance_id}.{schlüssel}`; in Beschriftungsfeldern des Backends steht die
- * ausdrückliche Form mit '#' davor (Extension Snippets).
+ * Each instance has exactly one set (subdirectory = instance_id), one file per backend language
+ * (Cms::backendLanguages()) with key = "text" - the same format as the
+ * lang/ files of the components (SnippetIni). SnippetCache collects the sets
+ * as prefix custom.{instance_id}. In templates the snippets are called
+ * `custom.{key}` (Cms::snippet() adds the current instance) or explicitly
+ * `custom.{instance_id}.{key}`; in label fields of the backend the explicit
+ * form with '#' in front is used (extension Snippets).
  *
- * ZUGRIFF
+ * ACCESS
  * --------------------
- * Ein Set darf sehen und ändern, wer Zugriff auf die Instanz hat
- * (Access::instance()). instances() liefert nur diese; SnippetsBackend und der
- * Suchendpunkt der Extension prüfen jede Instanz damit. Das Set entsteht beim ersten
- * Speichern; wird die Instanz gelöscht, räumt Instance::hookOnDeleted() es ab
+ * Whoever has access to the instance may see and change a set
+ * (Access::instance()). instances() returns only these; SnippetsBackend and the
+ * search endpoint of the extension check each instance with it. The set is created on the first
+ * save; if the instance is deleted, Instance::hookOnDeleted() removes it
  * (delete()).
  *
- * KEINE DATENBANK, KEIN DATASET
+ * NO DATABASE, NO DATASET
  * --------------------
- * Die Dateien sind die einzige Ablage. Diese Klasse liest sie (SnippetIni) und
- * schreibt sie neu; das Backend zeigt ein Set als
- * Tabelle Schlüssel × Sprache. Nach jedem Schreiben wird der Cache des Präfixes neu
- * gebaut (SnippetCache::build('custom.{instance_id}')).
+ * The files are the only storage. This class reads them (SnippetIni) and
+ * writes them again; the backend shows a set as a
+ * table key × language. After each write, the cache of the prefix is rebuilt
+ * (SnippetCache::build('custom.{instance_id}')).
  *
- * KEINE INJECTION
+ * NO INJECTION
  * --------------------
- * Verzeichnisnamen sind Instanz-Ids (SnippetCache::CUSTOM_SET_PATTERN), Schlüssel
- * müssen KEY_PATTERN genügen (Kleinbuchstaben, Ziffern, Unterstrich - kein Punkt, weil
- * Cms::snippet() am letzten Punkt trennt). Die Texte landen ausschließlich über
- * SnippetIni::quote() in der Datei - was auch immer ein Admin eingibt, es bleibt ein
- * Wert in Anführungszeichen; ausgeführt wird nichts.
+ * Directory names are instance ids (SnippetCache::CUSTOM_SET_PATTERN), keys
+ * must match KEY_PATTERN (lowercase letters, digits, underscore - no dot, because
+ * Cms::snippet() splits at the last dot). The texts end up in the file exclusively via
+ * SnippetIni::quote() - whatever an administrator enters, it remains a
+ * value in quotation marks; nothing is executed.
  *
- * @see Camindo\Core\SnippetCache                       Einsammeln, Präfix custom.{instance_id}
- * @see Camindo\Core\Modules\Snippets\SnippetsBackend   Oberfläche
- * @see Camindo\Core\Modules\Instance\Instance          löscht das Set mit der Instanz
+ * @see Camindo\Core\SnippetCache                       collecting, prefix custom.{instance_id}
+ * @see Camindo\Core\Modules\Snippets\SnippetsBackend   UI
+ * @see Camindo\Core\Modules\Instance\Instance          deletes the set with the instance
  */
 namespace Camindo\Core\Modules\Snippets;
 
@@ -49,16 +49,16 @@ use Camindo\Core\System;
 
 class Snippets {
 
-    // Schlüssel eines Snippets
+    // Key of a snippet
     public const KEY_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
-    // Verweis auf ein Snippet eines Sets in Beschriftungsfeldern: #custom.{instance_id}.{key}
-    // (Treffer 1: instance_id, 2: Schlüssel) - Export/Import der Bereiche
+    // Reference to a snippet of a set in label fields: #custom.{instance_id}.{key}
+    // (match 1: instance_id, 2: key) - export/import of the areas
     public const REFERENCE_PATTERN = '/#custom\.([1-9][0-9]{0,9})\.([a-z][a-z0-9_]{0,63})(?![a-z0-9_])/';
 
-    // Verweis in Template-Quelltext: custom.{key} (Kurzform, Set der Instanz der Seite)
-    // oder custom.{instance_id}.{key} - (CMS:SNIPPET …), $this->cms->snippet('…')
-    // (Treffer 1: instance_id oder leer, 2: Schlüssel bzw. dessen fester Anfang)
+    // Reference in template source: custom.{key} (short form, set of the page's instance)
+    // or custom.{instance_id}.{key} - (CMS:SNIPPET …), $this->cms->snippet('…')
+    // (match 1: instance_id or empty, 2: key or its fixed start)
     public const TEMPLATE_PATTERN = '/(?<![A-Za-z0-9_.])#?custom\.(?:([1-9][0-9]{0,9})\.)?([a-z][a-z0-9_]{0,63})/';
 
     public function __construct(
@@ -72,10 +72,10 @@ class Snippets {
     {}
 
     // ====================
-    // Sets = Instanzen
+    // Sets = instances
 
     /**
-     * Wurzelverzeichnis der Sets (var/custom/snippets).
+     * Root directory of the sets (var/custom/snippets).
      */
     public function dir(): string
     {
@@ -88,8 +88,8 @@ class Snippets {
     }
 
     /**
-     * Darf der angemeldete Admin das Set dieser Instanz sehen und ändern?
-     * Die Instanz muss existieren (Instanz-Cache) und die Gruppe sie dürfen.
+     * May the logged-in administrator see and change the set of this instance?
+     * The instance must exist (instance cache) and the group must be allowed to use it.
      */
     public function allowed(int $instanceId): bool
     {
@@ -99,12 +99,12 @@ class Snippets {
     }
 
     /**
-     * Instanzen, deren Set der Admin sehen darf, mit Kennzahlen - in der Reihenfolge
-     * des Instanz-Caches.
+     * Instances whose set the administrator may see, with key figures - in the order
+     * of the instance cache.
      *
-     * @return array  instance_id => ['label' => Instanz-Beschriftung,
-     *                                'keys' => Anzahl Schlüssel (alle Sprachen),
-     *                                'languages' => ['de' => Anzahl Texte, ...]]
+     * @return array  instance_id => ['label' => instance label,
+     *                                'keys' => number of keys (all languages),
+     *                                'languages' => ['de' => number of texts, ...]]
      */
     public function instances(): array
     {
@@ -122,15 +122,15 @@ class Snippets {
     }
 
     /**
-     * Schlüssel eines Sets, die ein Template-Quelltext anspricht (Export/Import von
-     * Template-Bereichen). Ein Treffer, den es im Set nicht gibt, gilt als fester
-     * Anfang eines zusammengesetzten Schlüssels ("custom.status_{$cms['status']}",
-     * 'custom.motif_' . $m) - dann zählen alle Schlüssel mit diesem Anfang.
+     * Keys of a set that a template source refers to (export/import of
+     * template areas). A match that does not exist in the set counts as the fixed
+     * start of a composed key ("custom.status_{$cms['status']}",
+     * 'custom.motif_' . $m) - then all keys with this start count.
      *
-     * @param string $code        Template-Quelltext
-     * @param array  $set         Set der Instanz (load()): schlüssel => [lang => text]
-     * @param int    $instanceId  Instanz des Sets - Verweise mit anderer Id zählen nicht
-     * @return string[]           Schlüssel aus $set
+     * @param string $code        template source
+     * @param array  $set         set of the instance (load()): key => [lang => text]
+     * @param int    $instanceId  instance of the set - references with another id do not count
+     * @return string[]           keys from $set
      */
     public static function templateRefs(string $code, array $set, int $instanceId): array
     {
@@ -151,9 +151,9 @@ class Snippets {
     }
 
     /**
-     * Präfixe der erlaubten Instanzen - für die Suche der Extension.
+     * Prefixes of the allowed instances - for the search of the extension.
      *
-     * @return string[]  z. B. ['custom.1', 'custom.31']
+     * @return string[]  e.g. ['custom.1', 'custom.31']
      */
     public function allowedPrefixes(): array
     {
@@ -170,25 +170,25 @@ class Snippets {
     }
 
     // ====================
-    // Früheres PHP-Format
+    // Earlier PHP format
 
     /**
-     * Sets im früheren PHP-Format (lang/{code}.php, noch ältere lang/de.php) in
-     * .ini-Dateien umwandeln - Teil von Werkzeuge > Entwickler > Snippets,
-     * `camindo.php refresh snippets` und `upgrade`. Seit dem Umstieg auf .ini liest
-     * der Cache nur noch lang/{code}.ini; ohne Umwandlung fehlen die Snippets.
+     * Convert sets in the earlier PHP format (lang/{code}.php, even older lang/de.php) into
+     * .ini files - part of Tools > Developer > Snippets,
+     * `camindo.php refresh snippets` and `upgrade`. Since the switch to .ini the
+     * cache only reads lang/{code}.ini; without conversion the snippets are missing.
      *
-     * Die PHP-Dateien werden NICHT ausgeführt, sondern als Quelltext gelesen
-     * (parseLegacy() - nur `return [ 'schlüssel' => 'text', ... ];` aus
-     * String-Literalen, so wie compileFile() sie früher mit var_export() schrieb).
-     * Gibt es zu einer Sprache schon eine .ini-Datei (im Modul gespeichert, nachdem
-     * die alten Snippets verschwunden waren), wird zusammengeführt; bei gleichem
-     * Schlüssel gilt die .ini-Datei, eine {code}.php vor der zweistelligen de.php.
-     * Die PHP-Datei wird danach in {name}.php.bak umbenannt und bleibt als Sicherung
-     * liegen. Den Cache baut der Aufrufer danach neu (SnippetCache::build()).
+     * The PHP files are NOT executed, but read as source text
+     * (parseLegacy() - only `return [ 'key' => 'text', ... ];` made of
+     * string literals, as compileFile() used to write them with var_export()).
+     * If there is already an .ini file for a language (saved in the module after
+     * the old snippets had disappeared), the two are merged; for the same
+     * key the .ini file applies, a {code}.php before the two-letter de.php.
+     * The PHP file is then renamed to {name}.php.bak and remains as a backup.
+     * The caller then rebuilds the cache (SnippetCache::build()).
      *
      * @return array  'converted' => ["{set}/lang/de_DE.php -> de_DE.ini (12 snippets)", ...],
-     *                'errors'    => ["{pfad}: ...", ...] (Datei bleibt unverändert)
+     *                'errors'    => ["{pfad}: ...", ...] (file stays unchanged)
      */
     public function convertLegacy(): array
     {
@@ -197,7 +197,7 @@ class Snippets {
         foreach ((array)glob($this->dir() . '/*', GLOB_ONLYDIR) as $setDir) {
             $set = basename((string)$setDir);
             if (!preg_match(SnippetCache::CUSTOM_SET_PATTERN, $set)) continue;
-            // Sprache => [Dateien], kurze Namen (de.php) zuerst - die {code}.php gewinnt
+            // language => [files], short names (de.php) first - the {code}.php wins
             $byLang = [];
             $legacy = (array)glob($setDir . '/lang/*.php');
             usort($legacy, fn($a, $b) => strlen(basename((string)$a)) <=> strlen(basename((string)$b)) ?: strcmp((string)$a, (string)$b));
@@ -248,12 +248,12 @@ class Snippets {
     }
 
     /**
-     * Quelltext einer Sprachdatei im früheren PHP-Format lesen, ohne ihn auszuführen:
-     * `<?php // … return [ 'a' => 'Text', … ];` (auch array( … )), Schlüssel und
-     * Texte als String-Literale, Texte auch verkettet ('a' . "\0" . 'b', so schreibt
-     * var_export() Nullbytes).
+     * Read the source of a language file in the earlier PHP format without executing it:
+     * `<?php // … return [ 'a' => 'Text', … ];` (also array( … )), keys and
+     * texts as string literals, texts also concatenated ('a' . "\0" . 'b', as
+     * var_export() writes null bytes).
      *
-     * @return array|null  schlüssel => text; null, wenn die Datei anders aufgebaut ist
+     * @return array|null  key => text; null if the file is structured differently
      */
     public static function parseLegacy(string $code): ?array
     {
@@ -267,7 +267,7 @@ class Snippets {
             $token = $tokens[$pos] ?? null;
             return $token !== null && (is_array($token) ? $token[0] === $expected : $token === $expected);
         };
-        // Ein Literal oder eine Verkettung von Literalen
+        // A literal or a concatenation of literals
         $string = function () use (&$pos, $tokens, $is): ?string {
             $value = '';
             do {
@@ -320,7 +320,7 @@ class Snippets {
     }
 
     /**
-     * Präfix eines Sets, wie Cms::snippet() ihn erwartet: custom.{instance_id}
+     * Prefix of a set, as Cms::snippet() expects it: custom.{instance_id}
      */
     public function prefix(int $instanceId): string
     {
@@ -328,8 +328,8 @@ class Snippets {
     }
 
     /**
-     * Set einer Instanz löschen: Sprachdateien, Verzeichnis, Cachedateien - beim
-     * Löschen der Instanz. Kein Set: nichts zu tun.
+     * Delete the set of an instance: language files, directory, cache files - when
+     * the instance is deleted. No set: nothing to do.
      */
     public function delete(int $instanceId): bool
     {
@@ -339,20 +339,20 @@ class Snippets {
         foreach ((array)glob($dir . '/lang/*.ini') as $file) unlink($file);
         @rmdir($dir . '/lang');
         foreach ((array)glob($dir . '/{,.}*', GLOB_BRACE) as $entry) {
-            if (is_file($entry)) unlink($entry);   // z. B. .DS_Store
+            if (is_file($entry)) unlink($entry);   // e.g. .DS_Store
         }
         $this->snippetCache->remove($this->prefix($instanceId));
         return @rmdir($dir);
     }
 
     // ====================
-    // Inhalte
+    // Contents
 
     /**
-     * Backend-Sprachen = Spalten der Tabelle und Dateinamen (Cms::backendLanguages()).
-     * FALLBACK_LANG steht vorn, weil der Cache fehlende Übersetzungen von dort holt.
+     * Backend languages = columns of the table and file names (Cms::backendLanguages()).
+     * FALLBACK_LANG comes first, because the cache fetches missing translations from there.
      *
-     * @return string[]  z. B. ['en', 'de']
+     * @return string[]  e.g. ['en', 'de']
      */
     public function languages(): array
     {
@@ -362,9 +362,9 @@ class Snippets {
     }
 
     /**
-     * Alle Snippets eines Sets: schlüssel => [lang => text] in der Reihenfolge der
-     * Dateien (Schlüssel, die nur in einer Sprache vorkommen, hängen hinten an).
-     * Fehlende Texte sind ''. Kein Set: leer.
+     * All snippets of a set: key => [lang => text] in the order of the
+     * files (keys that occur in only one language are appended at the end).
+     * Missing texts are ''. No set: empty.
      */
     public function load(int $instanceId): array
     {
@@ -388,14 +388,14 @@ class Snippets {
     }
 
     /**
-     * Snippets eines Sets prüfen und schreiben - ersetzt den gesamten Inhalt; das
-     * Verzeichnis entsteht beim ersten Mal.
+     * Check and write snippets of a set - replaces the entire content; the
+     * directory is created the first time.
      *
-     * @param int   $instanceId  erlaubte Instanz (allowed())
-     * @param array $rows        Liste von ['key' => '...', 'text' => [lang => text]] in
-     *                           der gewünschten Reihenfolge; Zeilen mit leerem Schlüssel
-     *                           werden übergangen (gelöscht)
-     * @return bool  false mit Fehlern in Cms::errors ('row.{i}' für die Zeile)
+     * @param int   $instanceId  allowed instance (allowed())
+     * @param array $rows        list of ['key' => '...', 'text' => [lang => text]] in
+     *                           the desired order; rows with an empty key
+     *                           are skipped (deleted)
+     * @return bool  false with errors in Cms::errors ('row.{i}' for the row)
      */
     public function save(int $instanceId, array $rows): bool
     {
@@ -423,17 +423,17 @@ class Snippets {
             $seen[$key] = true;
             $texts = (array)($row['text'] ?? []);
             foreach ($langs as $lang) {
-                // Kein trim(): führende/folgende Leerzeichen können gewollt sein
-                // HTML ist erlaubt, Script und Event-Handler nicht (Cms::_sanitize_html())
+                // No trim(): leading/trailing spaces can be intended
+                // HTML is allowed, script and event handlers are not (Cms::_sanitize_html())
                 $text = $this->cms->_sanitize_html((string)($texts[$lang] ?? ''));
-                // Leere Texte nicht schreiben - der Cache zieht dann den en-Fallback
+                // Do not write empty texts - the cache then uses the en fallback
                 if ($text === '') continue;
                 $files[$lang][$key] = $text;
             }
         }
         if (!$ok) return false;
 
-        // von var/ aus, damit auch var/custom/snippets selbst entsteht
+        // from var/, so that var/custom/snippets itself is created too
         if (!$this->system->createDir($this->config->get('paths.var_dir'), 'custom/snippets/' . $instanceId . '/lang')) {
             $this->cms->error($this->cms->snippet('snippets.error_set_dir'));
             return false;
@@ -450,14 +450,14 @@ class Snippets {
     }
 
     /**
-     * Snippets in ein Set übernehmen, ohne Vorhandenes zu ändern (Import von
-     * Bereichen, RecordImport): fehlende Schlüssel kommen hinten dazu, bei vorhandenen
-     * nur Texte in Sprachen, die dort noch leer sind. Schlüssel ohne einen einzigen
-     * Text werden übergangen.
+     * Take over snippets into a set without changing existing ones (import of
+     * areas, RecordImport): missing keys are appended at the end; for existing ones
+     * only texts in languages that are still empty there. Keys without a single
+     * text are skipped.
      *
-     * @param int   $instanceId  erlaubte Instanz (allowed())
-     * @param array $snippets    schlüssel => [lang => text]
-     * @return array|null  neu angelegte Schlüssel; null = Fehler (Meldung in Cms::errors)
+     * @param int   $instanceId  allowed instance (allowed())
+     * @param array $snippets    key => [lang => text]
+     * @return array|null  newly created keys; null = error (message in Cms::errors)
      */
     public function merge(int $instanceId, array $snippets): ?array
     {
@@ -467,7 +467,7 @@ class Snippets {
         foreach ($snippets as $key => $texts) {
             $key = (string)$key;
             if (!$this->validKey($key) || !is_array($texts)) continue;
-            // Exporte älterer Versionen führen zweistellige Kürzel (de, en)
+            // Exports of older versions use two-letter codes (de, en)
             $normalized = [];
             foreach ($texts as $code => $text) {
                 $lang = Cms::matchLanguage((string)$code, $this->languages());
@@ -487,16 +487,16 @@ class Snippets {
     }
 
     /**
-     * Ein Snippet anlegen oder ändern (Eingabemaske je Snippet). Die übrigen
-     * Snippets des Sets bleiben unverändert und in ihrer Reihenfolge; ein neuer
-     * Schlüssel kommt ans Ende.
+     * Create or change a snippet (input mask per snippet). The other
+     * snippets of the set remain unchanged and in their order; a new
+     * key goes at the end.
      *
-     * @param int    $instanceId  erlaubte Instanz (allowed())
-     * @param string $key         Schlüssel (KEY_PATTERN)
-     * @param array  $texts       [lang => text]; fehlende Sprachen gelten als ''
-     * @param bool   $isNew       true: der Schlüssel darf noch nicht vorkommen,
-     *                            false: er muss vorkommen
-     * @return bool  false mit Fehler in Cms::errors (Feld 'key' bzw. allgemein)
+     * @param int    $instanceId  allowed instance (allowed())
+     * @param string $key         key (KEY_PATTERN)
+     * @param array  $texts       [lang => text]; missing languages count as ''
+     * @param bool   $isNew       true: the key may not yet occur,
+     *                            false: it must occur
+     * @return bool  false with error in Cms::errors (field 'key' or general)
      */
     public function saveSnippet(int $instanceId, string $key, array $texts, bool $isNew): bool
     {
@@ -525,9 +525,9 @@ class Snippets {
     }
 
     /**
-     * Ein Snippet aus dem Set entfernen (in allen Sprachen).
+     * Remove a snippet from the set (in all languages).
      *
-     * @return bool  false mit Fehler in Cms::errors
+     * @return bool  false with error in Cms::errors
      */
     public function deleteSnippet(int $instanceId, string $key): bool
     {
@@ -545,7 +545,7 @@ class Snippets {
     }
 
     /**
-     * load()-Ergebnis in die Zeilenform von save().
+     * Convert the load() result into the row form of save().
      */
     private function rows(array $snippets): array
     {
@@ -555,7 +555,7 @@ class Snippets {
     }
 
     /**
-     * Beschriftung einer Zeile in Fehlermeldungen ("Zeile 3").
+     * Label of a row in error messages ("row 3").
      */
     private function rowLabel(int $i): string
     {
@@ -563,7 +563,7 @@ class Snippets {
     }
 
     /**
-     * Inhalt einer Sprachdatei (SnippetIni, ohne Abschnitte).
+     * Content of a language file (SnippetIni, without sections).
      */
     private function compileFile(int $instanceId, string $lang, array $snippets): string
     {

@@ -1,7 +1,7 @@
 <?php
-// Core-Modul Docs: die Handbücher im Backend (Hauptmenü → Handbücher).
-// Nicht 'listed' und ohne 'button': jeder Gruppe offen, keine Rechteverwaltung,
-// keine Kachel auf der Startseite (Access::module(), StartBackend).
+ // Core module Docs: the manuals in the backend (main menu → manuals).
+ // Not 'listed' and without 'button': open to every group, no rights management,
+ // no tile on the start page (Access::module(), StartBackend).
 return [
 
 'version' => '9.0.0',
@@ -10,7 +10,7 @@ return [
 'description' => '#docs.module_description',
 'icon' => 'menu_book',
 'listed' => false,
-// API: Handbücher suchen und lesen (DocsApi)
+ // API: search and read manuals (DocsApi)
 'api' => ['DocsApi'],
 'access' => [
 ]

@@ -1,46 +1,46 @@
 <?php
 /**
- * Backend des Moduls Privacy (Datenschutz). Instanzname im Code: $privacyBackend.
+ * Backend of the module Privacy (data protection). Instance name in the code: $privacyBackend.
  *
- *     policy_list.php      -> list()          Lösch-Policies (Klick: Infoseite,
- *                                             Rechtsklick: Kontextmenü)
- *     policy_info.php      -> info()          Infoseite einer Policy
- *     policy_edit.php      -> edit()          Policy anlegen, ändern, löschen; ohne
- *                                             Recht weiter zur Infoseite
- *     template_list.php    -> templateList()  Vorlagen der Datenauskunft je Instanz
- *                                             und Sprache
- *     template_edit.php    -> templateEdit()  Vorlage anlegen, ändern, löschen
- *                                             (Zusatzrecht template_edit)
- *     export.php           -> export()        Datenexport personenbezogener Daten
- *                                             (Zusatzrecht export)
- *     export_download.php  -> download()      Zip ausliefern und löschen
- *     deleted_admins.php   -> deletedAdmins() Gelöschte Benutzer (Klick: Infoseite im
- *                                             Modul Benutzer, dort "Anonymisieren")
- *     admin_anonymize.php  -> adminAnonymize() gelöschten Benutzer anonymisieren
- *                                             (Zusatzrecht admin_anonymize,
+ *     policy_list.php      -> list()          deletion policies (click: info page,
+ *                                             right-click: context menu)
+ *     policy_info.php      -> info()          info page of a policy
+ *     policy_edit.php      -> edit()          create, change, delete policy; without
+ *                                             right, continue to the info page
+ *     template_list.php    -> templateList()  templates of the data disclosure per instance
+ *                                             and language
+ *     template_edit.php    -> templateEdit()  create, change, delete template
+ *                                             (additional right template_edit)
+ *     export.php           -> export()        export of personal data
+ *                                             (additional right export)
+ *     export_download.php  -> download()      deliver and delete the zip
+ *     deleted_admins.php   -> deletedAdmins() deleted users (click: info page in the
+ *                                             module Users, there "Anonymize")
+ *     admin_anonymize.php  -> adminAnonymize() anonymize a deleted user
+ *                                             (additional right admin_anonymize,
  *                                             AdminAnonymizer)
  *
- * Dazu die Hinweise für den Löschdialog anderer Module: hintHtml() (ein Datensatz,
- * RecordBackendEdit) und areaHintHtml() (Stapelverarbeitung).
+ * In addition the notes for the delete dialog of other modules: hintHtml() (one record,
+ * RecordBackendEdit) and areaHintHtml() (batch processing).
  *
- * DATENEXPORT
+ * DATA EXPORT
  * --------------------
- * Ein Teilauszug dessen, was camindo CMS zu einer Person gespeichert hat - vor der
- * Weitergabe an die betroffene Person von Hand zu ergänzen (Rechtsgrundlagen,
- * Server-Logfiles außerhalb des CMS, Buchhaltung …). Erlaubt für:
- *     Website-User  Profil-Datensätze aus Bereichen, die die Gruppe lesen darf
+ * A partial extract of what camindo CMS has stored about a person - to be supplemented by hand
+ * before handing it to the data subject (legal bases, server log files outside the CMS,
+ * accounting …). Allowed for:
+ *     website users  profile records from areas the group may read
  *                   (RecordPersonalData)
- *     Benutzer      aus Gruppen, deren Benutzer die Gruppe im Modul Benutzer sehen
- *                   darf: eigene Gruppe mit admin_read_group, andere mit
+ *     users          from groups whose users the group may see in the module Users:
+ *                   own group with admin_read_group, others with
  *                   admin_read_other (AdminPersonalData)
- * Die Auskunft entsteht aus einer Vorlage (ExportTemplate) - getrennt für Website-User
- * und Benutzer. Website-User: Vorlagen der Instanz des Profils - ohne Vorlage kein
- * Export, bei mehreren Sprachen wählt man; Benutzer: Benutzer-Vorlagen aller lesbaren
- * Instanzen. Vor dem Erstellen bestätigt man mit einer
- * Checkbox, dazu berechtigt zu sein (Datenschutzbeauftragter); die betroffene Person
- * erfährt aus jeder späteren Auskunft von dieser (Eintrag 'export' im Audit-Log).
- * Das Zip liegt in var/export, bis es geladen wird (dann gelöscht) oder
- * admin.export_retention_hours abläuft.
+ * The disclosure is created from a template (ExportTemplate) - separately for website users
+ * and users. Website users: templates of the instance of the profile - without a template no
+ * export, with several languages one chooses; users: user templates of all readable
+ * instances. Before creating, one confirms with a
+ * checkbox that one is entitled to do so (data protection officer); the data subject
+ * learns of this from every later disclosure (entry 'export' in the audit log).
+ * The zip lies in var/export until it is loaded (then deleted) or
+ * admin.export_retention_hours expires.
  *
  * @see Camindo\Core\Modules\Privacy\DeletePolicy
  * @see Camindo\Core\Modules\Privacy\PrivacyJobs
@@ -79,9 +79,9 @@ class PrivacyBackend {
     // Policies
 
     /**
-     * Liste der Lösch-Policies (backend/policy_list.php) - alle, die die Gruppe sehen
-     * darf: für alle Instanzen und die ihrer Instanzen. Klick: Infoseite, Rechtsklick:
-     * Kontextmenü.
+     * List of deletion policies (backend/policy_list.php) - all that the group may see:
+     * for all instances and those of its instances. Click: info page, right-click:
+     * context menu.
      */
     public function list(): void
     {
@@ -119,8 +119,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Infoseite einer Policy (backend/policy_info.php): Label, Instanz, Kategorien,
-     * Bereiche, die sie benutzen, Blöcke; Reiter "Änderungen".
+     * Info page of a policy (backend/policy_info.php): label, instance, categories,
+     * areas that use it, blocks; tab "Changes".
      *
      * Request: id
      */
@@ -150,7 +150,7 @@ class PrivacyBackend {
         $this->backend->buttonAdd('button_close', "cApp.layers.close()");
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log)
+        // Tabs: Info | Changes (audit log)
         if ($this->backend->infoAuditTabs("Privacy/policy_info.php?id={$id}", 'privacy_policy', $id)) return;
 
         $items = '';
@@ -172,11 +172,11 @@ class PrivacyBackend {
     }
 
     /**
-     * Policy anlegen bzw. ändern (backend/policy_edit.php).
+     * Create or change a policy (backend/policy_edit.php).
      *
-     * Request: id (0 = neu), function: '' | update (Block hinzufügen/entfernen ohne
-     * zu speichern, block_action = add | remove, block_remove = Index) | save |
-     * delete (Rückfrage) | delete_confirm; data[label], data[instance_id],
+     * Request: id (0 = new), function: '' | update (add/remove block without
+     * saving, block_action = add | remove, block_remove = index) | save |
+     * delete (confirmation query) | delete_confirm; data[label], data[instance_id],
      * blocks[i][sources][], blocks[i][delay], blocks[i][unit], blocks[i][category],
      * blocks[i][action], blocks[i][fields] (Text "feld = wert" je Zeile),
      * blocks[i][trigger].
@@ -197,7 +197,7 @@ class PrivacyBackend {
         $data['blocks'] = DeletePolicy::normalizeBlocks((array)($data['blocks'] ?? []));
         $editable = $id > 0 ? $this->policy->canEdit((int)$data['instance_id']) : $this->_canCreate();
         if (!$editable) {
-            // ohne Recht: die Infoseite
+            // without right: the info page
             $this->backend->script("cApp.layers.replace('Privacy/policy_info.php?id={$id}');");
             echo $this->backend->template('container_footer');
             return;
@@ -225,7 +225,7 @@ class PrivacyBackend {
             echo $this->backend->template('alert_danger', ['{text}' => $this->backend->escape($this->cms->errorMsg())]);
         }
 
-        // Eingaben übernehmen (Block hinzufügen/entfernen, Speichern)
+        // Take over input (add/remove block, save)
         $blocks = $data['blocks'];
         $changed = false;
         if (in_array($function, ['update', 'save'], true)) {
@@ -247,7 +247,7 @@ class PrivacyBackend {
 
         if ($function === 'save' && $this->backend->requirePost()) {
             $normalized = DeletePolicy::normalizeBlocks($blocks);
-            // Trigger-Aktion ohne gültige Kennung fiele beim Bereinigen weg
+            // Trigger action without a valid identifier would be dropped during cleanup
             $badTrigger = array_filter($blocks, fn($b) => in_array((string)($b['action'] ?? ''), DeletePolicy::TRIGGER_ACTIONS, true)
                 && !preg_match(DeletePolicy::TRIGGER_PATTERN, strtolower(trim((string)($b['trigger'] ?? '')))));
             if (!$this->policy->canEdit((int)$data['instance_id'])) {
@@ -276,8 +276,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Das Formular mit seinen Blöcken - Felder über Backend::formField(), die eines
-     * Blocks mit varName 'blocks' und Name '{i}.{feld}' (blocks[{i}][{feld}],
+     * The form with its blocks - fields via Backend::formField(), those of a
+     * block with varName 'blocks' and name '{i}.{field}' (blocks[{i}][{field}],
      * Platzhalter {blocks_{i}_{feld}}, Schema DeletePolicy::BLOCK_SCHEMA).
      */
     private function _form(int $id, array $data, array $blocks, bool $changed): string
@@ -297,7 +297,7 @@ class PrivacyBackend {
 
         $this->backend->formField($this->policy, ['name' => 'label', 'value' => (string)$data['label'], 'id' => $id, 'primary' => true]);
         if ((string)$data['standard'] !== '') {
-            // Standard-Policies gelten immer für alle Instanzen
+            // Default policies always apply to all instances
             $this->backend->formStatic($this->policy, 'instance_id', $this->backend->escape($this->_instanceLabel(DeletePolicy::ALL_INSTANCES)));
             $this->backend->formHidden('data[instance_id]', DeletePolicy::ALL_INSTANCES);
         }
@@ -318,7 +318,7 @@ class PrivacyBackend {
         }
         $categories = [];
         foreach (DeletePolicy::CATEGORIES as $c) $categories[$c] = $this->_s('privacy.category_' . $c);
-        // Felder bzw. Kennung nur bei den Aktionen, die sie brauchen
+        // Fields resp. identifier only for the actions that need them
         $onAction = "var c=$(this).closest('.card-body'),v=this.value;"
             . "c.find('.c9-privacy-fields').toggleClass('d-none',v!=='set_fields'&&v!=='audit_set_fields');"
             . "c.find('.c9-privacy-trigger').toggleClass('d-none',v!=='record_trigger'&&v!=='audit_trigger');";
@@ -359,18 +359,18 @@ class PrivacyBackend {
         return '<form action="Privacy/policy_edit.php" method="post"' . ($changed ? ' data-changed="true"' : '') . '>'
             . $this->backend->form('privacy.form_buttons', [
                 '{delete}' => $deletable ? $this->backend->template('privacy.button_delete', ['{id}' => (string)$id]) : '',
-            ])   // ohne removePlaceholders: Hinweise nennen Platzhalter wie {record_id}
+            ])   // without removePlaceholders: notes name placeholders like {record_id}
             . '</form>';
     }
 
-    /** Löschbar: keine Standard-Policy, kein Bereich benutzt sie, Recht zum Ändern */
+    /** Deletable: no default policy, no area uses it, right to change */
     private function _deletable(array $row): bool
     {
         return (string)$row['standard'] === '' && $this->policy->canEdit((int)$row['instance_id'])
             && $this->policy->usageCount((int)$row['privacy_policy_id']) === 0;
     }
 
-    /** Kategorien der Blöcke, in der Reihenfolge von DeletePolicy::CATEGORIES */
+    /** Categories of the blocks, in the order of DeletePolicy::CATEGORIES */
     private function _categoriesText(array $blocks): string
     {
         $used = array_unique(array_filter(array_map(fn($b) => (string)($b['category'] ?? ''), $blocks)));
@@ -381,7 +381,7 @@ class PrivacyBackend {
         return implode(', ', $labels);
     }
 
-    /** Bereiche, die die Policy benutzen (Infoseite) */
+    /** Areas that use the policy (info page) */
     private function _areasHtml(int $policyId): string
     {
         $this->db->query("SELECT a.`area_id`, a.`label`, a.`name`, a.`instance_id` FROM `area` a WHERE a.`privacy_policy_id` = ? AND a.`deleted` = 0"
@@ -395,8 +395,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Die Lösch-Policy eines Bereichs als Sätze, je Block einer - Platzhalter
-     * {delete_policy} der Vorlage des Datenexports (RecordPersonalData).
+     * The deletion policy of an area as sentences, one per block - placeholder
+     * {delete_policy} of the data export template (RecordPersonalData).
      *
      * @return string[]
      */
@@ -407,8 +407,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Ein Block als Satz: "Datensatz wird gelöscht, …: nach 7 Tagen – Felder im Audit-Log überschreiben (_label = …)";
-     * mit $withCategory davor die Kategorie ("Vollständig anonymisieren: …").
+     * A block as a sentence: "Record is deleted, …: after 7 days – overwrite fields in the audit log (_label = …)";
+     * with $withCategory the category before it ("Fully anonymize: …").
      */
     private function _blockText(array $block, bool $withCategory = false): string
     {
@@ -428,18 +428,18 @@ class PrivacyBackend {
     }
 
     // ====================
-    // Hinweis im Löschdialog
+    // Note in the delete dialog
 
     /**
-     * Was das Löschen eines Datensatzes nach der Policy seines Bereichs mit der
-     * Datenbank tut (Löschdialog der Eingabemaske, RecordBackendEdit).
+     * What deleting a record according to the policy of its area does with the
+     * database (delete dialog of the input mask, RecordBackendEdit).
      */
     public function hintHtml(int $recordId): string
     {
         return $this->_hint($this->jobs->describe($recordId));
     }
 
-    /** Dasselbe für die Datensätze eines Bereichs (Stapelverarbeitung) */
+    /** The same for the records of an area (batch processing) */
     public function areaHintHtml(int $areaId): string
     {
         return $this->_hint($this->jobs->describeArea($areaId));
@@ -474,9 +474,9 @@ class PrivacyBackend {
     }
 
     /**
-     * Ein Plan (PrivacyJobs::plan()) als Sätze und Listen.
+     * A plan (PrivacyJobs::plan()) as sentences and lists.
      *
-     * @param string $number  single | plural (Verbform des Subjekts)
+     * @param string $number  single | plural (verb form of the subject)
      */
     private function _planHtml(array $plan, string $subject, string $number, int $count): string
     {
@@ -517,16 +517,16 @@ class PrivacyBackend {
      * Datenexport personenbezogener Daten (backend/export.php).
      *
      * Request: kind (user | admin), id, function: '' (Auswahl) | confirm (Vorlage
-     * wählen, Hinweise, Bestätigung) | export (POST: Zip erstellen, verlangt
-     * authorized = 1 und template_id)
+     * select, notes, confirmation) | export (POST: create zip, requires
+     * authorized = 1 and template_id)
      *
-     * Ohne Vorlage für die Instanz des Profils (Benutzer: für keine zugängliche
-     * Instanz) gibt es keinen Export; bei mehreren Vorlagen (Sprachen) wählt man.
+     * Without a template for the instance of the profile (users: for no accessible
+     * instance) there is no export; with several templates (languages) one chooses.
      */
     public function export(): void
     {
         $kind = (string)($_REQUEST['kind'] ?? 'user') === 'admin' ? 'admin' : 'user';
-        // Profil: aus dem Lookup (data[id]) bzw. der Auswahl im Papierkorb (trashed_id)
+        // Profile: from the lookup (data[id]) resp. the selection in the trash (trashed_id)
         $id = (int)($_REQUEST['id'] ?? 0) ?: $this->pickedProfileId('profile_id');
         $function = (string)($_REQUEST['function'] ?? '');
         $this->backend->setNaviLabel('#privacy.headline_export');
@@ -560,7 +560,7 @@ class PrivacyBackend {
 
         $error = '';
         if ($function === 'export') {
-            // Schreibt eine Datei mit personenbezogenen Daten - nur per POST (17-csrf.md)
+            // Writes a file with personal data - only via POST (developer docs, chapter 14 (Security: web))
             if (!$this->backend->requirePost()) {
                 echo $this->backend->access()->deniedHtml();
                 echo $this->backend->template('container_footer');
@@ -585,7 +585,7 @@ class PrivacyBackend {
         echo $this->backend->template('container_footer');
     }
 
-    /** Bestätigungsseite: Person, Inhalt, Vorlage, Warnhinweis, Checkbox */
+    /** Confirmation page: person, content, template, warning, checkbox */
     private function _exportConfirm(string $kind, int $id, string $person, int $instanceId, array $templates): string
     {
         $items = '';
@@ -598,7 +598,7 @@ class PrivacyBackend {
             '{items}' => $items,
         ]);
         if (!$templates) {
-            // Ohne Vorlage kein Export
+            // Without template no export
             $create = $kind === 'user' ? $this->exportTemplate->canEdit($instanceId) : $this->_templateCreatable();
             $create = $create ? $this->backend->template('privacy.button_template_create', [
                 '{query}' => 'kind=' . $kind . ($kind === 'user' ? '&instance_id=' . $instanceId : '')]) : '';
@@ -629,7 +629,7 @@ class PrivacyBackend {
         ]);
     }
 
-    /** Zip erstellen - in der Sprache der Vorlage - und den Download anbieten */
+    /** Create the zip - in the language of the template - and offer the download */
     private function _exportRun(string $kind, int $id, int $templateId): void
     {
         $template = $this->exportTemplate->load($templateId);
@@ -663,13 +663,13 @@ class PrivacyBackend {
     }
 
     /**
-     * Vorlagen, die für den Export in Frage kommen: Website-User - die Vorlagen der
-     * Instanz des Profils für seinen Profil-Bereich, sonst die für alle
-     * Profil-Bereiche; Benutzer - die Vorlagen lesbarer Instanzen für seine Gruppe,
-     * sonst die für alle Gruppen.
+     * Templates that qualify for the export: website users - the templates of the
+     * instance of the profile for its profile area, otherwise those for all
+     * profile areas; users - the templates of readable instances for its group,
+     * otherwise those for all groups.
      *
-     * @param int $scopeId  Profil-Bereich bzw. Benutzergruppe der Person
-     * @return array  privacy_template_id => Bezeichnung (Sprache bzw. "Instanz – Sprache")
+     * @param int $scopeId  profile area resp. user group of the person
+     * @return array  privacy_template_id => label (language resp. "instance – language")
      */
     private function _exportTemplates(string $kind, int $instanceId, int $scopeId): array
     {
@@ -684,12 +684,12 @@ class PrivacyBackend {
                 elseif ((int)$row['scope_id'] === 0) $general[(int)$row['privacy_template_id']] = $label;
             }
         }
-        // Vorlagen für den Bereich bzw. die Gruppe gehen vor - bei Benutzern über
-        // alle Instanzen hinweg
+        // Templates for the area resp. the group take precedence - for users across
+        // all instances
         return $specific ?: $general;
     }
 
-    /** Instanz und Profil-Bereich eines Profil-Datensatzes */
+    /** Instance and profile area of a profile record */
     private function _profileScope(int $recordId): array
     {
         $this->db->query("SELECT `instance_id`, `area_id` FROM `record` WHERE `record_id` = ?", 'i', [$recordId]);
@@ -705,8 +705,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Zip eines Exports ausliefern (backend/export_download.php) und löschen - nur
-     * eine Datei dieser Person, nur wer sie exportieren darf.
+     * Deliver the zip of an export (backend/export_download.php) and delete it - only
+     * a file of this person, only whoever may export it.
      *
      * Request: kind, id, file
      */
@@ -734,23 +734,23 @@ class PrivacyBackend {
         exit;
     }
 
-    /** Auswahl Website-User: Id des Profils, dazu die lesbaren Profil-Bereiche zum Suchen */
+    /** Selection of website users: id of the profile, plus the readable profile areas for searching */
     private function _exportFormUser(): string
     {
         return $this->backend->template('privacy.export_form_user', ['{picker}' => $this->profilePickerHtml('profile_id')]);
     }
 
     // ====================
-    // Profil auswählen (Datenexport, Werkzeuge > Papierkorb eines Users)
+    // Select profile (data export, Tools > trash of a user)
 
     /**
-     * Auswahl eines Profils: Lookup über alle Profil-Bereiche, die die Gruppe lesen
-     * darf (Datensatzliste Record/record_list.php mit filter[area_id][]), dazu eine
-     * Auswahl der Profile im Papierkorb - die Datensatzliste zeigt keine gelöschten.
-     * Gesendet wird data[{name}] (Lookup) bzw. trashed_{name} - pickedProfileId().
+     * Selection of a profile: lookup across all profile areas that the group may read
+     * (record list Record/record_list.php with filter[area_id][]), plus a
+     * selection of the profiles in the trash - the record list shows no deleted ones.
+     * Sent is data[{name}] (lookup) resp. trashed_{name} - pickedProfileId().
      *
-     * @param string $name      Feldname im Formular ([a-z_])
-     * @param int    $selected  vorbelegtes Profil (aktiv oder im Papierkorb)
+     * @param string $name      field name in the form ([a-z_])
+     * @param int    $selected  preselected profile (active or in the trash)
      */
     public function profilePickerHtml(string $name, int $selected = 0): string
     {
@@ -759,7 +759,7 @@ class PrivacyBackend {
         $areaIds = $recordBackend->readableProfileAreaIds();
         $active = $selected > 0 ? $selected : 0;
 
-        // Profile im Papierkorb (neueste zuerst)
+        // Profiles in the trash (newest first)
         $trashed = [];
         if ($areaIds) {
             $this->db->query("SELECT `record_id`, `area_id` FROM `record` WHERE `deleted` = 1 AND `tmp` = 0 AND `area_id` IN ("
@@ -770,7 +770,7 @@ class PrivacyBackend {
         }
         if (isset($trashed[(string)$selected])) $active = 0;
 
-        // derselbe Lookup wie das Feld "Frontend-User" der Suchmaske
+        // same lookup as the field "Frontend user" of the search mask
         // (RecordBackend::profileLookupReplace(), Familie cApp.ui.slookup*)
         $lookup = $this->backend->template('edit_form_lookup_foreign_table', [
             '{name}' => $name,
@@ -787,7 +787,7 @@ class PrivacyBackend {
         ]);
     }
 
-    /** Das Profil aus profilePickerHtml(): Lookup, sonst die Auswahl im Papierkorb */
+    /** The profile from profilePickerHtml(): lookup, otherwise the selection in the trash */
     public function pickedProfileId(string $name): int
     {
         $data = $_REQUEST['data'] ?? [];
@@ -795,10 +795,10 @@ class PrivacyBackend {
         return max(0, $id ?: (int)($_REQUEST['trashed_' . $name] ?? 0));
     }
 
-    /** Höchstzahl der Profile im Papierkorb in der Auswahl */
+    /** Maximum number of profiles in the trash in the selection */
     private const TRASHED_PROFILES = 200;
 
-    /** Bezeichnung eines Datensatzes (Default-Feld seines Bereichs) samt Id - auch im Papierkorb */
+    /** Label of a record (default field of its area) with id - also in the trash */
     private function _recordLabel(int $recordId, int $areaId): string
     {
         $data = $GLOBALS['app']->get(Record::class)->load($recordId) ?? [];
@@ -807,7 +807,7 @@ class PrivacyBackend {
         return ($label !== '' ? $label . ' ' : '') . '(#' . $recordId . ')';
     }
 
-    /** Auswahl Benutzer: alle aus den Gruppen, deren Benutzer die Gruppe sehen darf */
+    /** Selection of users: all from the groups whose users the group may see */
     private function _exportFormAdmin(): string
     {
         $options = [];
@@ -818,7 +818,7 @@ class PrivacyBackend {
         return $this->backend->template('privacy.export_form_admin', ['{options}' => $this->_options($options, '')]);
     }
 
-    /** Teaser des Profils, wenn es exportiert werden darf, sonst null */
+    /** Teaser of the profile if it may be exported, otherwise null */
     private function _exportableProfile(int $id): ?string
     {
         $this->db->query("SELECT r.`area_id` FROM `record` r JOIN `area` a ON a.`area_id` = r.`area_id`"
@@ -828,7 +828,7 @@ class PrivacyBackend {
         return $this->backend->teaser('record', $id);
     }
 
-    /** Name des Benutzers, wenn er exportiert werden darf, sonst null */
+    /** Name of the user if it may be exported, otherwise null */
     private function _exportableAdmin(int $id): ?string
     {
         $this->db->query("SELECT `name`, `group_id` FROM `admin` WHERE `admin_id` = ?", 'i', [$id]);
@@ -837,7 +837,7 @@ class PrivacyBackend {
         return $this->backend->escape((string)$row['name']) . ' (#' . $id . ')';
     }
 
-    /** Darf die Gruppe die Benutzer der Gruppe $groupId sehen (Modul Benutzer)? */
+    /** May the group see the users of the group $groupId (module Users)? */
     private function _groupAccessible(int $groupId): bool
     {
         $access = $this->backend->access();
@@ -847,13 +847,13 @@ class PrivacyBackend {
     }
 
     // ====================
-    // Gelöschte Benutzer
+    // Deleted users
 
     /**
-     * Gelöschte Benutzer (backend/deleted_admins.php): Name, Gruppe, gelöscht am
-     * (letzter Eintrag 'delete' im Audit-Log), anonymisiert. Nur Benutzer aus Gruppen,
-     * die die Gruppe im Modul Benutzer sehen darf. Klick: Infoseite im Modul Benutzer
-     * (mit "Zurück"), dort die Schaltfläche "Anonymisieren".
+     * Deleted users (backend/deleted_admins.php): name, group, deleted on
+     * (last entry 'delete' in the audit log), anonymized. Only users from groups
+     * that the group may see in the module Users. Click: info page in the module Users
+     * (with "Back"), there the button "Anonymize".
      */
     public function deletedAdmins(): void
     {
@@ -886,7 +886,7 @@ class PrivacyBackend {
             $rows .= $this->backend->template('privacy.deleted_admin_row', [
                 '{id}' => (string)(int)$row['admin_id'],
                 '{name}' => $this->backend->escape((string)$row['name']),
-                // ohne Gruppe: die Gruppe wurde nach dem Löschen des Benutzers gelöscht
+                // without group: the group was deleted after the user was deleted
                 '{group}' => isset($groups[(int)$row['group_id']]) ? $this->backend->escape($groups[(int)$row['group_id']]) : $this->backend->emptyPlaceholder,
                 '{deleted_at}' => $row['deleted_at'] ? $this->backend->escape($auditDiff->localTime((string)$row['deleted_at'])) : $this->backend->emptyPlaceholder,
                 '{anonymized}' => $anonymized ? $this->backend->template('privacy.badge_anonymized') : '',
@@ -899,8 +899,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Gelöschten Benutzer anonymisieren (backend/admin_anonymize.php, aufgerufen von
-     * der Infoseite des Benutzers): Rückfrage, dann per POST AdminAnonymizer.
+     * Anonymize a deleted user (backend/admin_anonymize.php, called from
+     * the info page of the user): confirmation query, then via POST AdminAnonymizer.
      *
      * Request: id, function ('' | confirm)
      */
@@ -946,11 +946,11 @@ class PrivacyBackend {
     }
 
     // ====================
-    // Vorlagen der Datenauskunft
+    // Templates of the data disclosure
 
     /**
-     * Vorlagen je Instanz und Sprache (backend/template_list.php). Klick: bearbeiten
-     * (ohne Recht: ansehen), Rechtsklick: Kontextmenü.
+     * Templates per instance and language (backend/template_list.php). Click: edit
+     * (without right: view), right-click: context menu.
      */
     public function templateList(): void
     {
@@ -992,13 +992,13 @@ class PrivacyBackend {
     }
 
     /**
-     * Vorlage anlegen, ändern, löschen (backend/template_edit.php).
+     * Create, change, delete template (backend/template_edit.php).
      *
-     * Request: id (0 = neu), function: '' | create (nach der Wahl von Art und
-     * Instanz: Formular, vorbelegt mit der Vorlage des Core) | save | delete |
-     * delete_confirm; data[slot] ("art:instanz", Schritt 1 beim Anlegen),
-     * data[kind], data[instance_id], data[scope_id] (Profil-Bereich bzw.
-     * Benutzergruppe, 0 = alle), data[language_id], data[content]; kind und
+     * Request: id (0 = new), function: '' | create (after choosing the kind and
+     * instance: form, prefilled with the template of the core) | save | delete |
+     * delete_confirm; data[slot] ("kind:instance", step 1 when creating),
+     * data[kind], data[instance_id], data[scope_id] (profile area resp.
+     * user group, 0 = all), data[language_id], data[content]; kind and
      * instance_id (Vorauswahl)
      */
     public function templateEdit(): void
@@ -1059,10 +1059,10 @@ class PrivacyBackend {
             echo $this->backend->template('alert_danger', ['{text}' => $this->backend->escape($this->cms->errorMsg())]);
         }
 
-        // Neu, Schritt 1: Art und Instanz wählen
+        // New, step 1: choose kind and instance
         if ($id === 0 && ($function === '' || $kind === '' || !$this->exportTemplate->canEdit($instanceId))) {
             $slots = $this->_templateSlots();
-            // Vorauswahl aus dem Datenexport ohne Vorlage (kind, instance_id)
+            // Preselection from the data export without template (kind, instance_id)
             $presetKind = (string)($_REQUEST['kind'] ?? '');
             $presetInstance = (int)($_REQUEST['instance_id'] ?? 0);
             $selected = '';
@@ -1100,7 +1100,7 @@ class PrivacyBackend {
             echo $this->backend->template('alert_danger', ['{text}' => $this->backend->escape($this->cms->errorMsg())]);
         }
         elseif ($function === 'create') {
-            // Vorbelegung in der Hauptsprache der Instanz (die erste der Liste)
+            // Prefill in the main language of the instance (the first in the list)
             $data['language_id'] = (int)array_key_first($languages);
             $data['content'] = $this->exportTemplate->defaultContent($kind, $this->exportTemplate->backendLang($instanceId, (int)$data['language_id']));
         }
@@ -1128,12 +1128,12 @@ class PrivacyBackend {
         $this->backend->formHidden('id', $id);
         echo $this->backend->form('privacy.form_buttons', [
             '{delete}' => $id > 0 ? $this->backend->template('privacy.button_template_delete', ['{id}' => (string)$id]) : '',
-        ]);   // ohne removePlaceholders: der Hinweis nennt Platzhalter der Vorlage
+        ]);   // without removePlaceholders: the note names placeholders of the template
         echo '</form>';
         echo $this->backend->template('container_footer');
     }
 
-    /** "Art – Instanz – Gilt für – Sprache" einer Vorlage */
+    /** "Kind – Instance – Applies to – Language" of a template */
     private function _templateLabel(array $row): string
     {
         $kind = (string)$row['kind'];
@@ -1148,13 +1148,13 @@ class PrivacyBackend {
         return implode(' – ', $parts);
     }
 
-    /** Art einer Vorlage: "Website-User" bzw. "Benutzer" */
+    /** Kind of a template: "Website user" resp. "User" */
     private function _kindLabel(string $kind): string
     {
         return $this->_s($kind === 'admin' ? 'privacy.tab_export_admin' : 'privacy.tab_export_user');
     }
 
-    /** Darf der Admin überhaupt eine Vorlage anlegen? */
+    /** May the admin create a template at all? */
     private function _templateCreatable(): bool
     {
         foreach (array_keys($this->_instanceOptions(false)) as $instanceId) {
@@ -1164,8 +1164,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Art und Instanz für eine neue Vorlage - nur Instanzen, die der Admin bearbeiten
-     * darf. Geltung und Sprache wählt man danach im Formular.
+     * Kind and instance for a new template - only instances that the admin may edit
+     * may. Scope and language are chosen afterwards in the form.
      *
      * @return array  "art:instanz" => "Art – Instanz"
      */
@@ -1182,7 +1182,7 @@ class PrivacyBackend {
     // ====================
     // Hilfen
 
-    /** Reiter des Moduls */
+    /** Tabs of the module */
     private function _tabs(string $active): string
     {
         $this->backend->tabBarReset();
@@ -1198,8 +1198,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Reiter "Gelöschte Benutzer": Superuser und Gruppen mit Zugriff auf das Modul
-     * Benutzer (die Liste zeigt nur Benutzer, die die Gruppe dort sehen darf).
+     * Tab "Deleted users": superuser and groups with access to the module
+     * users (the list shows only users that the group may see there).
      */
     private function _canSeeDeletedAdmins(): bool
     {
@@ -1207,7 +1207,7 @@ class PrivacyBackend {
         return $access->isSuperuser() || $access->module('Admin');
     }
 
-    /** Darf die Gruppe gelöschte Benutzer anonymisieren (Superuser oder admin_anonymize)? */
+    /** May the group anonymize deleted users (superuser or admin_anonymize)? */
     public function canAnonymizeAdmins(): bool
     {
         $access = $this->backend->access();
@@ -1220,21 +1220,21 @@ class PrivacyBackend {
         return $access->isSuperuser() || $access->moduleRight('Privacy', 'export');
     }
 
-    /** Darf eine neue Policy angelegt werden (Superuser oder policy_edit)? */
+    /** May a new policy be created (superuser or policy_edit)? */
     private function _canCreate(): bool
     {
         $access = $this->backend->access();
         return $access->isSuperuser() || ($access->moduleRight('Privacy', 'policy_edit') && $this->_instanceOptions());
     }
 
-    /** Policy sichtbar: für alle Instanzen oder eine lesbare Instanz */
+    /** Policy visible: for all instances or a readable instance */
     private function _canSee(int $instanceId): bool
     {
         $access = $this->backend->access();
         return $instanceId === DeletePolicy::ALL_INSTANCES || $access->isSuperuser() || $access->instance($instanceId);
     }
 
-    /** Alle Policies, die die Gruppe sehen darf */
+    /** All policies that the group may see */
     private function _policies(): array
     {
         $this->db->query("SELECT * FROM `privacy_policy` ORDER BY `standard` = '', `instance_id`, `label`");
@@ -1242,8 +1242,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Instanzen, die die Gruppe bearbeiten darf; mit $withAll für den Superuser zuerst
-     * "alle" (Policies).
+     * instances that the group may edit; with $withAll for the superuser first
+     * "all" (policies).
      */
     private function _instanceOptions(bool $withAll = true): array
     {
@@ -1259,7 +1259,7 @@ class PrivacyBackend {
         return $options;
     }
 
-    /** Vorbelegung der Instanz einer neuen Policy */
+    /** Prefill of the instance of a new policy */
     private function _defaultInstance(): int
     {
         $keys = array_keys($this->_instanceOptions());
@@ -1281,8 +1281,8 @@ class PrivacyBackend {
     }
 
     /**
-     * Snippet mit Werten: {count} u. Ä. für plural/select (Cms::snippet()), alle Werte
-     * zusätzlich als einfache Platzhalter {name} - die ersetzt der Snippet-Cache nicht.
+     * snippet with values: {count} etc. for plural/select (Cms::snippet()), all values
+     * additionally as simple placeholders {name} - the snippet cache does not replace those.
      */
     private function _s(string $key, array $vars = []): string
     {

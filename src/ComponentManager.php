@@ -1,57 +1,57 @@
 <?php
 /**
- * Komponenten: Module, Prozessoren, Extensions - entdecken, Zustand bestimmen,
- * Tabelle `component` abgleichen, Laufzeitlisten schreiben.
+ * Components: modules, processors, extensions - discover them, determine their state,
+ * reconcile the table `component`, write the runtime lists.
  *
- * Eine Komponente ist ein Verzeichnis mit install/settings.php unter
+ * A component is a directory with install/settings.php under
  *
- *     {core_dir}/Modules|Processors|Extensions      Core-Komponente (kind, core = true)
- *     {camindo_dir}/Modules|Processors|Extensions   Zusatzkomponente (Composer-Ziel)
+ *     {core_dir}/Modules|Processors|Extensions      core component (kind, core = true)
+ *     {camindo_dir}/Modules|Processors|Extensions   add-on component (Composer target)
  *
- * ZUSTÄNDE (docs/developers/14-installation-und-update.md, 5.2)
+ * STATES (developer docs, chapter 09 (Installation and update))
  * --------------------
- *     core        Core-Komponente: immer installiert und aktiv, Version = CAMINDO_VERSION
- *     discovered  Verzeichnis da, keine Zeile (oder Zeile mit version = '')
- *     inactive    Zeile mit version, status = 0
- *     active      status = 1, kein wartendes Update
- *     update      update_version > version - gilt zur Laufzeit als inaktiv
- *     orphaned    Zeile da, Verzeichnis fehlt (composer remove ohne uninstall)
- *     error       requires verletzt, Namenskonflikt, ungültiger Name, settings.php fehlt
+ *     core        core component: always installed and active, version = CAMINDO_VERSION
+ *     discovered  directory present, no row (or row with version = '')
+ *     inactive    row with version, status = 0
+ *     active      status = 1, no update pending
+ *     update      update_version > version - counts as inactive at runtime
+ *     orphaned    row present, directory missing (composer remove without uninstall)
+ *     error       requires violated, name conflict, invalid name, settings.php missing
  *
- * LAUFZEITLISTEN
+ * RUNTIME LISTS
  * --------------------
- * var/config/components/{modules,processors,extensions}.php enthalten NUR die zur
- * Laufzeit aktiven Komponenten (Core + Zustand active); danach wird der Index der
- * Handbücher neu aufgebaut (Handbücher der Komponenten, Modules\Docs\Docs). Format:
+ * var/config/components/{modules,processors,extensions}.php contain ONLY the components
+ * active at runtime (core + state active); afterwards the index of the
+ * manuals is rebuilt (manuals of the components, Modules\Docs\Docs). Format:
  *
  *     $this->modules['Record'] = ['type' => …, 'core' => true, 'path' => '/…/Core/Modules/Record',
  *                                 'namespace' => 'Camindo\Core\Modules\Record', 'version' => '9.1.0', …];
  *
- * Cms bindet sie im Konstruktor ein; wer eine Komponente dort nicht findet, behandelt
- * sie als nicht vorhanden - kein Modulbutton, kein Backend-Pfad, kein Prozessor in
- * der Konverterliste. Das ist die Regel "update wartet = inaktiv" aus 13 §2.6, ohne
- * dass jeder Verbraucher ein Flag prüfen muss.
+ * Cms includes them in its constructor; whoever does not find a component there treats
+ * it as nonexistent - no module button, no backend path, no processor in the
+ * converter list. This is the rule "update pending = inactive" from developer docs, chapter 08 (Components and extensions), without
+ * every consumer having to check a flag.
  *
- * Prozessoren: eine Zusatzkomponente gleichen Namens ERSETZT den Core-Prozessor
- * ('overrides' => true, ProcessorFactory). Module: Namenskonflikt = Fehler.
+ * Processors: an add-on component with the same name REPLACES the core processor
+ * ('overrides' => true, ProcessorFactory). Modules: name conflict = error.
  *
- * LEBENSZYKLUS (14 §6.3-6.5)
+ * LIFECYCLE (developer docs, chapter 08 (Components and extensions))
  * --------------------
- *     install(name)       schema.sql, seed.sql, Installer::install(); Zeile mit version,
- *                         tables (für --purge); Snippet-Cache und Assets - danach INAKTIV
- *     activate(name)      requires (Abhängigkeiten müssen aktiv sein), status = 1,
- *                         Installer::activate(), Laufzeitlisten, InstanceCache
- *     deactivate(name)    status = 0; Abhängige nur mit force (werden mit deaktiviert)
+ *     install(name)       schema.sql, seed.sql, Installer::install(); row with version,
+ *                         tables (for --purge); snippet cache and assets - then INACTIVE
+ *     activate(name)      requires (dependencies must be active), status = 1,
+ *                         Installer::activate(), runtime lists, InstanceCache
+ *     deactivate(name)    status = 0; dependents only with force (they are deactivated too)
  *     update(name)        migrations/ version -> update_version, Installer::migrate()
- *     uninstall(name)     deactivate, Installer::uninstall(), purge: Tabellen droppen,
- *                         Zeile weg, Caches und Assets weg - auch für Verwaiste
+ *     uninstall(name)     deactivate, Installer::uninstall(), purge: drop tables,
+ *                         row gone, caches and assets gone - also for orphans
  *
- * Vor install/update/uninstall läuft eine Sicherung (Backup), außer $backup = false.
- * Alle schreibenden Methoden nehmen einen Logger entgegen - CLI: STDOUT, Backend: Aside -
- * und werfen bei Fehlern eine RuntimeException; der Aufrufer meldet sie.
+ * Before install/update/uninstall a backup runs, unless $backup = false.
+ * All writing methods take a logger - CLI: STDOUT, backend: Aside -
+ * and throw a RuntimeException on errors; the caller reports them.
  *
- * Installer.php einer Komponente: Klasse {namespace}\Install\Installer, die
- * Install\ComponentInstallerInterface implementiert; wird per require_once geladen.
+ * Installer.php of a component: class {namespace}\Install\Installer, which
+ * implements Install\ComponentInstallerInterface; loaded via require_once.
  *
  * @see Camindo\Core\Cli\ComponentCommand, Camindo\Core\Cli\UpgradeCommand
  * @see Camindo\Core\Modules\Component\ComponentBackend
@@ -71,30 +71,30 @@ class ComponentManager {
         'extensions' => 'Extensions',
     ];
 
-    // Schlüssel aus settings.php, die in die Laufzeitliste übernommen werden
-    // (Weißliste - eine fremde settings.php schreibt nichts Beliebiges hinein)
+    // Keys from settings.php that are taken over into the runtime list
+    // (allow list - a foreign settings.php writes nothing arbitrary into it)
     private const SETTINGS_KEYS = [
         'type', 'label', 'description', 'icon', 'version', 'listed',
-        'position',      // Sortierwert für Backend-Listen (je höher, desto weiter unten)
-        'access',        // Zusatzrechte des Moduls (12-group-rights.md)
-        'shared',        // Scripte, die andere Module als Lookup aufrufen dürfen
-        'personal',      // Scripte, die jeder Admin ohne Modulzugriff aufrufen darf (eigene Einstellungen)
-        'script_access', // Script => nötiges Zusatzrecht
-        'entries',       // Einstiegsscripte für die Modulkachel
-        'requires',      // Voraussetzungen (14 §5.3)
-        'tables',        // Tabellen der Komponente (für --purge)
-        'commands',      // Modul: Datei mit (CMS:...)-Befehlsdefinitionen, relativ zum Modul (06-templates.md)
-        'services',      // Modul: nachladbare Dienste der Befehle, Name => Klasse (Page::$lazyServices)
-        'button',        // Modul: false = keine Kachel auf der Startseite (Standard true)
-        'superuser',     // Modul: true = nur fuer Superuser, unabhaengig von den Gruppenrechten
-        'widget',        // Modul: Startseiten-Widget, ['class','method','label','icon'] (Camindo\Core\Widgets)
-        'api',           // Modul: API-Klassen relativ zum Modul-Namespace (Camindo\Core\Api\Api)
-        'display_types', 'field_types',  // Extensions (13 §3)
-        'assets',        // Extension: Editor-Dateien; Modul: JS/CSS, das jede Backend-Seite lädt
-        'options_provider', // Extension: Klasse mit clientOptions(array): array (Backend::fieldExtension())
+        'position',      // sort value for backend lists (the higher, the further down)
+        'access',        // additional rights of the module (developer docs, chapter 11 (Permissions))
+        'shared',        // scripts that other modules may call as lookup
+        'personal',      // scripts that every admin may call without module access (own settings)
+        'script_access', // script => required additional right
+        'entries',       // entry scripts for the module tile
+        'requires',      // prerequisites (developer docs, chapter 08 (Components and extensions))
+        'tables',        // tables of the component (for --purge)
+        'commands',      // module: file with (CMS:...) command definitions, relative to the module (developer docs, chapter 06 (Template compiler))
+        'services',      // module: loadable services of the commands, name => class (Page::$lazyServices)
+        'button',        // module: false = no tile on the start page (default true)
+        'superuser',     // module: true = superusers only, regardless of the group rights
+        'widget',        // module: start page widget, ['class','method','label','icon'] (Camindo\Core\Widgets)
+        'api',           // module: API classes relative to the module namespace (Camindo\Core\Api\Api)
+        'display_types', 'field_types',  // extensions (developer docs, chapter 08 (Components and extensions))
+        'assets',        // extension: editor files; module: JS/CSS that every backend page loads
+        'options_provider', // extension: class with clientOptions(array): array (Backend::fieldExtension())
     ];
 
-    // Arten mit Assets => Verzeichnis unter public/backend/
+    // Kinds with assets => directory under public/backend/
     private const ASSET_DIRS = ['extensions' => 'ext', 'modules' => 'mod'];
 
     private ?array $discovered = null;
@@ -114,8 +114,8 @@ class ComponentManager {
     // ==== Lesen ====
 
     /**
-     * Sortierwert einer Komponente aus ihrer settings.php ('position', Standard 0).
-     * Für Laufzeitlisten (Cms::$modules …) genügt der Eintrag selbst.
+     * Sort value of a component from its settings.php ('position', default 0).
+     * For runtime lists (Cms::$modules …) the entry itself is enough.
      */
     public static function position(array $settingsOrEntry): int
     {
@@ -124,7 +124,7 @@ class ComponentManager {
     }
 
     /**
-     * Verzeichnisse lesen - nur Dateien, keine Datenbank.
+     * Read directories - files only, no database.
      *
      * @return array  "kind/Name" => ['name', 'kind', 'core', 'path', 'namespace',
      *                'version', 'settings', 'errors' => [], 'overrides' => bool]
@@ -138,7 +138,7 @@ class ComponentManager {
         $list = [];
 
         foreach (self::KINDS as $kind => $subDir) {
-            // Core zuerst, damit eine Zusatzkomponente den Konflikt sieht
+            // Core first, so that an add-on component sees the conflict
             foreach ([[true, $coreDir], [false, $mainDir]] as [$isCore, $baseDir]) {
                 $dir = $baseDir . '/' . $subDir;
                 if (!is_dir($dir)) continue;
@@ -148,7 +148,7 @@ class ComponentManager {
                     $key = "$kind/$name";
                     if (isset($list[$key]) && !$isCore) {
                         if ($kind === 'processors') {
-                            $entry['overrides'] = true;        // Zusatz ersetzt Core
+                            $entry['overrides'] = true;        // add-on replaces core
                         }
                         else {
                             $entry['errors'][] = 'name conflict with core component';
@@ -159,8 +159,8 @@ class ComponentManager {
                 }
             }
         }
-        // Reihenfolge der Backend-Listen und Laufzeitlisten: Art, dann 'position' aus
-        // settings.php (je höher, desto weiter unten; fehlend = 0), dann Name
+        // Order of the backend lists and runtime lists: kind, then 'position' from
+        // settings.php (the higher, the further down; missing = 0), then name
         uksort($list, function (string $a, string $b) use ($list): int {
             return [$list[$a]['kind'], self::position($list[$a]), $a]
                 <=> [$list[$b]['kind'], self::position($list[$b]), $b];
@@ -169,7 +169,7 @@ class ComponentManager {
     }
 
     /**
-     * Zustand aller Komponenten: Dateien + Tabelle `component`. Liest, schreibt nichts.
+     * State of all components: files + table `component`. Reads, writes nothing.
      *
      * @return array  "kind/Name" => discover()-Eintrag + 'state', 'row' (?array),
      *                'installed_version', 'update_version'
@@ -179,7 +179,7 @@ class ComponentManager {
         $list = $this->discover();
         $rows = $this->rows();
 
-        // Verwaiste: Zeile ohne Verzeichnis
+        // Orphans: row without directory
         foreach ($rows as $key => $row) {
             if (isset($list[$key])) continue;
             $list[$key] = [
@@ -200,7 +200,7 @@ class ComponentManager {
         }
         unset($entry);
 
-        // requires.components braucht die Zustände der anderen - zweiter Durchlauf
+        // requires.components needs the states of the others - second pass
         foreach ($list as $key => &$entry) {
             if ($entry['path'] === '') continue;
             $errors = $this->checkRequires($entry, $list);
@@ -214,7 +214,7 @@ class ComponentManager {
     }
 
     /**
-     * Ein Eintrag aus status().
+     * One entry from status().
      */
     public function find(string $kind, string $name): ?array
     {
@@ -222,10 +222,10 @@ class ComponentManager {
     }
 
     /**
-     * Eintrag zu einem Namen von der Kommandozeile: "Blog" oder "modules/Blog".
-     * Ohne Art muss der Name über alle Arten eindeutig sein.
+     * Entry for a name from the command line: "Blog" or "modules/Blog".
+     * Without kind the name must be unique across all kinds.
      *
-     * @throws \RuntimeException  unbekannt oder mehrdeutig
+     * @throws \RuntimeException  unknown or ambiguous
      */
     public function resolve(string $name): array
     {
@@ -250,16 +250,16 @@ class ComponentManager {
     // ==== Schreiben ====
 
     /**
-     * Abgleich Dateien -> Tabelle `component` und Laufzeitlisten (schreibt keine
-     * Schemata, installiert nichts):
+     * Reconcile files -> table `component` and runtime lists (writes no
+     * schemas, installs nothing):
      *
-     *   - Core-Komponenten: Zeile anlegen/nachziehen (version = CAMINDO_VERSION,
-     *     status = 1), verschwundene löschen
-     *   - neue Zusatzkomponenten: Zeile mit version = '' (entdeckt, nicht installiert)
-     *   - bekannte: update_version, wenn die Dateien neuer sind; label/description/type
+     *   - core components: create/update the row (version = CAMINDO_VERSION,
+     *     status = 1), delete vanished ones
+     *   - new add-on components: row with version = '' (discovered, not installed)
+     *   - known ones: update_version if the files are newer; label/description/type
      *
      * @param callable|null $log  function(string $line): void
-     * @return array  Zustandsliste (status()) nach dem Abgleich
+     * @return array  state list (status()) after the reconciliation
      */
     public function refresh(?callable $log = null): array
     {
@@ -277,7 +277,7 @@ class ComponentManager {
             if ($entry['core']) {
                 if ($entry['path'] === '') {
                     $this->db->query("DELETE FROM `component` WHERE `component_id` = ?", 'i', [(int)$row['component_id']]);
-                    // mit ihr gehen die veröffentlichten Assets (public/backend/ext|mod/{name}/)
+                    // the published assets (public/backend/ext|mod/{name}/) go with it
                     $this->removeAssets($entry);
                     $log("$key: core row removed (directory gone)");
                     continue;
@@ -307,7 +307,7 @@ class ComponentManager {
                 continue;
             }
             if ($entry['errors'] && $row === null) {
-                // fehlerhaft (Namenskonflikt, ungültiger Name, requires): keine Zeile anlegen
+                // faulty (name conflict, invalid name, requires): do not create a row
                 $log("$key: error - " . implode('; ', $entry['errors']));
                 continue;
             }
@@ -333,11 +333,11 @@ class ComponentManager {
             }
         }
 
-        $this->discovered = null;   // Zustände neu lesen
+        $this->discovered = null;   // re-read the states
         $status = $this->status();
-        // Assets aller laufenden Extensions und Module neu publizieren - Core-Komponenten
-        // haben keinen install-Schritt, und nach einer Änderung an einer Zusatzkomponente
-        // genügt so `refresh`
+        // Re-publish the assets of all running extensions and modules - core components
+        // have no install step, and after a change to an add-on component
+        // `refresh` is enough this way
         foreach ($status as $key => $entry) {
             if (isset(self::ASSET_DIRS[$entry['kind']]) && $this->isRuntimeActive($entry)) {
                 $n = $this->publishAssets($entry);
@@ -350,9 +350,9 @@ class ComponentManager {
     }
 
     /**
-     * var/config/components/{modules,processors,extensions}.php - nur aktive Komponenten.
+     * var/config/components/{modules,processors,extensions}.php - only active components.
      *
-     * @param array|null $status  Ergebnis von status(), sonst wird es geholt
+     * @param array|null $status  result of status(), otherwise it is fetched
      */
     public function writeRuntimeLists(?array $status = null): void
     {
@@ -375,8 +375,8 @@ class ComponentManager {
                 $data['namespace'] = $entry['namespace'];
                 if ($entry['overrides']) $data['overrides'] = true;
                 if (isset(self::ASSET_DIRS[$kind])) {
-                    // Manifest der publizierten Assets (13 §3.5): Pfade relativ zum
-                    // Backend-Docroot, Versionsparameter gegen Browser-Caches
+                    // Manifest of the published assets (developer docs, chapter 08 (Components and extensions)):
+                    // paths relative to the backend docroot, version parameter against browser caches
                     $data['assets_published'] = $this->publishedAssets($entry);
                 }
                 $php .= "\$this->{$kind}[" . var_export($entry['name'], true) . '] = '
@@ -384,9 +384,9 @@ class ComponentManager {
             }
             $this->system->filePutContents($varDir . $relDir, "/$kind.php", $php, lock: true);
         }
-        // Handbücher der Komponenten (docs/) kommen und gehen mit ihnen: Suchindex
-        // neu aufbauen. Fehlt die Tabelle noch (frühe Installation), baut der Installer
-        // ihn später ohnehin auf.
+        // The manuals of the components (docs/) come and go with them: rebuild the
+        // search index. If the table is still missing (early installation), the installer
+        // builds it later anyway.
         try {
             (new Modules\Docs\Docs($this->config, $this->db))->rebuildIndex();
         }
@@ -395,7 +395,7 @@ class ComponentManager {
     }
 
     /**
-     * Zählt die Komponente zur Laufzeit?
+     * Does the component count at runtime?
      */
     public function isRuntimeActive(array $entry): bool
     {
@@ -406,12 +406,12 @@ class ComponentManager {
     // ==== Lebenszyklus ====
 
     /**
-     * Zusatzkomponente installieren (14 §6.3): schema.sql, seed.sql, Installer::install(),
-     * Zeile in `component` (status = 0), Snippet-Cache, Assets, Laufzeitlisten.
-     * Danach ist die Komponente INAKTIV - außer mit $activate.
+     * Install an add-on component (developer docs, chapter 08 (Components and extensions)): schema.sql, seed.sql, Installer::install(),
+     * row in `component` (status = 0), snippet cache, assets, runtime lists.
+     * Afterwards the component is INACTIVE - unless with $activate.
      *
      * @param callable|null $log  function(string $line): void
-     * @return array  Eintrag aus status() nach der Installation
+     * @return array  entry from status() after the installation
      */
     public function install(string $name, ?callable $log = null, bool $activate = false, bool $backup = true): array
     {
@@ -479,9 +479,9 @@ class ComponentManager {
     }
 
     /**
-     * Alle entdeckten Zusatzkomponenten installieren - in Abhängigkeitsreihenfolge.
+     * Install all discovered add-on components - in dependency order.
      *
-     * @return string[]  installierte "kind/Name"
+     * @return string[]  installed "kind/Name"
      */
     public function installAll(?callable $log = null, bool $activate = false, bool $backup = true): array
     {
@@ -499,10 +499,10 @@ class ComponentManager {
     }
 
     /**
-     * Scharfschalten: requires (Abhängigkeiten müssen aktiv sein), status = 1,
-     * Installer::activate(), Laufzeitlisten, InstanceCache (Modulrechte).
+     * Activate: requires (dependencies must be active), status = 1,
+     * Installer::activate(), runtime lists, InstanceCache (module rights).
      *
-     * @return array  Eintrag aus status()
+     * @return array  entry from status()
      */
     public function activate(string $name, ?callable $log = null): array
     {
@@ -537,11 +537,11 @@ class ComponentManager {
     }
 
     /**
-     * Abschalten: status = 0, Installer::deactivate(), Laufzeitlisten, InstanceCache.
-     * Hängen aktive Komponenten von dieser ab, ist $force nötig - sie werden dann
-     * zuerst deaktiviert (Reihenfolge im Ergebnis).
+     * Deactivate: status = 0, Installer::deactivate(), runtime lists, InstanceCache.
+     * If active components depend on this one, $force is needed - they are then
+     * deactivated first (order in the result).
      *
-     * @return string[]  deaktivierte "kind/Name", die Abhängigen zuerst
+     * @return string[]  deactivated "kind/Name", the dependents first
      */
     public function deactivate(string $name, ?callable $log = null, bool $force = false): array
     {
@@ -580,11 +580,11 @@ class ComponentManager {
     }
 
     /**
-     * Migrationen von component.version auf update_version (14 §6.4), Installer::migrate(),
-     * Zeiger je Version; danach version = update_version, tables neu, Caches und
-     * Assets neu. Der Status bleibt, wie er war.
+     * Migrations from component.version to update_version (developer docs, chapter 08 (Components and extensions)),
+     * Installer::migrate(), pointer per version; afterwards version = update_version, tables
+     * anew, caches and assets anew. The status stays as it was.
      *
-     * @return array  Eintrag aus status()
+     * @return array  entry from status()
      */
     public function update(string $name, ?callable $log = null, bool $backup = true): array
     {
@@ -630,10 +630,10 @@ class ComponentManager {
     }
 
     /**
-     * Alle Komponenten mit wartendem Update - in Abhängigkeitsreihenfolge
-     * (requires.components, topologisch). Teil von `upgrade`.
+     * All components with a pending update - in dependency order
+     * (requires.components, topological). Part of `upgrade`.
      *
-     * @return string[]  aktualisierte "kind/Name"
+     * @return string[]  updated "kind/Name"
      */
     public function updateAll(?callable $log = null, bool $backup = true): array
     {
@@ -651,12 +651,12 @@ class ComponentManager {
     }
 
     /**
-     * Entfernen (14 §6.5): deactivate (falls aktiv), Installer::uninstall(), mit $purge
-     * die Tabellen aus component.tables droppen, Zeile löschen, Snippet-Cache und
-     * Assets der Komponente entfernen, Laufzeitlisten. Läuft auch für Verwaiste
-     * (Dateien weg) - dann ohne Installer, --purge über die gespeicherte Tabellenliste.
+     * Remove (developer docs, chapter 08 (Components and extensions)): deactivate (if active), Installer::uninstall(), with $purge
+     * drop the tables from component.tables, delete the row, remove the snippet cache and
+     * assets of the component, runtime lists. Also runs for orphans
+     * (files gone) - then without installer, --purge via the stored table list.
      *
-     * @return string[]  gedroppte Tabellen
+     * @return string[]  dropped tables
      */
     public function uninstall(string $name, ?callable $log = null, bool $purge = false, bool $backup = true): array
     {
@@ -742,8 +742,8 @@ class ComponentManager {
     }
 
     /**
-     * Snippet-Präfix wie SnippetCache::sourceDirs(): Module 'blog', Prozessoren
-     * 'proc.blog', Extensions 'ext.blog'.
+     * Snippet prefix as SnippetCache::sourceDirs(): modules 'blog', processors
+     * 'proc.blog', extensions 'ext.blog'.
      */
     public function prefix(array $entry): string
     {
@@ -752,7 +752,7 @@ class ComponentManager {
     }
 
     /**
-     * settings.php['tables'] als JSON für component.tables (nur gültige Bezeichner).
+     * settings.php['tables'] as JSON for component.tables (valid identifiers only).
      */
     private function tablesJson(array $entry): ?string
     {
@@ -762,8 +762,8 @@ class ComponentManager {
     }
 
     /**
-     * Dateien, die zu einer installierten Komponente gehören: Snippet- und HTML-Cache
-     * (nur ihr Präfix) und publizierte Assets.
+     * Files that belong to an installed component: snippet and HTML cache
+     * (only its prefix) and published assets.
      */
     private function runtimeFiles(array $entry, callable $log): void
     {
@@ -776,17 +776,17 @@ class ComponentManager {
     }
 
     /**
-     * Assets nach public/backend/ext/{name}/ (Extensions, 13 §3.5) bzw.
-     * public/backend/mod/{name}/ (Module) kopieren - flach, Dateiname bleibt. Vorher
-     * wird das Verzeichnis geleert. Pfade in settings.php['assets'] sind relativ zu
-     * public/ der Komponente; 'vendor:…'
-     * zeigt in vendor/ des Projekts (Drittbibliotheken aus der composer.json der
-     * Extension). Kopieren statt Symlink - vendor/ bleibt außerhalb des Docroots.
-     * 'dirs' nennt ganze Verzeichnisse, die rekursiv unter ihrem Namen kopiert
-     * werden (Bibliotheken, die ihre Teile relativ zum Script nachladen - TinyMCE:
-     * skins/, themes/, plugins/ …); sie stehen nicht im Manifest.
+     * Copy assets to public/backend/ext/{name}/ (extensions, developer docs, chapter 08 (Components and extensions)) or
+     * public/backend/mod/{name}/ (modules) - flat, the file name stays. Beforehand
+     * the directory is emptied. Paths in settings.php['assets'] are relative to
+     * the component's public/; 'vendor:…'
+     * points into the project's vendor/ (third-party libraries from the composer.json of the
+     * extension). Copy instead of symlink - vendor/ stays outside the docroot.
+     * 'dirs' names whole directories that are copied recursively under their name
+     * (libraries that load their parts relative to the script - TinyMCE:
+     * skins/, themes/, plugins/ …); they are not in the manifest.
      *
-     * @return int  kopierte Dateien
+     * @return int  copied files
      */
     private function publishAssets(array $entry): int
     {
@@ -819,9 +819,9 @@ class ComponentManager {
     }
 
     /**
-     * Verzeichnis rekursiv kopieren (nur reguläre Dateien, keine Symlinks).
+     * Copy a directory recursively (regular files only, no symlinks).
      *
-     * @return int  kopierte Dateien
+     * @return int  copied files
      */
     private function copyDir(string $src, string $dest): int
     {
@@ -840,8 +840,8 @@ class ComponentManager {
     }
 
     /**
-     * Quelle eines Asset-Eintrags (Datei, mit $dir ein Verzeichnis), null wenn
-     * ungültig oder nicht vorhanden.
+     * Source of an asset entry (file, with $dir a directory), null if
+     * invalid or not present.
      */
     private function assetSource(array $entry, string $file, bool $dir = false): ?string
     {
@@ -856,9 +856,9 @@ class ComponentManager {
     }
 
     /**
-     * Verzeichnis unter public/backend/: ext/{name} bzw. mod/{name}, der Name
-     * kleingeschrieben wie der Snippet-Präfix - so heißt die Extension auch in
-     * data-c9-ext. '' für Arten ohne Assets.
+     * Directory under public/backend/: ext/{name} or mod/{name}, the name in lowercase
+     * like the snippet prefix - this is also how the extension is named in
+     * data-c9-ext. '' for kinds without assets.
      */
     private function assetDir(array $entry): string
     {
@@ -868,9 +868,9 @@ class ComponentManager {
     }
 
     /**
-     * Manifest für die Laufzeitliste: ['js' => ['ext/calendar/calendar.ext.js?v=9.1.0'], 'css' => […]]
-     * bzw. 'mod/{name}/…' für Module
-     * (Pfade relativ zu public/backend/) - nur Dateien, die es wirklich gibt.
+     * Manifest for the runtime list: ['js' => ['ext/calendar/calendar.ext.js?v=9.1.0'], 'css' => […]]
+     * or 'mod/{name}/…' for modules
+     * (paths relative to public/backend/) - only files that really exist.
      */
     private function publishedAssets(array $entry): array
     {
@@ -881,9 +881,9 @@ class ComponentManager {
             foreach ((array)($entry['settings']['assets'][$type] ?? []) as $file) {
                 $name = basename((string)$file);
                 if (!is_file("$backendDir/$dir/$name")) continue;
-                // Version + Zeitpunkt des Publizierens: nach `refresh` holt der Browser
-                // geänderte Dateien neu, auch ohne neue Versionsnummer (cApp.extensions
-                // lädt sie dynamisch - ein "harter" Reload erfasst sie nicht immer)
+                // Version + time of publishing: after `refresh` the browser fetches
+                // changed files anew, even without a new version number (cApp.extensions
+                // loads them dynamically - a "hard" reload does not always catch them)
                 $manifest[$type][] = "$dir/$name?v=" . rawurlencode($entry['version'] . '.' . (int)filemtime("$backendDir/$dir/$name"));
             }
         }
@@ -910,9 +910,9 @@ class ComponentManager {
     }
 
     /**
-     * Aktive Zusatzkomponenten, deren requires.components diese Komponente nennen.
+     * Active add-on components whose requires.components name this component.
      *
-     * @param array|null $all  status(), sonst wird es geholt
+     * @param array|null $all  status(), otherwise it is fetched
      * @return string[]  "kind/Name"
      */
     public function dependents(array $entry, ?array $all = null): array
@@ -927,10 +927,10 @@ class ComponentManager {
     }
 
     /**
-     * Schlüssel der Einträge so sortiert, dass Abhängigkeiten (requires.components)
-     * vor den Abhängigen stehen. Zyklen werden aufgebrochen (alphabetische Reihenfolge).
+     * Keys of the entries sorted so that dependencies (requires.components)
+     * come before the dependents. Cycles are broken (alphabetical order).
      *
-     * @param array $entries  "kind/Name" => Eintrag
+     * @param array $entries  "kind/Name" => entry
      * @return string[]
      */
     private function dependencyOrder(array $entries): array
@@ -1001,11 +1001,11 @@ class ComponentManager {
     }
 
     /**
-     * settings.php 'requires' prüfen (14 §5.3). Für installierte Komponenten -
-     * eine 'discovered' prüft nur core/php/bin, die Abhängigkeiten zu anderen
-     * Komponenten erst bei install/activate (dann sind sie Pflicht).
+     * Check settings.php 'requires' (developer docs, chapter 08 (Components and extensions)). For installed components -
+     * a 'discovered' one only checks core/php/bin; dependencies on other
+     * components only at install/activate (then they are mandatory).
      *
-     * @return string[]  Fehler
+     * @return string[]  errors
      */
     public function checkRequires(array $entry, array $all, bool $strictComponents = false): array
     {
@@ -1041,7 +1041,7 @@ class ComponentManager {
     }
 
     /**
-     * Tabelle `component`: "kind/Name" => Zeile
+     * Table `component`: "kind/Name" => row
      */
     private function rows(): array
     {

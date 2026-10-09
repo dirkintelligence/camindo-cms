@@ -1,145 +1,145 @@
 <?php
 /**
- * Sprach-Snippets einsammeln und als PHP-Cache schreiben - var/cache/lang.
+ * Collect language snippets and write them as a PHP cache - var/cache/lang.
  *
- * Der Builder hinter Tools/tool_snippets.php (ToolSnippets) und Core/cron/cache.php.
- * Er hängt nur an Config und System, damit CLI, Installer und eine spätere
- * Komponentenverwaltung ihn ohne Backend-Kontext rufen können. Muss nach JEDER Änderung
- * an einer lang/-Datei laufen - Cms::snippet() liest ausschließlich aus dem Cache.
+ * The builder behind Tools/tool_snippets.php (ToolSnippets) and Core/cron/cache.php.
+ * It depends only on Config and System, so that the CLI, installer and a later
+ * component management can call it without a backend context. Must run after EVERY change
+ * to a lang/ file - Cms::snippet() reads exclusively from the cache.
  *
- * WAS EINGESAMMELT WIRD
+ * WHAT IS COLLECTED
  * --------------------
- *     {core}/lang                        Präfix core,        Backend UND Frontend
- *     {core}/backend/lang                Präfix core,        nur Backend
- *     {dir}/Modules/{Name}/lang          Präfix {name}       Backend UND Frontend
- *     {dir}/Modules/{Name}/backend/lang  Präfix {name}       nur Backend
- *     {dir}/Processors/{Name}/lang       Präfix proc.{name}  Backend UND Frontend
- *     {dir}/Processors/{Name}/backend/lang                   nur Backend
- *     {dir}/Extensions/{Name}/lang       Präfix ext.{name}   Backend UND Frontend (13 §3)
- *     {dir}/Extensions/{Name}/backend/lang                   nur Backend
- *     ... jeweils für {dir} = camindo_dir und core_dir
- *     {var}/translation/translated/*.ini Übersetzungspakete (s. u.), Präfix je Schlüssel
- *     {var}/custom/snippets/{instance_id}/lang   Präfix custom.{instance_id}
- *                                        (Snippets einer Instanz, Modul Snippets;
- *                                         Backend UND Frontend)
+ *     {core}/lang                        prefix core,        backend AND frontend
+ *     {core}/backend/lang                prefix core,        backend only
+ *     {dir}/Modules/{Name}/lang          prefix {name}       backend AND frontend
+ *     {dir}/Modules/{Name}/backend/lang  prefix {name}       backend only
+ *     {dir}/Processors/{Name}/lang       prefix proc.{name}  backend AND frontend
+ *     {dir}/Processors/{Name}/backend/lang                   backend only
+ *     {dir}/Extensions/{Name}/lang       prefix ext.{name}   backend AND frontend (developer docs, chapter 08 (Components and extensions))
+ *     {dir}/Extensions/{Name}/backend/lang                   backend only
+ *     ... in each case for {dir} = camindo_dir and core_dir
+ *     {var}/translation/translated/*.ini translation packages (see below), prefix per key
+ *     {var}/custom/snippets/{instance_id}/lang   prefix custom.{instance_id}
+ *                                        (snippets of an instance, Snippets module;
+ *                                         backend AND frontend)
  *
- * Später Eingesammeltes überschreibt Früheres bei gleichem Schlüssel und Geltungs-
- * bereich. Da {camindo_dir} vor {core_dir} durchlaufen wird, gewinnen am Ende die
- * Core-Komponenten - eine gleichnamige Zusatzkomponente kann ein Core-Snippet also
- * nicht ersetzen. Ein Schlüssel, der in lang/ UND backend/lang/ derselben Komponente
- * steht, wird gemeldet (zur Laufzeit gewinnt die Frontend-Datei).
+ * Later collected entries overwrite earlier ones with the same key and scope.
+ * Since {camindo_dir} is traversed before {core_dir}, the core components win in the end -
+ * an add-on component of the same name cannot replace a core snippet. A key that
+ * appears in lang/ AND backend/lang/ of the same component is reported
+ * (at runtime the frontend file wins).
  *
- * Die Sprachdateien heißen lang/{code}.ini (Format: SnippetIni, ohne Abschnitte,
- * schluessel = "Text"), {code} im Format Cms::LANG_PATTERN (de_DE.ini). Andere Dateien
- * im lang-Verzeichnis werden übergangen; ausgeführt wird nichts.
+ * The language files are called lang/{code}.ini (format: SnippetIni, without sections,
+ * key = "text"), {code} in the format Cms::LANG_PATTERN (de_DE.ini). Other files
+ * in the lang directory are skipped; nothing is executed.
  *
- * ZUSATZSPRACHEN: var/translation/translated/*.ini
+ * ADDITIONAL LANGUAGES: var/translation/translated/*.ini
  * --------------------
- * Eine Datei je Sprache für beliebig viele Komponenten; die Sprache steht im Namen:
- * {code}.ini oder {code}_{beliebig}.ini (sv_SE.ini, sv_SE_core.ini, sv_SE_ext_tinymce.ini).
- * Jede Sprache, für die hier eine Datei liegt, wird Backend-Sprache (languages.php).
+ * One file per language for any number of components; the language is in the name:
+ * {code}.ini or {code}_{anything}.ini (sv_SE.ini, sv_SE_core.ini, sv_SE_ext_tinymce.ini).
+ * Every language for which a file exists here becomes a backend language (languages.php).
  *
- *     [frontend]                          wie lang/          (Backend UND Frontend)
+ *     [frontend]                          like lang/         (backend AND frontend)
  *     core.yes = "…"
- *     [backend]                           wie backend/lang/  (nur Backend)
+ *     [backend]                           like backend/lang/ (backend only)
  *     ext.datepicker.option_mode = "…"
  *
- * Schlüssel: {präfix}.{schlüssel} - geteilt wird am LETZTEN Punkt (Snippet-Schlüssel
- * enthalten keinen); ohne Punkt gilt der Präfix core. Einträge vor dem ersten Abschnitt
- * zählen wie [backend]. Präfixe nicht vorhandener Komponenten werden übergangen. Die
- * Pakete überschreiben die Dateien der Komponenten, die Snippet-Sets der Instanzen
- * überschreiben die Pakete.
+ * Key: {prefix}.{key} - split at the LAST dot (snippet keys do not contain one);
+ * without a dot the prefix core applies. Entries before the first section
+ * count as [backend]. Prefixes of components that do not exist are skipped. The
+ * packages overwrite the files of the components, the snippet sets of the instances
+ * overwrite the packages.
  *
- * Zu jeder Sprache gehört en_US_{code}.ini mit nur der Bezeichnung der Sprache in ihrer
- * eigenen Sprache - über den Namen zählt sie zu en_US und landet damit im en-Fallback
- * aller Sprachen:  backend_language_sv_SE = "Svenska"
- * Die Schlüssel backend_language_* stehen deshalb in den Core-Dateien nur in en_US.ini
- * und werden in den anderen Sprachen nicht als fehlend gemeldet.
+ * Every language comes with en_US_{code}.ini containing only the name of the language in its
+ * own language - by its name it counts as en_US and thus lands in the en fallback
+ * of all languages:  backend_language_sv_SE = "Svenska"
+ * The keys backend_language_* therefore only appear in en_US.ini in the core files
+ * and are not reported as missing in the other languages.
  *
- * Vorlagen zum Übersetzen schreibt jeder vollständige Bau nach var/translation/blueprint:
- *     en_US_core.ini   alle en_US-Snippets der Core-Komponenten ({core_dir}), schon
- *                      mit [frontend]/[backend] und Präfix - ohne backend_language_*
- *     en_US_en_US.ini  Vorlage für en_US_{code}.ini
+ * Templates for translation are written by every complete build to var/translation/blueprint:
+ *     en_US_core.ini   all en_US snippets of the core components ({core_dir}), already
+ *                      with [frontend]/[backend] and prefix - without backend_language_*
+ *     en_US_en_US.ini  template for en_US_{code}.ini
  *
  *
- * EINE DATEI JE SPRACHE, PRÄFIX UND GELTUNGSBEREICH
+ * ONE FILE PER LANGUAGE, PREFIX AND SCOPE
  * --------------------
- *     var/cache/lang/{lang}/{prefix}.php           Backend und Frontend
- *     var/cache/lang/{lang}/{prefix}.backend.php   nur Backend
+ *     var/cache/lang/{lang}/{prefix}.php           backend and frontend
+ *     var/cache/lang/{lang}/{prefix}.backend.php   backend only
  *
- * Jede Datei gibt ein Array zurück (return [...]). Cms::snippet() bindet sie beim
- * ersten Zugriff auf ein Snippet des Präfixes ein - erst die Frontend-Datei, und nur
- * wenn der Schlüssel dort fehlt, auch die Backend-Datei. Ein Frontend-Request lädt so
- * nur die wenigen Dateien, deren Texte er wirklich braucht (Fehlermeldungen von
- * Dataset, Cms::select(), RecordUser, Prozessoren).
+ * Each file returns an array (return [...]). Cms::snippet() includes it on the
+ * first access to a snippet of the prefix - first the frontend file, and only
+ * if the key is missing there, the backend file as well. A frontend request thus loads
+ * only the few files whose texts it really needs (error messages from
+ * Dataset, Cms::select(), RecordUser, processors).
  *
- * build() ohne Argument baut alles neu und räumt das Verzeichnis vorher leer;
- * build('record') schreibt nur die Dateien EINER Komponente (alle Sprachen) und
- * remove('record') entfernt sie - für das (De)Installieren einer Komponente.
+ * build() without an argument rebuilds everything and empties the directory beforehand;
+ * build('record') writes only the files of ONE component (all languages) and
+ * remove('record') deletes them - for installing/uninstalling a component.
  *
- * DER en-FALLBACK WIRD BEIM BAUEN EINGEFROREN
+ * THE en FALLBACK IS FROZEN WHEN BUILDING
  * --------------------
- * Jede Datei ist vollständig: Für jede Sprache werden alle Schlüssel angelegt, die es in
- * Cms::FALLBACK_LANG gibt; fehlt die Übersetzung (Schlüssel nicht vorhanden oder leer),
- * steht der englische Text drin. Zur Laufzeit gibt es keinen Sprach-Fallback mehr, nur
- * noch den Rückfall auf den Schlüssel selbst. Welche Sprachen es gibt, entscheidet
- * Core/lang und var/translation/translated (Cms::backendLanguages()); eine Komponente,
- * die nur en_US.ini mitbringt, bekommt für jede andere Sprache eine Datei mit den
- * englischen Texten. Fehlende Übersetzungen stehen im Ergebnis von build().
+ * Every file is complete: for every language all keys that exist in
+ * Cms::FALLBACK_LANG are created; if the translation is missing (key absent or empty),
+ * the English text is inserted. At runtime there is no language fallback any more,
+ * only the fall back to the key itself. Which languages exist is decided by
+ * Core/lang and var/translation/translated (Cms::backendLanguages()); a component
+ * that only brings en_US.ini gets a file with the English texts for every other
+ * language. Missing translations appear in the result of build().
  *
- * ICU-SNIPPETS WERDEN ZU CLOSURES KOMPILIERT
+ * ICU SNIPPETS ARE COMPILED TO CLOSURES
  * --------------------
- * Enthält ein Snippet ein select- oder plural-Konstrukt, wird es nicht als Text
- * abgelegt, sondern als anonyme Funktion, die zur Laufzeit ein match() über die
- * übergebenen Argumente ausführt. Cms::snippet() erkennt das ($text instanceof
- * \Closure) und ruft sie auf. Die Auswertung kostet damit zur Laufzeit fast nichts -
- * der Preis ist, dass eine Änderung am Snippet erst nach einem Cache-Neubau wirkt.
+ * If a snippet contains a select or plural construct, it is not stored as text,
+ * but as an anonymous function that runs a match() over the passed arguments at runtime.
+ * Cms::snippet() recognizes this ($text instanceof \Closure) and calls it. The evaluation
+ * therefore costs almost nothing at runtime - the price is that a change to the snippet
+ * only takes effect after a cache rebuild.
  *
- * Die Kompilierung besteht aus vier Methoden:
- *     compileMixedTextToPHP()   zerlegt Text in statische Teile und ICU-Blöcke
- *     compileICUBlockToPHP()    macht aus EINEM Block ein match()
- *     extractICUChoices()       zerlegt einen Block in seine Zweige
- *     formatStaticText()        behandelt das '#' innerhalb eines plural-Zweigs
- * compileMixedTextToPHP() und compileICUBlockToPHP() rufen sich gegenseitig auf -
- * daher die beliebige Verschachtelbarkeit.
+ * The compilation consists of four methods:
+ *     compileMixedTextToPHP()   splits text into static parts and ICU blocks
+ *     compileICUBlockToPHP()    turns ONE block into a match()
+ *     extractICUChoices()       splits a block into its branches
+ *     formatStaticText()        handles the '#' inside a plural branch
+ * compileMixedTextToPHP() and compileICUBlockToPHP() call each other -
+ * hence the arbitrary nesting possible.
  *
  * @see Camindo\Core\Cms::snippet()
- * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  dasselbe für die HTML-Vorlagen
- * @see docs/developers/03-backend-entwicklung.md
+ * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  the same for the HTML templates
+ * @see developer docs, chapter 05 (Backend development)
  *
  * ---
  *
- * Implementierung für ausgewählter Kernbestandteile des ICU Message Formats. 
+ * Implementation of selected core parts of the ICU Message Format.
 
-1. UNTERSTÜTZTE FUNKTIONEN
+1. SUPPORTED FUNCTIONS
 --------------------------
-* Typ: `select`
-- Ermöglicht das exakte Matching von übergebenen String-Werten.
-- Ein Fallback-Schlüsselwort ist erforderlich: `other`.
+* Type: `select`
+- Allows exact matching of passed string values.
+- A fallback keyword is required: `other`.
 
-* Typ: `plural`
-- Ermöglicht das exakte Matching von Werten durch das Präfix `=` (z. B. `=0`, `=1`).
-- Platzhalter-Ersetzung: Das Zeichen `#` im Ausgabetext wird automatisch durch den übergebenen Zahlenwert (als String gecastet) ersetzt.
-- Ein Fallback-Schlüsselwort ist erforderlich: `other`.
+* Type: `plural`
+- Allows exact matching of values via the prefix `=` (e.g. `=0`, `=1`).
+- Placeholder replacement: the character `#` in the output text is automatically replaced by the passed numeric value (cast to string).
+- A fallback keyword is required: `other`.
 
-* Verschachtelung (Nesting)
-- Rekursive Verschachtelungen werden nativ unterstützt. Es ist problemlos möglich, z. B. einen `plural`-Block innerhalb eines `select`-Zweiges zu definieren.
+* Nesting
+- Recursive nesting is supported natively. It is easily possible, e.g., to define a `plural` block inside a `select` branch.
 
-2. BEKANNTE EINSCHRÄNKUNGEN (NICHT UNTERSTÜTZT)
+2. KNOWN LIMITATIONS (NOT SUPPORTED)
 -----------------------------------------------
-Um falsche Erwartungen zu vermeiden, hier die ICU-Features, die diese Library *nicht* abdeckt:
+To avoid wrong expectations, here are the ICU features this library does *not* cover:
 
-* Reine Variablen-Interpolation: Einfache Platzhalter ohne Typ-Definition (z. B. `Hallo {name}`) werden vom Regex `^\{[a-zA-Z0-9_]+,\s*(select|plural)\s*,` nicht erfasst und als statischer String zurückgegeben. (Diese müssen ggf. an anderer Stelle im System verarbeitet werden).
-* Lokalisierungsbasierte Plural-Regeln: Grammatikalische Plural-Kategorien wie `zero`, `one`, `two`, `few`, `many` werden nicht anhand von Sprach-Regelwerken evaluiert. Der Parser vergleicht lediglich exakt die Eingabe (ohne `=`) mit dem Key oder fällt auf `other` zurück.
-* Datenformatierung: ICU-Typen für Formatierungen wie `number`, `date`, `time` oder `currency` sind nicht implementiert.
-* Plural-Offsets: Die erweiterte Plural-Syntax zur Verschiebung von Werten (z. B. `offset:1`) wird nicht unterstützt.
-* Escaping: Das Maskieren von Sonderzeichen (z. B. `'#'`, wenn das Raute-Zeichen als normaler Text und nicht als Platzhalter ausgegeben werden soll) wird vom Compiler nicht beachtet; jedes `#` in einem Plural-Block wird ersetzt.
+* Pure variable interpolation: simple placeholders without a type definition (e.g. `Hallo {name}`) are not caught by the regex `^\{[a-zA-Z0-9_]+,\s*(select|plural)\s*,` and are returned as a static string. (These may have to be processed elsewhere in the system).
+* Locale-based plural rules: grammatical plural categories such as `zero`, `one`, `two`, `few`, `many` are not evaluated against language rule sets. The parser merely compares the input exactly (without `=`) with the key or falls back to `other`.
+* Data formatting: ICU types for formatting such as `number`, `date`, `time` or `currency` are not implemented.
+* Plural offsets: the extended plural syntax for shifting values (e.g. `offset:1`) is not supported.
+* Escaping: masking special characters (e.g. `'#'`, when the hash sign should be output as normal text and not as a placeholder) is not respected by the compiler; every `#` in a plural block is replaced.
 
-3. SYNTAX-VORAUSSETZUNGEN
+3. SYNTAX REQUIREMENTS
 -------------------------
-- Das Muster muss exakt beginnen mit: `{variablenName, select, ` oder `{variablenName, plural, ` (Whitespace um die Schlüsselwörter ist erlaubt, das erste öffnende Zeichen muss aber ein `{` sein).
+- The pattern must begin exactly with: `{variableName, select, ` or `{variableName, plural, ` (whitespace around the keywords is allowed, but the first opening character must be a `{`).
 
-// Beispiel für das ICU Message Format (select|plural)
+// Example of the ICU Message Format (select|plural)
 'debug' => '{typ, select,
 m {
     {count, plural,
@@ -163,7 +163,7 @@ other {
     }
 }
 }',
-Ausgabe mittels 
+Output via
 Camindo\Core\Cms ->snippet('debug',['typ' => 'f', 'count' => '3']);
 
 */
@@ -171,26 +171,26 @@ namespace Camindo\Core;
 
 class SnippetCache {
 
-    // Präfix (= Name der Cachedatei) der Snippets ohne Komponente: Core/lang, Core/backend/lang
+    // Prefix (= name of the cache file) of the snippets without component: Core/lang, Core/backend/lang
     public const CORE_PREFIX = Cms::CORE_PREFIX;
 
-    // Snippet-Sets der Instanzen unter var/custom/snippets/{instance_id}/lang -
-    // Präfix custom.{instance_id} (Modul Snippets); Cms::snippet() löst die Kurzform
-    // custom.{key} auf die aktuelle Instanz auf
+    // Snippet sets of the instances under var/custom/snippets/{instance_id}/lang -
+    // prefix custom.{instance_id} (Snippets module); Cms::snippet() resolves the short form
+    // custom.{key} to the current instance
     public const CUSTOM_PREFIX = 'custom';
     public const CUSTOM_SET_PATTERN = '/^[1-9][0-9]{0,9}$/';
 
-    // Liste der Backend-Sprachen (Core/lang und Übersetzungspakete), beim Bauen geschrieben - Cms::backendLanguages()
-    // liest sie, statt je Request das Verzeichnis zu durchsuchen
+    // List of the backend languages (Core/lang and translation packages), written when building - Cms::backendLanguages()
+    // reads it instead of searching the directory on every request
     public const LANGUAGES_FILE = 'languages.php';
 
-    // Übersetzungspakete und Vorlagen, relativ zu paths.var_dir (siehe Klassenkommentar)
+    // Translation packages and templates, relative to paths.var_dir (see class comment)
     public const TRANSLATED_DIR = '/translation/translated';
     public const BLUEPRINT_DIR = '/translation/blueprint';
-    // Sprache eines Übersetzungspakets aus dem Dateinamen: {code}.ini, {code}_….ini
+    // Language of a translation package from the file name: {code}.ini, {code}_….ini
     private const TRANSLATED_PATTERN = '/^([a-z]{2,3}_[A-Z]{2})(?:_[^\/]*)?\.ini$/';
-    // Bezeichnungen der Backend-Sprachen (Backend::backendLanguageOptions()): nur in en_US,
-    // für die anderen Sprachen gilt der Fallback - wird nicht als fehlend gemeldet
+    // Names of the backend languages (Backend::backendLanguageOptions()): only in en_US,
+    // for the other languages the fallback applies - not reported as missing
     public const LANGUAGE_NAME_PREFIX = 'backend_language_';
 
     public function __construct(
@@ -201,19 +201,19 @@ class SnippetCache {
     }
 
     /**
-     * Cache bauen - alles oder nur eine Komponente.
+     * Build the cache - everything or only one component.
      *
-     * @param ?string $prefix  null: alles (Verzeichnis wird vorher geleert);
-     *                         sonst der Präfix EINER Komponente ('record',
-     *                         'proc.magick', CORE_PREFIX) - nur deren Dateien werden
-     *                         ersetzt
-     * @return array  'dirs'       durchsuchte Verzeichnisse (Präfix => [Pfad, ...])
-     *                'files'      Anzahl geschriebener Dateien
-     *                'duplicates' Schlüssel in lang/ UND backend/lang/ ("de: record.x")
-     *                'missing'    fehlende Übersetzungen: Sprache => ['record.x', ...]
-     *                'errors'     fehlerhafte Zeilen der .ini-Dateien ("Datei:Zeile: ...")
-     *                'blueprints' geschriebene Übersetzungsvorlagen (Pfade)
-     * @throws \Exception  wenn das Cacheverzeichnis nicht angelegt werden kann
+     * @param ?string $prefix  null: everything (directory is emptied beforehand);
+     *                         otherwise the prefix of ONE component ('record',
+     *                         'proc.magick', CORE_PREFIX) - only its files are
+     *                         replaced
+     * @return array  'dirs'       searched directories (prefix => [path, ...])
+     *                'files'      number of files written
+     *                'duplicates' keys in lang/ AND backend/lang/ ("de: record.x")
+     *                'missing'    missing translations: language => ['record.x', ...]
+     *                'errors'     faulty lines of the .ini files ("file:line: ...")
+     *                'blueprints' translation templates written (paths)
+     * @throws \Exception  if the cache directory cannot be created
      */
     public function build(?string $prefix = null): array
     {
@@ -224,8 +224,8 @@ class SnippetCache {
             throw new \Exception("Error: Creation of directory \"{$cacheDir}\" failed.");
         }
 
-        // Sammlung: $array[{sprache}][{präfix}][{scope}][{schlüssel}] = text
-        // scope: '' = Backend und Frontend (lang/), 'backend' = nur Backend (backend/lang/)
+        // Collection: $array[{language}][{prefix}][{scope}][{key}] = text
+        // scope: '' = backend and frontend (lang/), 'backend' = backend only (backend/lang/)
         $array = [];
         $duplicates = [];
         $dirs = [];
@@ -240,7 +240,7 @@ class SnippetCache {
             }
         };
 
-        // Vorlage en_US_core.ini: en_US der Core-Komponenten, nur beim vollständigen Bau
+        // Template en_US_core.ini: en_US of the core components, only for the complete build
         $coreDir = $this->config->get('paths.core_dir');
         $blueprint = [];
 
@@ -261,7 +261,7 @@ class SnippetCache {
             }
         }
 
-        // Übersetzungspakete (Zusatzsprachen) - nur Präfixe vorhandener Komponenten
+        // Translation packages (additional languages) - only prefixes of existing components
         $known = array_flip($this->prefixes());
         foreach ($this->translatedFiles() as $file => $lang) {
             $dirs['translation'][] = $file;
@@ -285,7 +285,7 @@ class SnippetCache {
             }
         }
 
-        // Snippet-Sets der Instanzen zuletzt - sie überschreiben alles
+        // Snippet sets of the instances last - they overwrite everything
         foreach ($customDirs as [$dir, $dirPrefix, $scope]) {
             if ($prefix !== null && $dirPrefix !== $prefix) continue;
             $dirs[$dirPrefix][] = $dir;
@@ -294,8 +294,8 @@ class SnippetCache {
             }
         }
 
-        // Alte Dateien entfernen: alles (auch Präfixe
-        // entfernter Komponenten) bzw. nur die der Komponente
+        // Remove old files: everything (also prefixes
+        // of removed components) or only those of the component
         if ($prefix === null) {
             foreach ((array)glob($cacheDir . '/*') as $entry) {
                 if (is_dir($entry)) {
@@ -310,9 +310,9 @@ class SnippetCache {
             $this->remove($prefix);
         }
 
-        // en-Fallback einfrieren und Dateien schreiben. Sprachen: die des Backends
-        // (Core/lang und Übersetzungspakete) plus alle, die eine Komponente
-        // zusätzlich mitbringt.
+        // Freeze the en fallback and write files. Languages: those of the backend
+        // (Core/lang and translation packages) plus all that a component
+        // additionally brings along.
         $fallback = Cms::FALLBACK_LANG;
         $langs = array_unique(array_merge($this->backendLanguages(), array_keys($array)));
         $prefixes = [];
@@ -325,15 +325,15 @@ class SnippetCache {
         $fileCount = 0;
         foreach ($langs as $lang) {
             foreach ($prefixes as $p) {
-                // Custom-Sets (Modul Snippets) sind bewusst oft nur in einigen Sprachen
-                // gepflegt - der en-Fallback gilt, gemeldet wird er nicht
+                // Custom sets (Snippets module) are deliberately often maintained only in some
+                // languages - the en fallback applies, it is not reported
                 $reportMissing = !str_starts_with($p, self::CUSTOM_PREFIX . '.');
                 foreach (['', 'backend'] as $scope) {
                     $base = $array[$fallback][$p][$scope] ?? [];
                     $own  = $array[$lang][$p][$scope] ?? [];
                     if (!$base && !$own) continue;
 
-                    // Reihenfolge der Sprachdatei beibehalten, fehlende Schlüssel aus en
+                    // Keep the order of the language file, missing keys from en
                     $snippets = [];
                     foreach ($own as $key => $val) {
                         if ($val === '' && isset($base[$key])) {
@@ -354,7 +354,7 @@ class SnippetCache {
 
                     $file = '/' . $lang . '/' . $p . ($scope === '' ? '' : '.backend') . '.php';
                     $this->system->filePutContents($cacheDir, $file, $this->compileFile($snippets), lock:true);
-                    // Cms::snippet() liest die Datei per include - OPcache sonst mit altem Stand
+                    // Cms::snippet() reads the file via include - otherwise OPcache keeps the old state
                     if (function_exists('opcache_invalidate')) {
                         @opcache_invalidate($cacheDir . $file, true);
                     }
@@ -363,13 +363,13 @@ class SnippetCache {
             }
         }
 
-        // Backend-Sprachen einmalig festhalten (nach dem Leeren oben, immer neu)
+        // Record the backend languages once (after the emptying above, always anew)
         $this->system->filePutContents($cacheDir, '/' . self::LANGUAGES_FILE, $this->compileFile($this->backendLanguages()), lock:true);
         if (function_exists('opcache_invalidate')) {
             @opcache_invalidate($cacheDir . '/' . self::LANGUAGES_FILE, true);
         }
 
-        // Übersetzungsvorlagen (nur beim vollständigen Bau, sonst fehlten Komponenten)
+        // Translation templates (only for the complete build, otherwise components would be missing)
         $blueprints = [];
         if ($prefix === null) {
             $this->system->createDir($varDir, self::TRANSLATED_DIR);
@@ -387,9 +387,9 @@ class SnippetCache {
     }
 
     /**
-     * Cachedateien EINER Komponente entfernen (alle Sprachen) - beim Deinstallieren.
+     * Remove the cache files of ONE component (all languages) - when uninstalling.
      *
-     * @return int  Anzahl gelöschter Dateien
+     * @return int  number of deleted files
      */
     public function remove(string $prefix): int
     {
@@ -405,9 +405,9 @@ class SnippetCache {
     }
 
     /**
-     * Präfixe aller vorhandenen Komponenten (aus den Quellverzeichnissen).
+     * Prefixes of all existing components (from the source directories).
      *
-     * @return string[]  z. B. ['core', 'admin', ..., 'proc.magick']
+     * @return string[]  e.g. ['core', 'admin', ..., 'proc.magick']
      */
     public function prefixes(): array
     {
@@ -419,9 +419,9 @@ class SnippetCache {
     }
 
     /**
-     * Quellverzeichnisse in Sammelreihenfolge (siehe Klassenkommentar).
+     * Source directories in collection order (see class comment).
      *
-     * @return array  Liste von [Verzeichnis, Präfix, Scope ('' | 'backend')]
+     * @return array  list of [directory, prefix, scope ('' | 'backend')]
      */
     private function sourceDirs(): array
     {
@@ -442,9 +442,9 @@ class SnippetCache {
                 }
             }
         }
-        // Snippets der Instanzen (Modul Snippets): ein Set je Unterverzeichnis
-        // (= instance_id), Präfix custom.{instance_id}. Andere Verzeichnisnamen
-        // werden übergangen.
+        // Snippets of the instances (Snippets module): one set per subdirectory
+        // (= instance_id), prefix custom.{instance_id}. Other directory names
+        // are skipped.
         foreach ((array)glob(self::customDir($this->config) . '/*', GLOB_ONLYDIR) as $subDir) {
             $set = basename($subDir);
             if (!preg_match(self::CUSTOM_SET_PATTERN, $set)) continue;
@@ -454,7 +454,7 @@ class SnippetCache {
     }
 
     /**
-     * Wurzel der Snippet-Sets der Instanzen: var/custom/snippets.
+     * Root of the snippet sets of the instances: var/custom/snippets.
      */
     public static function customDir(Config $config): string
     {
@@ -462,9 +462,9 @@ class SnippetCache {
     }
 
     /**
-     * Backend-Sprachen: die Kürzel, für die es Core/lang/{code}.ini gibt, und die der
-     * Übersetzungspakete - wie Cms::backendLanguages(), nur ohne Cms (der Builder soll
-     * ohne Cms auskommen).
+     * Backend languages: the codes for which there is Core/lang/{code}.ini, and those of the
+     * translation packages - like Cms::backendLanguages(), only without Cms (the builder should
+     * manage without Cms).
      */
     private function backendLanguages(): array
     {
@@ -472,10 +472,10 @@ class SnippetCache {
     }
 
     /**
-     * Sprachdateien eines lang-Verzeichnisses einlesen: {code}.ini.
+     * Read the language files of a lang directory: {code}.ini.
      *
-     * @param string[] $errors  Fehler der .ini-Dateien werden angehängt
-     * @return array<string, array<string, string>>  Sprache => [Schlüssel => Text]
+     * @param string[] $errors  errors of the .ini files are appended
+     * @return array<string, array<string, string>>  language => [key => text]
      */
     private function readDir(string $dir, array &$errors): array
     {
@@ -495,7 +495,7 @@ class SnippetCache {
     }
 
     /**
-     * Wurzel der Übersetzungspakete: var/translation/translated.
+     * Root of the translation packages: var/translation/translated.
      */
     public static function translatedDir(Config $config): string
     {
@@ -503,9 +503,9 @@ class SnippetCache {
     }
 
     /**
-     * Übersetzungspakete mit ihrer Sprache, nach Namen sortiert.
+     * Translation packages with their language, sorted by name.
      *
-     * @return array<string, string>  Pfad => Sprache
+     * @return array<string, string>  path => language
      */
     private function translatedFiles(): array
     {
@@ -519,8 +519,8 @@ class SnippetCache {
     }
 
     /**
-     * Sprache eines Übersetzungspakets aus dem Dateinamen: sv_SE.ini, sv_SE_core.ini,
-     * en_US_sv_SE.ini (-> en_US). Andere Namen: null.
+     * Language of a translation package from the file name: sv_SE.ini, sv_SE_core.ini,
+     * en_US_sv_SE.ini (-> en_US). Other names: null.
      */
     public static function translatedLanguage(string $file): ?string
     {
@@ -528,10 +528,10 @@ class SnippetCache {
     }
 
     /**
-     * Vorlagen zum Übersetzen nach var/translation/blueprint schreiben.
+     * Write the templates for translation to var/translation/blueprint.
      *
-     * @param array $blueprint  'frontend'|'backend' => [Präfix => [Schlüssel => Text]] (en_US, Core)
-     * @return string[]  geschriebene Dateien
+     * @param array $blueprint  'frontend'|'backend' => [prefix => [key => text]] (en_US, Core)
+     * @return string[]  files written
      */
     private function writeBlueprints(array $blueprint): array
     {
@@ -545,7 +545,7 @@ class SnippetCache {
             foreach ($blueprint[$section] ?? [] as $p => $snippets) {
                 $first = true;
                 foreach ($snippets as $key => $val) {
-                    // Sprachbezeichnungen kommen je Sprache aus en_US_{code}.ini
+                    // Language names come per language from en_US_{code}.ini
                     if ($p === self::CORE_PREFIX && str_starts_with($key, self::LANGUAGE_NAME_PREFIX)) continue;
                     if ($first) {
                         $groups[$section][$p . '.' . $key] = $p;
@@ -586,8 +586,8 @@ class SnippetCache {
     }
 
     /**
-     * Sprache einer Sprachdatei aus ihrem Namen: {code}.ini im Format
-     * Cms::LANG_PATTERN (de_DE.ini). Alles andere: null.
+     * Language of a language file from its name: {code}.ini in the format
+     * Cms::LANG_PATTERN (de_DE.ini). Anything else: null.
      */
     public static function fileLanguage(string $file): ?string
     {
@@ -597,11 +597,11 @@ class SnippetCache {
     }
 
     /**
-     * Inhalt einer Cachedatei: return [...] mit den Snippets eines Präfixes und
-     * Geltungsbereichs; ICU-Snippets als Closure.
+     * Content of a cache file: return [...] with the snippets of a prefix and
+     * scope; ICU snippets as closures.
      *
-     * @param array $snippets  schlüssel => text
-     * @return string          PHP-Quelltext
+     * @param array $snippets  key => text
+     * @return string          PHP source code
      */
     private function compileFile(array $snippets): string
     {
@@ -610,12 +610,12 @@ class SnippetCache {
         $phpContent .= "return [\n";
 
         foreach ($snippets as $key => $value) {
-            // kein trim()! Führende und folgende Leerzeichen in einem Snippet
-            // können gewollt sein (z. B. als Abstand vor einer Einheit).
+            // no trim()! Leading and trailing spaces in a snippet
+            // may be intended (e.g. as a gap before a unit).
 
-            // Enthält das Snippet ein ICU-Konstrukt? Dann als Closure ablegen,
-            // sonst als schlichten String. Die schnelle str_contains()-Prüfung
-            // davor erspart den Regex bei der großen Mehrheit der Snippets.
+            // Does the snippet contain an ICU construct? Then store it as a closure,
+            // otherwise as a plain string. The fast str_contains() check
+            // before it spares the regex for the large majority of snippets.
             if (str_contains($value, '{') && preg_match('/\{[a-zA-Z0-9_]+,\s*(select|plural)\s*,/s', $value)) {
                 $compiledCode = $this->compileMixedTextToPHP($value);
                 $phpContent .= "    " . var_export($key, true) . " => function(array \$args = []) {\n        return $compiledCode;\n    },\n";
@@ -629,22 +629,22 @@ class SnippetCache {
     }
 
     /**
-     * Zerlegt gemischten Text in statische Teile und ICU-Blöcke und erzeugt daraus
-     * einen PHP-Ausdruck.
+     * Splits mixed text into static parts and ICU blocks and builds from them
+     * a PHP expression.
      *
-     * Ein Snippet ist selten NUR ein ICU-Block - meist steht Text davor und dahinter.
-     * Die Methode läuft deshalb zeichenweise durch: alles bis zur nächsten gültigen
-     * ICU-Signatur wandert in den Puffer, der Block selbst wird über die Zählung der
-     * geschweiften Klammern isoliert (nicht per Regex - der käme mit Verschachtelung
-     * nicht zurecht) und an compileICUBlockToPHP() gegeben.
+     * A snippet is rarely ONLY an ICU block - usually there is text before and after it.
+     * The method therefore runs character by character: everything up to the next valid
+     * ICU signature goes into the buffer, the block itself is isolated by counting the
+     * curly braces (not by regex - that would not cope with nesting) and handed to
+     * compileICUBlockToPHP().
      *
-     * Herausgegeben werden die Teile mit '.' verkettet, also ein einziger
-     * PHP-Ausdruck, den der Aufrufer in eine Closure setzen kann.
+     * The parts are output concatenated with '.', i.e. a single
+     * PHP expression that the caller can put into a closure.
      *
-     * @param string  $text        Snippet-Text
-     * @param ?string $pluralVar   Name der Zählvariable, wenn wir uns innerhalb eines
-     *                             plural-Zweigs befinden - nur dann wird '#' ersetzt
-     * @return string              PHP-Quelltext (Ausdruck)
+     * @param string  $text        snippet text
+     * @param ?string $pluralVar   name of the count variable if we are inside a
+     *                             plural branch - only then is '#' replaced
+     * @return string              PHP source code (expression)
      */
     private function compileMixedTextToPHP(string $text, ?string $pluralVar = null): string {
         $length = strlen($text);
@@ -660,13 +660,13 @@ class SnippetCache {
                 // Prüfen, ob eine gültige ICU-Signatur beginnt
                 if (preg_match('/^\{([a-zA-Z0-9_]+),\s*(select|plural)\s*,/s', $rest, $matches)) {
                     
-                    // Bisherigen Puffer als statischen Text ablegen
+                    // Store the buffer so far as static text
                     if ($buffer !== '') {
                         $parts[] = $this->formatStaticText($buffer, $pluralVar);
                         $buffer = '';
                     }
 
-                    // Den gesamten, in geschweiften Klammern eingeschlossenen Block extrahieren
+                    // Extract the entire block enclosed in curly braces
                     $braceLevel = 0;
                     $block = '';
                     for ($j = $i; $j < $length; $j++) {
@@ -680,10 +680,10 @@ class SnippetCache {
                         }
                     }
                     
-                    // Den isolierten Block kompilieren
+                    // Compile the isolated block
                     $parts[] = $this->compileICUBlockToPHP($block);
                     
-                    // Index verschieben, da der Block verarbeitet wurde
+                    // Advance the index, since the block has been processed
                     $i = $j + 1;
                     continue;
                 }
@@ -693,23 +693,23 @@ class SnippetCache {
             $i++;
         }
 
-        // Restlichen Text im Puffer ablegen
+        // Store the remaining text in the buffer
         if ($buffer !== '') {
             $parts[] = $this->formatStaticText($buffer, $pluralVar);
         }
 
-        // Wenn nichts extrahiert wurde, leeren String zurückgeben, ansonsten Teile mit '.' verketten
+        // If nothing was extracted, return an empty string, otherwise concatenate the parts with '.'
         return empty($parts) ? "''" : implode(" . ", $parts);
     }
 
     /**
-     * Statischen Text als PHP-Literal ausgeben, mit '#'-Ersetzung im plural-Zweig.
+     * Output static text as a PHP literal, with '#' replacement in the plural branch.
      *
-     * Innerhalb eines plural-Blocks steht '#' für den Zahlenwert. Statt ihn hier
-     * einzusetzen (der Wert ist zur Kompilierzeit ja nicht bekannt), wird ein
-     * str_replace()-Aufruf in den erzeugten Code geschrieben.
+     * Inside a plural block '#' stands for the numeric value. Instead of inserting it here
+     * (the value is not known at compile time), a str_replace() call
+     * is written into the generated code.
      *
-     * Ein Maskieren von '#' gibt es nicht - jedes '#' im Zweig wird ersetzt.
+     * There is no escaping of '#' - every '#' in the branch is replaced.
      */
     private function formatStaticText(string $text, ?string $pluralVar): string {
         if ($pluralVar !== null && str_contains($text, '#')) {
@@ -719,22 +719,21 @@ class SnippetCache {
     }
 
     /**
-     * Einen einzelnen ICU-Block in ein PHP-match() übersetzen.
+     * Translate a single ICU block into a PHP match().
      *
      * Aus  {count, plural, =0 {nichts} other {# Stück}}  wird
      *     match((string)($args['count'] ?? '')) { '0' => 'nichts', default => str_replace(…) }
      *
-     * Der Zweig 'other' wird zu 'default'. Bei plural wird das führende '=' vom
-     * Schlüssel entfernt - verglichen wird also exakt und nicht nach den
-     * grammatikalischen Plural-Regeln der Sprache (one/few/many werden nur wörtlich
-     * getroffen).
+     * The branch 'other' becomes 'default'. For plural the leading '=' is removed from the
+     * key - so the comparison is exact and not based on the grammatical plural rules
+     * of the language (one/few/many are only matched literally).
      *
-     * Der Inhalt jedes Zweigs geht zurück durch compileMixedTextToPHP() - so lassen
-     * sich Blöcke beliebig ineinander schachteln. In einem plural-Zweig wird dabei der
-     * Variablenname weitergereicht, damit '#' dort ersetzt werden kann.
+     * The content of each branch goes back through compileMixedTextToPHP() - this way
+     * blocks can be nested arbitrarily. In a plural branch the variable name is passed on,
+     * so that '#' can be replaced there.
      *
-     * Passt der Block nicht auf das erwartete Muster, wird er unverändert als String
-     * ausgegeben - lieber der Rohtext als ein Syntaxfehler in der Cachedatei.
+     * If the block does not match the expected pattern, it is output unchanged as a string -
+     * better the raw text than a syntax error in the cache file.
      */
     private function compileICUBlockToPHP(string $icu): string {
         if (!preg_match('/^\{([a-zA-Z0-9_]+),\s*(select|plural)\s*,(.*)\}$/is', $icu, $matches)) {
@@ -758,8 +757,8 @@ class SnippetCache {
                 $matchKey = var_export($cleanKey, true);
             }
 
-            // Der Rückgabewert eines Zweigs (Choice) kann wieder gemischten Text enthalten.
-            // Daher rufen wir die compileMixedTextToPHP rekursiv auf.
+            // The return value of a branch (choice) can again contain mixed text.
+            // Therefore we call compileMixedTextToPHP recursively.
             $passPluralVar = ($type === 'plural') ? $varName : null;
             $compiledValue = $this->compileMixedTextToPHP(trim($value), $passPluralVar);
 
@@ -771,14 +770,13 @@ class SnippetCache {
     }
 
     /**
-     * Die Zweige eines ICU-Blocks in schlüssel => inhalt zerlegen.
+     * Split the branches of an ICU block into key => content.
      *
-     * Zählt die geschweiften Klammern mit: auf Ebene 0 gelesener Text ist der
-     * Schlüssel ('=0', 'other', 'm'), was zwischen der öffnenden und der zugehörigen
-     * schließenden Klammer steht, ist der Inhalt. Verschachtelte Klammern landen
-     * unverändert im Inhalt und werden erst beim rekursiven Aufruf ausgewertet.
+     * Counts the curly braces: text read at level 0 is the key ('=0', 'other', 'm'),
+     * what stands between the opening and the matching closing brace is the content. Nested braces end up
+     * unchanged in the content and are only evaluated in the recursive call.
      *
-     * Deshalb keine Regex: die Verschachtelung wäre damit nicht zu greifen.
+     * Therefore no regex: the nesting would not be handled that way.
      */
     private function extractICUChoices(string $body): array {
         $choices = [];

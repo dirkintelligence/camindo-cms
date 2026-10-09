@@ -1,34 +1,34 @@
 <?php
 /**
- * Vertrag des Dependency-Injection-Containers.
+ * Contract of the dependency injection container.
  *
- * Bewusst minimal gehalten und an PSR-11 angelehnt (dort: Psr\Container\ContainerInterface),
- * aber ohne dessen Exception-Interfaces - camindo bringt keine Container-Library mit.
+ * Deliberately minimal and modeled on PSR-11 (there: Psr\Container\ContainerInterface),
+ * but without its exception interfaces - camindo does not ship a container library.
  *
- * Klassen typisieren ihre Container-Abhängigkeit auf DIESES Interface, nicht auf die
- * konkrete Klasse Container (vgl. ProcessorFactory). Der Container registriert sich im
- * Konstruktor unter beiden Namen selbst, beide Schreibweisen funktionieren also.
+ * Classes type-hint their container dependency on THIS interface, not on the concrete
+ * class Container (cf. ProcessorFactory). The container registers itself in its
+ * constructor under both names, so both spellings work.
  */
 namespace Camindo\Core;
 
 interface ContainerInterface
 {
     /**
-     * Service holen. Erzeugt ihn beim ersten Aufruf und liefert danach immer dieselbe Instanz.
+     * Get a service. Creates it on the first call and returns the same instance afterwards.
      *
-     * @param string $id  Klassen- oder Interface-Name, i. d. R. per MeineKlasse::class
-     * @return mixed      Die Instanz
-     * @throws \Exception wenn $id weder registriert noch auflösbar ist
+     * @param string $id  Class or interface name, usually via MyClass::class
+     * @return mixed      The instance
+     * @throws \Exception if $id is neither registered nor resolvable
      */
     public function get(string $id);
 
     /**
-     * Kann get($id) etwas liefern?
+     * Can get($id) return something?
      *
-     * Achtung: true bedeutet nur "auflösbar", nicht "bereits erzeugt" - für eine
-     * beliebige existierende Klasse liefert has() true, weil Autowiring greifen würde.
+     * Note: true only means "resolvable", not "already created" - for any existing
+     * class has() returns true, because autowiring would apply.
      *
-     * @param string $id  Klassen- oder Interface-Name
+     * @param string $id  Class or interface name
      */
     public function has(string $id): bool;
 }

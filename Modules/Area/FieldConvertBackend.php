@@ -4,18 +4,18 @@ namespace Camindo\Core\Modules\Area;
 class FieldConvertBackend extends FieldBackend {
 
     /**
-     * Typ oder Mehrsprachigkeit eines bestehenden Feldes ändern (backend/field_convert.php).
+     * Change the type or multilingualism of an existing field (backend/field_convert.php).
      *
-     * Drei Zustände über $_REQUEST['function']:
+     * Three states via $_REQUEST['function']:
      *
-     *     ''         Auswahl der möglichen Ziele (Field::conversionTargets()) als
-     *                Karten wie in create() - links die Typen, rechts der Sprachwechsel.
-     *                Ziele, bei denen Inhalte verloren gehen können, tragen den Hinweis.
-     *     confirm    Bestätigung: aktueller und neuer Typ, bei möglichem Datenverlust
-     *                die Warnung, bei offenen Arbeitskopien des Bereichs der Hinweis
-     *                darauf, dann der Button "Typ ändern" (POST, function=convert).
-     *     convert    Field::convert(); danach Balloon und zurück zur Detailansicht.
-     *                Bei einem Fehler erscheint die Meldung über der Auswahl.
+     *     ''         selection of the possible targets (Field::conversionTargets()) as
+     *                cards as in create() - types on the left, language switch on the right.
+     *                Targets where content may be lost carry the note.
+     *     confirm    confirmation: current and new type, on possible data loss
+     *                the warning, with open working copies of the area the note
+     *                about them, then the button "Change type" (POST, function=convert).
+     *     convert    Field::convert(); afterwards a balloon and back to the detail view.
+     *                On an error the message appears above the selection.
      *
      * Request: id, function, type, multilingual
      */
@@ -43,7 +43,7 @@ class FieldConvertBackend extends FieldBackend {
         $type = (string)($this->data['type'] ?? 'text');
         $multilingual = (int)!empty($this->data['multilingual']);
 
-        // Zugehörigen Bereich laden (gibt Bereichsname aus)
+        // Load the associated area (outputs the area name)
         $this->areaId = (int)($this->data['area_id'] ?? 0);
         echo $this->_loadArea();
 
@@ -77,7 +77,7 @@ class FieldConvertBackend extends FieldBackend {
             $this->function = '';
         }
 
-        // Bestätigung
+        // Confirmation
         // --------------------
         if ($this->function === 'confirm') {
             $target = null;
@@ -119,7 +119,7 @@ class FieldConvertBackend extends FieldBackend {
             }
         }
 
-        // Auswahl der Ziele
+        // Selection of the targets
         // --------------------
         if (empty($targets)) {
             echo $this->backend->template('alert_warning', [
@@ -172,9 +172,9 @@ class FieldConvertBackend extends FieldBackend {
     }
 
     /**
-     * Hinweis für convert(): Datensätze des Bereichs, die gerade bearbeitet werden.
-     * Die Umwandlung achtet keine Bearbeitungssperre; den Arbeitsstand nimmt sie mit
-     * (Record::retypeWorkingCopies()), die geöffnete Eingabemaske zeigt aber noch den
+     * Note for convert(): records of the area that are currently being edited.
+     * The conversion does not respect the edit lock; it takes the working copy along
+     * (Record::retypeWorkingCopies()), but the open input mask still shows the
      * alten Feldtyp.
      */
     private function _workingCopiesWarning(): string
@@ -192,9 +192,9 @@ class FieldConvertBackend extends FieldBackend {
     }
 
     /**
-     * Beschriftung eines Typs samt Mehrsprachigkeit für convert():
-     * "chars (Kurzer Text), mehrsprachig" - der Sprachzusatz nur bei Typen, die es
-     * können.
+     * Label of a type including multilingualism for convert():
+     * "chars (short text), multilingual" - the language suffix only for types that
+     * can.
      */
     private function _convertLabel(string $type, int $multilingual): string
     {

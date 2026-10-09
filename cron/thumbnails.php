@@ -1,16 +1,16 @@
 <?php
 /**
- * thumbnails.php - Thumbnails eines Bereichs im Hintergrund neu erzeugen
+ * thumbnails.php - regenerate thumbnails of an area in the background
  *
- * Wird NICHT per Cronjob aufgerufen, sondern von ToolThumbnails::start() (Tools ->
- * Daten -> "Thumbnails neu erzeugen", Schalter "Hintergrundprozess"). Läuft exakt
- * dieselbe Methode wie im Request: ToolThumbnails::run(); der Fortschritt geht über
- * das Token an `bgproc`, das Ergebnis als interne Nachricht an den Admin.
+ * NOT called by a cron job, but by ToolThumbnails::start() (Tools ->
+ * Data -> "Regenerate thumbnails", switch "Background process"). Runs exactly
+ * the same method as in the request: ToolThumbnails::run(); the progress goes via
+ * the token to `bgproc`, the result as an internal message to the admin.
  *
- * Argumente:
- *     --area=123     Bereich
- *     --admin=10     auslösender Administrator (Empfänger der Nachricht)
- *     --token=...    Token des bgproc-Eintrags
+ * Arguments:
+ *     --area=123     area
+ *     --admin=10     triggering administrator (recipient of the message)
+ *     --token=...    token of the bgproc entry
  */
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Cms;
@@ -30,7 +30,7 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 $args = [];
@@ -52,8 +52,8 @@ $tool   = $app->get(ToolThumbnails::class);
 
 $success = false;
 try {
-    // Auslösender Admin: changed_by, Empfänger der Nachricht, Sprache der Texte
-    $app->get(Session::class)->setCliAdmin($adminId);   // (ohne Gruppenrechte: Werkzeug, das Recht "data" wurde beim Anstoßen geprüft)
+    // Triggering admin: changed_by, recipient of the message, language of the texts
+    $app->get(Session::class)->setCliAdmin($adminId);   // (without group rights: a tool; the right "data" was checked when it was started)
     if ($adminId > 0 && ($adminData = $app->get(Admin::class)->load($adminId))) {
         $app->get(Cms::class)->applyAdminSettings((array)($adminData['settings'] ?? []));
     }

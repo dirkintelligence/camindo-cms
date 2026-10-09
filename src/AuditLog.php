@@ -1,94 +1,93 @@
 <?php
 /**
- * Audit-Log: wer hat wann was geändert. Instanzname im Code: $auditLog.
+ * Audit log: who changed what, and when. Instance name in the code: $auditLog.
  *
- * ZWEI ABLAGEN (seit 2026-09-26, 16-sicherheit.md §20)
+ * TWO STORES (since 2026-09-26, developer docs, chapter 13 (Security: authentication))
  * --------------------
- *     Tabelle audit_log   Metadaten für Listen und Recherche: Zeit, Handelnder,
- *                         Herkunft, Aktion, Objekt, Bezeichnung und `fields` - die
- *                         geänderten Felder OHNE Werte (Schlüssel, Beschriftung,
- *                         Sprache), dazu `page` (Seite der Datei)
- *     var/audit/…         die vollständigen Einträge samt Vorher/Nachher, je Objekt
- *                         eine Datei mit HMAC-Kette (Camindo\Core\AuditStore)
- * write() trägt die Metazeile in der Transaktion des Aufrufers ein und hängt den
- * Inhalt nach dem Commit an die Datei (Database::afterCommit()). search() liest nur
- * die Datenbank; forObject() und load() holen die Inhalte aus der Datei.
+ *     table audit_log    metadata for lists and search: time, actor,
+ *                        origin, action, object, label and `fields` - the
+ *                        changed fields WITHOUT values (key, label,
+ *                        language), plus `page` (page of the file)
+ *     var/audit/…        the complete entries including before/after, one
+ *                        file per object with an HMAC chain (Camindo\Core\AuditStore)
+ * write() inserts the meta line within the transaction of the caller and appends
+ * the content to the file after the commit (Database::afterCommit()). search() reads only
+ * the database; forObject() and load() fetch the contents from the file.
  *
- * WAS HINEINKOMMT
+ * WHAT GOES IN
  * --------------------
- * Jede Änderung, die über ein Dataset läuft - Datensätze, Bereiche, Felder,
- * Templates, Admins, Gruppen, Instanzen, Sprachen, Status, Konverter, Aufgaben,
- * Komponenten -, gleich aus welcher Quelle: Eingabemaske, Frontend (CMS:USER_INPUT),
- * Import, Stapelverarbeitung, Verschieben, Papierkorb-Cron. Dazu die Anmeldungen
- * am Backend (login, login_failed, logout) und jede Datenauskunft zu einem Website-
- * User (export, RecordPersonalData). Dataset ruft dafür an vier Stellen:
+ * Every change that runs through a dataset - records, areas, fields,
+ * templates, admins, groups, instances, languages, status, converters, tasks,
+ * components - regardless of source: input mask, frontend (CMS:USER_INPUT),
+ * import, batch processing, move, trash cron. Plus the logins
+ * to the backend (login, login_failed, logout) and every data access report for a website
+ * user (export, RecordPersonalData). Dataset calls it at four points:
  *
- *     save()            create / update  - mit Vorher/Nachher der geänderten Felder
- *     softDeleteOne()   delete           - Papierkorb, Inhalt bleibt erhalten
+ *     save()            create / update  - with before/after of the changed fields
+ *     softDeleteOne()   delete           - trash, content is kept
  *     restoreOneCore()  restore
- *     finalDeleteOne()  purge            - endgültig; der letzte Stand wird mitgeschrieben
+ *     finalDeleteOne()  purge            - for good; the last state is written along
  *
- * Eine Kindklasse schaltet sich mit $audit = false ab (Messaging: private
- * Nachrichten gehören nicht ins Protokoll) und nennt mit $auditIgnore Spalten, die
- * nichts aussagen oder geheim sind (Anmeldecode, Signatur, Volltext …).
+ * A child class switches itself off with $audit = false (messaging: private
+ * messages do not belong in the log) and names columns in $auditIgnore that
+ * say nothing or are secret (login code, signature, full text …).
  *
- * VORHER / NACHHER
+ * BEFORE / AFTER
  * --------------------
- * Verglichen werden Schnappschüsse (Dataset::auditSnapshot()): eine flache Liste
- * Schlüssel => ['l' => Beschriftung (roh, '#snippet' möglich), 't' => Feldtyp,
- * 'g' => Sprachcode oder '', 'v' => Wert als Text, 'c' => Vergleichswert (optional)].
- * Ein Datensatz liefert dabei ALLE Felder in allen Sprachen samt Metafeldern und
- * Verknüpfungen (Record::auditSnapshot()). diff() nimmt nur, was sich unterscheidet;
- * ein Speichern ohne Änderung erzeugt keinen Eintrag.
+ * Snapshots are compared (Dataset::auditSnapshot()): a flat list
+ * key => ['l' => label (raw, '#snippet' possible), 't' => field type,
+ * 'g' => language code or '', 'v' => value as text, 'c' => comparison value (optional)].
+ * A record delivers ALL fields in all languages including meta fields
+ * and links (Record::auditSnapshot()). diff() takes only what differs;
+ * a save without change creates no entry.
  *
- * GEHEIMES BLEIBT GEHEIM
+ * SECRETS STAY SECRET
  * --------------------
- *     password    nie ein Wert, nur "geändert" (Vergleich über einen Hash des Hashs)
- *     encrypted   gespeichert wird der Geheimtext (base64), verglichen über einen
- *                 HMAC des Klartexts; entschlüsselt wird erst bei der Anzeige
+ *     password    never a value, only "changed" (comparison via a hash of the hash)
+ *     encrypted   the ciphertext (base64) is stored, compared via an HMAC of the plain text;
+ *                 decrypted only when displayed
  *
- * AUFBEWAHRUNG (Config audit.*)
+ * RETENTION (config audit.*)
  * --------------------
- *     retention_days_changes  Einträge zu Objekten, die es noch gibt, und
- *                             Anmeldungen. 0 = unbegrenzt: ein Datensatz bleibt bis
- *                             zu seinem Ursprung nachvollziehbar.
- *     log_logins              erfolgreiche An- und Abmeldungen am Backend
- *                             protokollieren (Vorgabe false - sie verraten
- *                             Arbeitszeiten, aber nichts über Änderungen);
- *                             Fehlversuche stehen immer drin
- *     retention_days_logins   An-/Abmeldungen und Fehlversuche, in Tagen (Vorgabe 90,
- *                             0 = wie retention_days_changes)
- *     retention_days_deleted  Einträge zu endgültig gelöschten Objekten, gezählt ab
- *                             dem Löschen (Eintrag 'purge'). Danach verschwindet
- *                             ihr ganzer Verlauf. Nicht für Datensätze: deren
- *                             Verlauf regelt die Lösch-Policy des Bereichs (Modul
+ *     retention_days_changes  entries for objects that still exist, and
+ *                             logins. 0 = unlimited: a record remains traceable
+ *                             back to its origin.
+ *     log_logins              log successful logins and logouts to the backend
+ *                             (default false - they reveal working
+ *                             hours, but nothing about changes);
+ *                             failed attempts are always included
+ *     retention_days_logins   logins/logouts and failed attempts, in days (default 90,
+ *                             0 = as retention_days_changes)
+ *     retention_days_deleted  entries for objects deleted for good, counted from
+ *                             the deletion (entry 'purge'). Afterwards their
+ *                             entire history disappears. Not for records: their
+ *                             history is governed by the deletion policy of the area (module
  *                             Privacy - deleteObject(), overwriteObject()).
- * purge() läuft aus der Zeitplaner-Aufgabe "Aufbewahrungsfristen anwenden" (retention).
+ * purge() runs from the scheduler task "apply retention periods" (retention).
  *
- * IP-ADRESSEN
+ * IP ADDRESSES
  * --------------------
- * Die Spalte `ip` hält die volle Adresse, bis IpAnonymizer sie nach
- * privacy.ip_anonymize_days kürzt (Vorgabe 7 Tage). In die Datei unter var/audit
- * kommt sie von Beginn an gekürzt - an die HMAC-Kette wird nur angehängt.
+ * The column `ip` holds the full address until IpAnonymizer truncates it after
+ * privacy.ip_anonymize_days (default 7 days). The file under var/audit
+ * receives it truncated from the start - only appended to the HMAC chain.
  *
- * Keine Fremdschlüssel: ein Eintrag überlebt Admin, Datensatz und Bereich, von denen
- * er erzählt.
+ * No foreign keys: an entry outlives the admin, record and area it tells about.
  *
- * HANDELNDE NUR ALS ID
+ * ACTORS ONLY AS ID
  * --------------------
- * Wer gehandelt hat, steht als admin_id bzw. user_id - ohne Namen, weder in
- * `audit_log.actor_name` noch in der Datei. Den Namen eines Benutzers setzt erst die
- * Anzeige ein (AuditDiff::actorLabel(), aus `admin` - auch für gelöschte). So genügt
- * zum Anonymisieren eines Benutzers das Umbenennen seiner Zeile (Modul Privacy,
- * AdminAnonymizer); die Dateien der Objekte, an denen er gearbeitet hat, bleiben
- * unberührt. Einen Namen trägt nur ein Fehlversuch mit einem Namen, den es nicht gibt
- * (login(): zu einem bestehenden Konto steht er unter dessen admin_id). Ältere Einträge
- * mit Namen bereinigt `camindo.php audit strip-names` (stripActorNames()).
+ * Who acted is stored as admin_id resp. user_id - without a name, neither in
+ * `audit_log.actor_name` nor in the file. A user's name is only added by the
+ * display (AuditDiff::actorLabel(), from `admin` - also for deleted ones). So renaming
+ * the row of a user is enough to anonymize them (module Privacy,
+ * AdminAnonymizer); the files of the objects they worked on remain
+ * untouched. Only a failed attempt with a name that does not exist carries a name
+ * (login(): for an existing account the name is stored under its admin_id). Older entries
+ * with names are cleaned up by `camindo.php audit strip-names` (stripActorNames()).
  *
  * @see Camindo\Core\Dataset::auditSnapshot()
  * @see Camindo\Core\AuditDiff                       grafischer Vergleich
  * @see Camindo\Core\Modules\Audit\AuditBackend      Recherche (Superuser)
- * @see Camindo\Core\Modules\Record\RecordBackendInfo  Reiter "Änderungen"
+ * @see Camindo\Core\Modules\Record\RecordBackendInfo  tab "Changes"
  */
 namespace Camindo\Core;
 
@@ -96,22 +95,22 @@ class AuditLog {
 
     public const ACTIONS = ['create', 'update', 'delete', 'restore', 'purge', 'login', 'login_failed', 'logout', 'export', 'privacy'];
 
-    /** Ergebnis der Prüfung (Zeitplaner-Aufgabe auditverify) unter var/cache */
+    /** Result of the check (scheduler task auditverify) under var/cache */
     public const VERIFY_FILE = 'audit-verify.json';
 
-    /** Obergrenze eines einzelnen Werts (Zeichen) - darüber wird gekürzt */
+    /** Upper limit of a single value (characters) - longer values are truncated */
     public const MAX_VALUE_LENGTH = 200000;
 
-    /** Kennzeichen am Ende eines gekürzten Werts */
+    /** Marker at the end of a truncated value */
     public const TRUNCATED = ' […]';
 
-    /** Anmeldungen und Abmeldungen hängen am Admin */
+    /** Logins and logouts belong to the admin */
     private const LOGIN_ACTIONS = ['login', 'login_failed', 'logout'];
 
-    /** Herkunft, die der Aufrufer für einen Vorgang setzt (setContext()) */
+    /** Origin that the caller sets for an operation (setContext()) */
     private string $context = '';
 
-    /** admin_id => Name, je Request */
+    /** admin_id => name, per request */
     private array $adminNames = [];
 
     public function __construct(
@@ -125,7 +124,7 @@ class AuditLog {
     {}
 
     /**
-     * Audit-Log eingeschaltet (audit.enabled, Vorgabe true)?
+     * Audit log switched on (audit.enabled, default true)?
      */
     public function enabled(): bool
     {
@@ -133,15 +132,15 @@ class AuditLog {
     }
 
     /**
-     * Herkunft der folgenden Einträge festlegen - 'import', 'batch', 'trash' …
-     * (leer = aus der Laufumgebung: backend, frontend, cli).
+     * Set the origin of the following entries - 'import', 'batch', 'trash' …
+     * (empty = from the runtime environment: backend, frontend, cli).
      */
     public function setContext(string $context): void
     {
         $this->context = preg_replace('/[^a-z0-9_-]/', '', strtolower($context)) ?? '';
     }
 
-    /** Die gesetzte Herkunft ('' = aus der Laufumgebung) */
+    /** The origin that was set ('' = from the runtime environment) */
     public function context(): string
     {
         return $this->context;
@@ -150,17 +149,17 @@ class AuditLog {
     // ==== Schreiben ====
 
     /**
-     * Einen Eintrag schreiben. Läuft in der Transaktion des Aufrufers - ein Rollback
-     * nimmt den Eintrag mit.
+     * Write an entry. Runs in the transaction of the caller - a rollback
+     * takes the entry along.
      *
      * @param string   $action      create|update|delete|restore|purge|login|login_failed|logout|export
-     * @param string   $objectType  Tabellenname ('record', 'area', 'admin' …)
-     * @param int      $objectId    Id des Objekts
-     * @param string   $label       Bezeichnung des Objekts zum Zeitpunkt der Änderung
-     * @param array    $changes     Ergebnis von diff() bzw. fullChanges()
-     * @param int|null $areaId      Bereich (bei Datensätzen)
-     * @param int|null $instanceId  Instanz (wo bekannt)
-     * @param string   $actorName   nur für login_failed: der eingegebene Name
+     * @param string   $objectType  table name ('record', 'area', 'admin' …)
+     * @param int      $objectId    id of the object
+     * @param string   $label       label of the object at the time of the change
+     * @param array    $changes     result of diff() resp. fullChanges()
+     * @param int|null $areaId      area (for records)
+     * @param int|null $instanceId  instance (where known)
+     * @param string   $actorName   only for login_failed: the entered name
      */
     public function write(string $action, string $objectType, int $objectId, string $label = '',
         array $changes = [], ?int $areaId = null, ?int $instanceId = null, string $actorName = ''): void
@@ -171,14 +170,14 @@ class AuditLog {
 
         $changes = array_values($changes);
         $label = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($label)) ?? ''), 0, 255);
-        // Datensatz, dessen Audit-Log eine Lösch-Policy schon überschrieben hat: auch
-        // jeder spätere Eintrag (etwa 'purge' mit dem letzten Stand) wird so geschrieben
+        // Record whose audit log a deletion policy has already overwritten: every later
+        // entry as well (e.g. 'purge' with the last state) is written this way
         if ($objectType === 'record' && ($override = $this->policyOverride($objectId)) !== null) {
             $entry = self::applyOverride(['label' => $label, 'actor' => $actor, 'changes' => $changes], ...$override);
             [$label, $actor, $changes] = [$entry['label'], $entry['actor'], $entry['changes']];
         }
         $actor['name'] = mb_substr($actor['name'], 0, 128);
-        // -1 = alle Instanzen (etwa eine Lösch-Policy) - die Spalte ist unsigned
+        // -1 = all instances (e.g. a deletion policy) - the column is unsigned
         if ($instanceId !== null && $instanceId < 0) $instanceId = 0;
         $time = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s.v');
         $this->db->pushResult();
@@ -201,10 +200,10 @@ class AuditLog {
             $this->db->popResult();
         }
 
-        // Inhalt erst nach dem Commit in die Datei - ein Rollback nimmt die Metazeile
-        // mit, in der Datei bliebe sonst ein Eintrag ohne Gegenstück
-        // In der Datei nur die gekürzte IP: an die HMAC-Kette wird nur angehängt,
-        // kürzen ließe sie sich dort später nicht mehr (IpAnonymizer)
+        // Content goes into the file only after the commit - a rollback takes the meta line
+        // along, otherwise the file would keep an entry without counterpart
+        // Only the truncated IP goes into the file: only appended to the HMAC chain,
+        // it could not be truncated there later (IpAnonymizer)
         $fileActor = ['ip' => ClientIp::anonymize((string)$actor['ip'], ClientIp::v4Octets($this->config))] + $actor;
         if ((string)($fileActor['name'] ?? '') === '') unset($fileActor['name']);
         $entry = [
@@ -224,15 +223,15 @@ class AuditLog {
                 }
             }
             catch (\Throwable $e) {
-                // Der Vorgang selbst ist gespeichert - der fehlende Inhalt fällt bei
-                // `camindo.php audit verify` auf (page = 0)
+                // The operation itself is saved - the missing content shows up in
+                // `camindo.php audit verify` (page = 0)
                 $this->container->get(System::class)->log('security', "audit file write failed for #{$entry['id']}: " . $e->getMessage());
             }
         });
     }
 
     /**
-     * Die geänderten Felder ohne Werte für die Metazeile (Listen, Filter "Feld").
+     * The changed fields without values for the meta line (lists, filter "field").
      */
     private function fieldsJson(array $changes): string
     {
@@ -244,23 +243,23 @@ class AuditLog {
     }
 
     /**
-     * Anmeldung am Backend protokollieren (StartBackend).
+     * Log a backend login (StartBackend).
      *
-     * Ein Fehlversuch mit dem Namen eines bestehenden Kontos steht im Verlauf dieses
-     * Kontos (object_id = admin_id) und ohne den eingegebenen Namen - der ergibt sich
-     * aus der Id. Nur ein Name, den es nicht gibt, wird mitgeschrieben (Objekt 0).
+     * A failed attempt with the name of an existing account appears in the history of this
+     * account (object_id = admin_id) and without the entered name - which follows
+     * from the id. Only a name that does not exist is recorded (object 0).
      *
      * @param string $action  login|login_failed|logout
-     * @param int    $adminId 0 bei login_failed
-     * @param string $name    login_failed: der eingegebene Name; sonst leer = aus `admin`
-     * @param string $origin  Oberfläche (Access::INTERFACES), wo der Kontext sie nicht
-     *                        schon nennt - etwa eine gescheiterte Anmeldung über die API
+     * @param int    $adminId 0 for login_failed
+     * @param string $name    login_failed: the entered name; otherwise empty = from `admin`
+     * @param string $origin  interface (Access::INTERFACES), where the context does not
+     *                        already name it - e.g. a failed login via the API
      */
     public function login(string $action, int $adminId, string $name = '', string $origin = ''): void
     {
         if (!in_array($action, self::LOGIN_ACTIONS, true)) return;
-        // Erfolgreiche An- und Abmeldungen ohne Tätigkeit sagen nichts über Änderungen
-        // aus, wohl aber über Arbeitszeiten - nur auf ausdrücklichen Wunsch (audit.log_logins)
+        // Successful logins and logouts without activity say nothing about changes,
+        // but they do say something about working hours - only on explicit request (audit.log_logins)
         if ($action !== 'login_failed' && !$this->logLogins()) return;
         $actorName = '';
         if ($action === 'login_failed' && $adminId < 1 && $name !== '') {
@@ -278,7 +277,7 @@ class AuditLog {
         }
     }
 
-    /** admin_id zu einem Benutzernamen (Kollation der Spalte), 0 = keiner */
+    /** admin_id for a user name (collation of the column), 0 = none */
     private function adminIdByName(string $name): int
     {
         $this->db->pushResult();
@@ -291,13 +290,13 @@ class AuditLog {
         }
     }
 
-    /** Erfolgreiche An- und Abmeldungen protokollieren? (audit.log_logins, Vorgabe false) */
+    /** Log successful logins and logouts? (audit.log_logins, default false) */
     public function logLogins(): bool
     {
         return (bool)($this->config->get('audit.log_logins') ?? false);
     }
 
-    /** Tage, nach denen An- und Abmeldungen gelöscht werden (audit.retention_days_logins, 0 = wie Änderungen) */
+    /** Days after which logins and logouts are deleted (audit.retention_days_logins, 0 = as changes) */
     public function loginRetentionDays(): int
     {
         return max(0, (int)($this->config->get('audit.retention_days_logins') ?? 90));
@@ -306,12 +305,12 @@ class AuditLog {
     // ==== Vergleich ====
 
     /**
-     * Die Unterschiede zweier Schnappschüsse.
+     * The differences of two snapshots.
      *
-     * @param array $before  Schnappschuss vorher ([] bei create)
-     * @param array $after   Schnappschuss nachher ([] bei purge)
-     * @return array         Liste aus ['k' => Schlüssel, 'l' => Beschriftung, 't' => Typ,
-     *                       'g' => Sprachcode, 'b' => vorher, 'a' => nachher]
+     * @param array $before  snapshot before ([] for create)
+     * @param array $after   snapshot after ([] for purge)
+     * @return array         list of ['k' => key, 'l' => label, 't' => type,
+     *                       'g' => language code, 'b' => before, 'a' => after]
      */
     public function diff(array $before, array $after): array
     {
@@ -329,7 +328,7 @@ class AuditLog {
                 'l' => (string)($ref['l'] ?? $key),
                 't' => $type,
                 'g' => (string)($ref['g'] ?? ''),
-                // Passwörter: nur die Tatsache der Änderung
+                // Passwords: only the fact of the change
                 'b' => $type === 'password' ? ($bCmp === '' ? '' : '***') : $this->limit((string)($b['v'] ?? '')),
                 'a' => $type === 'password' ? ($aCmp === '' ? '' : '***') : $this->limit((string)($a['v'] ?? '')),
             ];
@@ -340,7 +339,7 @@ class AuditLog {
     // ==== Lesen ====
 
     /**
-     * Einträge zu einem Objekt mit vollständigen Änderungen, neueste zuerst.
+     * Entries for an object with complete changes, newest first.
      */
     public function forObject(string $objectType, int $objectId, int $limit = 200): array
     {
@@ -354,11 +353,11 @@ class AuditLog {
     }
 
     /**
-     * Eine Seite des Verlaufs eines Objekts samt Vorher/Nachher - liest nur die Seiten
-     * der Datei, auf denen die Einträge stehen (für blätternde Abfragen wie
+     * One page of the history of an object including before/after - reads only the pages
+     * of the file on which the entries stand (for paging queries such as
      * audit.history).
      *
-     * @return array  Zeilen wie forObject()
+     * @return array  rows like forObject()
      */
     public function historyPage(string $objectType, int $objectId, int $limit, int $offset, bool $oldestFirst): array
     {
@@ -379,13 +378,13 @@ class AuditLog {
     }
 
     /**
-     * Prüfung der Datei eines Objekts (AuditStore::verify()) und Abgleich mit der
-     * Datenbank: fehlen Inhalte zu Metazeilen oder Metazeilen zu Inhalten, und stimmen
-     * die Metaspalten mit dem signierten Eintrag der Datei überein (metaMismatch())?
-     * Listen und Recherche zeigen die Metaspalten - per SQL geändert, fiele das sonst
-     * nicht auf.
+     * Check the file of an object (AuditStore::verify()) and reconcile it with the
+     * database: are contents missing for meta lines or meta lines for contents, and do
+     * the meta columns match the signed entry of the file (metaMismatch())?
+     * Lists and search show the meta columns - if changed via SQL, this would
+     * otherwise go unnoticed.
      *
-     * @return array  ok, errors (Texte), lines
+     * @return array  ok, errors (texts), lines
      */
     public function verifyObject(string $objectType, int $objectId): array
     {
@@ -415,13 +414,13 @@ class AuditLog {
     }
 
     /**
-     * Metaspalten einer Zeile aus `audit_log`, die nicht zum Eintrag der Datei passen.
-     * Verglichen wird, was write() in beide Ablagen schreibt, in derselben Kürzung;
-     * die IP nur auf zwei Oktette bzw. 48 Bit gekürzt - in der Datei steht sie von
-     * Beginn an gekürzt, in der Spalte erst nach privacy.ip_anonymize_days, und
-     * privacy.ip_v4_octets kann sich dazwischen geändert haben.
+     * Meta columns of a row from `audit_log` that do not match the entry of the file.
+     * Compared is what write() writes to both stores, in the same truncation;
+     * the IP only truncated to two octets resp. 48 bits - in the file it stands truncated
+     * from the start, in the column only after privacy.ip_anonymize_days, and
+     * privacy.ip_v4_octets may have changed in between.
      *
-     * @return array  Namen der abweichenden Spalten
+     * @return array  names of the differing columns
      */
     private function metaMismatch(array $row, array $entry): array
     {
@@ -436,7 +435,7 @@ class AuditLog {
             'actor_name'  => mb_substr((string)($actor['name'] ?? ''), 0, 128),
             'origin'      => (string)($actor['origin'] ?? ''),
             'area_id'     => $int($entry['area'] ?? null),
-            // -1 (alle Instanzen) steht in der Spalte als 0, siehe write()
+            // -1 (all instances) is stored as 0 in the column, see write()
             'instance_id' => ($instance = $int($entry['instance'] ?? null)) !== null ? max(0, $instance) : null,
             'label'       => mb_substr((string)($entry['label'] ?? ''), 0, 255),
             'fields'      => $this->fieldsJson((array)($entry['changes'] ?? [])),
@@ -460,9 +459,9 @@ class AuditLog {
     }
 
     /**
-     * Alle Dateien und Metazeilen prüfen (`camindo.php audit verify`).
+     * Check all files and meta lines (`camindo.php audit verify`).
      *
-     * @return array  checked (Objekte), failed ("typ:id" => Fehlertexte)
+     * @return array  checked (objects), failed ("type:id" => error texts)
      */
     public function verifyAll(): array
     {
@@ -487,9 +486,9 @@ class AuditLog {
     }
 
     /**
-     * Ergebnis einer Gesamtprüfung festhalten (var/cache/audit-verify.json) - daraus
-     * zeigt die Startseite den Betriebshinweis (SystemHealth, Prüfung 'audit').
-     * Geschrieben von der Zeitplaner-Aufgabe "Audit-Log prüfen" (auditverify) und von
+     * Record the result of a full check (var/cache/audit-verify.json) - from this
+     * the start page shows the operational notice (SystemHealth, check 'audit').
+     * Written by the scheduler task "check audit log" (auditverify) and by
      * `camindo.php audit verify|restore`.
      *
      * @param array $result  verifyAll()
@@ -502,9 +501,9 @@ class AuditLog {
     }
 
     /**
-     * Den festgehaltenen Befund EINES Objekts nachführen (nach reseal oder einer
-     * Einzelprüfung) - ohne alle Objekte erneut zu prüfen. Ohne gespeicherte
-     * Gesamtprüfung bleibt es dabei.
+     * Update the recorded finding of ONE object (after reseal or a single
+     * check) - without checking all objects again. Without a stored
+     * full check it stays that way.
      *
      * @param array $check  verifyObject()
      */
@@ -523,19 +522,19 @@ class AuditLog {
     }
 
     /**
-     * Dateien auf den Stand der Datenbank zurücksetzen - nach dem Zurückspielen einer
-     * Datenbanksicherung (`camindo.php audit restore`).
+     * Reset the files to the state of the database - after restoring a
+     * database backup (`camindo.php audit restore`).
      *
-     * Die Dateien unter var/audit sind nicht Teil des Dumps: nach dem Zurückspielen
-     * enthalten sie Einträge, deren Metazeilen es nicht mehr gibt, und die Datenbank
-     * vergibt deren audit_ids neu. Entfernt wird jeder Eintrag mit einer audit_id über
-     * der höchsten der Datenbank (AuditStore::cutAfter()); die betroffenen Dateien
-     * landen vorher unverändert in var/audit-restore-{Zeitpunkt}/. Muss laufen, bevor
-     * neue Einträge entstehen.
+     * The files under var/audit are not part of the dump: after the restore they
+     * contain entries whose meta lines no longer exist, and the database
+     * assigns their audit_ids anew. Every entry with an audit_id above the highest
+     * in the database is removed (AuditStore::cutAfter()); the affected files
+     * are beforehand copied unchanged to var/audit-restore-{time}/. Must run before
+     * new entries are created.
      *
-     * @param bool $dryRun  nur zählen
-     * @return array        max_id, objects (betroffene Objekte), removed (Einträge),
-     *                      archive (Verzeichnis der Kopien, '' ohne Änderung)
+     * @param bool $dryRun  only count
+     * @return array        max_id, objects (affected objects), removed (entries),
+     *                      archive (directory of the copies, '' without change)
      */
     public function restoreToDatabase(bool $dryRun = false): array
     {
@@ -566,12 +565,12 @@ class AuditLog {
     }
 
     /**
-     * Gebrochene Kette eines Objekts neu verketten (`camindo.php audit reseal`,
-     * AuditStore::reseal()). Die Seiten landen vorher unverändert in
-     * var/audit-reseal-{Zeitpunkt}/; der Vorgang steht im Protokoll 'security'.
+     * Re-chain a broken chain of an object (`camindo.php audit reseal`,
+     * AuditStore::reseal()). The pages are beforehand copied unchanged to
+     * var/audit-reseal-{time}/; the operation is recorded in the log 'security'.
      *
-     * @return array  wie AuditStore::reseal(), dazu archive ('' ohne Änderung) und
-     *                check (verifyObject() danach)
+     * @return array  as AuditStore::reseal(), plus archive ('' without change) and
+     *                check (verifyObject() afterwards)
      */
     public function resealObject(string $objectType, int $objectId, string $reason = '', bool $force = false, bool $dryRun = false): array
     {
@@ -589,11 +588,11 @@ class AuditLog {
     }
 
     /**
-     * IP-Adressen in den Dateien kürzen, die vor dem Update mit voller Adresse
-     * geschrieben wurden (`camindo.php audit anonymize-ip`, AuditStore::anonymizeIps()).
-     * Steht im Protokoll 'security'.
+     * Truncate IP addresses in the files that were written with the full address
+     * before the update (`camindo.php audit anonymize-ip`, AuditStore::anonymizeIps()).
+     * Recorded in the log 'security'.
      *
-     * @return array  files, entries, skipped (Objekte mit gebrochener Kette)
+     * @return array  files, entries, skipped (objects with a broken chain)
      */
     public function anonymizeFileIps(bool $dryRun = false): array
     {
@@ -607,14 +606,14 @@ class AuditLog {
     }
 
     /**
-     * Recherche.
+     * Search.
      *
      * @param array $filter  from, to (Y-m-d, UTC), admin_id, action, object_type,
-     *                       object_id, area_id, origin, search (Bezeichnung/Name, Teilwort),
-     *                       field (Feldschlüssel oder -beschriftung in den Änderungen);
-     *                       Einschränkungen: object_types, area_ids (Listen - leer = nichts)
-     * @param bool  $oldestFirst  älteste Einträge zuerst (sonst neueste)
-     * @return array         Zeilen, `changes` als Array
+     *                       object_id, area_id, origin, search (label/name, substring),
+     *                       field (field key or label in the changes);
+     *                       restrictions: object_types, area_ids (lists - empty = nothing)
+     * @param bool  $oldestFirst  oldest entries first (otherwise newest)
+     * @return array         rows, `changes` as array
      */
     public function search(array $filter, int $limit = 100, int $offset = 0, bool $oldestFirst = false): array
     {
@@ -626,7 +625,7 @@ class AuditLog {
             $this->db->query($sql, $types, $values);
             $rows = [];
             while ($row = $this->db->fetch()) {
-                // Nur die Felder ohne Werte - die Werte stehen in der Datei (forObject(), load())
+                // Only the fields without values - the values are in the file (forObject(), load())
                 $row['changes'] = json_decode((string)$row['fields'], true) ?: [];
                 $rows[] = $row;
             }
@@ -638,19 +637,19 @@ class AuditLog {
     }
 
     /**
-     * Objekte, die ein Admin zuletzt geändert hat - je Objekt eine Zeile, das
-     * zuletzt geänderte zuerst (Reiter "Aktivitäten" der Admin-Info).
+     * Objects that an admin last changed - one row per object, the most recently
+     * changed first (tab "Activities" of the admin info).
      *
      * @param int    $adminId
-     * @param string $objectType  z. B. 'record'
+     * @param string $objectType  e.g. 'record'
      * @return array  ['object_id', 'area_id', 'label', 'action', 'created_at' (UTC),
-     *                 'changes' (Anzahl seiner Einträge zu dem Objekt)] je Objekt
+     *                 'changes' (number of its entries for the object)] per object
      */
     public function recentObjects(int $adminId, string $objectType, int $limit = 20): array
     {
         $this->db->pushResult();
         try {
-            // letzter Eintrag je Objekt über idx_admin (admin_id, audit_id)
+            // last entry per object via idx_admin (admin_id, audit_id)
             $this->db->query(
                 "SELECT `a`.`object_id`, `a`.`area_id`, `a`.`label`, `a`.`action`, `a`.`created_at`, `m`.`changes`"
                 . " FROM (SELECT `object_id`, MAX(`audit_id`) AS `last_id`, COUNT(*) AS `changes` FROM `audit_log`"
@@ -670,7 +669,7 @@ class AuditLog {
     }
 
     /**
-     * Anzahl der Treffer einer Recherche.
+     * Number of hits of a search.
      */
     public function count(array $filter): int
     {
@@ -686,7 +685,7 @@ class AuditLog {
     }
 
     /**
-     * Ein Eintrag.
+     * One entry.
      */
     public function load(int $auditId): ?array
     {
@@ -701,7 +700,7 @@ class AuditLog {
     }
 
     /**
-     * Vorkommende Objekttypen (für die Auswahlliste der Recherche).
+     * Object types that occur (for the selection list of the search).
      *
      * @return string[]
      */
@@ -718,7 +717,7 @@ class AuditLog {
     }
 
     /**
-     * Admins, die im Protokoll vorkommen: admin_id => Name (für die Auswahlliste).
+     * Admins that occur in the log: admin_id => name (for the selection list).
      */
     public function actors(): array
     {
@@ -739,13 +738,13 @@ class AuditLog {
     }
 
     /**
-     * Namen der Handelnden aus älteren Einträgen entfernen (`camindo.php audit
-     * strip-names`): Benutzer und Website-User stehen nur noch als Id (siehe
-     * Klassenkommentar). Dateien mit Kontrollpunkt 'strip-names', dazu
-     * `audit_log.actor_name`. Wiederholbar - ein zweiter Lauf findet nichts mehr.
+     * Remove the names of the actors from older entries (`camindo.php audit
+     * strip-names`): users and website users are only kept as ids now (see
+     * class comment). Files with checkpoint 'strip-names', plus
+     * `audit_log.actor_name`. Repeatable - a second run finds nothing more.
      *
-     * @return array  ['entries' => geänderte Einträge in Dateien, 'files' => Dateien,
-     *                 'rows' => geänderte Metazeilen]
+     * @return array  ['entries' => changed entries in files, 'files' => files,
+     *                 'rows' => changed meta lines]
      */
     public function stripActorNames(): array
     {
@@ -770,14 +769,14 @@ class AuditLog {
         return ['entries' => $entries, 'files' => $files, 'rows' => $rows];
     }
 
-    // ==== Übernahme aus der Datenbank ====
+    // ==== Takeover from the database ====
 
     /**
-     * Einträge aus der früheren Spalte audit_log.changes in die Dateien übernehmen
-     * (`camindo.php audit migrate`) - je Objekt beginnend mit Kontrollpunkt 'migrate',
-     * in der Reihenfolge der audit_id. Danach wird die Spalte entfernt.
+     * Take over entries from the former column audit_log.changes into the files
+     * (`camindo.php audit migrate`) - per object beginning with checkpoint 'migrate',
+     * in the order of audit_id. The column is removed afterwards.
      *
-     * @return int  übernommene Einträge (0: nichts zu tun)
+     * @return int  entries taken over (0: nothing to do)
      */
     public function migrateToFiles(): int
     {
@@ -815,13 +814,13 @@ class AuditLog {
         return $count;
     }
 
-    // ==== Lösch-Policies (Modul Privacy) ====
+    // ==== Deletion policies (module Privacy) ====
 
     /**
-     * Den ganzen Verlauf eines Objekts löschen - Datenbank und Datei (Aktion
-     * audit_delete bzw. purge einer Lösch-Policy).
+     * Delete the entire history of an object - database and file (action
+     * audit_delete resp. purge of a deletion policy).
      *
-     * @return int  entfernte Einträge der Datenbank
+     * @return int  removed entries of the database
      */
     public function deleteObject(string $objectType, int $objectId): int
     {
@@ -838,14 +837,14 @@ class AuditLog {
     }
 
     /**
-     * Den Verlauf mehrerer Objekte von Hand löschen (`camindo.php audit delete`) - wie
-     * deleteObject(), dazu der festgehaltene Prüfbefund und ein Eintrag im Protokoll
-     * 'security' (nur Typ, Anzahl und $scope, keine Inhalte).
+     * Delete the history of several objects by hand (`camindo.php audit delete`) - like
+     * deleteObject(), plus the recorded check finding and an entry in the log
+     * 'security' (only type, count and $scope, no contents).
      *
      * @param int[]  $objectIds
-     * @param string $scope   wofür, für das Protokoll, z. B. "area 141"
-     * @return array          objects (Objekte mit Verlauf), entries (Zeilen der
-     *                        Datenbank), files (Seiten unter var/audit)
+     * @param string $scope   what for, for the log, e.g. "area 141"
+     * @return array          objects (objects with history), entries (rows of the
+     *                        database), files (pages under var/audit)
      */
     public function deleteObjects(string $objectType, array $objectIds, bool $dryRun = false, string $scope = ''): array
     {
@@ -878,8 +877,8 @@ class AuditLog {
     }
 
     /**
-     * Datensätze, deren Verlauf zu einem Bereich gehört: die im Bereich liegen
-     * (auch im Papierkorb) oder laut Audit-Log dort lagen - auch endgültig gelöschte.
+     * Records whose history belongs to an area: those in the area
+     * (also in the trash) or, according to the audit log, were there - also those deleted for good.
      *
      * @return int[]
      */
@@ -899,13 +898,13 @@ class AuditLog {
     }
 
     /**
-     * Felder im Verlauf eines Objekts überschreiben (Aktion audit_set_fields einer
-     * Lösch-Policy) - Datei (AuditStore::rewriteObject(), neuer Kontrollpunkt) und
-     * Bezeichnung in der Datenbank.
+     * Overwrite fields in the history of an object (action audit_set_fields of a
+     * deletion policy) - file (AuditStore::rewriteObject(), new checkpoint) and
+     * label in the database.
      *
-     * @param array $fields    Feld => Wert, dazu _label, * (DeletePolicy)
-     * @param array $vars      Platzhalter: record_id, user_id
-     * @return int  geänderte Einträge der Datei
+     * @param array $fields    field => value, plus _label, * (DeletePolicy)
+     * @param array $vars      placeholders: record_id, user_id
+     * @return int  changed entries of the file
      */
     public function overwriteObject(string $objectType, int $objectId, array $fields, array $vars): int
     {
@@ -925,16 +924,16 @@ class AuditLog {
     }
 
     /**
-     * Jeden Eintrag im Verlauf eines Objekts durch eine Funktion schicken (Aktion
-     * audit_trigger einer Lösch-Policy: onPrivacyAction() des Trigger-Templates) und
-     * Geändertes zurückschreiben - Datei (AuditStore::rewriteObject(), neuer
-     * Kontrollpunkt) und Bezeichnung/Name in der Datenbank (audit_log.label,
-     * actor_name je Eintrag).
+     * Send every entry in the history of an object through a function (action
+     * audit_trigger of a deletion policy: onPrivacyAction() of the trigger template) and
+     * write back what changed - file (AuditStore::rewriteObject(), new
+     * checkpoint) and label/name in the database (audit_log.label,
+     * actor_name per entry).
      *
-     * @param callable $transform  function(array $entry): array - Eintrag wie in der
-     *                             Datei: id, t, action, actor {type, name, user_id …},
+     * @param callable $transform  function(array $entry): array - entry as in the
+     *                             file: id, t, action, actor {type, name, user_id …},
      *                             label, changes [{k, l, t, g, b, a}, …]
-     * @return int  geänderte Einträge
+     * @return int  changed entries
      */
     public function transformObject(string $objectType, int $objectId, callable $transform): int
     {
@@ -942,7 +941,7 @@ class AuditLog {
         $changed = $this->store->rewriteObject($objectType, $objectId, function (array $body) use ($transform, &$rows): array {
             $new = $transform($body);
             if (!is_array($new)) return $body;
-            // Kennung, Zeitpunkt und Objekt bleiben - sonst wäre der Eintrag ein anderer
+            // Identifier, time and object stay - otherwise the entry would be a different one
             foreach (['id', 't', 'type', 'oid'] as $key) {
                 if (array_key_exists($key, $body)) $new[$key] = $body[$key];
             }
@@ -968,10 +967,10 @@ class AuditLog {
     }
 
     /**
-     * Einen Eintrag (label, changes) nach den Feldern einer Lösch-Policy umschreiben:
-     * Feld => Wert ersetzt Vorher und Nachher dieses Felds, * alle übrigen, _label
-     * die Bezeichnung. Leere Werte bleiben leer (nichts verraten, was nicht da war).
-     * Wer gehandelt hat, steht nur als Id im Eintrag und bleibt.
+     * Rewrite an entry (label, changes) according to the fields of a deletion policy:
+     * field => value replaces before and after of this field, * all others, _label
+     * the label. Empty values stay empty (reveal nothing that was not there).
+     * Whoever acted is stored only as an id in the entry and stays.
      */
     public static function applyOverride(array $entry, array $fields, array $vars): array
     {
@@ -979,7 +978,7 @@ class AuditLog {
         if (array_key_exists('_label', $fields)) $entry['label'] = $render((string)$fields['_label']);
         foreach ((array)($entry['changes'] ?? []) as $i => $change) {
             $key = (string)($change['k'] ?? '');
-            // mehrsprachige Felder stehen als feld@de_DE im Eintrag - feld meint alle Sprachen
+            // multilingual fields appear as field@de_DE in the entry - field means all languages
             $base = str_contains($key, '@') ? strstr($key, '@', true) : $key;
             if (array_key_exists($key, $fields)) $value = $render((string)$fields[$key]);
             elseif (array_key_exists($base, $fields)) $value = $render((string)$fields[$base]);
@@ -992,15 +991,15 @@ class AuditLog {
         return $entry;
     }
 
-    /** {record_id}, {user_id} in einem Wert einer Lösch-Policy ersetzen */
+    /** Replace {record_id}, {user_id} in a value of a deletion policy */
     public static function renderValue(string $value, array $vars): string
     {
         return strtr($value, ['{record_id}' => (string)(int)($vars['record_id'] ?? 0), '{user_id}' => (string)(int)($vars['user_id'] ?? 0)]);
     }
 
     /**
-     * Schon ausgeführte Überschreibungen des Audit-Logs eines Datensatzes (Modul
-     * Privacy) - [fields, vars] oder null. Je Request zwischengespeichert.
+     * Overwrites of the audit log of a record that have already run (module
+     * Privacy) - [fields, vars] or null. Cached per request.
      */
     private function policyOverride(int $recordId): ?array
     {
@@ -1011,10 +1010,10 @@ class AuditLog {
         return $this->policyOverrides[$recordId];
     }
 
-    /** Zwischenspeicher für policyOverride() */
+    /** Cache for policyOverride() */
     private array $policyOverrides = [];
 
-    /** Nach einer Aktion audit_set_fields: policyOverride() neu lesen */
+    /** After an action audit_set_fields: re-read policyOverride() */
     public function forgetPolicyOverride(int $recordId): void
     {
         unset($this->policyOverrides[$recordId]);
@@ -1023,9 +1022,9 @@ class AuditLog {
     // ==== Aufbewahrung ====
 
     /**
-     * Abgelaufene Einträge löschen (siehe Klassenkommentar).
+     * Delete expired entries (see class comment).
      *
-     * @return array  ['deleted' => n, 'changes' => n] gelöschte Zeilen je Regel
+     * @return array  ['deleted' => n, 'changes' => n] deleted rows per rule
      */
     public function purge(): array
     {
@@ -1037,14 +1036,14 @@ class AuditLog {
         $this->db->pushResult();
         try {
             if ($loginDays > 0) {
-                // An- und Abmeldungen, Fehlversuche: eigene, kürzere Frist
+                // Logins/logouts, failed attempts: their own, shorter period
                 $cutoff = gmdate('Y-m-d H:i:s', time() - $loginDays * 86400);
                 $actions = "'" . implode("','", self::LOGIN_ACTIONS) . "'";
                 $this->db->query("SELECT DISTINCT `object_id` FROM `audit_log` WHERE `object_type` = 'admin'"
                     . " AND `action` IN ($actions) AND `created_at` < ?", 's', [$cutoff]);
                 $ids = array_map('intval', $this->db->fetchColumn());
                 foreach ($ids as $adminId) {
-                    // mitten aus dem Verlauf des Kontos - trim() nähme nur den Anfang
+                    // from the middle of the account's history - trim() would only take the beginning
                     $this->store->rewriteObject('admin', $adminId, fn(array $b) => in_array((string)($b['action'] ?? ''), self::LOGIN_ACTIONS, true)
                         && (string)$b['t'] < $cutoff ? null : $b, 'retention');
                 }
@@ -1052,9 +1051,9 @@ class AuditLog {
                 $result['logins'] = max(0, $this->db->affected_rows);
             }
             if ($deletedDays > 0) {
-                // Objekte, deren endgültiges Löschen länger zurückliegt - außer
-                // Datensätzen: deren Verlauf regelt die Lösch-Policy ihres Bereichs
-                // (Modul Privacy, Aktion audit_delete)
+                // Objects whose final deletion lies further back - except
+                // records: their history is governed by the deletion policy of their area
+                // (module Privacy, action audit_delete)
                 $this->db->query(
                     "SELECT DISTINCT `object_type`, `object_id` FROM `audit_log`"
                     . " WHERE `action` = 'purge' AND `object_type` <> 'record' AND `created_at` < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)",
@@ -1063,7 +1062,7 @@ class AuditLog {
                 $objects = [];
                 while ($row = $this->db->fetch()) $objects[] = $row;
                 foreach ($objects as $object) {
-                    // Wieder angelegt (Import mit derselben Id)? Dann nur bis zum Löschen
+                    // Created again (import with the same id)? Then only up to the deletion
                     $this->db->query(
                         "SELECT MAX(`audit_id`) FROM `audit_log` WHERE `object_type` = ? AND `object_id` = ? AND `action` = 'purge'",
                         'si', [$object['object_type'], (int)$object['object_id']]
@@ -1097,13 +1096,13 @@ class AuditLog {
         return $result;
     }
 
-    // ==== Hilfen für die Schnappschüsse (Dataset / Record) ====
+    // ==== Helpers for the snapshots (Dataset / Record) ====
 
     /**
-     * Schnappschuss-Eintrag eines verschlüsselten Werts: Geheimtext als base64 zum
-     * späteren Entschlüsseln, verglichen wird über den HMAC des Klartexts.
+     * Snapshot entry of an encrypted value: ciphertext as base64 for later
+     * decryption, compared via the HMAC of the plain text.
      *
-     * @param string $cipher  Geheimtext, binär
+     * @param string $cipher  ciphertext, binary
      */
     public function encryptedEntry(string $label, string $cipher, string $lang = ''): array
     {
@@ -1116,7 +1115,7 @@ class AuditLog {
     }
 
     /**
-     * Gespeicherten verschlüsselten Wert (base64) für die Anzeige entschlüsseln.
+     * Decrypt a stored encrypted value (base64) for display.
      */
     public function decryptValue(string $value): string
     {
@@ -1134,8 +1133,8 @@ class AuditLog {
     // ====================
 
     /**
-     * Wer handelt gerade? Admin (Session, auch CLI mit setCliAdmin()), angemeldeter
-     * Frontend-User oder das System (Cron, CLI).
+     * Who is acting right now? Admin (session, also CLI with setCliAdmin()), logged-in
+     * frontend user or the system (cron, CLI).
      *
      * @return array  type, admin_id, user_id, name, ip, origin
      */
@@ -1143,11 +1142,11 @@ class AuditLog {
     {
         $origin = $this->context !== '' ? $this->context
             : (PHP_SAPI === 'cli' ? 'cli' : (defined('CAMINDO_BACKEND') ? 'backend' : 'frontend'));
-        // Über ClientIp: hinter einem Proxy die IP des Besuchers, nicht die des Proxys
+        // Via ClientIp: behind a proxy the IP of the visitor, not that of the proxy
         $ip = PHP_SAPI === 'cli' ? '' : mb_substr($this->container->get(ClientIp::class)->ip(), 0, 45);
         $actor = ['type' => 'system', 'admin_id' => null, 'user_id' => null, 'name' => '', 'ip' => $ip, 'origin' => $origin];
 
-        // Benutzer und Website-User nur als Id (siehe Klassenkommentar)
+        // Users and website users only as id (see class comment)
         $adminId = (int)$this->session->get('admin_id');
         if ($adminId > 0) {
             $actor['type'] = 'admin';
@@ -1155,8 +1154,8 @@ class AuditLog {
             return $actor;
         }
         if (PHP_SAPI === 'cli') return $actor;
-        // Web-Request ohne Admin: angemeldeter Frontend-User oder Besucher (auch die
-        // fehlgeschlagene Anmeldung am Backend)
+        // Web request without admin: logged-in frontend user or visitor (also the
+        // failed login at the backend)
         $actor['type'] = 'visitor';
         if (!defined('CAMINDO_BACKEND')) {
             $userSession = $this->container->get(UserSession::class);
@@ -1190,7 +1189,7 @@ class AuditLog {
     }
 
     /**
-     * WHERE-Klausel der Recherche.
+     * WHERE clause of the search.
      *
      * @return array  [sql, types, values]
      */
@@ -1209,7 +1208,7 @@ class AuditLog {
         if (!empty($filter['object_id'])) $add('`object_id` = ?', 'i', (int)$filter['object_id']);
         if (!empty($filter['area_id'])) $add('`area_id` = ?', 'i', (int)$filter['area_id']);
         if (!empty($filter['origin'])) $add('`origin` = ?', 's', (string)$filter['origin']);
-        // Einschränkungen (Rechte): Listen, leer = keine Treffer
+        // Restrictions (rights): lists, empty = no hits
         if (isset($filter['object_types'])) {
             $list = array_values(array_filter(array_map('strval', (array)$filter['object_types']), fn($t) => preg_match('/^[a-z_]{1,32}$/', $t)));
             $parts[] = $list ? "`object_type` IN ('" . implode("','", $list) . "')" : '0';
@@ -1226,7 +1225,7 @@ class AuditLog {
         if (!empty($filter['to'])) $add('`created_at` < ?', 's', (string)$filter['to']);
         if (($search = trim((string)($filter['search'] ?? ''))) !== '') {
             $like = '%' . addcslashes($search, '%_\\') . '%';
-            // Handelnde stehen nur als Id - ihr Name aus `admin`
+            // Actors are only stored as id - their name from `admin`
             $parts[] = '(`label` LIKE ? OR `actor_name` LIKE ? OR `ip` LIKE ?'
                 . ' OR `admin_id` IN (SELECT `admin_id` FROM `admin` WHERE `name` LIKE ?))';
             $types .= 'ssss';

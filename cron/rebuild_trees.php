@@ -1,29 +1,29 @@
 <?php
 /**
- * rebuild_trees.php - Baumfelder neu berechnen (Reparatur und Migration)
+ * rebuild_trees.php - recalculate tree fields (repair and migration)
  *
- * Berechnet `lft`, `rgt`, `depth` und `parent_ids` aus `parent_id` + `position` neu -
- * für den Bereichsbaum (`area`) und für jeden Inhaltsbereich (`record`) einzeln.
+ * Recalculates `lft`, `rgt`, `depth` and `parent_ids` from `parent_id` + `position` -
+ * for the area tree (`area`) and for each content area (`record`) individually.
  *
- * ZWEI ANLÄSSE
+ * TWO OCCASIONS
  * --------------------
- * 1. REPARATUR: die Nested-Set-Grenzen stimmen nicht mehr (abgebrochene Transaktion,
- *    direkte Eingriffe in die Datenbank). `parent_id` und `position` sind die
- *    führenden Felder, alles andere ist daraus ableitbar.
+ * 1. REPAIR: the nested-set bounds no longer match (interrupted transaction,
+ *    direct interventions in the database). `parent_id` and `position` are the
+ *    leading fields, everything else can be derived from them.
  *
- * 2. MIGRATION eines Bestands auf die bereichsweise Baumführung:
- *      - `lft`/`rgt` zählen jetzt je Inhaltsbereich ab 1 (vorher tabellenweit)
- *      - `depth` ist 0-basiert (vorher begannen Wurzelknoten bei 1)
- *      - Inhaltsbereiche OHNE Eingabefeld `parent_id` führen keinen Baum mehr:
- *        ihre Datensätze werden flach gemacht (parent_id = NULL, lft/rgt/depth = 0,
- *        parent_ids = []); die bisherige Anzeigereihenfolge bleibt als `position`
- *        erhalten.
- *    Das Skript ist dafür EINMAL nach dem Update aufzurufen. Ohne den Lauf bleiben
- *    Altbestände mit 1-basiertem depth und tabellenweiten lft-Werten stehen.
+ * 2. MIGRATION of a stock to the per-area tree handling:
+ *      - `lft`/`rgt` now count from 1 per content area (previously table-wide)
+ *      - `depth` is 0-based (previously root nodes started at 1)
+ *      - content areas WITHOUT input field `parent_id` no longer keep a tree:
+ *        their records are flattened (parent_id = NULL, lft/rgt/depth = 0,
+ *        parent_ids = []); the previous display order remains as `position`
+ *        preserved.
+ *    The script is to be called ONCE after the update for this. Without the run
+ *    legacy data with 1-based depth and table-wide lft values remain.
  *
- * Mehrfache Läufe sind unschädlich - das Ergebnis hängt nur von parent_id/position ab.
+ * Repeated runs are harmless - the result depends only on parent_id/position.
  *
- * Aufruf:
+ * Call:
  *     php /var/www/html/camindo/Core/cron/rebuild_trees.php
  *
  * @see Camindo\Core\TreeManagerTrait
@@ -32,7 +32,7 @@ use Camindo\Core\Database;
 use Camindo\Core\Modules\Area\Area;
 use Camindo\Core\Modules\Record\Record;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -44,7 +44,7 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 /** @var \Camindo\Core\Container $app */
@@ -54,11 +54,11 @@ $db     = $app->get(Database::class);
 $area   = $app->get(Area::class);
 $record = $app->get(Record::class);
 
-// 1. Bereichsbaum (`area`) - eine Tabelle, ein Baum
+// 1. Area tree (`area`) - one table, one tree
 $area->externalRebuildTree();
 echo "area: tree rebuilt\n";
 
-// 2. Inhaltsbereiche einzeln
+// 2. Content areas individually
 $db->query("SELECT `area_id`, `name` FROM `area` WHERE `type` IN ('record','profile','ugc') ORDER BY `lft` ASC");
 $areas = $db->fetchAll();
 
@@ -69,15 +69,15 @@ foreach ($areas as $row) {
     $name   = (string)$row['name'];
 
     if ($record->isTreeArea($areaId)) {
-        // Bereich mit Eingabefeld `parent_id`: Positionen je Elternknoten lückenlos
-        // machen (Altbestände zählten tabellenweit) und Baum neu berechnen
+        // Area with input field `parent_id`: make positions per parent node gapless
+        // (legacy data counted table-wide) and recalculate the tree
         $record->normalizePositions($areaId);
         $record->externalRebuildTree($areaId);
         echo "record area {$areaId} ({$name}): tree rebuilt\n";
         $trees++;
     }
     else {
-        // Bereich ohne Baum: Baumfelder neutralisieren, Reihenfolge behalten
+        // Area without tree: neutralize tree fields, keep the order
         $record->resetTreeFields($areaId);
         echo "record area {$areaId} ({$name}): flattened\n";
         $flat++;

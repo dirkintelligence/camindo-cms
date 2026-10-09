@@ -8,9 +8,9 @@ return [
 'description' => '#area.module_description',
 'icon' => 'transition_dissolve',
 'listed' => true,
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
-// API-Klassen (Camindo\Core\Api\Api, relativ zum Modul-Namespace)
+// Additional module rights:
+// none (superuser-only module)
+// API classes (Camindo\Core\Api\Api, relative to the module namespace)
 'api' => ['AreaApi', 'AreaAdminApi', 'FieldApi'],
 'access' => [
 ]

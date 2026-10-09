@@ -1,27 +1,27 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `language` - die Sprachen, in denen das Frontend
- * ausgeliefert wird.
+ * Dataset child class for the table `language` - the languages in which the frontend
+ * is delivered.
  *
- * Nicht zu verwechseln mit den Sprach-Snippets des Backends: die liegen als
- * PHP-Dateien in den lang/-Verzeichnissen und werden über Cms::snippet() geholt.
- * Diese Tabelle beschreibt ausschließlich die Sprachen der Website-Inhalte.
+ * Not to be confused with the backend language snippets: those are stored as
+ * PHP files in the lang/ directories and fetched via Cms::snippet().
+ * This table describes only the languages of the website content.
  *
- * Der `code` landet als erstes URL-Segment im Frontend (/de/..., /en/...); die
- * Rewrite-Regel in public/.htaccess (Docroot) trennt ihn ab und übergibt ihn als
- * eigenen Parameter an Page::resolveRequest(). `endonym` ist die Eigenbezeichnung
- * der Sprache ("Deutsch" statt "German") - das gehört in einen Sprachumschalter.
+ * The `code` becomes the first URL segment in the frontend (/de/..., /en/...); the
+ * rewrite rule in public/.htaccess (docroot) splits it off and passes it as its own
+ * parameter to Page::resolveRequest(). `endonym` is the native name of the
+ * language ("Deutsch" instead of "German") - it belongs in a language switcher.
  *
- * ZWEI ANGABEN FÜR DIE LAUFZEIT
+ * TWO SETTINGS FOR RUNTIME
  * --------------------
- *     backend_code   Backend-Sprache (Snippets) zu dieser Inhaltssprache, z. B.
- *                    de_AT -> de_DE. Die Meldungen der CMS-Befehle kommen aus
- *                    Cms::snippet() - so erscheinen sie im Frontend in der Sprache
- *                    der Seite. Auswahl aus Cms::backendLanguages(), Pflicht.
- *     timezone       Zeitzone, in der Datums- und Zeitangaben dieser Sprachversion
- *                    ausgegeben werden; leer = system.timezone aus der Konfiguration.
- * Beides stellt Cms::setLanguage() ein, sobald Page die Sprache des Aufrufs kennt;
- * die Werte liegen dafür im Instanz-Dateicache (InstanceCache).
+ *     backend_code   backend language (snippets) for this content language, e.g.
+ *                    de_AT -> de_DE. The messages of the CMS commands come from
+ *                    Cms::snippet() - so they appear in the frontend in the language
+ *                    of the page. Choice from Cms::backendLanguages(), required.
+ *     timezone       time zone in which date and time values of this language version
+ *                    are output; empty = system.timezone from the configuration.
+ * Cms::setLanguage() sets both as soon as Page knows the language of the request;
+ * the values are kept for this in the instance file cache (InstanceCache).
  *
  * @see Camindo\Core\Modules\Language\LanguageBackend
  * @see Camindo\Core\Dataset
@@ -66,7 +66,7 @@ class Language extends Dataset {
                 'type'  => 'chars',
                 'label' => '#language.field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select a snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'endonym' => [
@@ -92,8 +92,8 @@ class Language extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: neue Sprache ans Ende der Sortierung stellen.
-     * Die Position bestimmt u. a. die Reihenfolge im Sprachumschalter.
+     * Before creating: put the new language at the end of the sort order.
+     * The position determines, among other things, the order in the language switcher.
      */
     protected function hookOnCreate(array &$data): void
     {
@@ -103,16 +103,16 @@ class Language extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: backend_code und timezone gegen die tatsächlichen
-     * Möglichkeiten prüfen - eine Auswahlliste ist kein Schutz vor einem
-     * manipulierten Formular, und beide Werte gehen später ungeprüft an
-     * date_default_timezone_set() bzw. an den Snippet-Cache.
+     * Before saving: check backend_code and timezone against the actual
+     * options - a selection list is no protection against a
+     * manipulated form, and both values later go unchecked to
+     * date_default_timezone_set() or to the snippet cache.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         if (empty($fields) || in_array('backend_code', $fields, true)) {
             $code = trim((string)($data['backend_code'] ?? ''));
-            // Frühere zweistellige Kürzel ("de") auf das heutige ("de_DE") heben
+            // Raise earlier two-letter codes ("de") to the current one ("de_DE")
             if (preg_match('/^[a-z]{2,3}$/', $code)) {
                 $code = Cms::matchLanguage($code, $this->cms->backendLanguages()) ?? $code;
                 $data['backend_code'] = $code;
@@ -132,17 +132,17 @@ class Language extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: Cache-Dateien der Instanzen erneuern.
+     * After saving: renew the cache files of the instances.
      *
-     * Die Dateien instance-{id}.php führen zu jeder Sprache code, label und endonym
-     * (siehe InstanceCache) - eine Änderung hier muss dort ankommen.
+     * The files instance-{id}.php list code, label and endonym for each language
+     * (see InstanceCache) - a change here must arrive there.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
         $this->instanceCache()->rebuild();
 
-        // Anderes Kürzel mit anderen Regeln: der Volltext der Sprache ist nach den alten
-        // gefaltet (Collation::fold()) - in jeder Instanz, die sie führt, als veraltet markieren
+        // Different code with other rules: the full text of the language is folded by the old
+        // rules (Collation::fold()) - mark it as stale in every instance that uses it
         $languageId = (int)($data['language_id'] ?? $previousData['language_id'] ?? 0);
         $oldCode = (string)($previousData['code'] ?? '');
         $newCode = (string)($data['code'] ?? $oldCode);
@@ -153,7 +153,7 @@ class Language extends Dataset {
         }
     }
 
-    /** Instanzen, die eine Sprache führen (als Haupt- oder weitere Sprache) */
+    /** Instances that use a language (as main or additional language) */
     private function instancesWith(int $languageId): array
     {
         $this->db->query(
@@ -169,8 +169,8 @@ class Language extends Dataset {
     }
 
     /**
-     * Instanzen, die eine Sprache als Hauptsprache bzw. als weitere Sprache führen -
-     * für die Warnung vor dem Löschen.
+     * Instances that use a language as main language or as additional language -
+     * for the warning before deleting.
      *
      * @return array  ['primary' => [instance_id => label], 'additional' => [...]]
      */
@@ -203,16 +203,16 @@ class Language extends Dataset {
     }
 
     /**
-     * Vor dem Löschen: die Inhalte der Sprache in allen Instanzen löschen.
+     * Before deleting: delete the contents of the language in all instances.
      *
-     * Läuft in der Transaktion von Dataset::delete() - wirft ein Schritt, bleibt die
-     * Sprache stehen (schon gelöschte Dateien bleiben dann weg).
+     * Runs in the transaction of Dataset::delete() - if a step throws, the
+     * language remains (already deleted files then stay gone).
      *
-     * Hauptsprache einer Instanz darf sie nicht sein: `instance`.`primary_language_id`
-     * hat keinen Fremdschlüssel, die Instanz zeigte sonst ins Leere - erst dort eine
-     * andere Hauptsprache wählen. Sonst LanguageData::deleteLanguage(): Texte, Zahlen,
-     * Dateien, Volltext, Inhalts-Cache und Datenschutz-Vorlagen der
-     * Sprache verschwinden aus allen Instanzen.
+     * A language may not be the main language of an instance: `instance`.`primary_language_id`
+     * has no foreign key, otherwise the instance would point to nothing - first choose
+     * another main language there. Otherwise LanguageData::deleteLanguage(): texts, numbers,
+     * files, full text, content cache and privacy templates of the
+     * language disappear from all instances.
      */
     protected function hookOnDelete(array $data): void
     {
@@ -233,18 +233,18 @@ class Language extends Dataset {
     }
 
     /**
-     * Nach dem Löschen: Cache-Dateien der Instanzen erneuern.
+     * After deleting: renew the cache files of the instances.
      */
     protected function hookOnDeleted(array $data): void
     {
         $this->instanceCache()->rebuild();
     }
 
-    // Sonderfunktionen für Language
+    // Special functions for Language
     // --------------------
 
     /**
-     * Dateicache der Instanzen (siehe Camindo\Core\InstanceCache).
+     * File cache of the instances (see Camindo\Core\InstanceCache).
      */
     private function instanceCache(): InstanceCache
     {

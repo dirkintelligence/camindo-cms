@@ -1,15 +1,15 @@
 <?php
 /**
- * Optionen der Extension Password in der Feld-Eingabemaske (13 §3.3).
+ * Options of the extension Password in the field input mask (developer docs, chapter 08 (Components and extensions)).
  *
- * Eingebunden von FieldBackend::_extensionOptionsHtml() mit
- *     $backend  Camindo\Core\Backend      Vorlagen
- *     $cms      Camindo\Core\Cms          Snippets
- *     $options  array                     bisherige Werte (details.extension_options)
- *     $name     string                    Namenspräfix der Eingaben: data[details][extension_options]
+ * Included by FieldBackend::_extensionOptionsHtml() with
+ *     $backend  Camindo\Core\Backend      templates
+ *     $cms      Camindo\Core\Cms          snippets
+ *     $options  array                     current values (details.extension_options)
+ *     $name     string                    name prefix of the inputs: data[details][extension_options]
  *
- * Jede Regel einzeln überschreibbar; leer = Vorgabe aus security.password_policy
- * (als Platzhalter angezeigt). Dieselben Werte prüft der Server beim Speichern
+ * Each rule can be overridden individually; empty = default from security.password_policy
+ * (shown as placeholder). The server checks the same values when saving
  * (Camindo\Core\PasswordPolicy::rulesFor()).
  */
 use Camindo\Core\PasswordPolicy;

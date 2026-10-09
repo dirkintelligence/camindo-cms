@@ -1,6 +1,6 @@
 <?php
 /**
- * API-Methoden rund um die API selbst: wer bin ich, was gibt es, wie ruft man es auf.
+ * API methods around the API itself: who am I, what is there, how to call it.
  *
  * @see Camindo\Core\Api\Api
  */
@@ -33,7 +33,7 @@ class SystemApi
     }
 
     /**
-     * Angemeldeter Admin, Oberfläche, Kanal, Modulrechte, Instanzen und Sprachen.
+     * Signed-in admin, interface, channel, module rights, instances and languages.
      */
     #[ApiMethod('system.whoami', '#api_system_whoami')]
     public function whoami(): array
@@ -42,7 +42,7 @@ class SystemApi
     }
 
     /**
-     * Alle API-Methoden mit Kurzbeschreibung.
+     * All API methods with a short description.
      */
     #[ApiMethod('system.methods', '#api_system_methods')]
     public function methods(): array
@@ -55,9 +55,9 @@ class SystemApi
     }
 
     /**
-     * Eine Methode mit JSON-Schema ihrer Parameter.
+     * One method with the JSON schema of its parameters.
      *
-     * @param string $method  Name der Methode, z. B. 'system.whoami'
+     * @param string $method  name of the method, e.g. 'system.whoami'
      */
     #[ApiMethod('system.describe', '#api_system_describe')]
     public function describe(string $method): array
@@ -66,8 +66,8 @@ class SystemApi
     }
 
     /**
-     * Die eigenen Hintergrundprozesse (Stapelverarbeitung, Export, Import …),
-     * neueste zuerst.
+     * The own background processes (batch processing, export, import …),
+     * newest first.
      */
     #[ApiMethod('system.processes', '#api_system_processes')]
     public function processes(): array
@@ -76,9 +76,9 @@ class SystemApi
     }
 
     /**
-     * Stand eines Hintergrundprozesses.
+     * State of a background process.
      *
-     * @param string $token  aus der Antwort, die den Prozess gestartet hat (background.token)
+     * @param string $token  from the response that started the process (background.token)
      * @return array  token, type, status (running | finished | timeout | failed), progress (0-100), message, created_at, finished_at
      */
     #[ApiMethod('system.process', '#api_system_process')]
@@ -88,7 +88,7 @@ class SystemApi
     }
 
     /**
-     * Einen laufenden Hintergrundprozess abbrechen.
+     * Abort a running background process.
      *
      * @param string $token  background.token
      */
@@ -99,7 +99,7 @@ class SystemApi
         return ['aborted' => $this->bgproc->abort($token)];
     }
 
-    /** Prozess des angemeldeten Admins (Superuser: jeder) - sonst not_found */
+    /** Process of the signed-in admin (superuser: everyone) - otherwise not_found */
     private function ownProcess(string $token): array
     {
         $row = $this->bgproc->getByToken(preg_replace('/[^a-z0-9_\-]/i', '', $token) ?? '');

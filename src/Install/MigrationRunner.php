@@ -1,29 +1,29 @@
 <?php
 /**
- * Migrationen eines Verzeichnisses von Version `from` auf Version `to` ausführen.
+ * Run migrations of a directory from version `from` to version `to`.
  *
- *     {dir}/9.1.0.sql     Schema - Anweisung für Anweisung (SqlFile)
- *     {dir}/9.1.0.php     Daten/Logik derselben Version, läuft nach der .sql;
- *                         gibt eine Closure function(InstallContext): void zurück
+ *     {dir}/9.1.0.sql     schema - statement by statement (SqlFile)
+ *     {dir}/9.1.0.php     data/logic of the same version, runs after the .sql;
+ *                         returns a closure function(InstallContext): void
  *     {dir}/9.2.0.sql
  *
- * Dateiname = die Version, die diese Migration einführt. Es laufen alle mit
- * from < v <= to, sortiert per version_compare(). Nach jeder Version ruft der
- * Runner $advance($version) - der Aufrufer schreibt damit den Zeiger fort
- * (system.core_version bzw. component.version), sodass ein Abbruch die
- * Installation auf der letzten guten Version stehen lässt.
+ * File name = the version this migration introduces. All with
+ * from < v <= to run, sorted by version_compare(). After each version the
+ * runner calls $advance($version) - the caller thereby advances the pointer
+ * (system.core_version or component.version), so that an abort leaves the
+ * installation at the last good version.
  *
- * Core: Core/install/migrations, Aufrufer camindo.php upgrade.
- * Zusatzkomponenten: {Komponente}/install/migrations, Aufrufer ComponentManager::update().
+ * Core: Core/install/migrations, caller camindo.php upgrade.
+ * Add-on components: {component}/install/migrations, caller ComponentManager::update().
  *
- * @see docs/developers/14-installation-und-update.md, Kapitel 3
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Install;
 
 class MigrationRunner {
 
     /**
-     * Versionen im Verzeichnis, die zwischen from (exklusiv) und to (inklusiv) liegen,
+     * versions in the directory that lie between from (exclusive) and to (inclusive),
      * aufsteigend.
      *
      * @return string[]
@@ -43,9 +43,9 @@ class MigrationRunner {
     }
 
     /**
-     * Ausführen.
+     * Run.
      *
-     * @param callable $advance  function(string $version): void - nach jeder Version
+     * @param callable $advance  function(string $version): void - after each version
      * @return string[]          gelaufene Versionen
      */
     public function run(string $dir, string $from, string $to, InstallContext $ctx, callable $advance): array

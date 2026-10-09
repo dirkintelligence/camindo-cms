@@ -1,24 +1,24 @@
 /*
- * cApp.embedded – Fest verknüpfte Inhalte, eingebettet
+ * cApp.embedded – Permanently linked content, embedded
  *
- * Eingabemaske der Datensätze: ein Feld vom Typ 'link' mit display_type 'embed'
- * zeigt die Eingabemasken seiner Inhalte als Zellen (.c9-embed-cell) in einem Block
- * (.c9-embed-block, RecordBackendEdit::_embedBlock()). Jede Zelle bekommt beim
- * Überfahren ein more_vert-Menü links oben (Einfügen vor / nach, nach oben / unten,
- * Löschen), unter den Zellen stehen Schaltflächen zum Anfügen.
+ * Input mask of records: a field of type 'link' with display_type 'embed'
+ * shows the input masks of its contents as cells (.c9-embed-cell) in a block
+ * (.c9-embed-block, RecordBackendEdit::_embedBlock()). On hover each cell gets
+ * a more_vert menu at the top left (insert before / after, move up / down,
+ * delete), below the cells there are buttons for appending.
  *
- * Alle Aktionen laufen über Record/ajax_embed.php (RecordBackendEdit::embedAction()):
+ * All actions go through Record/ajax_embed.php (RecordBackendEdit::embedAction()):
  *
- *     insert   der Server legt die Arbeitskopie des neuen Inhalts an und liefert
- *              die fertige Zelle - sie wird an ihrer Stelle eingesetzt
- *     up/down  der Server tauscht die Reihenfolge (data_rel.position), hier werden
- *              die Zellen getauscht
- *     delete   der Server löst die Verknüpfung, die Zelle verschwindet
+ *     insert   the server creates the working copy of the new content and returns
+ *              the finished cell - it is inserted at its position
+ *     up/down  the server swaps the order (data_rel.position), here the cells
+ *              are swapped
+ *     delete   the server removes the relation, the cell disappears
  *
- * Die übrigen Zellen bleiben unberührt - Eingaben darin gehen nicht verloren.
- * Gespeichert werden die Inhalte mit dem Datensatz (embed[{record_id}][feld]).
- * Eine nicht leere Antwort bei up/down/delete ist eine Fehlermeldung und wird
- * über dem Block angezeigt.
+ * The other cells remain untouched - input in them is not lost.
+ * The contents are saved with the record (embed[{record_id}][feld]).
+ * A non-empty response for up/down/delete is an error message and is
+ * shown above the block.
  */
 (function (cApp) {
     'use strict';
@@ -32,7 +32,7 @@
         },
 
         /**
-         * Einträge des Zellenmenüs
+         * Entries of the cell menu
          */
         _bindMenuActions() {
             $(document).on('click', '.c9-embed-menu [data-embed-action]', (e) => {
@@ -53,7 +53,7 @@
         },
 
         /**
-         * Schaltflächen "Inhalt hinzufügen" unter den Zellen
+         * Buttons "Add content" below the cells
          */
         _bindAddButtons() {
             $(document).on('click', '.c9-embed-add [data-embed-action="append"]', (e) => {
@@ -65,8 +65,8 @@
         },
 
         /**
-         * Solange das Menü offen ist, bleibt die Zelle hervorgehoben (das Menü
-         * hängt am Zellenrand, die Maus verlässt dabei die Zelle)
+         * While the menu is open the cell stays highlighted (the menu
+         * hangs at the cell edge, so the mouse leaves the cell)
          */
         _bindMenuState() {
             $(document).on('show.bs.dropdown', '.c9-embed-handle', (e) => {
@@ -85,7 +85,7 @@
         },
 
         /**
-         * URL einer Aktion: update-url des Blocks plus Parameter
+         * URL of an action: update-url of the block plus parameters
          */
         _url($block, params) {
             let url = $block.data('update-url');
@@ -98,22 +98,22 @@
         },
 
         /**
-         * Ajax-Aufruf ohne Ziel-Element: Antwort als Text
+         * Ajax call without target element: response as text
          */
         _request(url, done) {
             cApp.system.addSpinner();
             $.ajax({
-                // POST: insert/up/down/delete legen an, sortieren um und hängen aus
-                // (17-csrf.md §2.7). Die Parameter bleiben im Query-String, der Körper
-                // ist leer - Record/ajax_embed.php liest sie über $_REQUEST.
+                // POST: insert/up/down/delete create, reorder and detach
+                // (developer docs, chapter 14 (Security: web)). The parameters stay in the query string, the body
+                // is empty - Record/ajax_embed.php reads them via $_REQUEST.
                 type: 'POST',
                 url: cConfig.backend_path + 'Modules/' + url + '&cache=' + Date.now(),
                 data: new FormData(),
                 contentType: false,
                 processData: false,
                 dataType: 'html',
-                // eigener $.ajax statt cLoadContent (Antwort als Text, kein Zielelement) -
-                // das CSRF-Token muss hier von Hand mit (17-csrf.md §2.4)
+                // own $.ajax instead of cLoadContent (response as text, no target element) -
+                // the CSRF token has to be added by hand here (developer docs, chapter 14 (Security: web))
                 headers: cApp.system.csrfHeaders(),
                 success: (response) => {
                     cApp.system.removeSpinner();
@@ -132,7 +132,7 @@
         },
 
         /**
-         * Fehlermeldung des Servers über dem Block anzeigen (ersetzt eine vorherige)
+         * Show the server's error message above the block (replaces a previous one)
          */
         _showError($block, html) {
             $block.find('.c9-embed-error').remove();
@@ -144,12 +144,12 @@
         },
 
         /**
-         * Neuen Inhalt einfügen: vor/nach $cell, ohne $cell ans Ende des Blocks
+         * Insert new content: before/after $cell, without $cell at the end of the block
          *
-         * @param {jQuery|null} $cell   Bezugszelle
-         * @param {boolean}     before  vor der Bezugszelle
-         * @param {number}      areaId  Zielbereich des neuen Inhalts
-         * @param {jQuery}      $block  Block (nur ohne $cell)
+         * @param {jQuery|null} $cell   Reference cell
+         * @param {boolean}     before  before the reference cell
+         * @param {number}      areaId  Target area of the new content
+         * @param {jQuery}      $block  Block (only without $cell)
          */
         insert($cell, before, areaId, $block = null) {
             $block = $block || $cell.closest('.c9-embed-block');
@@ -183,7 +183,7 @@
         },
 
         /**
-         * Inhalt eine Stelle nach oben / unten
+         * Move content one position up / down
          */
         move($cell, direction) {
             const $block = $cell.closest('.c9-embed-block');
@@ -207,7 +207,7 @@
         },
 
         /**
-         * Inhalt entfernen (nach Rückfrage)
+         * Remove content (after confirmation)
          */
         remove($cell) {
             const $block = $cell.closest('.c9-embed-block');
@@ -230,7 +230,7 @@
 
         _flash($cell) {
             $cell.removeClass('c9-embed-moved');
-            void $cell[0].offsetWidth; // Animation neu starten
+            void $cell[0].offsetWidth; // restart animation
             $cell.addClass('c9-embed-moved');
         }
     };

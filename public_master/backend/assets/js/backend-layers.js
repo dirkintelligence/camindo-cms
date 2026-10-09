@@ -1,35 +1,35 @@
 /*
- * cApp.layers – Layer-Verwaltung & Hash-Routing
+ * cApp.layers – Layer management & hash routing
  *
- * Layer sind übereinanderliegende Inhalts-Ebenen in <article>.
- * Die aktuellen Inhalte werden im URL-Hash abgebildet (Pfade mit ~ getrennt).
- * Methoden:
+ * Layers are stacked content levels in <article>.
+ * The current contents are mapped in the URL hash (paths separated by ~).
+ * Methods:
  *     add, close, replace, clear, removeReferer, refresh, invalidate
  *
- * Layer, die aus der Oberfläche heraus geöffnet wurden (add() ohne skipHashUpdate,
- * addPost(), replace(), replacePost()), tragen data-intent="1"; Layer aus dem Hash
- * (Lesezeichen, F5, Zurück-Taste, Link von außen) nicht. Daran entscheidet
- * openPost(), ob eine Eingabemaske mit Check-out sofort oder erst auf Knopfdruck
- * geladen wird (17-csrf.md §2.8, RecordBackendEdit::_editOpenStub()).
+ * Layers opened from the user interface (add() without skipHashUpdate,
+ * addPost(), replace(), replacePost()) carry data-intent="1"; layers from the hash
+ * (bookmark, F5, back button, link from outside) do not. Based on this,
+ * openPost() decides whether an input mask with check-out is loaded immediately or
+ * only at the push of a button (developer docs, chapter 14 (Security: web), RecordBackendEdit::_editOpenStub()).
  *
- * Nach einer Änderung, die den Layer darunter betrifft (Speichern, Löschen, Import,
- * Stapelverarbeitung …), ist das Muster immer dasselbe:
+ * After a change that affects the layer below (save, delete, import,
+ * batch processing …), the pattern is always the same:
  *
- *     cApp.layers.invalidate();   // Referer als veraltet markieren
- *     cApp.layers.close();        // bzw. replace(): der Referer lädt neu, sobald
- *                                 // er wieder oben liegt
+ *     cApp.layers.invalidate();   // mark the referer as outdated
+ *     cApp.layers.close();        // or replace(): the referer reloads as soon as
+ *                                 // it is on top again
  *
  */
 (function (cApp) {
     'use strict';
 
     // ---------------------------------------------------------------------------
-    // Hilfsfunktionen (privat, nicht am Objekt)
+    // Helper functions (private, not on the object)
     // ---------------------------------------------------------------------------
 
     /**
-     * Extrahiert alle Pfade aus dem URL-Hash als Array.
-     * @param  {string} hash  z. B. "#pfad/a~pfad/b"
+     * Extracts all paths from the URL hash as an array.
+     * @param  {string} hash  e.g. "#pfad/a~pfad/b"
      * @returns {string[]}
      */
     function hashToPaths(hash) {
@@ -39,9 +39,9 @@
     }
 
     /**
-     * Schreibt den Hash in die Browser-History.
+     * Writes the hash to the browser history.
      * @param {string}  hash
-     * @param {boolean} replace  true → replaceState statt pushState
+     * @param {boolean} replace  true → replaceState instead of pushState
      */
     function hashWrite(hash, replace) {
         hash = '#' + hash.replace(/^[#/]+/, '');
@@ -53,7 +53,7 @@
     }
 
     /**
-     * Entfernt Query-Parameter aus einem Pfad (für Anzeige in Breadcrumb).
+     * Removes query parameters from a path (for display in the breadcrumb).
      * @param  {string} path
      * @returns {string}
      */
@@ -68,22 +68,22 @@
     // ---------------------------------------------------------------------------
     cApp.layers = {
 
-        // --- Initialisierung ---
+        // --- Initialization ---
 
         init() {
             window.addEventListener('popstate', () => {
-                // Browser hat Hash bereits geändert → skipHashUpdate = true
+                // Browser has already changed the hash → skipHashUpdate = true
                 this.change(true);
             });
             this.change(true);
         },
 
 
-        // --- Hash-Synchronisation ---
+        // --- Hash synchronization ---
 
         /**
-         * Gleicht die vorhandenen Layer mit den Pfaden im Hash ab.
-         * @param {boolean} skipHashUpdate  Verhindert erneutes Schreiben des Hash
+         * Matches the existing layers against the paths in the hash.
+         * @param {boolean} skipHashUpdate  Prevents writing the hash again
          */
         change(skipHashUpdate) {
             skipHashUpdate = skipHashUpdate || false;
@@ -101,24 +101,24 @@
                 return;
             }
 
-            // Wie viele Layer passen ab dem Anfang zu den Hash-Pfaden?
+            // How many layers from the beginning match the hash paths?
             let matchCount = 0;
             $('article .c9-layer').each(function (i) {
                 if ($(this).attr('data-url') !== allPaths[i]) return false; // break
                 matchCount++;
             });
 
-            // Bei zu vielen Abweichungen: komplett neu aufbauen
+            // With too many differences: rebuild completely
             if (matchCount < maxCount - 1) {
                 $('article').empty();
-                this.loadSilent('');          // HOME-Layer zuerst anlegen
+                this.loadSilent('');          // create the HOME layer first
                 prevPaths.forEach(p => this.loadSilent(p));
                 this.add(lastPath, false, skipHashUpdate);
                 return;
             }
 
             if (pathCount === layerCount) {
-                if (matchCount === pathCount) return; // Nichts zu tun
+                if (matchCount === pathCount) return; // nothing to do
                 $('article .c9-layer:last').cLoadContent(lastPath);
             } else if (layerCount === pathCount - 1) {
                 this.add(lastPath, false, skipHashUpdate);
@@ -128,18 +128,18 @@
         },
 
 
-        // --- Layer-Operationen ---
+        // --- Layer operations ---
 
         /**
-         * Lädt einen Pfad still (ohne Anzeige) – für den Aufbau vorheriger Layer.
+         * Loads a path silently (without display) – for building previous layers.
          */
         loadSilent(path) {
             path = path.replace(/^\/+/, '');
             const $layer = $(`<div class="c9-layer" style="display:none" data-url="${path}"></div>`);
             $('article').append($layer);
             
-            // Anpassung: Callback hinzufügen, damit die Navigation 
-            // den Titel auslesen kann, sobald das HTML geladen ist.
+            // Adjustment: add a callback so that the navigation
+            // can read the title as soon as the HTML is loaded.
             $layer.cLoadContent({
                 url: path,
                 callback: () => {
@@ -149,13 +149,13 @@
         },
 
         /**
-         * Fügt einen neuen Layer hinzu und zeigt ihn an.
+         * Adds a new layer and shows it.
          * @param {string}  path
-         * @param {boolean} replaceHash     History-Eintrag ersetzen statt hinzufügen
-         * @param {boolean} skipHashUpdate  Hash nicht anfassen (init/popstate)
-         * @param {boolean} slide           Layer von rechts hereinschieben und beim
-         *                                  Schließen wieder hinaus (Datensatzliste
-         *                                  eines Lookup-Feldes, _slideIn())
+         * @param {boolean} replaceHash     Replace the history entry instead of adding one
+         * @param {boolean} skipHashUpdate  Do not touch the hash (init/popstate)
+         * @param {boolean} slide           Slide the layer in from the right and out again
+         *                                  when closing (record list
+         *                                  of a lookup field, _slideIn())
          */
         add(path, replaceHash, skipHashUpdate, slide) {
             replaceHash    = replaceHash    || false;
@@ -178,7 +178,7 @@
                 hashWrite(paths.join('~'), replaceHash);
             }
 
-            // Nav-Punkt vorab mit Pfadname anlegen und mit Layer verknüpfen
+            // Create the nav item in advance with the path name and link it to the layer
             this._naviRebuild();
             const $navItem = $('#c9-navi .c9-navitem-text:last');
             $newLayer.data('nav-item', $navItem);
@@ -197,9 +197,9 @@
         },
 
         /**
-         * Neuen Layer mit einer POST-Anfrage öffnen (Formular mit data-layer="new").
-         * Wie add(), nur mit Formulardaten; im Hash steht der Pfad ohne Parameter -
-         * nach einem Neuladen zeigt der Layer also die Startmaske des Scripts.
+         * Open a new layer with a POST request (form with data-layer="new").
+         * Like add(), only with form data; the hash contains the path without parameters -
+         * so after a reload the layer shows the start mask of the script.
          * @param {string}   path
          * @param {FormData} params
          */
@@ -234,7 +234,7 @@
         },
 
         /**
-         * Entfernt den obersten Layer.
+         * Removes the topmost layer.
          * @param {boolean} replaceHash
          * @param {boolean} skipHashUpdate
          */
@@ -247,9 +247,9 @@
             const $last = $('article .c9-layer:last');
             if (cApp.extensions && cApp.extensions.destroyAll) cApp.extensions.destroyAll($last);
 
-            // Hereingeschobener Layer (add() mit slide): er verlässt den Stapel sofort -
-            // Aufrufe direkt nach close() sehen schon den Layer darunter -, bleibt
-            // aber für die Animation als Ghost ohne Klasse c9-layer stehen
+            // Slid-in layer (add() with slide): it leaves the stack immediately -
+            // calls directly after close() already see the layer below -, but
+            // stays as a ghost without class c9-layer for the animation
             const slide = $last.attr('data-slide') === '1'
                 && $('article .c9-layer').length > 1 && this._slideOk();
             const scrollFrom = $('article').scrollTop();
@@ -276,10 +276,10 @@
         },
 
         /**
-         * Entfernt den zweitobersten Layer samt seinem Pfad im Hash - der oberste
-         * bleibt. Für Schritte, deren Vorgänger-Maske hinfällig geworden ist (der
-         * Import: seine Datei ist nach dem Ausführen weg); "Schließen" des obersten
-         * Layers landet dann direkt auf der Ebene darunter.
+         * Removes the second-topmost layer together with its path in the hash - the topmost
+         * stays. For steps whose predecessor mask has become obsolete (the
+         * import: its file is gone after execution); "Close" of the topmost
+         * layer then lands directly on the level below.
          */
         removeReferer() {
             const allLayers = $('article .c9-layer');
@@ -294,7 +294,7 @@
         },
 
         /**
-         * Bleibt im aktuellen Layer, lädt aber einen anderen Pfad.
+         * Stays in the current layer, but loads a different path.
          * @param {string}  path
          * @param {boolean} replaceHash
          * @param {boolean} scrollTop
@@ -324,14 +324,14 @@
         },
 
         /**
-         * Wie replace(), aber per POST - für Aktionen mit Seiteneffekt
-         * (17-csrf.md §2.7: verländernde Aktionen dürfen nicht per GET laufen,
-         * sonst hilft weder `SameSite=Lax` noch das CSRF-Token).
+         * Like replace(), but via POST - for actions with side effects
+         * (developer docs, chapter 14 (Security: web)): modifying actions must not run via GET,
+         * otherwise neither `SameSite=Lax` nor the CSRF token helps).
          *
-         * Im Hash steht der Pfad wie bei replace(), also MIT Parametern. Nach einem
-         * Neuladen der Seite würde daraus ein GET - der Server lehnt die Aktion dann
-         * ab (Backend::requirePost()) und zeigt die Meldung. Das ist gewollt: eine
-         * schreibende Aktion soll sich nicht durch F5 wiederholen.
+         * The hash contains the path as with replace(), i.e. WITH parameters. After a
+         * reload of the page this would become a GET - the server then rejects the action
+         * (Backend::requirePost()) and shows the message. This is intended: a
+         * writing action should not be repeated by F5.
          *
          * @param {string}   path
          * @param {FormData} params  optional
@@ -359,13 +359,13 @@
         },
 
         /**
-         * Platzhalter einer Seite mit Seiteneffekt beim Öffnen (Check-out der
-         * Eingabemaske): den Layer, in dem er steht, per POST neu laden - sofort, wenn
-         * der Layer aus der Oberfläche geöffnet wurde (data-intent), sonst erst mit
-         * force (Knopf im Platzhalter). Siehe Kopfkommentar.
+         * Placeholder of a page with a side effect on opening (check-out of the
+         * input mask): reload the layer it is in via POST - immediately if
+         * the layer was opened from the user interface (data-intent), otherwise only with
+         * force (button in the placeholder). See header comment.
          *
-         * @param {string}  elementId  Id des Platzhalters
-         * @param {boolean} force      Klick auf den Knopf
+         * @param {string}  elementId  Id of the placeholder
+         * @param {boolean} force      Click on the button
          */
         openPost(elementId, force) {
             const el = document.getElementById(elementId);
@@ -388,9 +388,9 @@
         },
 
         /**
-         * Ermittelt aus data-url des obersten Layers den Query-String (ohne ?)
-         * und ohne function Parameter
-         * @returns {string} Der Query-String oder ein leerer String
+         * Determines the query string (without ?) from data-url of the topmost layer
+         * and without the function parameter
+         * @returns {string} The query string or an empty string
          */
         queryString() {
             const cPath = $('article .c9-layer:last').attr('data-url') || ''; 
@@ -407,9 +407,9 @@
         },
 
         /**
-         * Ermittelt aus data-url des obersten Layers den Pfad ohne queryString
-         * Außnahmen sind die Parameter area_id, src_field, src_id
-         * @returns {string} Der Pfad ohne queryString
+         * Determines the path without query string from data-url of the topmost layer
+         * Exceptions are the parameters area_id, src_field, src_id
+         * @returns {string} The path without query string
          */
         base() {
             const cPath = $('article .c9-layer:last').attr('data-url') || ''; 
@@ -419,13 +419,13 @@
             const basePath = index !== -1 ? cPath.substring(0, index) : cPath;
 
             try {
-                // Nutze eine Basis-URL, falls cPath ein relativer Pfad ist
+                // Use a base URL in case cPath is a relative path
                 const url = new URL(cPath, window.location.origin);
                 
                 const newParams = new URLSearchParams();
                 const paramsToKeep = ['area_id', 'src_field', 'src_id'];
                 
-                // Prüfe auf die Ausnahmeparameter und füge sie hinzu, falls vorhanden
+                // Check for the exception parameters and add them if present
                 paramsToKeep.forEach(param => {
                     const value = url.searchParams.get(param);
                     if (value !== null) {
@@ -435,7 +435,7 @@
                 
                 const newQueryString = newParams.toString();
                 
-                // Wenn Parameter vorhanden sind, trenne mit &, sonst starte mit ?
+                // If parameters are present, separate with &, otherwise start with ?
                 if (newQueryString) {
                     return `${basePath}?${newQueryString}&`;
                 }
@@ -447,14 +447,14 @@
         },
 
         /**
-         * Zeigt der oberste Layer dieses Script (Pfad ohne Query-String)?
+         * Does the topmost layer show this script (path without query string)?
          *
-         * Verglichen wird nur der Script-Anteil von data-url - dieselbe Seite mit
-         * anderen Parametern (z. B. Messaging/message_list.php?tab=outbox) zählt
-         * also mit. Layer darunter zählen nicht: sie sind verdeckt, und ob sie
-         * offen bleiben, entscheidet der Benutzer.
+         * Only the script part of data-url is compared - the same page with
+         * other parameters (e.g. Messaging/message_list.php?tab=outbox) thus
+         * counts as well. Layers below do not count: they are covered, and whether they
+         * stay open is up to the user.
          *
-         * @param {string} path  Pfad, ggf. mit Query-String
+         * @param {string} path  Path, possibly with query string
          * @returns {boolean}
          */
         isOnTop(path) {
@@ -465,16 +465,16 @@
         },
 
         /**
-         * Wie add(), für Seiten, die es nur einmal im Stapel geben soll (Kopfzeile:
-         * Einstellungen, Nachrichten; Hauptmenü: Info, Handbücher):
-         *  - zeigt der oberste Layer schon dieses Script, wird kein neuer angelegt
-         *    (kein Stapel gleicher Layer durch wiederholte Klicks) - er wird nur
-         *    an den Anfang gescrollt;
-         *  - liegt es weiter unten, wird dieser Layer geschlossen (samt seinem Pfad
-         *    im Hash) und die Seite oben neu geöffnet.
+         * Like add(), for pages that should exist only once in the stack (header:
+         * settings, messages; main menu: info, manuals):
+         *  - if the topmost layer already shows this script, no new one is created
+         *    (no stack of identical layers from repeated clicks) - it is only
+         *    scrolled to the top;
+         *  - if it lies further down, that layer is closed (together with its path
+         *    in the hash) and the page is reopened on top.
          *
          * @param {string} path
-         * @returns {boolean}  true: Layer wurde angelegt
+         * @returns {boolean}  true: layer was created
          */
         addOnce(path) {
             if (this.isOnTop(path)) {
@@ -501,7 +501,7 @@
         },
 
         /**
-         * Entfernt alle Layer und legt einen neuen an.
+         * Removes all layers and creates a new one.
          * @param {string}  path
          * @param {boolean} replaceHash
          * @param {boolean} skipHashUpdate
@@ -520,20 +520,20 @@
         },
 
         /**
-         * Markiert den Layer unter dem obersten (den Referer) als veraltet: er wird
-         * neu geladen, sobald er wieder oben liegt (_showLast()) - gleich, ob der
-         * oberste Layer über einen Knopf, die Breadcrumb-Navi oder "Zurück" des
-         * Browsers geschlossen bzw. mit replace() ersetzt wird. Ersetzt das frühere
-         * refreshReferer() und das Paar close() + refresh().
+         * Marks the layer below the topmost one (the referer) as outdated: it is
+         * reloaded as soon as it is on top again (_showLast()) - no matter whether the
+         * topmost layer is closed via a button, the breadcrumb navigation or the browser's
+         * "Back", or replaced with replace(). Replaces the former
+         * refreshReferer() and the pair close() + refresh().
          *
-         * Standardmäßig nur der Referer: tiefere Layer können Eingabemasken mit
-         * Arbeitskopie sein, die ein Neuladen nicht verträgt. levels > 1 markiert
-         * zusätzlich die Layer darunter - nur für Masken, unter denen sicher keine
-         * Eingabemaske liegt (z. B. Bereich bearbeiten über Info-Seite und Liste).
+         * By default only the referer: deeper layers can be input masks with a
+         * working copy that cannot tolerate a reload. levels > 1 additionally marks
+         * the layers below - only for masks below which there is certainly no
+         * input mask (e.g. editing an area via the info page and list).
          *
-         * @param {function} [callback]  nach dem Neuladen des Referers ausführen
-         *                               (z. B. ein Lookup-Feld der Maske darunter füllen)
-         * @param {number}   [levels=1]  Anzahl der Layer unter dem obersten
+         * @param {function} [callback]  execute after the referer has been reloaded
+         *                               (e.g. fill a lookup field of the mask below)
+         * @param {number}   [levels=1]  Number of layers below the topmost one
          */
         invalidate(callback, levels = 1) {
             const $layers = $('article .c9-layer');
@@ -546,7 +546,7 @@
         },
 
         /**
-         * Lädt den obersten Layer neu.
+         * Reloads the topmost layer.
          */
         refresh(callback) {
             const $last = $('article .c9-layer:last');
@@ -560,18 +560,18 @@
 
 
         /**
-         * Login abschließen: Lädt Inhalte leer gebliebener Layer nach.
+         * Complete the login: loads the contents of layers that remained empty.
          *
-         * Steht die Kopfzeile (serverseitig in index.php gerendert) in einer anderen
-         * Sprache als der beim Anmelden gewählten, wird das Backend komplett neu
-         * geladen - die Layer entstehen aus dem Hash ohnehin neu.
+         * If the header (rendered server-side in index.php) is in a different
+         * language than the one chosen at login, the backend is reloaded
+         * completely - the layers are rebuilt from the hash anyway.
          *
-         * @param {string} backendCode  gewählte Backend-Sprache ('' = unbekannt)
+         * @param {string} backendCode  chosen backend language ('' = unknown)
          */
         loginComplete(backendCode, locale) {
-            // Kopfzeile in anderer Sprache oder cConfig.locale (Datumsformate der
-            // Extensions) veraltet: die Seite wurde ohne Anmeldung geladen
-            // (<html lang> in BCP-47-Schreibweise: de_DE -> de-DE)
+            // Header in a different language or cConfig.locale (date formats of the
+            // extensions) outdated: the page was loaded without login
+            // (<html lang> in BCP 47 notation: de_DE -> de-DE)
             if ((backendCode && document.documentElement.lang !== backendCode.replace('_', '-'))
                 || (locale && window.cConfig.locale !== locale)) {
                 window.location.reload();
@@ -588,42 +588,42 @@
                         }
                     });
                 }
-                // Login-Dialog schließen
+                // Close the login dialog
                 $('#login-modal').modal('hide');
             });
             $('article').scrollTop(0);
             $('article .c9-layer').css('display','none').last().css('display', 'block');
-            // Hintergrundprozesse aus einer früheren Sitzung? Einmal nachsehen,
-            // die Überwachung endet von selbst, wenn nichts läuft (cApp.polling)
+            // Background processes from an earlier session? Check once,
+            // the monitoring ends by itself if nothing is running (cApp.polling)
             if (cApp.polling && cApp.polling.watchBgproc) cApp.polling.watchBgproc();
-            // Abzeichen der internen Nachrichten: index.php wurde ohne Anmeldung
-            // geladen und zeigt 0 (cApp.mail)
+            // Badge of the internal messages: index.php was loaded without login
+            // and shows 0 (cApp.mail)
             if (cApp.mail && cApp.mail.refreshBadge) cApp.mail.refreshBadge();
         },
 
         /**
-         * Zeigt den Login-Dialog.
+         * Shows the login dialog.
          *
-         * Jede Ajax-Antwort '##accessdenied##' landet hier - beim Start ohne
-         * Sitzung sind das mehrere auf einmal (jeder Layer aus dem Hash) und
-         * danach laufend weitere (Polling). Ist der Dialog schon offen, wird das
-         * Formular deshalb NICHT erneut geladen: das würde die laufende Eingabe
-         * verwerfen und den Fokus wieder auf das Namensfeld setzen.
+         * Every Ajax response '##accessdenied##' ends up here - at startup without a
+         * session there are several at once (each layer from the hash) and
+         * then more continuously (polling). If the dialog is already open, the
+         * form is therefore NOT loaded again: that would discard the current input
+         * and set the focus back to the name field.
          */
         login() {
             const $modal  = $('#login-modal');
             const $dialog = $('#login-dialog');
 
-            // Bereits offen und Formular da bzw. gerade unterwegs: nichts tun
+            // Already open and form present or on its way: do nothing
             if (this._loginOpen && ($dialog.data('xhr') || $dialog.find('form').length)) return;
             this._loginOpen = true;
 
-            // Bootstrap setzt beim Ende der Fade-Transition (shown.bs.modal)
-            // per Focus-Trap den Fokus zwingend auf das Modal-Element selbst.
-            // Läuft unser Ajax-Callback vor diesem Event durch (z. B. bei
-            // warmem Browser/schneller Verbindung), wird sein Fokus dadurch
-            // wieder überschrieben. Deshalb zusätzlich hier fokussieren,
-            // da shown.bs.modal garantiert nach dem Focus-Trap feuert.
+            // At the end of the fade transition (shown.bs.modal) Bootstrap
+            // forces the focus onto the modal element itself via its focus trap.
+            // If our Ajax callback runs before this event (e.g. with a
+            // warm browser/fast connection), its focus is overwritten
+            // by that. Therefore also focus here,
+            // since shown.bs.modal is guaranteed to fire after the focus trap.
             $modal
                 .off('shown.bs.modal.login hidden.bs.modal.login')
                 .on('shown.bs.modal.login', function () {
@@ -634,7 +634,7 @@
                 })
                 .modal('show');
 
-            // Formular in der zuletzt gewählten bzw. der Browsersprache laden
+            // Load the form in the last chosen language or the browser language
             const lang = (cApp.ui && cApp.ui.loginPrefLang) ? cApp.ui.loginPrefLang() : '';
             $dialog.empty().cLoadContent({
                 url: 'Start/login.php' + (lang ? '?lang=' + encodeURIComponent(lang) : '')
@@ -642,8 +642,8 @@
         },
 
         /**
-         * Ist der Login-Dialog offen (abgemeldet)? Polling-Anfragen unterbleiben
-         * dann - ihre Antwort '##accessdenied##' hätte sonst nichts zu tun.
+         * Is the login dialog open (logged out)? Polling requests are then
+         * skipped - their response '##accessdenied##' would have nothing to do otherwise.
          * @returns {boolean}
          */
         loginOpen() {
@@ -651,13 +651,13 @@
         },
 
         /**
-         * Zeigt die Rückfrage vor dem Abmelden.
+         * Shows the confirmation prompt before logging out.
          *
-         * Benutzt denselben Dialog wie die Anmeldung (#login-modal): das
-         * Script Start/logout.php liefert die Teile des Modals. Bestätigt der
-         * Benutzer, schickt sich das Formular an dasselbe Script zurück und die
-         * Antwort lädt das Fenster neu; bricht er ab, schließt der Knopf das
-         * Modal (data-bs-dismiss) und die Oberfläche bleibt, wie sie war.
+         * Uses the same dialog as the login (#login-modal): the
+         * script Start/logout.php delivers the parts of the modal. If the
+         * user confirms, the form sends itself back to the same script and the
+         * response reloads the window; if they cancel, the button closes the
+         * modal (data-bs-dismiss) and the user interface stays as it was.
          */
         logout() {
             const $modal  = $('#login-modal');
@@ -666,7 +666,7 @@
             $modal
                 .off('hidden.bs.modal.logout')
                 .one('hidden.bs.modal.logout', () => {
-                    // Der Dialog gehört danach wieder dem Anmeldeformular
+                    // Afterwards the dialog belongs to the login form again
                     $dialog.empty();
                 })
                 .modal('show');
@@ -675,18 +675,18 @@
         },
 
         /**
-         * Schließt alle Layer sicher (mit Prüfung auf ungespeicherte Daten) 
-         * und springt zur Startseite zurück.
+         * Closes all layers safely (with a check for unsaved data)
+         * and jumps back to the start page.
          */
         home() {
             this._closeLayersTo(0, () => {
-                // Alle Layer wurden sicher geschlossen. Hash komplett entfernen.
+                // All layers were closed safely. Remove the hash completely.
                 history.pushState(null, null, window.location.pathname + window.location.search);
                 
-                // Navigation aktualisieren
+                // Update the navigation
                 this._naviRebuild();
 
-                // Basis-Layer (Startseite) neu aufbauen
+                // Rebuild the base layer (start page)
                 this.loadSilent('');
                 $('article').scrollTop(0);
                 $('article .c9-layer:last').css('display', 'block');
@@ -694,48 +694,48 @@
         },
 
 
-        // --- Breadcrumb: sukzessives Schließen mit dirty-check ---
+        // --- Breadcrumb: successive closing with dirty check ---
 
         /**
-         * Schließt Layer sukzessive vom obersten bis zur Ziel-Tiefe.
-         * Prüft bei jedem Schritt, ob ungespeicherte Änderungen vorhanden sind.
-         * Bricht ab, wenn der Nutzer den Verwerfen-Dialog abbricht.
+         * Closes layers successively from the topmost one to the target depth.
+         * Checks at each step whether there are unsaved changes.
+         * Aborts if the user cancels the discard dialog.
          *
-         * @param {number} targetDepth  Anzahl der Layer, die danach noch existieren sollen
-         * @param {function} onDone    Wird aufgerufen, wenn das Ziel erreicht ist
+         * @param {number} targetDepth  Number of layers that should still exist afterwards
+         * @param {function} onDone    Called when the target is reached
          */
         _closeLayersTo(targetDepth, onDone) {
             const $layers    = $('article .c9-layer');
             const currentDepth = $layers.length;
 
             if (currentDepth <= targetDepth) {
-                // Ziel erreicht
+                // Target reached
                 if (typeof onDone === 'function') onDone();
                 return;
             }
 
-            // Obersten Layer auf ungespeicherte Änderungen prüfen
+            // Check the topmost layer for unsaved changes
             const $topLayer = $layers.last();
             cApp.forms.checkLayerAndExecute($topLayer, () => {
-                // Nutzer hat bestätigt (oder kein dirty state) → Layer entfernen
+                // User has confirmed (or no dirty state) → remove the layer
                 $topLayer.remove();
-                // Nächste Ebene rekursiv prüfen
+                // Check the next level recursively
                 this._closeLayersTo(targetDepth, onDone);
             });
         },
 
 
-        // --- Animation: Layer schieben (Datensatzliste eines Lookup-Feldes) ---
+        // --- Animation: sliding layers (record list of a lookup field) ---
 
-        /** Dauer der Schiebe-Animation in ms */
+        /** Duration of the slide animation in ms */
         _slideDuration: 180,
 
-        /** Laufende Animation sofort beenden (Funktion) bzw. null */
+        /** Stop the running animation immediately (function) or null */
         _slideDone: null,
 
         /**
-         * Animation möglich und erwünscht? Nicht ohne Web Animations API und nicht
-         * bei "Bewegung reduzieren" im Betriebssystem.
+         * Animation possible and desired? Not without the Web Animations API and not
+         * with "Reduce motion" in the operating system.
          * @returns {boolean}
          */
         _slideOk() {
@@ -743,20 +743,20 @@
                 && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         },
 
-        /** Laufende Schiebe-Animation sofort zum Ende bringen */
+        /** Bring the running slide animation to its end immediately */
         _slideFinish() {
             if (this._slideDone) this._slideDone();
         },
 
         /**
-         * Beide Layer gleichzeitig verschieben; done() räumt auf - am Ende der
-         * Animation oder vorzeitig über _slideFinish().
+         * Move both layers at the same time; done() cleans up - at the end of the
+         * animation or prematurely via _slideFinish().
          * @param {Element[]} elements
-         * @param {Array[]}   offsets   je Element [von, bis] in % der Breite
+         * @param {Array[]}   offsets   per element [from, to] in % of the width
          * @param {function}  cleanup
          */
         _slide(elements, offsets, cleanup) {
-            // in Sprachen von rechts nach links gespiegelt
+            // mirrored in right-to-left languages
             const dir = document.documentElement.dir === 'rtl' ? -1 : 1;
             const $article = $('article').addClass('c9-layers-sliding');
             const animations = elements.map((el, i) => el.animate([
@@ -775,11 +775,11 @@
         },
 
         /**
-         * Öffnen: der neue Layer startet mit seiner linken Kante am rechten Rand,
-         * beide Layer schieben nach links, bis der neue am linken Rand anliegt.
-         * Der neue Layer liegt währenddessen absolut auf Höhe der Scrollposition.
+         * Opening: the new layer starts with its left edge at the right margin,
+         * both layers slide to the left until the new one touches the left margin.
+         * Meanwhile the new layer lies absolutely positioned at the height of the scroll position.
          * @param {jQuery} $new
-         * @returns {boolean}  false: nicht animiert (der Aufrufer schaltet sofort um)
+         * @returns {boolean}  false: not animated (the caller switches immediately)
          */
         _slideIn($new) {
             this._slideFinish();
@@ -798,14 +798,14 @@
         },
 
         /**
-         * Schließen: der Ghost des geschlossenen Layers und der wieder sichtbare
-         * Layer darunter schieben gemeinsam nach rechts, dann verschwindet der Ghost.
-         * @param {jQuery} $ghost       geschlossener Layer (absolut positioniert)
-         * @param {number} scrollFrom   Scrollposition, in der er zu sehen war
+         * Closing: the ghost of the closed layer and the layer below that becomes
+         * visible again slide to the right together, then the ghost disappears.
+         * @param {jQuery} $ghost       closed layer (absolutely positioned)
+         * @param {number} scrollFrom   scroll position at which it was visible
          */
         _slideOut($ghost, scrollFrom) {
             const $cur = $('article .c9-layer:last');
-            // Ghost so versetzen, dass er an derselben Stelle sichtbar bleibt
+            // Offset the ghost so that it stays visible at the same place
             $ghost.css('top', ($('article').scrollTop() - scrollFrom) + 'px');
             this._slide([$cur[0], $ghost[0]], [[-100, 0], [0, 100]], () => {
                 $ghost.remove();
@@ -813,14 +813,14 @@
         },
 
 
-        // --- Interne Hilfsfunktionen ---
+        // --- Internal helper functions ---
 
         _showLast() {
             const $last = $('article .c9-layer:last');
             $last.css('display', 'block');
             const scrollY = parseInt($last.attr('data-scroll') || 0, 10);
             $('article').scrollTop(scrollY);
-            // veraltet (invalidate()): neu laden, Scrollposition beibehalten
+            // outdated (invalidate()): reload, keep the scroll position
             if ($last.attr('data-stale')) {
                 const callback = $last.data('stale-callback');
                 $last.removeAttr('data-stale').removeData('stale-callback');
@@ -836,7 +836,7 @@
         },
 
         /**
-         * Baut die Breadcrumb-Navi anhand des aktuellen Hash neu auf.
+         * Rebuilds the breadcrumb navigation based on the current hash.
          */
         _naviRebuild() {
             const paths = hashToPaths(location.hash);
@@ -864,19 +864,19 @@
 
             $('#c9-navi > nav').html(html);
 
-            // Eigenen Zähler für die Pfade definieren
+            // Define a separate counter for the paths
             let pathIndex = 0;
             
             $('article .c9-layer').each(function() {
                 const url = $(this).attr('data-url') || '';
                 
-                // Den leeren Basis-Layer überspringen, da er im paths-Array nicht vorkommt
+                // Skip the empty base layer, since it does not occur in the paths array
                 if (url === '') return; 
 
                 const $navSpan = $(this).find('.c9-navtext').first();
                 if ($navSpan.length) {
                     $('#c9-navi .c9-navitem-link, #c9-navi .c9-navitem-text')
-                        .eq(pathIndex + 1) // +1 wegen des Home-Icons ganz links
+                        .eq(pathIndex + 1) // +1 because of the home icon on the far left
                         .text($navSpan.text());
                 }
                 pathIndex++;
@@ -886,16 +886,16 @@
 
 
     // ---------------------------------------------------------------------------
-    // Breadcrumb-Klick-Handler
-    // Sukzessives Schließen mit dirty-check pro Layer
+    // Breadcrumb click handler
+    // Successive closing with dirty check per layer
     // ---------------------------------------------------------------------------
     $(document).on('click', '#c9-navi a', function (e) {
         e.preventDefault();
 
         const clickedIndex = $(this).index('#c9-navi a'); // 0 = Home
-        const targetDepth  = clickedIndex; // so viele Hash-Pfade sollen übrig bleiben
+        const targetDepth  = clickedIndex; // this many hash paths should remain
 
-        // Prüfen ob ein leerer Basis-Layer ('') vorhanden ist
+        // Check whether an empty base layer ('') exists
         const hasBaseLayer = $('article .c9-layer').first().attr('data-url') === '';
         const targetLayerCount = targetDepth + (hasBaseLayer ? 1 : 0);
 
@@ -911,7 +911,7 @@
                     cApp.layers.loadSilent('');
                 }
                 
-                // (_showLast(): eine veraltete Startseite lädt neu)
+                // (_showLast(): an outdated start page reloads)
                 cApp.layers._showLast();
                 $('article').scrollTop(0);
             } else {

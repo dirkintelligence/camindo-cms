@@ -1,8 +1,8 @@
 <?php
-// Core-Modul Privacy (Datenschutz): Lösch-Policies der Inhaltsbereiche verwalten und
-// personenbezogene Daten von Website-Usern und Benutzern exportieren, gelöschte
+// Core module Privacy (data protection): manage deletion policies of the content areas and
+// export personal data of website users and users, deleted
 // Benutzer anonymisieren.
-// Ohne Zusatzrecht sieht die Gruppe die Policies nur; Superuser dürfen alles.
+// Without an additional right the group only sees the policies; superusers may do everything.
 return [
 
 'version' => '9.1.1',
@@ -11,22 +11,22 @@ return [
 'description' => '#privacy.module_description',
 'icon' => 'shield',
 'listed' => true,
-// Zusatzrechte (Backend-Benutzergruppen): interner Name => Snippet der Beschriftung.
+// Additional rights (backend user groups): internal name => snippet of the label.
 'access' => [
-    // Policies anlegen, ändern, löschen - nur für Instanzen, die die Gruppe bearbeiten
-    // darf; Policies für alle Instanzen (Standard-Policies) nur der Superuser
+    // Create, change, delete policies - only for instances the group may edit
+    // may; policies for all instances (default policies) only the superuser
     'policy_edit' => 'privacy.access_policy_edit',
-    // Datenexport personenbezogener Daten: Website-User aus lesbaren Profil-Bereichen,
-    // Benutzer aus Gruppen, deren Benutzer die Gruppe im Modul Benutzer sehen darf
+    // Data export of personal data: website users from readable profile areas,
+    // users from groups whose users the group may see in the module Users
     'export' => 'privacy.access_export',
-    // Vorlagen der Datenauskunft anlegen, ändern, löschen - nur für Instanzen, die
-    // die Gruppe bearbeiten darf
+    // Create, change, delete templates of the data disclosure - only for instances that
+    // the group may edit
     'template_edit' => 'privacy.access_template_edit',
-    // Gelöschte Benutzer anonymisieren (Reiter "Gelöschte Benutzer", AdminAnonymizer) -
-    // nur Benutzer aus Gruppen, die die Gruppe im Modul Benutzer sehen darf
+    // Anonymize deleted users (tab "Deleted users", AdminAnonymizer) -
+    // only users from groups that the group may see in the module Users
     'admin_anonymize' => 'privacy.access_admin_anonymize',
 ],
-// Reiter, die ein Zusatzrecht verlangen (Access::script())
+// Tabs that require an additional right (Access::script())
 'script_access' => [
     'export.php' => 'export',
     'export_download.php' => 'export',

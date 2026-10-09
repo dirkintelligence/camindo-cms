@@ -1,22 +1,22 @@
 <?php
 /**
- * Zeitbasierte Einmal-Passwörter nach RFC 6238 (TOTP) - die Codes der
- * Authenticator-Apps (Google Authenticator, Aegis, 1Password, Microsoft …).
+ * Time-based one-time passwords per RFC 6238 (TOTP) - the codes of the
+ * authenticator apps (Google Authenticator, Aegis, 1Password, Microsoft …).
  *
- * Reine Rechnung ohne Zustand und ohne Bibliothek: HMAC-SHA1 über den Zeitschritt
- * (RFC 4226, "dynamic truncation"), 30 Sekunden je Schritt, 6 Stellen. Das sind die
- * Werte, die jede App ohne weitere Angaben annimmt - die otpauth://-URI nennt sie
- * trotzdem, damit nichts geraten wird.
+ * Pure computation without state and without a library: HMAC-SHA1 over the time step
+ * (RFC 4226, "dynamic truncation"), 30 seconds per step, 6 digits. These are the
+ * values every app accepts without further details - the otpauth:// URI names them
+ * anyway, so that nothing is guessed.
  *
- * verify() lässt einen Schritt Abweichung in beide Richtungen zu (Uhren von Handy
- * und Server gehen selten auf die Sekunde gleich) und liefert den getroffenen
- * Schritt zurück. Den muss der Aufrufer sich merken und beim nächsten Mal nur
- * noch spätere Schritte annehmen - sonst ließe sich ein abgefangener Code innerhalb
- * seiner 90 Sekunden ein zweites Mal verwenden (Replay, siehe
+ * verify() allows one step of deviation in either direction (clocks of phone
+ * and server rarely match to the second) and returns the matched
+ * step. The caller must remember it and next time accept only later
+ * steps - otherwise an intercepted code could be used a second time within
+ * its 90 seconds (replay, see
  * Camindo\Core\Modules\Admin\TotpFactor).
  *
- * Das Secret sind 20 Zufallsbytes (160 Bit, die Länge des SHA1-Blocks laut RFC 4226
- * §4), für die App Base32-kodiert (RFC 4648, ohne '=').
+ * The secret is 20 random bytes (160 bits, the length of the SHA1 block per RFC 4226
+ * §4), Base32-encoded for the app (RFC 4648, without '=').
  *
  * @see Camindo\Core\Modules\Admin\TotpFactor  Speicherung, Replay-Schutz, Wiederherstellungscodes
  */
@@ -26,35 +26,35 @@ class Totp {
 
     public const DIGITS = 6;
     public const PERIOD = 30;
-    /** Erlaubte Abweichung in Zeitschritten (je Richtung) */
+    /** Allowed deviation in time steps (per direction) */
     public const WINDOW = 1;
-    /** Länge des Secrets in Bytes */
+    /** Length of the secret in bytes */
     public const SECRET_BYTES = 20;
 
     private const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-    /** Neues Secret, roh (20 Bytes) */
+    /** New secret, raw (20 bytes) */
     public static function generateSecret(): string
     {
         return random_bytes(self::SECRET_BYTES);
     }
 
-    /** Zeitschritt zu einem Unix-Zeitstempel */
+    /** Time step for a Unix timestamp */
     public static function step(?int $time = null): int
     {
         return intdiv($time ?? time(), self::PERIOD);
     }
 
     /**
-     * Code zu einem Zeitschritt (RFC 4226 §5.3).
+     * Code for a time step (RFC 4226 §5.3).
      *
-     * @param string $secret  rohes Secret
+     * @param string $secret  raw secret
      */
     public static function code(string $secret, int $step): string
     {
-        // Zähler als 8 Byte big-endian
+        // Counter as 8 bytes big-endian
         $hmac = hash_hmac('sha1', pack('J', $step), $secret, true);
-        // Dynamic truncation: die unteren 4 Bit des letzten Bytes wählen 4 Bytes aus
+        // Dynamic truncation: the lower 4 bits of the last byte select 4 bytes
         $offset = ord($hmac[19]) & 0x0f;
         $value = ((ord($hmac[$offset]) & 0x7f) << 24)
             | (ord($hmac[$offset + 1]) << 16)
@@ -64,15 +64,15 @@ class Totp {
     }
 
     /**
-     * Code prüfen.
+     * Check a code.
      *
-     * Verglichen wird jeder Schritt im Fenster mit hash_equals(), auch nach einem
-     * Treffer - die Laufzeit soll nicht verraten, welcher Schritt passte.
+     * Every step in the window is compared with hash_equals(), also after a
+     * match - the runtime should not reveal which step matched.
      *
-     * @param string $secret     rohes Secret
-     * @param string $code       Eingabe; Leerzeichen werden entfernt ("123 456")
-     * @param int    $afterStep  nur Schritte GRÖSSER als dieser gelten (Replay-Schutz)
-     * @return int|null          der getroffene Zeitschritt, null = kein gültiger Code
+     * @param string $secret     raw secret
+     * @param string $code       input; spaces are removed ("123 456")
+     * @param int    $afterStep  only steps GREATER than this count (replay protection)
+     * @return int|null          the matched time step, null = no valid code
      */
     public static function verify(string $secret, string $code, int $afterStep = 0, ?int $time = null): ?int
     {
@@ -89,12 +89,12 @@ class Totp {
     }
 
     /**
-     * otpauth://-URI für den QR-Code (Key Uri Format, von allen gängigen Apps
-     * verstanden).
+     * otpauth:// URI for the QR code (key URI format, understood by all common
+     * apps).
      *
-     * @param string $secret   rohes Secret
-     * @param string $issuer   Anbieter, erscheint in der App über dem Konto
-     * @param string $account  Kontoname (Anmeldename)
+     * @param string $secret   raw secret
+     * @param string $issuer   provider, shown in the app above the account
+     * @param string $account  account name (login name)
      */
     public static function uri(string $secret, string $issuer, string $account): string
     {
@@ -108,7 +108,7 @@ class Totp {
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
-    /** Base32 nach RFC 4648, ohne Auffüllzeichen */
+    /** Base32 per RFC 4648, without padding characters */
     public static function base32Encode(string $data): string
     {
         $bits = '';
@@ -123,9 +123,9 @@ class Totp {
     }
 
     /**
-     * Base32 dekodieren (Groß-/Kleinschreibung, Leerzeichen und '=' egal).
+     * Decode Base32 (case, spaces and '=' do not matter).
      *
-     * @return string  rohe Bytes; '' bei ungültigen Zeichen
+     * @return string  raw bytes; '' on invalid characters
      */
     public static function base32Decode(string $text): string
     {

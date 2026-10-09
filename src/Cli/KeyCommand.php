@@ -2,21 +2,21 @@
 /**
  * key status | rotate [--invalidate-passwords] [--no-backup] | retire KID [--force] | rehash
  *
- *     status    aktueller Schlüssel, abgelöste Schlüssel mit Frist
- *               (security.key_password_grace_days), was noch an ihnen hängt
- *     rotate    neuen Schlüssel einführen, alles neu verschlüsseln und signieren
- *               (Camindo\Core\KeyRotation). Alle Admins werden abgemeldet.
- *               Höchstens einmal je 24 Stunden (KeyRotation::MIN_INTERVAL).
- *               --invalidate-passwords (auch -f): Passwörter sind öffentlich
- *               aufgetaucht - alle Passwörter sofort ungültig, alle Sessions, Geräte
- *               und Wiederherstellungscodes weg, der alte Schlüssel wird entfernt.
- *               Admins bekommen danach ein Passwort mit `admin password NAME`,
- *               Frontend-User über "Passwort vergessen".
- *     retire    abgelösten Schlüssel entfernen; mit --force auch, wenn noch
- *               Passwörter an ihm hängen (die werden ungültig)
- *     rehash    Suchwerte verschlüsselter Felder (data_enc.hash) mit der aktuellen
+ *     status    current key, retired keys with deadline
+ *               (security.key_password_grace_days), what still depends on them
+ *     rotate    introduce a new key, re-encrypt and sign everything
+ *               (Camindo\Core\KeyRotation). All administrators are logged out.
+ *               At most once per 24 hours (KeyRotation::MIN_INTERVAL).
+ *               --invalidate-passwords (also -f): passwords have become public
+ *               - all passwords immediately invalid, all sessions, devices
+ *               and recovery codes gone, the old key is removed.
+ *               Administrators then get a password with `admin password NAME`,
+ *               frontend users via "Forgot password".
+ *     retire    remove retired keys; with --force also if still
+ *               passwords depend on it (they become invalid)
+ *     rehash    search values of encrypted fields (data_enc.hash) with the current
  *               Normalisierung neu berechnen (KeyRotation::rehashEncrypted()) -
- *               einmal für Daten von vor der Normalisierung
+ *               once for data from before the normalization
  */
 namespace Camindo\Core\Cli;
 
@@ -96,7 +96,7 @@ class KeyCommand extends Command {
         return $this->usage('usage: key status | rotate [--invalidate-passwords] [--no-backup] | retire KID [--force] | rehash');
     }
 
-    /** Hinweis, wenn CAMINDO_KEY nicht den aktuellen Schlüssel enthält */
+    /** Note if CAMINDO_KEY does not contain the current key */
     private function envKeyWarning(string $state): void
     {
         if ($state === 'retired') {
