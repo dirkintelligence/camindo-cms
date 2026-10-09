@@ -1,0 +1,6 @@
+<div class="alert alert-warning">{text}</div>
+{list}
+<div class="mt-4 d-flex gap-2 flex-wrap">
+    <button type="submit" class="btn btn-danger"><span class="icon" aria-hidden="true">link_off</span> {#area.button_delete_links}</button>
+    <button type="button" onclick="var f=$(this).closest('form');f.find('input[name=function]').val('back');f.find('input[name=delete_links]').val('');f.submit();" class="btn btn-light">{#button_cancel}</button>
+</div>

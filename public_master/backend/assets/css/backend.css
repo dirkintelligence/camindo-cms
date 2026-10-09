@@ -1,0 +1,1205 @@
+/*
+ * camindo CMS 9 - Backend-Styles
+ *
+ * Nur Projekteigenes: Schriften, Icons, Layout (header/main/article/aside), c9-Klassen.
+ * Anpassungen an Bootstrap (Variablen, Farbschema inkl. --c9-*-Tokens, Buttons,
+ * Überschriften, Formulare, Modal) stehen in custom.scss des Bootstrap-Projekts und
+ * kommen mit assets/bootstrap/bootstrap(.rtl).min.css.
+ *
+ * Seiten nur über logische Properties (margin-inline-start, inset-inline-end ...):
+ * dann dreht alles bei <html dir="rtl"> mit (developer_docs/08-konventionen.md).
+ */
+@font-face {
+    font-family: "default-font";
+    src: url("../font/SourceSans3/SourceSans3vfw.woff2") format("woff2");
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Material Symbols Outlined";
+    src: url("../font/MaterialSymbols/MaterialSymbolsOutlined.woff2") format("woff2");
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+}
+.icon {
+    font-family: "Material Symbols Outlined" !important;
+    font-style: normal;
+    font-weight: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    vertical-align: top;
+    -webkit-font-feature-settings: "liga";
+    -moz-font-feature-settings: "liga=1";
+    -moz-font-feature-settings: "liga";
+    -ms-font-feature-settings: "liga" 1;
+    font-feature-settings: "liga";
+    -webkit-font-variant-ligatures: discretionary-ligatures;
+    font-variant-ligatures: discretionary-ligatures;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    display: inline-flex;
+    vertical-align: -0.15em;
+}
+/* Richtungs-Icons (Pfeile, Chevrons, Logout, ...): die Klasse icon-dir spiegelt sie
+   bei Sprachen, die von rechts nach links laufen (<html dir="rtl">, Cms::RTL_LANGUAGES).
+   Nicht für Icons ohne Richtung oder für Wiedergabe-Symbole (play_arrow). */
+[dir="rtl"] .icon.icon-dir {
+    transform: scaleX(-1);
+}
+
+.icon.icon-lg {
+    font-size:120%;
+}
+/* Icon hinter einer Feldbeschriftung (Schloss bei verschlüsselten Feldern) */
+.icon.icon-label {
+    font-size: 0.9em;
+    vertical-align: text-bottom;
+    padding-bottom:4px;
+}
+
+/* Farb-Tokens --c9-* (hell/dunkel): Bootstrap-Build, custom.scss */
+.c9-grey-10, .c9-grey-10:focus { color: var(--c9-grey-10) !important; }
+.c9-grey-15, .c9-grey-15:focus { color: var(--c9-grey-15) !important; }
+.c9-grey-20, .c9-grey-20:focus { color: var(--c9-grey-20) !important; }
+.c9-grey-30, .c9-grey-30:focus { color: var(--c9-grey-30) !important; }
+.c9-grey-50, .c9-grey-50:focus { color: var(--c9-grey-50) !important; }
+.c9-grey-90, .c9-grey-90:focus { color: var(--c9-grey-90) !important; }
+.c9-text-yellow, .c9-text-yellow * { color:var(--c9-yellow) !important; }
+
+.c9-monospace {
+    font-family: var(--bs-font-monospace);
+    font-size:90%;
+}
+.c9-lang-bade {
+    color: var(--c9-grey-50) !important;
+    text-transform: uppercase;
+}
+.c9-lang-bade span {
+    margin-inline-end:10px;
+}
+
+.c9-brick-bg {
+    background: var(--c9-brick-bg);
+}
+table.c9-brick-bg {
+    --bs-table-bg: var(--c9-brick-bg);
+}
+.c9-brick {
+    padding:8px 15px;
+    margin-top:2px;
+    background: var(--c9-brick-bg);
+}
+/* --- Interne Nachrichten (Modul Messaging) --- */
+.c9-message-head {
+    background: var(--c9-grey-10);
+}
+.c9-message-meta td {
+    padding: 0 0 0.25rem 0;
+    padding-inline-end: 1.5rem;
+    vertical-align: top;
+}
+.c9-message-meta td:first-child {
+    color: var(--c9-grey-50);
+}
+.c9-message-record {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--c9-grey-10);
+}
+a.c9-area-link {
+    display:block;
+    padding:8px 15px;
+    margin-top:2px;
+    background: var(--c9-brick-bg);
+    position:relative;
+}
+a.c9-area-link,
+a.c9-area-link * {
+    text-decoration: none !important;
+}
+a.c9-area-link .hover-icon {
+    position: absolute;
+    inset-inline-start:2px;
+    top:10px;
+    color: var(--c9-grey-50);
+    display:none;
+}
+a.c9-area-link:hover .hover-icon {
+    display:block;
+}
+a.c9-area-link.c9-folder,
+a.c9-area-link.c9-folder * {
+    color: var(--c9-grey-50);
+}
+/* Schrift und Grundgröße: Bootstrap-Build (custom.scss) */
+body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden; /* Body darf nicht scrollen */
+}
+.btn .icon {
+    font-size:130%;
+    position:relative;
+    bottom:-2px;
+}
+/* Überschriften: Bootstrap-Build (custom.scss) */
+h1 span.icon {
+    font-size: 1.6rem !important;
+    font-weight: 400;
+}
+ul.c9-list {
+    list-style-type: disc;
+    padding:0;
+    padding-inline-start:16px;
+    margin:0;
+}
+ul.c9-list li {
+    padding:0;
+    margin:0 0 3px 0;
+}
+
+.button-bar {
+    position:fixed;
+    left:0; right:0; bottom:0;
+    background: --bs-body-bg;
+    padding:15px;
+    text-align: center;
+    margin-inline-end:0;
+}
+/* .btn-light, .btn-secondary: Bootstrap-Build (custom.scss) */
+.c9-pagination .btn.btn-light:hover,
+.c9-pagination .btn.btn-secondary:hover,
+.c9-pagination .btn.btn-primary:hover {
+    border-color: var(--c9-grey-20);
+    background: var(--c9-grey-20);
+}
+.btn.btn-module {
+    width:100%;
+    background: var(--c9-brick-bg);
+    border:1px solid var(--bs-primary);
+    color: var(--bs-primary);
+    text-align: start;
+}
+.btn.btn-module:hover {
+    background: var(--c9-grey-15);
+}
+/* .table th, .px-25, .py-25, .px-tiny: Bootstrap-Build (custom.scss) */
+header {
+    position: fixed;
+    left: 0; top: 0; right: 0; height: 40px;
+    background: var(--bs-primary);
+    border-bottom: 1px solid var(--camindo-primary-border-emph);
+    box-shadow: 0 3px 3px #00000044;
+    z-index: 4;
+}
+
+main {
+    position: fixed;
+    left: 0; top: 40px;
+    right: 0; bottom: 0;
+    z-index: 2;
+    overflow: hidden;
+}
+
+article {
+    position: absolute;
+    left: 0; top: 40px; right: 0; bottom: 0;
+    min-width: 200px;
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+aside {
+    position: fixed;
+    inset-inline-end: 0;
+    top: 40px; 
+    width: 0; 
+    bottom: 0;
+    background: var(--bs-warning-bg-subtle);
+    border-inline-start: 1px solid var(--bs-secondary-border-subtle);
+    z-index: 3;
+    display: none;
+}
+
+.icon-checkbox {
+    font-size:130%;
+    position:relative;
+    bottom:-3px;
+}
+.icon.icon-note {
+    font-size: 0.7rem;
+    color: var(--c9-grey-30);
+    border: 1px solid var(--c9-grey-30);    
+    width: 14px;
+    height: 14px;
+    border-radius: 50%; /* 50% ist der Standard für Kreise */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0; 
+    vertical-align: middle;
+}
+.note {
+    font-size: 0.8rem;
+    color: var(--c9-grey-30);
+    margin-top:-9px;
+}
+.note .icon-note {
+    font-size:0.7rem;
+}
+/* label, Hintergrund der Formularfelder: Bootstrap-Build (custom.scss) */
+.c9-invalid {
+    border-inline-start:4px solid #ff0000;
+}
+/* temporär hinzugefügtes Suchfeld (Suchmaske, "weitere Felder") */
+.c9-col-2.warning {
+    border-inline-start:4px solid var(--bs-warning);
+    background: var(--bs-warning-bg-subtle);
+    padding-inline-start: .5rem;
+}
+.c9-group-error,
+.c9-group-info {
+    display:block;
+    position:relative;
+    padding-inline-start:26px;
+    margin-top:6px;
+    font-size:0.9rem;
+}
+.c9-group-error,
+.c9-group-error * {
+    color:#ff0000;
+}
+.c9-group-error .icon,
+.c9-group-info .icon {
+    position:absolute;
+    inset-inline-start:0; top:0;
+    font-size:1.2rem;
+}
+/* .font-monospace, .form-label, nav: Bootstrap-Build (custom.scss) */
+
+/* Head Elements */
+
+.c9-head-btn {
+    position: relative;
+    color: white;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius:0;
+}
+.c9-head-btn:hover {
+    color:white;
+    background: #8997b5;
+}
+.c9-badge  {
+    position: absolute;
+    top:3px; inset-inline-end:0px;
+    width:16px; height:16px;
+    background: white;
+    border-radius: 50%;    
+}
+.c9-badge small {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    line-height: 1;
+    pointer-events: none;
+    color: var(--bs-primary);
+}
+
+.c9-logo {
+    font-weight: 300 !important;
+    letter-spacing:-1px;
+    text-transform: none !important; /* wie im Seitenkopf: "camindo" klein */
+    white-space: nowrap;
+    direction: ltr;
+}
+.c9-logo small {
+    font-weight: 600 !important;
+    font-size:76%; /* Versalhöhe von CMS ≈ x-Höhe von "cam" */
+    line-height: 1;
+    vertical-align: baseline !important;
+    text-transform: uppercase;
+    margin-left:1px;
+    letter-spacing:0 !important;
+}
+.c9-head-btn#c9-logo {
+    width: auto;
+    font-size: 1.4rem;
+    padding: 0 10px;
+    line-height: 40px; /* = Buttonhöhe: Text sitzt vertikal mittig, <small> auf derselben Baseline */
+    display: inline-block; /* kein Flex: align-items:baseline packt die Zeile sonst an den oberen Rand */
+    white-space: nowrap;
+    direction: ltr; /* Markenname: "camindo" + <small>CMS</small> bei dir="rtl" nicht tauschen */
+}
+
+.c9-head-btn#c9-logo small {
+    font-size: 76%;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: baseline !important; /* Überschreibt Bootstraps Standard für <small> */
+    margin-left: 1px;
+}
+#c9-trigger-container {
+    position:absolute; left:-1px; top:-1px; width:1px; height:1px;
+}
+#c9-hamburger {
+    font-size:1.2rem;
+    padding:0;
+    margin:0;
+    border-radius: 0;
+}
+#c9-menu-container {
+    display: none;
+    position: fixed;
+    z-index: 1050;
+    inset-inline-start:0;
+    top:40px;
+    width: 100%;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+/* Hauptmenü (Start/menu.php): Trennlinien ohne .dropdown-menu-Kontext */
+#c9-menu-container .dropdown-divider {
+    height: 0;
+    margin: .5rem 0;
+    border: 0;
+    border-top: 1px solid var(--bs-border-color);
+    opacity: 1;
+}
+#c9-menu-container .dropdown-item .icon {
+    font-size: 1.1em;
+    vertical-align: -.15em;
+}
+/* --- bgproc-container --- */
+#c9-bgproc-container {
+    display: none;
+    position: absolute;
+    inset-inline-end: 0;
+    top: 40px;
+    z-index: 1051;
+    width: 100%;
+    max-width: 786px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+#c9-bgproc-container ul li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 4px 8px;
+    box-sizing: border-box;
+}
+
+#c9-bgproc-container ul li > div:first-child {
+    width: calc(100% - 32px);
+}
+
+#c9-bgproc-container ul li > div:last-child {
+    width: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.c9-bgproc-headline {
+    padding: 12px 4px;
+    font-weight: bold;
+}
+
+.c9-bgproc-desc {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 2px 0;
+    font-size: 12px;
+    line-height: 100%;
+    text-transform: uppercase;
+    color: var(--bs-text-secondary);
+}
+
+.c9-bgproc-bar {
+    width: 100%;
+    height: 18px;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.c9-bgproc-bar span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: var(--bs-primary);
+    border-radius: 2px;
+    color: white;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    transition: width 0.3s ease;
+}
+
+.c9-bgproc-bar .btn,
+#c9-bgproc-container ul li > div:last-child .btn {
+    padding: 0;
+    margin: 0;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Bread Crum Navigation */
+#c9-navi {
+    position:absolute;
+    left: 0; top: 10px; right: 0;
+    height:50px;
+    min-width: 200px;
+    overflow-y: auto;
+    background: linear-gradient(
+        to bottom,
+        var(--bs-body-bg) 0,
+        var(--bs-body-bg) 35px,
+        transparent 50px
+    );
+}
+#c9-navi .container {
+    padding-top:10px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+#c9-navi, #c9-navi * {
+    font-size:0.9rem;
+    text-transform: uppercase;
+}
+#c9-navi .icon {
+    font-size:1.2rem;
+}
+.c9-navitem-separator {
+    padding:0 2px;
+    color: var(--c9-grey-50);
+    font-weight: bold;
+    font-size:inherit;
+}
+.c9-navitem-text {
+    color: #666;
+}
+a.c9-navitem-link {
+    color: rgba(var(--bs-link-color-rgb), var(--bs-link-opacity, 1));
+    text-decoration: none;
+}
+a.c9-navitem-link:hover {
+    text-decoration: underline;
+}
+
+#aside-content {
+    height: 100%;
+    overflow-y: auto;
+    padding: 25px 15px;
+}
+.aside-close-btn {
+    position:absolute;
+    top:4px; inset-inline-end:20px;
+    font-size:20px;
+    padding:3px;
+    background: var(--bs-warning-bg-subtle);
+}
+aside iframe {
+    width:100%;
+    height:100%;
+    border:none;
+    padding-inline-start:10px;
+}
+.resize-handle {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.resize-handle:hover {
+    background:rgba(0,0,0,0.1);
+}
+.resize-handle .icon {
+    font-size:16px;
+    color:#666;
+    pointer-events:none;
+    user-select:none;
+}
+.resize-overlay {
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:9999;
+    cursor:col-resize;
+    display:none;
+}
+h1 .icon {
+    font-size:80%;
+    line-height:1;
+}
+#c9-layer {
+    color:#999;
+}
+
+.c9-layer {
+    margin-top:20px;
+}
+/* Schiebe-Animation der Layer (cApp.layers._slide()): kein waagrechter Scrollbalken,
+   der geschlossene Layer bleibt als Ghost bis zum Ende stehen */
+article.c9-layers-sliding {
+    overflow-x: hidden;
+}
+.c9-layer-ghost {
+    margin-top:20px;
+    pointer-events: none;
+}
+
+#balloon-messages {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1060; /* Überlagert die meisten anderen Elemente */
+    width: 90%;
+    max-width: 450px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Abstand zwischen mehreren Nachrichten */
+    pointer-events: none;
+}
+#balloon-messages .alert {
+    pointer-events: auto;
+    margin-bottom: 0;
+}
+#balloon-messages .alert .btn {
+    position: absolute;
+    top: 5px;
+    inset-inline-end: 5px;
+    padding: 0.1rem 0.35rem;
+    line-height: 1; /* '1' ist meist besser als '1px', da es sich an der Schriftgröße orientiert */
+    border:none;
+    color:var(--c9-grey-30);
+}
+#balloon-messages .alert .btn:hover {
+    background:transparent;
+    border-color:transparent;
+    color:var(--c9-grey-90);
+}
+
+/* Einfacher Hover-Effekt für die Cards */
+.btn.btn-card {
+    display:block !important;
+    width:auto !important;
+    background: var(--c9-brick-bg);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    margin-top:8px;
+    text-align:start;
+    padding-top:10px;
+    padding-bottom:10px;
+}
+.btn-card strong {
+    font-weight: normal;
+    font-size:1.3rem;
+}
+.btn-card .card-note,
+.btn-card .card-note strong {
+    font-size:1rem;
+    color:var(--c9-grey-50);
+}
+.btn-card .card-note strong {
+    font-weight: bold;
+}
+.btn-card:hover {
+    box-shadow: 0 .15rem .5rem rgba(0,0,0,.25)!important;
+    border-color:var(--c9-grey-30);
+}
+/* Links ohne Unterstrich und in Standard-Textfarbe */
+.btn-card {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* table with context-menu */
+.c9-ctx-row {
+    user-select: none;    /* Verhindert Textmarkierung beim schnellen Rechtsklicken */
+}
+.c9-ctx-row:not(.c9-click-disabled):hover {
+    cursor: pointer;
+}
+
+.table-hover > tbody > :not(.c9-click-disabled):hover > * {
+  --bs-table-bg-state: var(--c9-table-striped-bg);
+}
+
+.c9-click-disabled:hover {
+    cursor: not-allowed; 
+}
+
+#c9-ctx-menu {
+    z-index:1050;
+    min-width: 150px;
+    display:none;
+    position: fixed;
+}
+
+.c9-col-1 {
+  flex: 0 0 190px;
+  width: 190px;
+  max-width: 190px;
+}
+
+.c9-col-2 {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.c9-col-min {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+}
+
+.c9-line-numbers, .c9-line-numbers *,
+.c9-code-grow, .c9-code-grow * {
+    font-size: 0.875rem !important;
+}
+
+.c9-input-primary,
+.c9-label-primary {
+    font-weight:bold;
+}
+
+/*
+.c9-col-1 [data-bs-toggle] {
+    cursor:help;
+}
+*/
+
+/*
+.c9-moved > td {
+  transition: box-shadow 1s;
+  box-shadow: inset 0 2px 0 var(--bs-warning), inset 0 -2px 0 var(--bs-warning) !important;
+}
+.c9-moved > td:first-child {
+  transition: box-shadow 1s;
+  box-shadow: inset 2px 2px 0 var(--bs-warning), inset 0 -2px 0 var(--bs-warning) !important;
+}
+.c9-moved > td:last-child {
+  transition: box-shadow 1s;
+  box-shadow: inset -2px 2px 0 var(--bs-warning), inset 0 -2px 0 var(--bs-warning) !important;
+}
+.c9-moved.c9-moved-active > td {
+  box-shadow: inset 0 0 0 9999px var(--bs-table-hover-bg) !important;
+}
+.c9-moved.c9-moved-active > td:first-child {
+  box-shadow: inset 0 0 0 9999px var(--bs-table-hover-bg) !important;
+}
+.c9-moved.c9-moved-active > td:last-child {
+  box-shadow: inset 0 0 0 9999px var(--bs-table-hover-bg) !important;
+}
+*/
+.c9-moved-top {
+    transition: transform 1s ease-in-out;
+    transform: translateY(40px);
+}
+.c9-moved-bottom {
+    transition: transform 1s ease-in-out;
+    transform: translateY(-40px);
+}
+.c9-moved-top.c9-animate,
+.c9-moved-bottom.c9-animate {
+    transform: translateY(0);
+}
+
+.custom-pagination {
+    background: var(--c9-brick-bg);
+    padding:4px;
+}
+.custom-pagination .page-item + .page-item {
+    margin-inline-start: 0.35rem;
+}
+/* Seitenlinks ohne Rahmen und Hintergrund */
+.custom-pagination .page-link {
+    border: none;
+    background: transparent;
+}
+.custom-pagination .page-link:hover {
+    background: #e6e6e6;
+}
+.custom-pagination .active .page-link {
+    background: #6c757d;
+}
+/* Inaktive Seitenzahlen in neutralem Grau */
+.custom-pagination .page-number .page-link {
+    border: none;
+    background: transparent;
+    color: #6c757d;
+}
+.custom-pagination .page-number .page-link:hover {
+    background-color: #e9ecef;
+}
+
+fieldset .c9-col-1 {
+  flex: 0 0 calc(190px - 0.5rem);
+  width: calc(190px - 0.5rem);
+  max-width: calc(190px - 0.5rem);
+}
+
+div.c9-info-table .row {
+  background: var(--c9-brick-bg);
+  margin-inline: 0;
+  margin-bottom: 3px;
+}
+div.c9-info-table .row td {
+    background: var(--c9-brick-bg);
+}
+
+/* Ganzer Text eines Feldes mit Editor-Extension (Backend::backendValue(), 'long') */
+.c9-rich-text > :first-child { margin-top: 0; }
+.c9-rich-text > :last-child { margin-bottom: 0; }
+.c9-rich-text h1, .c9-rich-text h2, .c9-rich-text h3,
+.c9-rich-text h4, .c9-rich-text h5, .c9-rich-text h6 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0.75rem 0 0.25rem;
+}
+.c9-rich-text h1 { font-size: 1.25rem; }
+.c9-rich-text h2 { font-size: 1.125rem; }
+.c9-rich-text img { max-width: 100%; height: auto; }
+.c9-rich-text table { border-collapse: collapse; }
+.c9-rich-text th, .c9-rich-text td { border: 1px solid var(--bs-border-color); padding: 0.125rem 0.375rem; }
+.c9-rich-text blockquote { border-inline-start: 3px solid var(--bs-border-color); padding-inline-start: 0.75rem; margin-inline: 0; }
+
+table.c9-info-table strong,
+table.c9-info-table strong * {
+    color: var(--c9-grey-50);
+}
+
+.c9-table th {
+    padding-inline-start: 0 !important;
+}
+
+.c9-table th a {
+    white-space: nowrap;
+}
+
+.c9-navtext { display: none; }
+
+/* Wichtig: Der eigentliche Login-Dialog muss über der Pflanze liegen */
+
+#login-modal.show {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: hidden; 
+    background-color: #cccccc;
+}
+#login-dialog {
+    position: relative;
+}
+/* .modal-header, .modal-body h2: Bootstrap-Build (custom.scss) */
+
+.c9-styled-code a {
+    color:#446699;
+    cursor:pointer;
+}
+.c9-command {
+    color:#a000a0;
+}
+.c9-php {
+    color:#ff8800;
+}
+
+.c9-vspace {
+    height:24px;
+    overflow:hidden;
+}
+.c9-vspace-2 {
+    height:48px;
+    overflow:hidden;
+}
+
+.c9-ctx-disabled {
+    pointer-events: auto;
+}
+
+/* xs: alle Spalten übereinander */
+@media (max-width: 575.98px) {
+  .c9-col-1,
+  .c9-col-2 {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Spinner */
+.c9-indicator {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  background: #eeeeee88;
+}
+
+.c9-indicator-inc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.c9-toggle-col-checkboxes {
+    cursor: pointer;
+}
+
+.c9-ph-img {
+    display:block;
+    position:relative;
+    width:61px;
+}
+.c9-ph-img img {
+    width:61px;
+    height:78px;
+    border:0;
+}
+.c9-ph-img span {
+    position:absolute;
+    inset-inline-start:0;
+    bottom:7px;
+    width:61px;
+    text-align:center;
+    text-transform:uppercase;
+    font-size:11px;
+    font-weight:bold;
+    font-family:sans-serif;
+    color:#664422;
+}
+
+.c9-default-col,
+.c9-default-col *,
+td.c9-default-col,
+td.c9-default-col * {
+    font-weight: bold;
+    color:var(--c9-grey-90);
+}
+
+.c9-tree {
+    position:relative;
+}
+.c9-tree > div {
+    position:absolute;
+    inset-inline-start:0;
+    top:0;
+}
+.c9-tree > div > div {
+    position:absolute;
+    inset-inline-end:0;
+    top:0;
+    width:20px;
+    font-family:monospace;
+    color:var(--c9-grey-30);
+}
+/* └ zeigt bei rtl in die andere Richtung */
+[dir="rtl"] .c9-tree > div > div {
+    transform: scaleX(-1);
+}
+
+.c9-smartrows-up { visibility:hidden; }
+.c9-smartrows-down { visibility:hidden; }
+
+.c9-spinning {
+  display: inline-block; 
+  animation: c9-spin 2s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes c9-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.c9-pulsating {
+  animation: c9-pulse 2s linear infinite;
+}
+
+@keyframes c9-pulse {
+  0% {
+    opacity:1.0;
+  }
+  60% {
+    opacity:1.0;
+  }
+  80% {
+    opacity:0.3;
+  }
+  100% {
+    opacity:1.0;
+  }
+}
+
+.c9-spinner {
+  animation: c9-spin 1s linear infinite;
+  position: absolute;
+  transform-origin: center;
+  opacity: 0.75;
+}
+
+@media (max-width: 768px) {
+    footer {
+        display:none;
+    }
+}
+/* --- Fest verknüpfte Inhalte, eingebettet (Feldtyp 'link', display_type 'embed';
+       backend-embedded.js, RecordBackendEdit::_embedBlock()) --- */
+.c9-embed-headline {
+    margin-bottom: 0.5rem;
+}
+.c9-embed-table {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+.c9-embed-cell {
+    position: relative;
+    border: 1px solid var(--c9-grey-20);
+    border-radius: var(--bs-border-radius);
+    background: var(--c9-brick-bg);
+    padding: 0.5rem 1rem 1rem 1rem;
+    margin-bottom: 0.5rem;
+    transition: border-color .15s, box-shadow .15s;
+}
+.c9-embed-cell:hover,
+.c9-embed-cell.c9-embed-active {
+    border-color: var(--c9-grey-50);
+    box-shadow: 0 0 0 1px var(--c9-grey-50);
+}
+.c9-embed-handle {
+    position: absolute;
+    top: 1px;
+    inset-inline-start: 1px;
+    z-index: 5;
+    display: none;
+}
+.c9-embed-cell:hover > .c9-embed-handle,
+.c9-embed-cell.c9-embed-active > .c9-embed-handle {
+    display: block;
+}
+.c9-embed-menu-btn {
+    padding: 2px 6px 5px 6px;
+    line-height: 1;
+}
+.c9-embed-menu-btn .icon {
+    vertical-align: middle;
+}
+.c9-embed-area-label {
+    font-size: 0.8rem;
+    color: var(--c9-grey-50);
+    text-align: end;
+    min-height: 0.5rem;
+}
+.c9-embed-fields > .row:first-child {
+    margin-top: 0 !important;
+}
+.c9-embed-cell.c9-embed-moved {
+    animation: c9-embed-flash 0.8s ease-out;
+}
+@keyframes c9-embed-flash {
+    0%   { background-color: var(--c9-table-striped-bg); }
+    100% { background-color: var(--c9-brick-bg); }
+}
+
+/* --- Info-Seite: Inhalte eines 'link'-Feldes als Blöcke (RecordBackendInfo::_infoLinkBlocks()) --- */
+.c9-info-link-block {
+    position: relative;
+    border: 1px solid var(--c9-grey-20);
+    border-radius: var(--bs-border-radius);
+    padding: 0;
+    margin-bottom: 0.5rem;
+}
+/* Edit-Button des verknüpften Datensatzes: klebt rechts oben in der Ecke,
+   darf den Inhalt überdecken */
+.c9-info-link-block > .c9-info-link-edit {
+    position: absolute;
+    top: 1px;
+    inset-inline-end: 1px;
+    z-index: 2;
+}
+div.c9-info-table .c9-info-link-block .row {
+    border-radius: var(--bs-border-radius);
+}
+
+.c9-info-link-head {
+    font-weight: bold;
+    padding: 0.25rem 0 0.5rem 0;
+    border-bottom: 1px solid var(--c9-grey-15);
+    margin-bottom: 0.25rem;
+}
+.c9-info-link-block > .row > .c9-col-1 {
+    color: var(--c9-grey-50);
+}
+
+/* Rechte-Tabellen (Gruppen-Info / Bereichsrechte, Reiter "Zugriff"): senkrechte
+   Linien zwischen den Spaltenköpfen, Gruppenzeile ohne Unterstrich */
+table.c9-access-table thead th + th {
+    border-inline-start: 1px solid var(--bs-border-color);
+}
+table.c9-access-table thead tr:first-child th {
+    border-bottom: 0;
+}
+table.c9-access-table thead tr:first-child th:empty {
+    border-inline-start: 0;
+}
+table.c9-access-table:has(tbody input[type=checkbox]) thead tr:last-child th {
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Zwei-Faktor-Anmeldung: QR-Code (cApp.ui.qrCodes) und Wiederherstellungscodes */
+.c9-totp-qr { width: 200px; max-width: 100%; aspect-ratio: 1; background: #fff; }
+.c9-totp-qr svg { display: block; width: 100%; height: auto; }
+.c9-recovery-codes { columns: 2; column-gap: 2rem; max-width: 22rem; padding-inline-start: 1.5rem; }
+.c9-recovery-codes li { font-family: var(--bs-font-monospace); letter-spacing: .05em; }
+
+/* --- Handbücher (Core/docs/index.php) --- */
+.c9-docs {
+    max-width: 60rem;
+    --bs-code-color: #a000a0; /* Inline-Code wie .c9-command statt Bootstrap-Pink */
+}
+.c9-docs h3 code,
+.c9-docs td code {
+    --bs-code-color: #222;
+    background:none;
+}
+
+.c9-docs h1 { font-size: 1.75rem; margin: 1rem 0 1rem; }
+.c9-docs h2 { font-size: 1.6rem; margin: 2rem 0 .75rem; }
+.c9-docs h3 { font-size: 1.45rem; margin: 1.5rem 0 .5rem; }
+.c9-docs h4, .c9-docs h5, .c9-docs h6 { font-size: 1.30rem; margin: 1.25rem 0 .5rem; }
+.c9-docs h1, .c9-docs h2, .c9-docs h3, .c9-docs h4 { scroll-margin-top: 1rem; }
+.c9-docs table {
+    border-collapse: collapse;
+    margin: 0 0 1rem;
+    display: block;
+    overflow-x: auto;
+}
+.c9-docs th, .c9-docs td {
+    border: 1px solid var(--bs-border-color);
+    padding: .3rem .6rem;
+    vertical-align: top;
+}
+.c9-docs th:first-child, .c9-docs td:first-child {
+    white-space:nowrap;
+}
+.c9-docs th { background: var(--bs-tertiary-bg); }
+.c9-docs pre {
+    background: var(--bs-tertiary-bg);
+    padding: .75rem 1rem;
+    border-radius: .375rem;
+    overflow-x: auto;
+    font-size: 1em;
+}
+.c9-docs code { font-size: .88em; margin-left: 0.1em}
+.c9-docs em { margin-right:0.1rem; }
+.c9-docs blockquote {
+    border-inline-start: 4px solid var(--bs-border-color);
+    padding: .25rem 0;
+    padding-inline-start: 1rem;
+    color: var(--bs-secondary-color);
+}
+.c9-docs .c9-docs-icon {
+    font-size: 1.2em;
+    vertical-align: -.2em;
+}
+.c9-docs-hits li { margin-bottom: .75rem; }
+.c9-docs-index dt { font-weight: 600; margin-top: .5rem; }
+.c9-docs-index dd { margin-inline-start: 1.25rem; margin-bottom: .25rem; }
+.c9-docs-letters a { display: inline-block; min-width: 1.5rem; text-align: center; }
+/* Zurück/Weiter unter einer Handbuchseite (DocsBackend::_pager()) */
+.c9-docs-pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--bs-border-color);
+}
+.c9-docs-pager a {
+    display: flex; align-items: center; gap: .5rem; max-width: 48%;
+    text-decoration: none;
+}
+.c9-docs-pager-next { margin-inline-start: auto; text-align: end; }
+.c9-docs-pager-label { display: block; font-size: .8125em; color: var(--bs-secondary-color); }
+.c9-docs-pager-title { display: block; }
+
+/* Druckansicht eines ganzen Handbuchs (Docs/print.php): eigene Seite ohne Backend-Rahmen,
+   jedes Kapitel beim Drucken auf neuer Seite */
+body.c9-docs-print { height: auto; overflow: visible; --bs-body-bg: #fff; background: #fff; }
+.c9-docs-print .c9-docs { margin: 0 auto; padding: 1rem 16px 3rem; }
+.c9-docs-print .c9-docs :is(h1, h2, h3, h4) { scroll-margin-top: 4.5rem; }
+.c9-docs-print-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem 1rem;
+    padding: .5rem 16px;
+    background: var(--bs-body-bg);
+    border-bottom: 1px solid var(--bs-border-color);
+}
+.c9-docs-print-meta { color: var(--bs-secondary-color); font-size: .875em; }
+.c9-docs-chapter + .c9-docs-chapter {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--bs-border-color);
+}
+@media print {
+    @page { margin: 18mm 16mm; }
+    /* Bedienelemente nie drucken - auch nicht über den Druckbefehl des Browsers
+       (d-print-none allein reicht nicht, falls Bootstrap fehlt oder überschrieben wird) */
+    .c9-docs-print-bar, .c9-docs-head, .c9-docs-pager, .c9-docs-letters { display: none !important; }
+    /* 9 pt Grundschrift; Überschriften relativ dazu statt in rem */
+    .c9-docs-print .c9-docs { max-width: none; padding: 0; font-size: 9pt; }
+    .c9-docs-print .c9-docs h1 { font-size: 1.75em; }
+    .c9-docs-print .c9-docs h2 { font-size: 1.6em; }
+    .c9-docs-print .c9-docs h3 { font-size: 1.45em; }
+    .c9-docs-print .c9-docs :is(h4, h5, h6) { font-size: 1.3em; }
+    .c9-docs-chapter + .c9-docs-chapter { break-before: page; margin-top: 0; padding-top: 0; border-top: 0; }
+    .c9-docs :is(h1, h2, h3, h4, h5, h6) { break-after: avoid; }
+    .c9-docs :is(pre, blockquote, tr) { break-inside: avoid; }
+    /* Nichts darf breiter als die Seite sein - sonst verkleinert der Browser alles */
+    .c9-docs table { display: table; overflow: visible; width: 100%; }
+    .c9-docs :is(th, td, code, a) { overflow-wrap: anywhere; }
+    .c9-docs pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
+    .c9-docs a { color: inherit; text-decoration: none; }
+}

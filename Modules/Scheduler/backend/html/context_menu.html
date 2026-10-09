@@ -1,0 +1,9 @@
+<div class="c9-ctx-menu dropdown-menu shadow">
+    <a class="dropdown-item" data-action="Scheduler/scheduler_edit.php?id=#"><span class="icon" aria-hidden="true">edit</span> {#button_edit}</a>
+    <a class="dropdown-item" data-action="Scheduler/scheduler_edit.php?id=#&function=copy"><span class="icon" aria-hidden="true">content_copy</span> {#button_copy}</a>
+    <a class="dropdown-item" data-action="Scheduler/scheduler_run.php?id=#" data-method="post"><span class="icon" aria-hidden="true">play_arrow</span> {#scheduler.button_run}</a>
+    <a class="dropdown-item" data-ctx="disable" data-action="Scheduler/scheduler_toggle.php?id=#&enabled=0" data-method="post"><span class="icon" aria-hidden="true">pause</span> {#scheduler.button_disable}</a>
+    <a class="dropdown-item" data-ctx="enable" data-action="Scheduler/scheduler_toggle.php?id=#&enabled=1" data-method="post"><span class="icon" aria-hidden="true">play_circle</span> {#scheduler.button_enable}</a>
+    <div class="dropdown-divider"></div>
+    <a class="dropdown-item text-danger" data-action="Scheduler/scheduler_edit.php?id=#&function=delete"><span class="icon" aria-hidden="true">delete</span> {#button_delete}</a>
+</div>

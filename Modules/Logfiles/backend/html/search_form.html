@@ -1,0 +1,23 @@
+<form action="Logfiles/index.php" method="post" class="mt-2 mb-3">
+<div class="row g-2 align-items-end">
+    <div class="col-12 col-md-3">
+        <label class="form-label" for="c9-logfiles-name">{#logfiles.label_name}</label>
+        <select class="form-select" id="c9-logfiles-name" name="name">{name_options}</select>
+    </div>
+    <div class="col-12 col-md-3">
+        <label class="form-label" for="c9-logfiles-date">{#logfiles.label_date}</label>
+        <select class="form-select" id="c9-logfiles-date" name="date">{date_options}</select>
+    </div>
+    <div class="col-12 col-md-3">
+        <label class="form-label" for="c9-logfiles-category">{#logfiles.label_category}</label>
+        <select class="form-select" id="c9-logfiles-category" name="category">{category_options}</select>
+    </div>
+    <div class="col-12 col-md-3">
+        <label class="form-label" for="c9-logfiles-search">{#logfiles.label_search}</label>
+        <input type="text" class="form-control" id="c9-logfiles-search" name="search" value="{search}">
+    </div>
+</div>
+<div class="mt-2">
+    <button type="submit" class="btn btn-primary"><span class="icon" aria-hidden="true">search</span> {#button_search}</button>
+</div>
+</form>

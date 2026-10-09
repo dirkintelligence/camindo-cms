@@ -1,0 +1,13 @@
+<div class="row mt-3">
+    <div class="c9-col-1">{#area.headline_field_convert_current}</div>
+    <div class="c9-col-2 pt-1 pb-1">{current}</div>
+</div>
+<div class="row mt-2">
+    <div class="c9-col-1">{#area.headline_field_convert_target}</div>
+    <div class="c9-col-2 pt-1 pb-1"><strong>{target}</strong></div>
+</div>
+{warning}
+<div class="mt-4 d-flex gap-2 flex-wrap">
+    <button type="submit" class="btn btn-primary"><span class="icon" aria-hidden="true">swap_horiz</span> {#area.button_change_type}</button>
+    <button type="button" onclick="cApp.layers.replace('Area/field_convert.php?id={id}')" class="btn btn-light">{#button_back}</button>
+</div>

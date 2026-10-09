@@ -1,0 +1,23 @@
+<form action="Privacy/export.php" method="post">
+<input type="hidden" name="kind" value="{kind}">
+<input type="hidden" name="id" value="{id}">
+<input type="hidden" name="function" value="export">
+{template}
+<div class="alert alert-warning">{#privacy.note_export_partial}</div>
+<div class="alert alert-danger">
+    <div class="fw-semibold mb-1"><span class="icon" aria-hidden="true">warning</span> {#privacy.headline_export_warning}</div>
+    <ul class="mb-0">
+        <li>{#privacy.note_export_warning_authorized}</li>
+        <li>{warning}</li>
+    </ul>
+</div>
+<p class="form-text">{#privacy.note_export_file}</p>
+<div class="form-check mt-3">
+    <input class="form-check-input" type="checkbox" name="authorized" value="1" id="c9-privacy-authorized" required>
+    <label class="form-check-label" for="c9-privacy-authorized">{#privacy.label_export_authorized}</label>
+</div>
+<div class="mt-3 d-flex gap-2 flex-wrap">
+    <button type="submit" class="btn btn-primary"><span class="icon" aria-hidden="true">download</span> {#privacy.button_export_create}</button>
+    <button type="button" onclick="cApp.layers.close()" class="btn btn-light">{#button_cancel}</button>
+</div>
+</form>

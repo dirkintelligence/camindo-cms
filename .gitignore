@@ -1,0 +1,3 @@
+.DS_Store
+# Entwicklungsdaten (Admins, Zugangsdaten, Inhalte) - nur lokal, schema export erzeugt sie neu
+install/database/dev.sql

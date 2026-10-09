@@ -1,0 +1,40 @@
+<form action="Audit/index.php" method="post" class="mt-2 mb-3">
+<div class="row g-2 align-items-end">
+    <div class="col-6 col-md-2">
+        <label class="form-label" for="c9-audit-from">{#audit.label_from}</label>
+        <input type="date" class="form-control" id="c9-audit-from" name="from" value="{from}">
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label" for="c9-audit-to">{#audit.label_to}</label>
+        <input type="date" class="form-control" id="c9-audit-to" name="to" value="{to}">
+    </div>
+    <div class="col-12 col-md-2">
+        <label class="form-label" for="c9-audit-admin">{#audit.label_admin}</label>
+        <select class="form-select" id="c9-audit-admin" name="admin_id">{admin_options}</select>
+    </div>
+    <div class="col-12 col-md-2">
+        <label class="form-label" for="c9-audit-action">{#audit.label_action}</label>
+        <select class="form-select" id="c9-audit-action" name="action">{action_options}</select>
+    </div>
+    <div class="col-8 col-md-2">
+        <label class="form-label" for="c9-audit-type">{#audit.label_object_type}</label>
+        <select class="form-select" id="c9-audit-type" name="object_type">{type_options}</select>
+    </div>
+    <div class="col-4 col-md-2">
+        <label class="form-label" for="c9-audit-id">{#audit.label_object_id}</label>
+        <input type="number" min="1" class="form-control" id="c9-audit-id" name="object_id" value="{object_id}">
+    </div>
+    <div class="col-12 col-md-6">
+        <label class="form-label" for="c9-audit-search">{#audit.label_search}</label>
+        <input type="text" class="form-control" id="c9-audit-search" name="search" value="{search}" placeholder="{#audit.placeholder_search}">
+    </div>
+    <div class="col-12 col-md-6">
+        <label class="form-label" for="c9-audit-field">{#audit.label_field}</label>
+        <input type="text" class="form-control" id="c9-audit-field" name="field" value="{field}" placeholder="{#audit.placeholder_field}">
+    </div>
+</div>
+<input type="hidden" name="function" value="search">
+<div class="mt-2">
+    <button type="submit" class="btn btn-primary"><span class="icon" aria-hidden="true">search</span> {#button_search}</button>
+</div>
+</form>

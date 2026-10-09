@@ -1,0 +1,9 @@
+<form action="Admin/devices.php" method="post">
+<div class="alert alert-danger">{#admin.alert_devices_remove_all}</div>
+<input type="hidden" name="function" value="remove_all">
+<input type="hidden" name="id" value="{id}">
+<div class="mt-4 d-flex gap-2 flex-wrap">
+    <button type="submit" class="btn btn-danger">{#admin.button_devices_remove_all}</button>
+    <button type="button" onclick="cApp.layers.replace('Admin/devices.php?id={id}')" class="btn btn-light">{#button_cancel}</button>
+</div>
+</form>

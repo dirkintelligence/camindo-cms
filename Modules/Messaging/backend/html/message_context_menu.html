@@ -1,0 +1,8 @@
+<div class="c9-ctx-menu dropdown-menu shadow">
+    <a class="dropdown-item" data-action="Messaging/message_edit.php?box={box}&id=#"><span class="icon" aria-hidden="true">edit</span> {#button_edit}</a>
+    {read_items}
+    <a class="dropdown-item" data-action="Messaging/message_edit.php?function=forward&id=#"><span class="icon icon-dir" aria-hidden="true">forward</span> {#messaging.button_forward}</a>
+    <div class="dropdown-divider"></div>
+    <a class="dropdown-item text-danger" data-action="Messaging/message_edit.php?function=delete&box={box}&id=#"><span class="icon" aria-hidden="true">delete</span> {#button_delete}</a>
+</div>
+<div id="c9-message-action" class="d-none"></div>

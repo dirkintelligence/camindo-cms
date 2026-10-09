@@ -1,0 +1,14 @@
+<form action="Snippets/snippet_edit.php" method="post" class="c9-snippets-edit">
+<input type="hidden" name="function" value="save">
+<input type="hidden" name="instance_id" value="{instance_id}">
+<input type="hidden" name="new" value="{new}">
+{key_field}
+{language_blocks}
+<div class="row mt-5">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary">{#button_save}</button>
+        <button type="button" onclick="cApp.layers.close()" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</div>
+</form>

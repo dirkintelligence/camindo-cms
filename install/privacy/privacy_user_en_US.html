@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+    camindo CMS - template of the personal data export about a website user, file
+    auskunft.html in the zip (module Privacy). Minimal default from
+    Core/install/privacy. The export is a partial extract: complete it before handing
+    it to the data subject (legal bases, server log files outside the CMS, accounting
+    systems …).
+
+    Templates are maintained per kind (website users / users), instance and language
+    in the module Privacy (tab "Templates"); a new template is prefilled with
+    privacy_user_{language}.html from Core/install/privacy, otherwise with this file.
+    The report is created in the language of the chosen template. Without a template for the instance of a
+    profile there is no export.
+
+    {name}                          placeholder (unknown names stay as they are)
+    {#module.key}                   language snippet in the language of the template
+    <!- - if:NAME - -> … <!- - endif:NAME - ->   (without the blanks) only if NAME applies
+
+    Conditions:  audit  audit_changes_limited  audit_changes_unlimited
+                 audit_deleted_limited  logcleanup  no_logcleanup  dbbackup  no_dbbackup
+                 messages_limited  ip_v4_one  ip_v4_two
+
+    Values:
+        {lang} {dir} {subject} {subject_id} {created}
+        {domain}   (primary domain of the instance)   {instance}   (its label)
+        {trash_days} {device_days} {ip_days} {ip_v4_octets} {message_days}
+        {audit_changes_days} {audit_deleted_days} {session_hours} {session_minutes}
+        {basket_days} {unconfirmed_days} {export_hours}
+        {backups}   (number of database backups kept by task "Database backup", empty without)
+        {log_days} {security_days} {attempt_days}   (empty without task "Clean up logs")
+    Blocks:
+        {profile} {contents} (by area) {references} {second_factor} {tokens}
+        {basket} {files} {audit} {retention}
+        {purged}          (permanently deleted contents still linked in the audit log)
+        {devices} {sessions}   (each followed by its retention period)
+        {login_attempts}  (failed logins and codes, with the day of deletion)
+        {log_lines}       (lines of the security and mail logs naming the user)
+        {delete_policy}   (the delete policy of the profile area, one line per block)
+    Other persons appear only as "Admin", "User" or "System"; shortened IP addresses
+    with "xxx" in place of the removed digits.
+-->
+<html lang="{lang}" dir="{dir}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal data – {subject}</title>
+<style>
+body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d1d1f;background:#fff;max-width:960px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.6rem}h2{font-size:1.2rem;margin-top:2rem;border-bottom:1px solid #ccc}
+table{border-collapse:collapse;width:100%}th,td{text-align:start;vertical-align:top;border-bottom:1px solid #e5e5e5;padding:.3rem .5rem}
+th{width:30%}td{white-space:pre-wrap;word-break:break-word}.muted{color:#666}.badge{font-size:.8rem;border:1px solid #bbb;border-radius:4px;padding:0 .3rem}
+</style></head><body>
+<h1>Personal data stored about you</h1>
+<p class="muted">Art. 15 GDPR. daten.json contains the same data in machine-readable form (Art. 20 GDPR).</p>
+<table>
+<tr><th>Data subject</th><td>{subject} (#{subject_id})</td></tr>
+<tr><th>Controller</th><td>{domain}</td></tr>
+<tr><th>Created</th><td>{created}</td></tr>
+</table>
+
+<h2>Your account</h2>
+{profile}
+<h2>Your contents</h2>
+{contents}
+<h2>Deleted contents still in the change log</h2>
+{purged}
+<h2>Records related to your account</h2>
+{references}
+<h2>Known devices</h2>
+{devices}
+<h2>Sessions</h2>
+{sessions}
+<h2>Second factor</h2>
+{second_factor}
+<h2>Open links</h2>
+{tokens}
+<h2>Basket</h2>
+{basket}
+<h2>Failed sign-ins</h2>
+{login_attempts}
+<h2>Log files</h2>
+{log_lines}
+<h2>Files</h2>
+{files}
+<h2>Change log</h2>
+{audit}
+<h2>On deletion</h2>
+{delete_policy}
+
+
+<h2>Retention</h2>
+{retention}
+<p class="muted">IP addresses are shortened after {ip_days} days.</p>
+</body></html>

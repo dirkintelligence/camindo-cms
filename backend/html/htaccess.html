@@ -1,0 +1,20 @@
+## CAMINDO SYNTAX START
+## ----------------------------------------------
+## Do not change manually within this block!
+## Block is created by modules > tools > refresh
+## ----------------------------------------------
+
+## CAMINDO MODULE CALL
+RewriteRule ^backendModules/(.*)$ /backend/module.php?_path=$1 [QSA,L]
+RewriteRule ^backendExtensions/(.*)$ /backend/module.php?_ext=$1 [QSA,L]
+
+## CAMINDO MULTILANG
+## language/dataset - language code: xx, xx-XX or xx_XX (table `language`.`code`)
+RewriteRule ^([a-zA-Z]{2}(?:[-_][a-zA-Z]{2})?)/(.*)$ /index.php?lang=$1&request=$2 [QSA,L]
+
+## CAMINDO UNILANG
+## dataset
+{exclusions}RewriteRule ^(.*)$ /index.php?request=$1 [QSA,L]
+
+## CAMINDO SYNTAX CHECKSUM:{checksum}
+## CAMINDO SYNTAX END

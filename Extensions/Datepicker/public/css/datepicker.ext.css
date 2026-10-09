@@ -1,0 +1,10 @@
+/* Extension Datepicker: Kalender- und Zeitfeld rechts neben dem Textfeld */
+.c9-datepicker-input { display: inline-block; width: auto; min-width: 14rem; vertical-align: middle; }
+.c9-datepicker-picker, .c9-datepicker-time { display: inline-block; width: auto; margin-inline-start: .5rem; padding: .375rem .5rem; border: 1px solid var(--bs-border-color, #ced4da); border-radius: .375rem; background: var(--bs-body-bg, #fff); color: inherit; vertical-align: middle; }
+.c9-datepicker-picker { min-width: 9rem; cursor: pointer; }
+.datepicker-dropdown { z-index: 1090; }
+/* Schaltflächen randlos als btn-light: die Farben von datepicker-bs5 (fest #fff) überstimmen */
+.datepicker .datepicker-controls .btn { background-color: var(--bs-btn-bg); border-color: transparent; color: var(--bs-btn-color); }
+.datepicker .datepicker-controls .btn:hover, .datepicker .datepicker-controls .btn:focus { background-color: var(--bs-btn-hover-bg); border-color: transparent; color: var(--bs-btn-hover-color); }
+.datepicker .datepicker-controls .btn:not(:disabled):active { background-color: var(--bs-btn-active-bg); border-color: transparent; color: var(--bs-btn-active-color); }
+.datepicker .datepicker-controls .prev-button .icon, .datepicker .datepicker-controls .next-button .icon { vertical-align: -18%; }

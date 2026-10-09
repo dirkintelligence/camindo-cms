@@ -1,0 +1,17 @@
+<form action="Admin/totp.php" method="post">
+<div class="alert alert-warning">{text}</div>
+<div class="row mt-2">
+    <div class="c9-col-1 pt-1"><label for="passkey-password">{#admin.field_admin_password_current}</label></div>
+    <div class="c9-col-2 pt-1 pb-1"><input type="password" class="form-control" id="passkey-password" name="password_current" value=""
+        autocomplete="current-password"></div>
+</div>
+<input type="hidden" name="function" value="{function}">
+<input type="hidden" name="passkey_id" value="{passkey_id}">
+<div class="row mt-5">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-{style}">{button}</button>
+        <button type="button" onclick="cApp.layers.replace('Admin/totp.php')" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</div>
+</form>

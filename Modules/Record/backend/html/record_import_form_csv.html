@@ -1,0 +1,21 @@
+<div class="mb-4">{info}</div>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_csv_settings}</legend>
+{data_csv_separator}
+{data_csv_enclosure}
+{data_csv_eol}
+<div class="form-check form-switch mt-3">
+  <input class="form-check-input" type="checkbox" name="data[csv][stored]" value="1" id="c9-import-stored"{checked_stored}>
+  <label class="form-check-label" for="c9-import-stored">{#record.label_import_stored}</label>
+  <div class="form-text">{#record.note_import_stored}</div>
+</div>
+<div class="mt-2"><button type="submit" onclick="$(this.form).removeAttr('data-layer').find('input[name=function]').val('analyze')" class="btn btn-secondary btn-sm"><span class="icon" aria-hidden="true">refresh</span> {#record.button_import_reread}</button></div>
+</fieldset>
+<fieldset class="mb-4">
+<legend class="fs-6 fw-bold">{#record.label_import_mapping}</legend>
+<div class="form-text mb-2">{#record.note_import_mapping}</div>
+{mapping}
+</fieldset>
+{mode}
+{placement}
+{options}

@@ -1,0 +1,20 @@
+<h4 class="mt-4">{#tools.headline_trash}</h4>
+<p class="c9-grey-50">{#tools.note_trash}</p>
+{report}
+<form action="Tools/tool_delete.php" method="post">
+<input type="hidden" name="function" value="run">
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><label for="c9-trash-days">{#tools.label_trash_days}</label></div>
+    <div class="c9-col-2">
+        <input type="number" class="form-control" id="c9-trash-days" name="days" min="0" step="1" value="{days}" style="max-width: 8em">
+        <div class="form-text">{#tools.note_trash_days}</div>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-danger" onclick="return confirm(this.dataset.confirm);" data-confirm="{#tools.confirm_trash}"><span class="icon" aria-hidden="true">delete_forever</span> {#tools.button_trash_run}</button>
+    </div>
+</div>
+</form>
+<br>

@@ -1,0 +1,16 @@
+<form action="Admin/totp.php" method="post">
+<p>{text}</p>
+<div class="row mt-2">
+    <div class="c9-col-1 pt-1"><label for="totp-code">{#admin.label_email_code}</label></div>
+    <div class="c9-col-2 pt-1 pb-1"><input type="text" class="form-control" id="totp-code" name="code" value=""
+        maxlength="5" inputmode="numeric" autocomplete="one-time-code" spellcheck="false"></div>
+</div>
+<input type="hidden" name="function" value="{function}">
+<div class="row mt-5">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-{style}">{button}</button>
+        <button type="button" onclick="cApp.layers.replace('Admin/totp.php')" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</div>
+</form>

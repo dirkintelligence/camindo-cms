@@ -1,0 +1,20 @@
+    <div class="row mb-3">
+      <div class="col-sm-9 offset-sm-3">{text}</div>
+    </div>
+    <div class="row mb-3">
+      <label for="login-code" class="col-sm-3 col-form-label">{#start.label_login_code}</label>
+      <div class="col-sm-9">
+        <input name="code" value="" type="text" class="form-control" id="login-code"
+               inputmode="{inputmode}" maxlength="{maxlength}"
+               autocomplete="one-time-code" spellcheck="false">
+      </div>
+    </div>
+
+  </div><!-- .modal-body -->
+  <div class="modal-footer text-end">
+    <input type="hidden" name="function" value="step2">
+    <input type="hidden" name="uid" value="{uid}">
+    <input type="hidden" name="backend_code" value="{backend_code}">
+    <input type="hidden" name="timezone" value="{timezone}">
+    <input type="hidden" name="locale" value="{locale}">
+    <button type="submit" class="btn btn-primary">{#button_submit}</button>

@@ -1,0 +1,10 @@
+<form action="Privacy/export.php" method="post">
+<input type="hidden" name="kind" value="user">
+<input type="hidden" name="function" value="confirm">
+<p>{#privacy.note_export_user}</p>
+<div class="mb-3" style="max-width: 40em">
+    <div class="form-label">{#privacy.label_profile}</div>
+    {picker}
+</div>
+<button type="submit" class="btn btn-primary">{#privacy.button_continue}</button>
+</form>

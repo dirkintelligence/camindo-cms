@@ -1,0 +1,17 @@
+# camindo/project - was nicht ins Projekt-Git gehört
+/.camindo.php
+/.camindo.key
+/.sqlpwd
+/vendor/
+/Core/
+/Modules/*/
+/Processors/*/
+/Extensions/*/
+/var/*
+!/var/.gitkeep
+/public/media/*
+!/public/media/.gitkeep
+/public/backend/assets
+/public/backend/ext/
+/public/.htaccess
+# composer.lock GEHÖRT ins Git (Rollback-Weg, 14 §6.6)

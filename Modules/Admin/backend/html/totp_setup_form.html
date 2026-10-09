@@ -1,0 +1,25 @@
+<form action="Admin/totp.php" method="post">
+<p>{#admin.text_totp_setup}</p>
+<div class="row mt-2">
+    <div class="c9-col-1 pt-1">{#admin.label_totp_qr}</div>
+    <div class="c9-col-2 pt-1 pb-1"><div class="c9-totp-qr" data-c9-qr="{uri}"></div></div>
+</div>
+<div class="row mt-2">
+    <div class="c9-col-1 pt-1">{#admin.label_totp_secret}</div>
+    <div class="c9-col-2 pt-1 pb-1"><code class="user-select-all">{secret}</code></div>
+</div>
+<div class="row mt-2">
+    <div class="c9-col-1 pt-1"><label for="totp-code">{#admin.label_totp_code}</label></div>
+    <div class="c9-col-2 pt-1 pb-1"><input type="text" class="form-control" id="totp-code" name="code" value=""
+        inputmode="numeric" maxlength="7" autocomplete="one-time-code" spellcheck="false"></div>
+</div>
+<input type="hidden" name="function" value="enable">
+<input type="hidden" name="token" value="{token}">
+<div class="row mt-5">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary">{#admin.button_totp_enable}</button>
+        <button type="button" onclick="cApp.layers.replace('Admin/totp.php')" class="btn btn-light">{#button_cancel}</button>
+    </div>
+</div>
+</form>

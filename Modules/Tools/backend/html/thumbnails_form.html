@@ -1,0 +1,30 @@
+<form action="Tools/tool_thumbnails.php" method="post">
+<input type="hidden" name="function" value="run">
+<h4 class="mt-4">{#tools.headline_thumbnails}</h4>
+<p class="c9-grey-50">{#tools.note_thumbnails}</p>
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><label for="c9-thumbnails-area">{#tools.label_thumbnails_area}</label></div>
+    <div class="c9-col-2">
+        <select class="form-select" id="c9-thumbnails-area" name="area_id">
+            {options}
+        </select>
+    </div>
+</div>
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="background" value="1" id="c9-thumbnails-background"{checked}>
+            <label class="form-check-label" for="c9-thumbnails-background">{#record.label_batch_background}</label>
+            <div class="form-text">{#tools.note_thumbnails_background}</div>
+        </div>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-primary"{disabled}><span class="icon" aria-hidden="true">autorenew</span> {#tools.button_thumbnails_run}</button>
+    </div>
+</div>
+</form>
+<br>

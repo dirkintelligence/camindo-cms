@@ -1,0 +1,11 @@
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <label class="form-label small c9-grey-50" for="c9-search-add-field">{#record.label_more_fields}</label>
+        <div class="input-group">
+            <select class="form-select" name="add_field" id="c9-search-add-field">
+{options}            </select>
+            <button type="button" class="btn btn-secondary" onclick="const f=this.form; f.querySelector('input[name=function]').value='add_field'; f.requestSubmit();"><span class="icon" aria-hidden="true">add</span> {#record.button_add_field}</button>
+        </div>
+    </div>
+</div>

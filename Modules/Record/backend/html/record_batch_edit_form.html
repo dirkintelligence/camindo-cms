@@ -1,0 +1,24 @@
+<p>{#record.note_batch_edit}</p>
+<p class="small c9-grey-50">{#record.note_batch_edit_files}</p>
+<script>
+(function(){
+    // Eine Eingabe hakt ihr Feld automatisch an - bei mehrsprachigen Feldern
+    // (data[name][language_id]) die Checkbox ihrer Sprache
+    const $form = $('article .c9-layer:last form').last();
+    const check = (selector, lang) => {
+        let $boxes = $form.find('.c9-batch-check' + selector);
+        if (lang) $boxes = $boxes.filter('[data-lang="' + lang + '"]');
+        $boxes.prop('checked', true);
+    };
+    $form.on('input change', ':input:not(.c9-batch-check)', function () {
+        const m = /^data\[([a-z0-9_]+)\](?:\[(\d+)\])?/.exec(this.name || '');
+        if (m) check('[data-field="' + m[1] + '"]', m[2] || '');
+    });
+    // Lookup- und Upload-Felder arbeiten per Ajax an der Vorlage: jeder Klick auf
+    // ihre Buttons (Suchen, Anlegen, Leeren, Datei entfernen, Server-Datei) zählt
+    $form.on('click', '.c9-lookup-field button, .c9-upload-field button', function () {
+        const $field = $(this).closest('.c9-lookup-field, .c9-upload-field');
+        check('[data-field-id="' + $field.data('src-field') + '"]', String($field.data('lang') || ''));
+    });
+})();
+</script>
