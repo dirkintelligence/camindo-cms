@@ -1,9 +1,9 @@
 <?php
-// Core-Extension Snippets: Snippet-Auswahl neben einem Textfeld - Suchfenster über
-// alle Snippets des Caches (Core, Module, Prozessoren, Extensions, projekteigene
-// Sets des Moduls Snippets); die Auswahl schreibt '#'+Snippet-Id ins Feld, das
-// Suffix zeigt den aufgelösten Text (docs/developers/13-component-management.md, 3.7).
-// Standard für die 'label'-Felder der Module.
+// Core extension Snippets: snippet picker next to a text field - search window over
+// all snippets in the cache (core, modules, processors, extensions, project-specific
+// sets of the module Snippets); the selection writes '#'+snippet id into the field, the
+// suffix shows the resolved text (developer docs, chapter 08 (Components and extensions)).
+// Default for the 'label' fields of the modules.
 return [
     'version'       => '9.0.0',
     'type'          => 'picker',

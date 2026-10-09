@@ -1,25 +1,25 @@
 <?php
 /**
- * Inhalt des Reiters "Entwickler" im Werkzeugkasten.
+ * Content of the "Developer" tab in the toolbox.
  *
- * Drei Knöpfe, alle öffnen ihr Werkzeug im Aside-Bereich (der schmalen Spalte rechts),
- * damit die Ausgabe live mitläuft:
+ * Three buttons; all of them open their tool in the aside area (the narrow column on the right),
+ * so that the output is shown live:
  *
  *     Tools/tool_snippets.php   -> ToolSnippets::buildSnippetCache()
  *     Tools/tool_html.php       -> ToolHtmlTemplates::buildTemplateCache()
  *     Tools/tool_instances.php  -> InstanceCache::rebuild()
  *     Tools/tool_templates.php  -> Template::rebuildFiles()
  *     Tools/tool_media.php      -> MediaAccess::rebuildAll() + rebuildFieldProtection()
- *     Tools/tool_docs.php       -> docsIndex(): Such- und Stichwortindex der Handbücher
+ *     Tools/tool_docs.php       -> docsIndex(): search and keyword index of the manuals
  *     Tools/tool_info.php       -> ToolInfo::debugSessionData()
  *
- * Die beiden Cache-Werkzeuge muss man nach JEDER Änderung an einer lang/- oder
- * html/-Datei aufrufen - Snippets und Vorlagen kommen zur Laufzeit ausschließlich aus
- * dem Cache (docs/developers/03-backend-entwicklung.md).
+ * The two cache tools must be run after EVERY change to a lang/- or
+ * html/ file - snippets and templates come at runtime exclusively from
+ * the cache (developer docs, chapter 05 (Backend development)).
  *
- * Die Beschriftungen stehen hier als englischer Klartext in den snippet()-Aufrufen.
- * Ein nicht gefundener Schlüssel gibt sich selbst aus - deshalb erscheint der Text
- * trotzdem lesbar, übersetzt wird er aber nicht.
+ * The labels here are English plain text in the snippet() calls.
+ * A key that is not found outputs itself - therefore the text appears readable,
+ * but it is not translated.
  *
  * @see Camindo\Core\Modules\Tools\ToolsBackend
  */
@@ -40,10 +40,10 @@ class ToolDeveloper {
     }
 
     /**
-     * Knopfleiste des Entwickler-Reiters ausgeben.
+     * Output the button bar of the Developer tab.
      */
     public function list() {
-        // Zusatzrecht "developer" (Backend-Benutzergruppen)
+        // Additional right "developer" (backend user groups)
         $this->accessGuard('developer');
 
         // icon
@@ -62,19 +62,19 @@ class ToolDeveloper {
         $labelHtml = $this->cms->snippet('Renew backend-template cache');
         $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_html.php', 500);", $iconCached . ' ' . $labelHtml);        
 
-        // Instanz-Cache refresh (var/cache/instances.php, instance-{id}.php)
+        // Instance cache refresh (var/cache/instances.php, instance-{id}.php)
         $labelHtml = $this->cms->snippet('Renew instance cache');
         $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_instances.php', 500);", $iconCached . ' ' . $labelHtml);        
 
-        // Kompilierte Frontend-Templates (var/php/{area_id}/{name}.php)
+        // Compiled frontend templates (var/php/{area_id}/{name}.php)
         $labelHtml = $this->cms->snippet('Rebuild template files');
         $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_templates.php', 500);", $iconCached . ' ' . $labelHtml);
 
-        // Medien-Sperren (.htaccess je Instanz-Verzeichnis und je Feld mit user_auth)
+        // Media locks (.htaccess per instance directory and per field with user_auth)
         $labelHtml = $this->cms->snippet('Renew media htaccess');
         $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_media.php', 500);", $iconCached . ' ' . $labelHtml);
 
-        // Handbücher: Such- und Stichwortindex aus Core/docs neu aufbauen
+        // Manuals: rebuild search and keyword index from Core/docs
         $labelHtml = $this->cms->snippet('Index manuals');
         $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_docs.php', 500);", $iconCached . ' ' . $labelHtml);
 
@@ -86,8 +86,8 @@ class ToolDeveloper {
 
     }
     /**
-     * Such- und Stichwortindex der Handbücher neu aufbauen (Tools/tool_docs.php,
-     * Modules\Docs\Docs::rebuildIndex()) - Ausgabe im Aside-Bereich.
+     * Rebuild the search and keyword index of the manuals (Tools/tool_docs.php,
+     * Modules\Docs\Docs::rebuildIndex()) - output in the aside area.
      */
     public function docsIndex(): void
     {
@@ -98,8 +98,8 @@ class ToolDeveloper {
     }
 
     /**
-     * Zusatzrecht des Moduls Tools prüfen - Meldung und Abbruch, wenn es fehlt.
-     * Ohne geladene Rechte (kein Backend-Request) verweigert Access nichts.
+     * Check the additional right of the module Tools - message and abort if it is missing.
+     * Without loaded rights (no backend request) Access denies nothing.
      */
     private function accessGuard(string $right): void
     {

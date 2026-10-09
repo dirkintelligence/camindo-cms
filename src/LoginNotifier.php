@@ -1,29 +1,29 @@
 <?php
 /**
- * Vorgabe für security.login_notifier (16-sicherheit.md §11, §16): E-Mail an den
- * Admin, wenn er sich von einem unbekannten Gerät anmeldet oder jemand seinen
- * zweiten Faktor ändert:
+ * Default for security.login_notifier (developer docs, chapter 13 (Security: authentication)): Security:
+ * authentication): email to the admin when they sign in from an unknown device or
+ * someone changes their second factor:
  *
- *     new_device          Anmeldung von einem unbekannten Gerät
- *     totp_enabled        Authenticator-App eingerichtet
- *     totp_disabled       Authenticator-App abgeschaltet - vom Admin selbst oder,
- *                         mit $context['reset'], von einem Superuser zurückgesetzt
- *     recovery_code_used  Anmeldung mit einem Wiederherstellungscode
- *                         ($context['remaining'] = noch übrige)
- *     email_factor_on     Code per E-Mail als eigener zweiter Faktor eingeschaltet
- *     email_factor_off    … wieder abgeschaltet
- *     password_changed    eigenes Passwort geändert (AdminBackend::password())
- *     passkey_added       Passkey hinzugefügt ($context['passkey'] = Bezeichnung)
- *     passkey_removed     Passkey entfernt - mit $context['reset'] alle, durch
- *                         einen Superuser
+ *     new_device          Sign-in from an unknown device
+ *     totp_enabled        Authenticator app set up
+ *     totp_disabled       Authenticator app switched off - by the admin themselves or,
+ *                         with $context['reset'], reset by a superuser
+ *     recovery_code_used  Sign-in with a recovery code
+ *                         ($context['remaining'] = number still left)
+ *     email_factor_on     Code by email switched on as a separate second factor
+ *     email_factor_off    … switched off again
+ *     password_changed    Own password changed (AdminBackend::password())
+ *     passkey_added       Passkey added ($context['passkey'] = name)
+ *     passkey_removed     Passkey removed - with $context['reset'] all of them, by
+ *                         a superuser
  *
- * Texte: admin.subject_{Ereignis} und admin.message_{Ereignis} (beim Zurücksetzen
+ * Texts: admin.subject_{event} and admin.message_{event} (on reset
  * admin.message_totp_reset).
  *
- * Frontend-User bekommen von hier nichts - dort versendet das Template
- * (USER_LOGIN setzt $set['new_device'], USER_INPUT $set['password_changed'];
- * E-Mail mit CMS:EMAIL wie beim Reset-Link). Ein eigener Notifier kann beides
- * übernehmen (LoginNotifierInterface).
+ * Frontend users get nothing from here - there the template sends it
+ * (USER_LOGIN sets $set['new_device'], USER_INPUT $set['password_changed'];
+ * email with CMS:EMAIL as with the reset link). A custom notifier can take over
+ * both (LoginNotifierInterface).
  */
 namespace Camindo\Core;
 
@@ -39,7 +39,7 @@ class LoginNotifier implements LoginNotifierInterface {
     {
     }
 
-    /** Ereignisse, zu denen ein Admin eine E-Mail bekommt */
+    /** Events for which an admin gets an email */
     public const ADMIN_EVENTS = ['new_device', 'totp_enabled', 'totp_disabled', 'recovery_code_used',
         'email_factor_on', 'email_factor_off', 'password_changed', 'passkey_added', 'passkey_removed'];
 
@@ -50,7 +50,7 @@ class LoginNotifier implements LoginNotifierInterface {
         $from = (string)($this->config->get('email.noreply') ?: $this->config->get('email.reply'));
         if ($to === '' || $from === '') return;
 
-        // Sprache des Admins (persönliche Einstellungen), sonst die laufende
+        // Language of the admin (personal settings), otherwise the current one
         $lang = (string)($account['settings']['backend_code'] ?? '');
         $lang = $lang !== '' ? (Cms::matchLanguage($lang, $this->cms->backendLanguages()) ?? '') : '';
         $snippet = fn(string $key, array $vars = []) => $this->cms->snippet('admin.' . $key, $vars, $lang);

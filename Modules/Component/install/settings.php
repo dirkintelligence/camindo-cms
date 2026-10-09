@@ -8,8 +8,8 @@ return [
 'description' => '#component.module_description',
 'icon' => 'box',
 'listed' => true,
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+// Additional module permissions:
+// none (purely superuser module)
 'access' => [
 ]
 

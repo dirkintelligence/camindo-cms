@@ -1,28 +1,28 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `component` - das Verzeichnis aller Komponenten
- * (Module, Prozessoren, Extensions; Core und Zusatz).
+ * Dataset child class for the table `component` - the directory of all components
+ * (modules, processors, extensions; core and add-on).
  *
- * Die Tabelle wird nicht über eine Eingabemaske gepflegt, sondern vom
- * ComponentManager (Core/src): refresh() gleicht sie mit den Verzeichnissen ab,
- * install/update/uninstall schreiben version, update_version, status, tables,
- * installed_at, updated_at. Das Backend-Modul (ComponentBackend) und die CLI
- * (`camindo.php component …`) rufen dieselben Methoden. Zur Laufzeit wird die Tabelle
- * nicht abgefragt - Cms liest die generierten Listen var/config/components/*.php.
+ * The table is not maintained via an input mask, but by the
+ * ComponentManager (Core/src): refresh() compares it with the directories,
+ * install/update/uninstall write version, update_version, status, tables,
+ * installed_at, updated_at. The backend module (ComponentBackend) and the CLI
+ * (`camindo.php component …`) call the same methods. At runtime the table
+ * is not queried - Cms reads the generated lists var/config/components/*.php.
  *
- * Diese Klasse dient nur noch als Schema-Beschreibung (Spaltenlabels, Typen).
+ * This class now only serves as schema description (column labels, types).
  *
- * SPALTEN, DIE MAN LEICHT VERWECHSELT
+ * COLUMNS THAT ARE EASILY CONFUSED
  * --------------------
- *     component_type   Art: 'modules', 'processors' oder 'extensions'
- *     type             Untertyp aus install/settings.php, z. B. 'image' bei einem
- *                      Prozessor oder 'record' bei einem Modul
- *     version          installierte Version ('' = nur entdeckt)
- *     update_version   Version der Dateien, wenn sie neuer ist als die installierte
- *     tables           JSON-Liste der Tabellen (für das Löschen bei uninstall --purge)
+ *     component_type   kind: 'modules', 'processors' or 'extensions'
+ *     type             subtype from install/settings.php, e.g. 'image' for a
+ *                      processor or 'record' for a module
+ *     version          installed version ('' = only discovered)
+ *     update_version   version of the files, if it is newer than the installed one
+ *     tables           JSON list of the tables (for deletion with uninstall --purge)
  *
  * @see Camindo\Core\ComponentManager
- * @see docs/developers/14-installation-und-update.md, 5.2
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Modules\Component;
 
@@ -53,7 +53,7 @@ class Component extends Dataset {
                 'max'   => 32,
                 'flags' => ['trim', 'name']
             ],
-            // Verzeichnis- und Klassenname der Komponente, z. B. 'ImageGd'.
+            // Directory and class name of the component, e.g. 'ImageGd'.
             'name' => [
                 'type'  => 'chars',
                 'label' => '#component.field_name',
@@ -63,13 +63,13 @@ class Component extends Dataset {
                 'type'  => 'chars',
                 'label' => '#component.field_label',
                 'max'   => 128,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select a snippet (#prefix.key)
             ],
             'description' => [
                 'type'  => 'text',
                 'label' => '#component.field_description',
             ],
-            // 1 = fest eingebaute Core-Komponente, 0 = per Composer nachinstalliert
+            // 1 = built-in core component, 0 = installed later via Composer
             'core' => [
                 'type'  => 'integer',
                 'label' => '#component.field_core',
@@ -97,8 +97,8 @@ class Component extends Dataset {
         ];
     }
 
-    // Alle Hooks bewusst leer: Datensätze dieser Tabelle schreibt ausschließlich der
-    // ComponentManager, nicht eine Eingabemaske.
+    // All hooks deliberately empty: records of this table are written only by the
+    // ComponentManager, not by an input mask.
 
     protected function hookOnCreate(array &$data): void
     {

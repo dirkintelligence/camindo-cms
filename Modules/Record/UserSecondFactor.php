@@ -1,48 +1,48 @@
 <?php
 /**
- * Zweiter Faktor für Frontend-User (Profile) - developer_docs/20-frontend-schutz.md B,
- * Befehle CMS:USER_LOGIN codetemplate=…, CMS:USER_LOGIN_CODE, CMS:USER_2FA
+ * Second factor for frontend users (profiles) - developer docs, chapter 14 (Security: web),
+ * commands CMS:USER_LOGIN codetemplate=…, CMS:USER_LOGIN_CODE, CMS:USER_2FA
  * (RecordUser).
  *
- * WANN EIN ZWEITER FAKTOR NÖTIG IST
+ * WHEN A SECOND FACTOR IS REQUIRED
  * --------------------
- * Je Profil-Bereich, area.details.second_factor (policy()):
+ * Per profile area, area.details.second_factor (policy()):
  *
- *     none        (Vorgabe) nie - auch ein früher eingerichteter Faktor ruht
- *     optional    nur wenn der User selbst einen eingerichtet hat (USER_2FA)
- *     new_device  wie optional; ohne eigenen Faktor ein Code, wenn sich das Profil
- *                 von einem unbekannten Gerät anmeldet (LoginDevices::isKnown() -
- *                 auch das erste Gerät gilt als unbekannt). Das bekannte Gerät ist
- *                 hier der erste Faktor neben dem Passwort
- *     required    jede Anmeldung: TOTP, wenn eingerichtet, sonst der Code
+ *     none        (default) never - even a factor set up earlier stays inactive
+ *     optional    only if the user has set one up themselves (USER_2FA)
+ *     new_device  like optional; without an own factor a code if the profile
+ *                 signs in from an unknown device (LoginDevices::isKnown() -
+ *                 the first device also counts as unknown). The known device is
+ *                 here the first factor alongside the password
+ *     required    every sign-in: TOTP if set up, otherwise the code
  *
- * Zwei Faktoren:
- *     totp   Authenticator-App (RFC 6238, Camindo\Core\Totp) mit
- *            Wiederherstellungscodes. Einrichten: der User tippt den angezeigten
- *            Schlüssel in die App ab, scannt den QR-Code (im Template mit
- *            qrcode-generator, wie im Backend) oder öffnet auf dem Telefon den
- *            otpauth://-Link
- *     email  sechs Ziffern je Anmeldung; das codetemplate verschickt sie mit
- *            CMS:EMAIL - der Befehl selbst verschickt nichts
+ * Two factors:
+ *     totp   authenticator app (RFC 6238, Camindo\Core\Totp) with
+ *            recovery codes. Setup: the user types the displayed
+ *            key into the app, scans the QR code (in the template with
+ *            qrcode-generator, as in the backend) or opens the
+ *            otpauth:// link on the phone
+ *     email  six digits per sign-in; the codetemplate sends them with
+ *            CMS:EMAIL - the command itself sends nothing
  *
- * WAS IN DER DATENBANK STEHT
+ * WHAT IS STORED IN THE DATABASE
  * --------------------
- *     user_second_factor   je Profil höchstens eine Zeile: method 'totp' | 'email'
- *                          (selbst gewählt), totp_secret (Crypt::encrypt() binär,
- *                          Zusatzdaten 'utotp|{record_id}'), totp_step (Replay-
- *                          Sperre), enabled_at
- *     user_recovery_code   Crypt::hash('urecovery|{record_id}|{Code}'), einmal
- *                          einlösbar (DELETE)
+ *     user_second_factor   per profile at most one row: method 'totp' | 'email'
+ *                          (self-chosen), totp_secret (Crypt::encrypt() binary,
+ *                          additional data 'utotp|{record_id}'), totp_step (replay
+ *                          lock), enabled_at
+ *     user_recovery_code   Crypt::hash('urecovery|{record_id}|{Code}'), redeemable
+ *                          once (DELETE)
  *
- * Bewusst nicht in data_* und record_cache: das Secret stünde sonst in Arbeitskopien,
- * Exporten und dem Volltext. Beide Tabellen hängen per Fremdschlüssel am Profil
- * (ON DELETE CASCADE). KeyRotation verschlüsselt totp_secret mit um.
+ * Deliberately not in data_* and record_cache: otherwise the secret would be in working copies,
+ * exports and the full text. Both tables are linked to the profile via foreign keys
+ * (ON DELETE CASCADE). KeyRotation re-encrypts totp_secret.
  *
- * Der Anmeldecode selbst steht nur als Hash in der wartenden Session
+ * The sign-in code itself is only stored as a hash in the waiting session
  * (user_session.details.mfa_pending, RecordUser::startSecondFactor()).
  *
  * @see Camindo\Core\Modules\Record\RecordUser
- * @see Camindo\Core\Modules\Admin\TotpFactor   dasselbe für Admins
+ * @see Camindo\Core\Modules\Admin\TotpFactor   the same for admins
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -62,13 +62,13 @@ class UserSecondFactor
 
     public const RECOVERY_COUNT = 10;
 
-    /** Gültigkeit eines Setup-Tokens in Sekunden */
+    /** Validity of a setup token in seconds */
     public const SETUP_SECONDS = 900;
 
-    /** Stellen des Anmeldecodes */
+    /** digits of the sign-in code */
     public const CODE_DIGITS = 6;
 
-    /** Zeichen der Wiederherstellungscodes: ohne 0/O, 1/I/L (wie beim Admin) */
+    /** characters of the recovery codes: without 0/O, 1/I/L (as with the admin) */
     private const RECOVERY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     public function __construct(
@@ -84,7 +84,7 @@ class UserSecondFactor
     // ====================
     // Wann, womit
 
-    /** area.details.second_factor, unbekannt = 'none' */
+    /** area.details.second_factor, unknown = 'none' */
     public function policy(array $area): string
     {
         $details = is_array($area['details'] ?? null) ? $area['details'] : (json_decode((string)($area['details'] ?? ''), true) ?: []);
@@ -93,9 +93,9 @@ class UserSecondFactor
     }
 
     /**
-     * Welcher zweite Faktor gilt für diese Anmeldung?
+     * Which second factor applies to this sign-in?
      *
-     * @return string  '' = keiner, 'totp' oder 'email' (Code)
+     * @return string  '' = none, 'totp' or 'email' (code)
      */
     public function needed(array $profile, array $area): string
     {
@@ -109,7 +109,7 @@ class UserSecondFactor
         return '';
     }
 
-    /** Selbst eingerichteter Faktor: '' | 'totp' | 'email' */
+    /** Self-set-up factor: '' | 'totp' | 'email' */
     public function method(int $recordId): string
     {
         $row = $this->row($recordId);
@@ -133,12 +133,12 @@ class UserSecondFactor
     }
 
     // ====================
-    // Anmeldecode
+    // Sign-in code
 
     /**
-     * Neuer Code.
+     * New code.
      *
-     * @return array{0:string,1:string}  [Code, Hash für die Session]
+     * @return array{0:string,1:string}  [code, hash for the session]
      */
     public function newCode(): array
     {
@@ -163,8 +163,8 @@ class UserSecondFactor
     // TOTP
 
     /**
-     * TOTP-Code prüfen und den Zeitschritt verbrauchen (UPDATE … totp_step < ? ist
-     * die Sperre gegen denselben Code zweimal, auch gleichzeitig).
+     * Check the TOTP code and consume the time step (UPDATE … totp_step < ? is
+     * the lock against the same code twice, also at the same time).
      */
     public function verifyTotp(int $recordId, string $code): bool
     {
@@ -190,9 +190,9 @@ class UserSecondFactor
     }
 
     /**
-     * TOTP-Code oder Wiederherstellungscode.
+     * TOTP code or recovery code.
      *
-     * @return string  '' = falsch, 'totp' oder 'recovery'
+     * @return string  '' = wrong, 'totp' or 'recovery'
      */
     public function verifyTotpOrRecovery(array $profile, string $code): string
     {
@@ -208,13 +208,13 @@ class UserSecondFactor
     }
 
     /**
-     * Neues Secret zum Einrichten (nichts gespeichert - es reist verschlüsselt im
-     * Setup-Token mit, bis enableTotp() mit einem gültigen Code kommt).
+     * New secret for the setup (nothing is stored - it travels encrypted in the
+     * setup token until enableTotp() receives a valid code).
      *
-     * @param string $account  Name des Kontos in der App (Anmeldename)
-     * @param string $issuer   Anbieter in der App (Domain der Website)
-     * @return array           token, secret (Base32 in Vierergruppen, zum Abtippen),
-     *                         uri (otpauth://… - auf dem Telefon öffnet der Link die App)
+     * @param string $account  name of the account in the app (sign-in name)
+     * @param string $issuer   provider in the app (domain of the website)
+     * @return array           token, secret (Base32 in groups of four, for typing in),
+     *                         uri (otpauth://… - on the phone the link opens the app)
      */
     public function newSetup(array $profile, string $account, string $issuer): array
     {
@@ -224,7 +224,7 @@ class UserSecondFactor
         return $this->setupData($secret, $token, $account, $issuer);
     }
 
-    /** Anzeige zu einem vorhandenen Setup-Token (nach falschem Code), null = abgelaufen */
+    /** Display for an existing setup token (after a wrong code), null = expired */
     public function setupFromToken(array $profile, string $token, string $account, string $issuer): ?array
     {
         $secret = $this->secretFromToken((int)$profile['record_id'], $token);
@@ -232,10 +232,10 @@ class UserSecondFactor
     }
 
     /**
-     * TOTP einschalten.
+     * Enable TOTP.
      *
-     * @return array|null  Wiederherstellungscodes (nur jetzt im Klartext), null =
-     *                     Token abgelaufen oder Code falsch
+     * @return array|null  recovery codes (in plain text only now), null =
+     *                     token expired or code wrong
      */
     public function enableTotp(array $profile, string $token, string $code): ?array
     {
@@ -264,7 +264,7 @@ class UserSecondFactor
         return $codes;
     }
 
-    /** Code (E-Mail/SMS) als eigenen Faktor wählen - ersetzt TOTP */
+    /** Choose the code (email/SMS) as own factor - replaces TOTP */
     public function enableCode(array $profile): void
     {
         $recordId = (int)$profile['record_id'];
@@ -288,8 +288,8 @@ class UserSecondFactor
     }
 
     /**
-     * Eigenen Faktor entfernen - durch den User oder als Zurücksetzen im Backend
-     * ($reset: dann steht der Admin als Handelnder im Audit-Log).
+     * Remove own factor - by the user or as a reset in the backend
+     * ($reset: then the admin appears as the acting party in the audit log).
      */
     public function disable(array $profile, bool $reset = false): void
     {
@@ -311,9 +311,9 @@ class UserSecondFactor
     }
 
     // ====================
-    // Wiederherstellungscodes
+    // Recovery codes
 
-    /** @return string[]  neuer Satz im Klartext */
+    /** @return string[]  new set in plain text */
     public function regenerateRecoveryCodes(array $profile): array
     {
         $recordId = (int)$profile['record_id'];
@@ -347,7 +347,7 @@ class UserSecondFactor
     {
         $normalized = strtoupper(preg_replace('/[\s-]+/', '', $code) ?? '');
         if (!preg_match('/^[' . self::RECOVERY_ALPHABET . ']{10}$/', $normalized)) return false;
-        // HMAC unter allen Schlüsseln (Codes aus der Zeit vor einer Schlüsselrotation)
+        // HMAC under all keys (codes from the time before a key rotation)
         $hashes = $this->crypt->hashAll('urecovery|' . $recordId . '|' . $normalized, true);
         $this->db->pushResult();
         try {
@@ -385,7 +385,7 @@ class UserSecondFactor
     }
 
     // ====================
-    // Intern
+    // Internal
 
     private function row(int $recordId): ?array
     {
@@ -428,7 +428,7 @@ class UserSecondFactor
     }
 
     /**
-     * Audit 'update' am Profil - nur Kennungen und Anzahlen, nie Secret oder Code.
+     * Audit 'update' on the profile - only identifiers and counts, never secret or code.
      */
     private function audit(array $profile, string $key, string $before, string $after): void
     {
@@ -443,8 +443,8 @@ class UserSecondFactor
     }
 
     /**
-     * Ereignis an den Notifier (security.login_notifier); die Vorgabe tut für
-     * Frontend-User nichts - das Erfolgstemplate sieht $set['second_factor_changed'].
+     * Event to the notifier (security.login_notifier); the default does nothing for
+     * frontend users - the success template sees $set['second_factor_changed'].
      */
     private function notify(string $event, array $profile, array $context = []): void
     {

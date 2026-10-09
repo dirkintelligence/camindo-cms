@@ -1,15 +1,15 @@
 /*
- * Extension Snippets - Handler für cApp.extensions (13 §3.4)
+ * Extension Snippets - handler for cApp.extensions (developer docs, chapter 08 (Components and extensions))
  *
- * Hängt an ein Textfeld (z. B. die 'label'-Felder der Module) ein Suffix mit dem
- * aufgelösten Text, sobald der Wert mit '#' beginnt, und einen Knopf, der das
- * Suchfenster öffnet. Dort werden alle Snippets des Caches durchsucht -
- * Core, Module, Prozessoren, Extensions und die Instanz-Sets des Moduls Snippets
- * (custom.{instance_id}.*, nur Instanzen mit Zugriff). Ein Klick auf einen Treffer
- * schreibt '#' + Snippet-Id ins Feld (Cms::textOrSnippet() löst das beim Anzeigen auf).
+ * Attaches to a text field (e.g. the 'label' fields of the modules) a suffix with the
+ * resolved text as soon as the value starts with '#', and a button that opens the
+ * search window. There all snippets of the cache are searched -
+ * core, modules, processors, extensions and the instance sets of the module Snippets
+ * (custom.{instance_id}.*, only instances with access). A click on a hit
+ * writes '#' + snippet id into the field (Cms::textOrSnippet() resolves it on display).
  *
- * Suche, Auflösung und die Texte der Oberfläche kommen von
- * backendExtensions/Snippets/search.php (Sprache des Admins). Keine Optionen.
+ * Search, resolution and the texts of the user interface come from
+ * backendExtensions/Snippets/search.php (language of the admin). No options.
  */
 (function (cApp) {
     'use strict';
@@ -18,7 +18,7 @@
     let texts = null;
     let textsPromise = null;
 
-    // Texte der Oberfläche einmal je Seite holen
+    // Fetch the texts of the user interface once per page
     function loadTexts() {
         if (!textsPromise) {
             textsPromise = request({ texts: 1 }).then(() => texts).catch((err) => { textsPromise = null; throw err; });
@@ -68,8 +68,8 @@
             this.open = false;
             this.query = '';
 
-            // Suffix (Vorschau) + Knopf. Das Feld steckt entweder schon in einer
-            // .input-group (Backend::formField() mit prefix/suffix) oder bekommt eine.
+            // Suffix (preview) + button. The field either already sits in an
+            // .input-group (Backend::formField() with prefix/suffix) or gets one.
             let group = input.closest('.input-group');
             if (!group) {
                 group = el('div', 'input-group');
@@ -109,7 +109,7 @@
         }
 
         /**
-         * Suffix: der aufgelöste Text, wenn der Wert mit '#' beginnt; sonst leer.
+         * Suffix: the resolved text if the value starts with '#'; otherwise empty.
          */
         updatePreview() {
             const value = this.input.value.trim();
@@ -120,7 +120,7 @@
                 return;
             }
             request({ resolve: value }).then((data) => {
-                if (this.input.value.trim() !== value) return;   // inzwischen weitergetippt
+                if (this.input.value.trim() !== value) return;   // typed on in the meantime
                 this.preview.hidden = false;
                 this.preview.textContent = data.found ? data.text : (texts ? texts.label_not_found : '?');
                 this.preview.title = data.found ? data.id : '';
@@ -134,7 +134,7 @@
         }
 
         show() {
-            // Fenster sofort öffnen (Texte liegen nach loadTexts() vor), Treffer nachladen
+            // Open the window immediately (texts are available after loadTexts()), load the hits afterwards
             loadTexts().then(() => {
                 const value = this.input.value.trim();
                 const initial = value.charAt(0) === '#' ? value.substring(1) : '';
@@ -218,7 +218,7 @@
                 this.title.textContent = texts.label_results.replace('{count}', String(data.total));
             }
             const frag = document.createDocumentFragment();
-            // Erster Eintrag: '#' entfernen, Wert bleibt reiner Text
+            // First entry: remove '#', the value remains plain text
             if (current !== '' && this.input.value.trim().charAt(0) === '#') {
                 const none = el('button', 'c9-snippets-item c9-snippets-none');
                 none.type = 'button';
@@ -251,8 +251,8 @@
         }
 
         /**
-         * Treffer übernehmen: '#' + Id ins Feld. Leere Id: nur das '#' entfernen,
-         * der bisherige Text bleibt als Klartext stehen.
+         * Take over a hit: '#' + id into the field. Empty id: only remove the '#',
+         * the previous text stays as plain text.
          */
         select(id) {
             this.input.value = id === '' ? this.input.value.trim().replace(/^#/, '') : '#' + id;
@@ -272,7 +272,7 @@
             if (this.panel) this.panel.remove();
             this.preview.remove();
             this.button.remove();
-            // Hülle wieder entfernen; eine selbst angelegte .input-group ebenso
+            // Remove the wrapper again; likewise a self-created .input-group
             this.wrapper.parentNode.insertBefore(this.group, this.wrapper);
             this.wrapper.remove();
             if (this.group.children.length === 1 && this.group.firstElementChild === this.input) {

@@ -1,18 +1,18 @@
 <?php
 /**
- * check_webauthn.php - Selbsttest für Camindo\Core\WebAuthn (developer_docs/22-webauthn.md)
+ * check_webauthn.php - self-test for Camindo\Core\WebAuthn (developer docs, chapter 13 (Security: authentication))
  *
  *     php Core/cron/check_webauthn.php
  *
- * Ein Software-Authenticator (OpenSSL/libsodium) registriert je einen Schlüssel ES256,
- * RS256 und EdDSA und meldet sich an; dazu die Fehlerfälle: falscher Origin, falsche
- * Challenge, falsche RP ID, Zähler nicht gestiegen, Signatur manipuliert, fehlendes
- * UP-Flag, falscher Typ, kaputtes CBOR. Ohne Datenbank; RP ID fest cms.example.com.
- * Exit-Code 1 bei Abweichungen.
+ * A software authenticator (OpenSSL/libsodium) registers one key each for ES256,
+ * RS256 and EdDSA and logs in; plus the error cases: wrong origin, wrong
+ * challenge, wrong RP ID, counter not increased, signature tampered, missing
+ * UP flag, wrong type, broken CBOR. Without database; RP ID fixed to cms.example.com.
+ * Exit code 1 on deviations.
  */
 use Camindo\Core\{WebAuthn, Config, BackendDomain};
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -21,15 +21,15 @@ if (PHP_SAPI !== 'cli') {
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 $c = ['admin' => ['backend_domain' => 'cms.example.com', 'cookie_secure' => true]];
 $cfg = new Config($c);
 $wa = new WebAuthn($cfg, new BackendDomain($cfg));
 
-// CBOR-Encoder und authenticatorData für den Software-Authenticator
-function cb($v): string { // CBOR-Encoder für den Test
+// CBOR encoder and authenticatorData for the software authenticator
+function cb($v): string { // CBOR encoder for the test
     $head = function (int $major, int $n): string {
         if ($n < 24) return chr(($major << 5) | $n);
         if ($n < 256) return chr(($major << 5) | 24) . chr($n);
@@ -86,7 +86,7 @@ foreach ($keys as $name => [$alg, $cose, $sign]) {
     $attBadRp = cb(['fmt' => 'none', 'attStmt' => [], 'authData' => B(authData('evil.example', 0x41, 0, $credId, $cose))]);
     $expect("$name Registrierung falsche RP ID", fn() => $wa->verifyRegistration(clientData('webauthn.create', $ch, $origin), $attBadRp, $ch), false);
 
-    // Anmeldung
+    // Login
     $ch2 = WebAuthn::challenge();
     $ad = authData('cms.example.com', 0x05, 7);
     $cd = clientData('webauthn.get', $ch2, $origin);

@@ -1,9 +1,9 @@
 <?php
 /**
- * CI: legt in einer frischen Installation eine Instanz an - über Instance::save() wie
- * die Backend-Maske. Selbsttests wie check_tree_positions.php brauchen eine.
+ * CI: creates an instance in a fresh installation - via Instance::save() like
+ * the backend mask. Self-tests like check_tree_positions.php need one.
  *
- *     php Core/.github/ci/create-instance.php      (im Projektverzeichnis)
+ *     php Core/.github/ci/create-instance.php      (in the project directory)
  */
 if (PHP_SAPI !== 'cli') exit(1);
 

@@ -8,10 +8,10 @@ return [
 'description' => '#language.module_description',
 'icon' => 'flag',
 'listed' => true,
-// API: Sprachen lesen und anlegen/ändern (LanguageApi)
+// API: read and create/change languages (LanguageApi)
 'api' => ['LanguageApi'],
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+// Additional module permissions:
+// none (purely superuser module)
 'access' => [
 ]
 

@@ -1,61 +1,61 @@
 <?php
 /**
- * Datenexport personenbezogener Daten eines Website-Users: was das CMS zu einem
- * Profil-Datensatz gespeichert hat, als Zip. Erstellt im Modul Privacy
- * (PrivacyBackend::export(), Zusatzrecht export). Ein Teilauszug: für eine Auskunft
- * nach Art. 15/20 DSGVO von Hand zu ergänzen (Rechtsgrundlagen, Server-Logfiles,
- * Buchhaltung …). Instanzname im Code: $personalData.
+ * Personal data export of a website user: what the CMS has stored for a
+ * profile record, as a zip. Created in the module Privacy
+ * (PrivacyBackend::export(), additional right export). A partial extract: to be
+ * completed by hand for a disclosure under Art. 15/20 GDPR
+ * (legal bases, server log files, accounting …). Name in the code: $personalData.
  *
- * INHALT DES ZIPS
+ * CONTENTS OF THE ZIP
  * --------------------
- *     auskunft.html   für Menschen: eine eigenständige Seite (druckbar) aus der
- *                     Vorlage des Betreibers (PrivacyTemplate, Tabelle
- *                     privacy_template) in der Sprache der Vorlage
- *     daten.json      dieselben Daten maschinenlesbar (Datenübertragbarkeit)
- *     dateien/        die hochgeladenen Dateien unter ihrem ursprünglichen Namen
- *                     ({record_id}_{feld}[_{sprache}]_{name})
+ *     auskunft.html   for people: a self-contained page (printable) from the
+ *                     template of the operator (PrivacyTemplate, table
+ *                     privacy_template) in the language of the template
+ *     daten.json      the same data in machine-readable form (data portability)
+ *     dateien/        the uploaded files under their original name
+ *                     ({record_id}_{field}[_{language}]_{name})
  *
- * WAS DAZUGEHÖRT
+ * WHAT IS INCLUDED
  * --------------------
- *     Profil              alle Felder des Profil-Datensatzes, alle Sprachen;
- *                         verschlüsselte Felder im Klartext; Passwörter nur als
- *                         "gespeichert (nicht lesbar)"
- *     Inhalte des Users   Datensätze mit record.user_id = Profil (Kommentare,
- *                         Bewertungen … über CMS:USER_INPUT), auch im Papierkorb,
- *                         nach Bereich gegliedert
- *     Gelöschte Inhalte   endgültig gelöschte Datensätze, die das Audit-Log noch mit
- *                         dem User verbindet (Einträge mit seiner user_id), samt
- *                         dem, was die Lösch-Policy noch damit vorhat
- *     Verweise            Datensätze, die per Verknüpfungsfeld auf das Profil zeigen
- *                         (etwa Bestellungen), höchstens MAX_RECORDS
- *     Anmeldung           bekannte Geräte (login_device), Sitzungen (user_session),
- *                         zweiter Faktor (user_second_factor: Art und Datum - nie
- *                         Schlüssel oder Codes),
- *                         offene Einmal-Links (user_token), Warenkorb (user_basket)
- *     Protokoll           Einträge des Audit-Logs zu diesen Datensätzen und zu
- *                         Handlungen des Users. Wer gehandelt hat, steht nur als
- *                         "Sie selbst", "Admin", "User" oder "System" darin - Namen
- *                         anderer Personen gehören nicht in die Auskunft
- *     Fehlversuche        fehlgeschlagene Anmeldungen und Codes (user_login_attempt
- *                         unter "{area_id}:{Feldwert}" bzw. "{area_id}:#{record_id}"),
- *                         Sperren im Security-Log mit diesem Namen, Zeilen des
- *                         Mail-Logs mit einer E-Mail-Adresse des Profils (etwa nicht
- *                         zustellbare Mails)
- *     Speicherdauer       Papierkorb (admin.trash_retention_days), Audit-Log
- *                         (audit.*), Geräte, Kürzen der IP-Adressen
- *                         (privacy.ip_anonymize_days), Sitzungen, Logdateien
- *                         (Aufgabe "Logs aufräumen" des Zeitplaners)
+ *     profile             all fields of the profile record, all languages;
+ *                         encrypted fields in plain text; passwords only as
+ *                         "stored (not readable)"
+ *     user contents       records with record.user_id = profile (comments,
+ *                         ratings … via CMS:USER_INPUT), also in the trash,
+ *                         grouped by area
+ *     deleted contents    permanently deleted records that the audit log still
+ *                         links to the user (entries with his user_id), together with
+ *                         what the deletion policy still plans for them
+ *     references          records that point to the profile via a link field
+ *                         (e.g. orders), at most MAX_RECORDS
+ *     sign-in             known devices (login_device), sessions (user_session),
+ *                         second factor (user_second_factor: type and date - never
+ *                         keys or codes),
+ *                         open one-time links (user_token), shopping basket (user_basket)
+ *     log                 audit log entries for these records and for
+ *                         actions of the user. Who acted is only recorded there as
+ *                         "You", "Admin", "User" or "System" - names
+ *                         of other persons do not belong in the disclosure
+ *     failed attempts     failed sign-ins and codes (user_login_attempt
+ *                         under "{area_id}:{field value}" or "{area_id}:#{record_id}"),
+ *                         locks in the security log with this name, lines of the
+ *                         mail log with an e-mail address of the profile (e.g. undeliverable
+ *                         mails)
+ *     retention periods   trash (admin.trash_retention_days), audit log
+ *                         (audit.*), devices, shortening of IP addresses
+ *                         (privacy.ip_anonymize_days), sessions, log files
+ *                         (scheduler task "Clean up logs")
  *
- * Nicht enthalten, weil nicht sicher dem Profil zuzuordnen: die übrigen Zeilen der
- * Logdateien unter var/log - der Abschnitt Speicherdauer nennt ihre Frist.
- * Gekürzte IP-Adressen erscheinen mit "xxx" für die entfernten Stellen.
+ * Not included, because they cannot be reliably assigned to the profile: the other lines of the
+ * log files under var/log - the retention section names their period.
+ * Shortened IP addresses appear with "xxx" for the removed parts.
  *
- * Das Zip liegt in var/export unter einem nicht erratbaren Namen, wird nach dem
- * Herunterladen gelöscht (PrivacyBackend::download()) und sonst nach
- * admin.export_retention_hours vom Cron. Jede Auskunft steht im Audit-Log
- * (Aktion 'export').
+ * The zip lies in var/export under a name that cannot be guessed, is deleted after
+ * downloading (PrivacyBackend::download()) and otherwise after
+ * admin.export_retention_hours by the cron. Every disclosure is recorded in the audit log
+ * (action 'export').
  *
- * @see Camindo\Core\Modules\Privacy\PrivacyBackend::export()   Oberfläche
+ * @see Camindo\Core\Modules\Privacy\PrivacyBackend::export()   user interface
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -71,14 +71,14 @@ use Camindo\Core\System;
 
 class RecordPersonalData {
 
-    /** Obergrenze je Liste (Inhalte des Users, Verweise, Protokoll) */
+    /** Upper limit per list (user contents, references, log) */
     public const MAX_RECORDS = 500;
 
-    /** Datums-Platzhalter "kein Datum" / "kein Ende" (wie Cms::_formatDate()) */
+    /** date placeholders "no date" / "no end" (as Cms::_formatDate()) */
     private const DATE_MIN_DISPLAY = '1000-01-02 00:00:00';
     private const DATE_MAX_DISPLAY = '8999-12-31 00:00:00';
 
-    /** Metafelder, die in der Auskunft erscheinen */
+    /** meta fields that appear in the disclosure */
     private const META_FIELDS = ['record_id', 'created_at', 'changed_at', 'online_at', 'offline_at', 'status_id'];
 
     public function __construct(
@@ -96,13 +96,13 @@ class RecordPersonalData {
     {}
 
     /**
-     * Auskunft erstellen.
+     * Create the disclosure.
      *
-     * @param int    $profileId  record_id des Profils (Bereich vom Typ 'profile')
-     * @param string $template   Vorlage der Auskunft (privacy_template.content); die
-     *                           Snippet-Sprache stellt der Aufrufer passend ein
-     * @return array             ['zip' => Dateiname in var/export, 'size' => Bytes]
-     * @throws \RuntimeException  kein Profil, Zip nicht schreibbar
+     * @param int    $profileId  record_id of the profile (area of type 'profile')
+     * @param string $template   template of the disclosure (privacy_template.content); the
+     *                           caller sets the snippet language accordingly
+     * @return array             ['zip' => file name in var/export, 'size' => bytes]
+     * @throws \RuntimeException  no profile, zip not writable
      */
     public function export(int $profileId, string $template): array
     {
@@ -138,9 +138,9 @@ class RecordPersonalData {
     }
 
     /**
-     * Alle Daten zum Profil zusammentragen (Aufbau siehe daten.json).
+     * Collect all data on the profile (structure see daten.json).
      *
-     * @throws \RuntimeException  kein Profil-Datensatz
+     * @throws \RuntimeException  no profile record
      */
     public function collect(int $profileId): array
     {
@@ -150,13 +150,13 @@ class RecordPersonalData {
         }
         $instance = $this->instanceCache->instance($profile['instance_id']) ?? [];
 
-        // Inhalte des Users
+        // user contents
         $this->db->query(
             "SELECT `record_id` FROM `record` WHERE `user_id` = ? AND `tmp` = 0 ORDER BY `record_id` LIMIT " . self::MAX_RECORDS,
             'i', [$profileId]
         );
         $contentIds = array_map('intval', $this->db->fetchColumn());
-        // Datensätze, die auf das Profil verweisen
+        // records that point to the profile
         $this->db->query(
             "SELECT DISTINCT r.`src_id` FROM `data_rel` r JOIN `record` s ON s.`record_id` = r.`src_id`"
             . " WHERE r.`dest_id` = ? AND s.`tmp` = 0 ORDER BY r.`src_id` LIMIT " . self::MAX_RECORDS,
@@ -175,7 +175,7 @@ class RecordPersonalData {
         $guardNames = $this->guardNames($profile);
         $emails = $this->emails($profile);
 
-        // Dateien: Profil und eigene Inhalte (Verweise gehören anderen)
+        // files: profile and own contents (references belong to others)
         $files = [];
         foreach (array_merge([$profile], $contents) as $r) {
             foreach ($r['file_rows'] as $f) $files[] = $f;
@@ -222,11 +222,11 @@ class RecordPersonalData {
     // ====================
 
     /**
-     * Ein Datensatz für die Auskunft: Bereich, Bezeichnung, Metafelder, Felder.
+     * One record for the disclosure: area, label, meta fields, fields.
      *
      * @return array|null  record_id, area_id, area, instance_id, label, deleted,
-     *                     meta [Beschriftung => Wert], fields [Liste aus field, label,
-     *                     language, value], file_rows (intern, fürs Zip)
+     *                     meta [label => value], fields [list of field, label,
+     *                     language, value], file_rows (internal, for the zip)
      */
     private function recordData(int $id): ?array
     {
@@ -250,7 +250,7 @@ class RecordPersonalData {
         $fields = [];
         foreach ($snapshot as $key => $entry) {
             $name = explode('@', (string)$key)[0];
-            if (isset($this->cms->schema[$name])) continue;   // Metafelder: siehe oben
+            if (isset($this->cms->schema[$name])) continue;   // meta fields: see above
             $type = (string)($entry['t'] ?? 'text');
             $value = (string)($entry['v'] ?? '');
             if ($type === 'password') {
@@ -268,7 +268,7 @@ class RecordPersonalData {
             ];
         }
 
-        // Dateien (nur echte Dateien, siehe VirtualFieldsTrait::recordFileRows())
+        // files (only real files, see VirtualFieldsTrait::recordFileRows())
         $fileRows = [];
         $this->db->query(
             "SELECT DISTINCT d.`field_id`, d.`extension`, d.`filename`, d.`file_language_id`, f.`name`"
@@ -282,7 +282,7 @@ class RecordPersonalData {
             $relative = $this->cms->mediaPath((int)$f['field_id'], $id, $fileLanguageId, (string)$f['extension']);
             $path = rtrim((string)$this->config->get('paths.media_dir'), '/') . '/' . $relative;
             if (!empty($row['deleted'])) {
-                // im Papierkorb liegen die Dateien unter var/deleted
+                // files in the trash are stored under var/deleted
                 continue;
             }
             $original = preg_replace('/[^\p{L}\p{N}._-]+/u', '_', (string)$f['filename']) ?: ('file.' . $f['extension']);
@@ -307,7 +307,7 @@ class RecordPersonalData {
     }
 
     /**
-     * Protokolleinträge: zu den Datensätzen und Handlungen des Users.
+     * Log entries: on the records and actions of the user.
      */
     private function auditEntries(int $profileId, array $recordIds): array
     {
@@ -321,7 +321,7 @@ class RecordPersonalData {
         $entries = [];
         while ($row = $this->db->fetch()) {
             $fields = [];
-            // Geänderte Felder ohne Werte (Metazeile; die Werte stehen in var/audit)
+            // changed fields without values (meta line; the values are stored in var/audit)
             foreach ((array)json_decode((string)$row['fields'], true) as $change) {
                 $fields[] = $this->cms->textOrSnippet((string)($change['l'] ?? $change['k'] ?? ''))
                     . ((string)($change['g'] ?? '') !== '' ? ' (' . $change['g'] . ')' : '');
@@ -339,9 +339,9 @@ class RecordPersonalData {
     }
 
     /**
-     * Speicherdauer - Einstellungen dieser Installation, als Sätze (Platzhalter
-     * {retention} der Vorlage; die einzelnen Fristen gibt es dort auch als eigene
-     * Platzhalter, PrivacyTemplate::retention()).
+     * Retention periods - settings of this installation, as sentences (placeholder
+     * {retention} of the template; the individual periods also exist there as their own
+     * placeholders, PrivacyTemplate::retention()).
      *
      * @return string[]
      */
@@ -351,8 +351,8 @@ class RecordPersonalData {
         $lines = [
             strtr($this->cms->snippet('record.gdpr_retention_trash'), ['{days}' => (string)$v['trash_days']]),
         ];
-        // Was nach dem Löschen mit dem Änderungsprotokoll geschieht, sagt die
-        // Lösch-Policy des Bereichs (Platzhalter {delete_policy})
+        // What happens to the change log after deletion is stated by the
+        // deletion policy of the area (placeholder {delete_policy})
         if ($this->auditLog->enabled()) {
             $lines[] = $f['audit_changes_limited']
                 ? strtr($this->cms->snippet('record.gdpr_retention_audit_changes'), ['{days}' => (string)$v['audit_changes_days']])
@@ -361,7 +361,7 @@ class RecordPersonalData {
         $lines[] = strtr($this->cms->snippet('record.gdpr_retention_devices'), ['{days}' => (string)$v['device_days']]);
         $lines[] = strtr($this->cms->snippet('record.gdpr_retention_ip'), ['{days}' => (string)$v['ip_days']]);
         $lines[] = strtr($this->cms->snippet('record.gdpr_retention_sessions'), ['{hours}' => (string)$v['session_hours']]);
-        // Logdateien: Aufgabe "Logs aufräumen" des Zeitplaners
+        // log files: scheduler task "Clean up logs"
         $lines[] = $f['logcleanup']
             ? strtr($this->cms->snippet('record.gdpr_retention_logs'), [
                 '{days}' => (string)$v['log_days'],
@@ -375,10 +375,10 @@ class RecordPersonalData {
     // ==== HTML ====
 
     /**
-     * Die lesbare Auskunft (auskunft.html) aus der Vorlage des Betreibers
-     * für Website-User (PrivacyTemplate, Tabelle privacy_template) in deren
-     * Sprache. Die Blöcke entstehen aus den Vorlagen record.gdpr_*; alle Werte
-     * über Backend::escape().
+     * The readable disclosure (auskunft.html) from the operator's template
+     * for website users (PrivacyTemplate, table privacy_template) in their
+     * language. The blocks are built from the templates record.gdpr_*; all values
+     * via Backend::escape().
      */
     private function html(string $template, array $data, array $files): string
     {
@@ -406,7 +406,7 @@ class RecordPersonalData {
                 'contents' => $this->recordsHtml($data['contents']),
                 'purged' => $this->purgedHtml($data['purged']),
                 'references' => $this->recordsHtml($data['references']),
-                // Fristen direkt unter Geräten und Sitzungen
+                // periods directly below devices and sessions
                 'devices' => $this->tableHtml($data['devices'], [
                     'label' => 'gdpr_col_device', 'ip' => 'gdpr_col_ip', 'created_at' => 'gdpr_col_first', 'last_seen_at' => 'gdpr_col_last'])
                     . $this->noteHtml(strtr($this->cms->snippet('record.gdpr_retention_devices'), ['{days}' => (string)$v['device_days']])),
@@ -426,9 +426,9 @@ class RecordPersonalData {
                 'files' => $this->listHtml(array_map(fn($file) => 'dateien/' . $file, $files)),
                 'audit' => $this->tableHtml($audit, ['time' => 'gdpr_col_time', 'action' => 'gdpr_col_action',
                     'object' => 'gdpr_col_object', 'by' => 'gdpr_col_by', 'fields' => 'gdpr_col_fields']),
-                // Speicherdauer: immer mindestens eine Zeile
+                // retention periods: always at least one line
                 'retention' => $this->listHtml($data['retention']),
-                // Was beim Löschen geschieht: die Lösch-Policy des Profil-Bereichs
+                // what happens on deletion: the deletion policy of the profile area
                 'delete_policy' => $this->listHtml($GLOBALS['app']->get(\Camindo\Core\Modules\Privacy\PrivacyBackend::class)
                     ->policyLines((int)$profile['area_id'])),
             ],
@@ -436,7 +436,7 @@ class RecordPersonalData {
         );
     }
 
-    /** Mehrere Datensätze, nach Bereich gegliedert, mit Überschrift; ohne: "keine" */
+    /** Several records, grouped by area, with heading; none: "none" */
     private function recordsHtml(array $records): string
     {
         if (!$records) return $this->backend->template('record.gdpr_none');
@@ -450,7 +450,7 @@ class RecordPersonalData {
         return $html;
     }
 
-    /** Endgültig gelöschte Inhalte (nur noch im Audit-Log), nach Bereich gegliedert */
+    /** Permanently deleted contents (only still in the audit log), grouped by area */
     private function purgedHtml(array $purged): string
     {
         if (!$purged) return $this->backend->template('record.gdpr_none');
@@ -464,13 +464,13 @@ class RecordPersonalData {
         return $html;
     }
 
-    /** Hinweis unter einer Tabelle (etwa die Frist) */
+    /** Note below a table (e.g. the period) */
     private function noteHtml(string $text): string
     {
         return $this->backend->template('record.gdpr_note', ['{text}' => $this->backend->escape($text)]);
     }
 
-    /** Ein Datensatz: Felder (je Sprache), darunter die Metafelder */
+    /** One record: fields (per language), below them the meta fields */
     private function recordHtml(array $r, bool $withHeading = false): string
     {
         $out = '';
@@ -499,9 +499,9 @@ class RecordPersonalData {
     }
 
     /**
-     * Tabelle aus Zeilen, ohne Zeilen: "keine".
+     * Table from rows, without rows: "none".
      *
-     * @param array $columns  Spalte in $rows => Snippet der Überschrift (ohne "record.")
+     * @param array $columns  column in $rows => snippet of the heading (without "record.")
      */
     private function tableHtml(array $rows, array $columns): string
     {
@@ -521,7 +521,7 @@ class RecordPersonalData {
         return $this->backend->template('record.gdpr_table', ['{head}' => $head, '{rows}' => $body]);
     }
 
-    /** Aufzählung, ohne Einträge: "keine" */
+    /** List, without entries: "none" */
     private function listHtml(array $lines): string
     {
         if (!$lines) return $this->backend->template('record.gdpr_none');
@@ -541,8 +541,8 @@ class RecordPersonalData {
     }
 
     /**
-     * Wer gehandelt hat - ohne Namen anderer Personen: "Sie selbst", "Admin", "User"
-     * (ein anderer Website-User), "Besucher", "System".
+     * Who acted - without names of other persons: "You", "Admin", "User"
+     * (another website user), "Visitor", "System".
      */
     private function actorText(array $row, int $profileId): string
     {
@@ -555,11 +555,11 @@ class RecordPersonalData {
     }
 
     /**
-     * Endgültig gelöschte Datensätze, an denen der User im Audit-Log noch hängt
-     * (Einträge mit seiner user_id), samt dem, was die Lösch-Policy noch vorhat
-     * (offene Aufträge für das Audit-Log).
+     * Permanently deleted records that the audit log still links to the user
+     * (entries with his user_id), together with what the deletion policy still plans
+     * (open jobs for the audit log).
      *
-     * @return array  Liste aus record_id, area, object, purged_at, planned
+     * @return array  list of record_id, area, object, purged_at, planned
      */
     private function purgedContents(int $profileId): array
     {
@@ -597,9 +597,9 @@ class RecordPersonalData {
     }
 
     /**
-     * Namen, unter denen LoginGuard Fehlversuche des Profils zählt:
-     * "{area_id}:#{record_id}" (Codes) und "{area_id}:{Wert}" für jeden kurzen
-     * Textwert des Profils - der Anmeldename steckt in einem davon.
+     * Names under which LoginGuard counts failed attempts of the profile:
+     * "{area_id}:#{record_id}" (codes) and "{area_id}:{value}" for each short
+     * text value of the profile - the sign-in name is in one of them.
      */
     private function guardNames(array $profile): array
     {
@@ -614,7 +614,7 @@ class RecordPersonalData {
         return array_values(array_unique($names));
     }
 
-    /** E-Mail-Adressen unter den Feldwerten des Profils */
+    /** E-mail addresses among the field values of the profile */
     private function emails(array $profile): array
     {
         $emails = [];
@@ -625,7 +625,7 @@ class RecordPersonalData {
         return array_values(array_unique($emails));
     }
 
-    /** Fehlgeschlagene Anmeldungen und Codes (user_login_attempt), mit Löschdatum */
+    /** Failed sign-ins and codes (user_login_attempt), with deletion date */
     private function loginAttempts(array $guardNames): array
     {
         if (!$guardNames) return [];
@@ -641,10 +641,10 @@ class RecordPersonalData {
     }
 
     /**
-     * Zeilen der Logdateien, die eindeutig zum Profil gehören: Sperren im
-     * Security-Log mit einem seiner Namen (LoginGuard) und Zeilen des Mail-Logs mit
-     * einer seiner E-Mail-Adressen (etwa nicht zustellbare Mails). Das Debug-Log
-     * der Mails (ganze Nachrichten) bleibt außen vor.
+     * Lines of the log files that clearly belong to the profile: locks in the
+     * security log with one of its names (LoginGuard) and lines of the mail log with
+     * one of its e-mail addresses (e.g. undeliverable mails). The debug log
+     * of the mails (whole messages) is excluded.
      */
     private function logLines(array $guardNames, array $emails): array
     {
@@ -681,13 +681,13 @@ class RecordPersonalData {
         return $lines;
     }
 
-    /** IP-Adressen in einer Logzeile wie in der übrigen Auskunft darstellen */
+    /** Show IP addresses in a log line as in the rest of the disclosure */
     private function maskIps(string $line): string
     {
         return (string)preg_replace_callback('/\b\d{1,3}(?:\.\d{1,3}){3}\b/', fn($m) => $this->privacyTemplate->displayIp($m[0]), $line);
     }
 
-    /** Frist der Anmeldeversuche (Aufgabe "Logs aufräumen"), 0 = keine */
+    /** Period of the sign-in attempts (task "Clean up logs"), 0 = none */
     private function attemptDays(): int
     {
         return (int)($this->privacyTemplate->retention()['values']['attempt_days'] ?: 0);
@@ -707,7 +707,7 @@ class RecordPersonalData {
 
     private function recordLabel(array $snapshot, int $id): string
     {
-        // dieselbe Regel wie im Audit-Log: Default-Feld des Bereichs
+        // same rule as in the audit log: default field of the area
         $label = $this->record->auditLabelOf($id, $snapshot);
         return $label !== '' ? $label : '#' . $id;
     }

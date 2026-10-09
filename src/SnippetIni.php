@@ -1,28 +1,27 @@
 <?php
 /**
- * Sprachdateien im INI-Format lesen und schreiben - lang/{code}.ini der Komponenten,
- * die Snippet-Sets der Instanzen (Modul Snippets), var/translation/translated/*.ini
- * und die Vorlagen unter var/translation/blueprint.
+ * Read and write language files in INI format - lang/{code}.ini of the components,
+ * the snippet sets of the instances (Snippets module), var/translation/translated/*.ini
+ * and the templates under var/translation/blueprint.
  *
- * Bewusst KEIN parse_ini_file(): Dort sind yes/no/true/false/on/off/none/null als
- * Schlüssel Syntaxfehler (das Core-Snippet 'yes' wäre nicht ladbar), ${NAME} in einem
- * Wert setzt eine Umgebungsvariable ein und Konstanten in Werten ohne Anführungszeichen
- * werden aufgelöst. Ein Übersetzungspaket von außen soll nichts davon auslösen können;
- * ausgeführt wird nichts.
+ * Deliberately NOT parse_ini_file(): there yes/no/true/false/on/off/none/null as
+ * keys are syntax errors (the core snippet 'yes' would not be loadable), ${NAME} in a
+ * value substitutes an environment variable, and constants in values without quotes
+ * are resolved. A translation package from outside must not be able to trigger any of
+ * this; nothing is executed.
  *
  * FORMAT
  * --------------------
- *     ; Kommentar (auch # am Zeilenanfang)
- *     [backend]                       Abschnitt (nur in Übersetzungspaketen, s. u.)
- *     schluessel = "Wert"             Werte konsequent in doppelten Anführungszeichen
- *     mehrzeilig = "Zeile 1
- *     Zeile 2"                        ein Wert darf über mehrere Zeilen gehen
+ *     ; comment (also # at the start of a line)
+ *     [backend]                       section (only in translation packages, see below)
+ *     key = "value"                   values consistently in double quotes
+ *     multiline = "line 1
+ *     line 2"                         a value may span several lines
  *
- * Innerhalb der Anführungszeichen gelten nur zwei Maskierungen: \" für ein
- * Anführungszeichen und \\ für einen Backslash; jeder andere Backslash bleibt
- * stehen (\n ist also der Text \n, kein Zeilenumbruch). Ein Wert ohne
- * Anführungszeichen wird toleriert (Rest der Zeile, getrimmt, ohne ; Kommentar),
- * geschrieben wird er immer mit.
+ * Inside the quotes only two escapes apply: \" for a quote character and \\ for a
+ * backslash; any other backslash stays as it is (\n is therefore the text \n, not a
+ * line break). A value without quotes is tolerated (rest of the line, trimmed, without
+ * ; comment), but it is always written with quotes.
  *
  * @see Camindo\Core\SnippetCache
  */
@@ -30,17 +29,17 @@ namespace Camindo\Core;
 
 class SnippetIni {
 
-    // Schlüssel: wie Snippet-Schlüssel, in Übersetzungspaketen mit Präfix
-    // (ext.datepicker.option_mode) - Buchstaben, Ziffern, _ . -
+    // Keys: like snippet keys, in translation packages with prefix
+    // (ext.datepicker.option_mode) - letters, digits, _ . -
     private const KEY_PATTERN = '/^[A-Za-z0-9_][A-Za-z0-9_.\-]*$/';
 
     /**
-     * Datei lesen.
+     * Read a file.
      *
      * @return array{0: array<string, array<string, string>>, 1: string[]}
-     *         [Abschnitt => [Schlüssel => Text]] (Einträge vor dem ersten
-     *         Abschnitt unter '') und die Liste der Fehler ("Datei:Zeile: ...");
-     *         fehlerhafte Zeilen werden übergangen, der Rest gilt
+     *         [section => [key => text]] (entries before the first
+     *         section under '') and the list of errors ("file:line: ...");
+     *         faulty lines are skipped, the rest applies
      */
     public static function readFile(string $file): array
     {
@@ -50,11 +49,11 @@ class SnippetIni {
     }
 
     /**
-     * @return array{0: array<string, array<string, string>>, 1: string[]}  wie readFile()
+     * @return array{0: array<string, array<string, string>>, 1: string[]}  as readFile()
      */
     public static function parse(string $content, string $name = 'ini'): array
     {
-        // BOM und Windows-Zeilenenden
+        // BOM and Windows line endings
         if (str_starts_with($content, "\xEF\xBB\xBF")) $content = substr($content, 3);
         $content = str_replace(["\r\n", "\r"], "\n", $content);
 
@@ -99,12 +98,12 @@ class SnippetIni {
                 continue;
             }
 
-            // Wert: ab dem Gleichheitszeichen, führende Leerzeichen weg
+            // Value: from the equals sign on, leading spaces removed
             $i = $pos + $eq + 1;
             while ($i < $length && ($content[$i] === ' ' || $content[$i] === "\t")) $i++;
 
             if ($i < $length && $content[$i] === '"') {
-                // In Anführungszeichen - darf über Zeilen gehen
+                // In quotes - may span lines
                 $value = '';
                 $i++;
                 $closed = false;
@@ -128,7 +127,7 @@ class SnippetIni {
                     $errors[] = "$name:$rowLine: missing closing quote for '$key'";
                     break;
                 }
-                // Nach dem Wert nur noch Leerzeichen oder ein Kommentar
+                // After the value only spaces or a comment may follow
                 $end = strpos($content, "\n", $i);
                 if ($end === false) $end = $length;
                 $rest = trim(substr($content, $i, $end - $i));
@@ -155,7 +154,7 @@ class SnippetIni {
     }
 
     /**
-     * Wert als "…" mit den Maskierungen von parse().
+     * Value as "…" with the escapes of parse().
      */
     public static function quote(string $value): string
     {
@@ -163,7 +162,7 @@ class SnippetIni {
     }
 
     /**
-     * Einen Eintrag als Zeile: schluessel = "Wert"
+     * One entry as a line: key = "value"
      */
     public static function line(string $key, string $value): string
     {
@@ -171,7 +170,7 @@ class SnippetIni {
     }
 
     /**
-     * Kommentarzeilen (; …) aus einem mehrzeiligen Text.
+     * Comment lines (; …) from a multi-line text.
      */
     public static function comment(string $text): string
     {
@@ -183,14 +182,14 @@ class SnippetIni {
     }
 
     /**
-     * Abschnitte zu INI-Text.
+     * Sections to INI text.
      *
-     * @param array<string, array<string, string>> $sections  Abschnitt => [Schlüssel => Text];
-     *                                                       '' = ohne Abschnittskopf (zuerst)
-     * @param string $header  Kommentar am Dateianfang
-     * @param array<string, array<string, string>> $groups    optional: Abschnitt =>
-     *                         [Schlüssel => Zwischenüberschrift] - vor dem Schlüssel als
-     *                         Kommentar ausgegeben (z. B. die Komponente)
+     * @param array<string, array<string, string>> $sections  section => [key => text];
+     *                                                       '' = without section header (first)
+     * @param string $header  comment at the start of the file
+     * @param array<string, array<string, string>> $groups    optional: section =>
+     *                         [key => subheading] - output as a comment before the key
+     *                         (e.g. the component)
      */
     public static function build(array $sections, string $header = '', array $groups = []): string
     {

@@ -1,78 +1,78 @@
 <?php
 /**
- * Backend-Oberfläche für die Backend-Benutzer (Tabelle `admin`).
+ * Backend interface for the backend users (table `admin`).
  *
  * Einstiegspunkte (Scripte in backend/):
  *
  *     admin_list.php    -> list()    Benutzerliste
  *     admin_info.php    -> info()    Detailansicht
- *     admin_edit.php    -> edit()    anlegen / kopieren / ändern / löschen
- *     admin_search.php  -> search()  Suchmaske und Suchausführung
- *     settings.php      -> settings() persönliche Einstellungen (eigene, oder als
- *                                    Superuser die eines anderen Admins)
+ *     admin_edit.php    -> edit()    create / copy / change / delete
+ *     admin_search.php  -> search()  search mask and search execution
+ *     settings.php      -> settings() personal settings (own, or as
+ *                                    superuser, those of another admin)
  *     totp.php          -> totp()     Zwei-Faktor-Anmeldung: Authenticator-App
  *                                    einrichten/abschalten, Wiederherstellungscodes,
- *                                    E-Mail-Code als eigene Wahl; als Superuser für
- *                                    andere zurücksetzen
- *     password.php      -> password() eigenes Passwort ändern (nur mit dem bisherigen)
- *     devices.php       -> devices()  Anmeldegeräte und Sitzungen: eigene ansehen,
- *                                    einzeln entfernen, andere Sitzungen beenden; als
- *                                    Superuser alle Geräte eines anderen Admins entfernen
+ *                                    email code as own choice; as superuser, for
+ *                                    reset for others
+ *     password.php      -> password() change own password (only with the previous one)
+ *     devices.php       -> devices()  login devices and sessions: view own,
+ *                                    remove individually, end other sessions; as
+ *                                    superuser, remove all devices of another admin
  *
- * Das Modul ist das schlichteste im Bestand und dient deshalb als Muster für den
- * Standardaufbau (docs/developers/03-backend-entwicklung.md): vier Seiten, ein Zustandsautomat in
- * edit(), Hilfsmethoden mit _edit-Präfix.
+ * This is the simplest module in the codebase and therefore serves as the model for the
+ * standard structure (developer docs, chapter 05 (Backend development)): four pages, a state machine in
+ * edit(), helper methods with the _edit prefix.
  *
- * VERSCHLÜSSELTE FELDER
+ * ENCRYPTED FIELDS
  * --------------------
- * email, mobile und phone liegen als 'encrypted' in varbinary-Spalten, das Passwort als
- * nicht umkehrbarer Hash. Für die Oberfläche macht das keinen Unterschied - Dataset
- * ent- und verschlüsselt beim Laden und Speichern. Zu beachten ist nur die Suche:
- * verschlüsselte Felder lassen sich nur exakt vergleichen, nicht per LIKE. Für die
- * unscharfe Suche gibt es die Volltextspalte `ft`, die aus name, displayname,
- * primename und sortname gespeist wird.
+ * email, mobile and phone are stored as 'encrypted' in varbinary columns, the password as
+ * a non-reversible hash. For the interface this makes no difference - Dataset
+ * decrypts and encrypts on load and save. Only the search needs attention:
+ * encrypted fields can only be compared exactly, not with LIKE. For the
+ * fuzzy search there is the full-text column `ft`, fed from name, displayname,
+ * primename and sortname.
  *
  * GRUPPEN
  * --------------------
- * Backend::getGroups() liefert die Auswahlliste (Gruppe 1 = Superuser zuerst). Die
- * Gruppen selbst - mit ihren Rechten auf Module, Instanzen, Bereiche und Sprachen -
- * verwaltet GroupBackend im Reiter "Gruppen" neben der Admin-Liste (nur Superuser).
+ * Backend::getGroups() returns the selection list (group 1 = superuser first). The
+ * groups themselves - with their rights to modules, instances, areas and languages -
+ * are managed by GroupBackend in the "Groups" tab next to the admin list (superuser only).
  *
- * ZUSATZRECHTE (install/settings.php 'access', siehe 12-group-rights.md)
+ * ADDITIONAL RIGHTS (install/settings.php 'access', see developer docs, chapter 11 (Permissions))
  * --------------------
- * Die Liste mit den Namen sieht jeder mit Modulzugriff. Darüber hinaus:
+ * Everyone with module access sees the list of names. In addition:
  *
- *     admin_read_group    Detailansicht (Kontaktdaten) der Admins der eigenen Gruppe
- *     admin_read_other    Detailansicht der Admins anderer Gruppen
- *     admin_create        Admins anlegen und kopieren - in der eigenen Gruppe, mit
+ *     admin_read_group    detail view (contact data) of the admins of one's own group
+ *     admin_read_other    detail view of the admins of other groups
+ *     admin_create        create and copy admins - in one's own group, with
  *                         Startpasswort
- *     admin_change        Daten der Admins der eigenen Gruppe ändern und sie sperren
- *                         (Status) - ohne Passwort und ohne Gruppe
+ *     admin_change        change data of the admins of one's own group and block them
+ *                         (status) - without password and without group
  *
- * Die eigene Detailansicht ist immer lesbar. Das Passwort eines anderen Admins,
- * Löschen, Admins fremder Gruppen und die Einstellungen anderer Admins bleiben dem
+ * One's own detail view is always readable. The password of another admin,
+ * deleting, admins of foreign groups and the settings of other admins remain reserved for the
  * Superuser vorbehalten (_canRead() / _canCreate() / _canChange()).
  *
- * PASSWÖRTER
+ * PASSWORDS
  * --------------------
- * Ein Passwort, das ein anderer Admin gesetzt hat (Startpasswort beim Anlegen,
- * Zurücksetzen durch den Superuser), muss bei der ersten Anmeldung geändert werden
- * (admin.password_change, Admin::hookOnSaved()); ebenso nach
- * admin.password_retention_days. Das eigene Passwort ändert jeder Admin über
- * password.php - nur mit dem bisherigen.
+ * A password that another admin has set (initial password on creation,
+ * reset by the superuser) must be changed at the first login
+ * (admin.password_change, Admin::hookOnSaved()); likewise after
+ * admin.password_retention_days. Every admin changes their own password via
+ * password.php - only with the previous one.
  *
- * ALS LOOKUP-ZIEL
+ * AS LOOKUP TARGET
  * --------------------
- * Andere Formulare wählen einen Admin über ein Lookup-Feld (Vorlage
- * edit_form_lookup_foreign_table, z. B. der Empfänger einer internen Nachricht in
- * MessagingBackend). Dafür kennt list() den Parameter src_field: die Liste bekommt
- * eine Checkbox-Spalte, deren Häkchen cApp.ui.slookupUpdate() aufruft, und
- * ajax_lookup_preview.php (lookupPreview()) liefert den Vorschaublock mit dem
- * versteckten Feld, das die gewählte admin_id in das aufrufende Formular trägt -
- * genau wie TemplateBackend es für Instance::template_id macht.
+ * Other forms select an admin via a lookup field (template
+ * edit_form_lookup_foreign_table, e.g. the recipient of an internal message in
+ * MessagingBackend). For this, list() knows the parameter src_field: the list gets
+ * a checkbox column whose tick calls cApp.ui.slookupUpdate(), and
+ * ajax_lookup_preview.php (lookupPreview()) returns the preview block with the
+ * hidden field that carries the selected admin_id into the calling form -
+ * just as TemplateBackend does for Instance::template_id.
  *
- * @see Camindo\Core\Modules\Admin\Admin  Dataset/Model, enthält auch die Anmeldung
- * @see Camindo\Core\Modules\Admin\GroupBackend  Benutzergruppen und ihre Rechte
+ * @see Camindo\Core\Modules\Admin\Admin  Dataset/model, also contains the login
+ * @see Camindo\Core\Modules\Admin\GroupBackend  user groups and their rights
  * @see Camindo\Core\Backend
  */
 namespace Camindo\Core\Modules\Admin;
@@ -99,18 +99,18 @@ use Camindo\Core\Modules\Audit\AuditBackend;
 use Camindo\Core\Modules\Record\Record;
 use Camindo\Core\Modules\Messaging\Message;
 
-// Der Klassenname ist hier kleingeschrieben, Datei und alle Verwendungsstellen
-// schreiben ihn als `AdminBackend`. PHP vergleicht Klassennamen ohne Rücksicht auf
-// Groß-/Kleinschreibung, der Autoloader findet die Datei über den Dateinamen - es
-// funktioniert also, weicht aber von der Konvention ab (docs/developers/08-konventionen.md).
+// The class name is written in lowercase here, while the file and all places of use
+// write it as `AdminBackend`. PHP compares class names without regard to
+// case, and the autoloader finds the file via the file name - so it
+// works, but deviates from the convention (developer docs, chapter 15 (Conventions)).
 class AdminBackend {
-    // Werden nirgends gelesen oder gefüllt; die Statusdarstellung kommt aus
+    // Are never read or filled; the status display comes from
     // Backend::teaser('status', …).
     protected array $statusIcon = [];
     protected array $statusLabel = [];
 
-    // Einmal im Konstruktor gerendertes Icon, damit die HTML-Vorlage nicht in jeder
-    // Zeile neu aus dem Cache geholt werden muss.
+    // Icon rendered once in the constructor, so that the HTML template does not have to fetch it from the cache
+    // again for each row.
     protected string $iconAdmin = '';
     protected string $iconSuperuser = '';
 
@@ -148,10 +148,10 @@ class AdminBackend {
     }
 
     // ====================
-    // Zusatzrechte (siehe Klassenkommentar)
+    // Additional rights (see class comment)
 
     /**
-     * Darf die Detailansicht eines Admins der Gruppe $groupId gelesen werden?
+     * May the detail view of an admin of group $groupId be read?
      * (0 = eigener Datensatz)
      */
     private function _canRead(int $groupId, int $adminId = 0): bool
@@ -164,8 +164,8 @@ class AdminBackend {
     }
 
     /**
-     * Darf ein Admin angelegt bzw. kopiert werden (Zusatzrecht admin_create; die
-     * Gruppe ist für Nicht-Superuser fest die eigene)?
+     * May an admin be created or copied (additional right admin_create; the
+     * group is fixed to one's own for non-superusers)?
      */
     private function _canCreate(): bool
     {
@@ -175,8 +175,8 @@ class AdminBackend {
     }
 
     /**
-     * Darf ein Admin der Gruppe $groupId geändert bzw. gesperrt werden
-     * (Zusatzrecht admin_change, nur eigene Gruppe)?
+     * May an admin of group $groupId be changed or blocked
+     * (additional right admin_change, own group only)?
      */
     private function _canChange(int $groupId): bool
     {
@@ -186,7 +186,7 @@ class AdminBackend {
     }
 
     /**
-     * Gruppe neuer Admins: für Nicht-Superuser fest die eigene.
+     * Group of new admins: for non-superusers, fixed to one's own.
      */
     private function _ownGroupId(): int
     {
@@ -196,20 +196,20 @@ class AdminBackend {
     /**
      * Benutzerliste (backend/admin_list.php).
      *
-     * 'request' => 'all' lässt Cms::select() Filter, Sortierung und Seitenzahl aus dem
-     * Request übernehmen - damit wirken Suchmaske, Sortierlinks und Paginierung ohne
+     * 'request' => 'all' lets Cms::select() take filter, sort order and page number from the
+     * request - so search mask, sort links and pagination work without
      * eigenes Zutun.
      *
-     * Die Statusspalte trägt zusätzlich ein Dropdown im Spaltenkopf (Schnellfilter);
-     * $thStatusId wird deshalb nicht direkt eingesetzt, sondern erst in die Vorlage
+     * The status column additionally has a dropdown in the column header (quick filter);
+     * $thStatusId is therefore not used directly, but only inserted into the template
      * admin.admin_table_head_column_dropdown gewickelt.
      *
-     * Mit src_field (Name des aufrufenden Lookup-Feldes) wird die Liste zur
-     * Auswahlliste: erste Spalte Checkbox, Häkchen = cApp.ui.slookupUpdate(); bereits
-     * gewählte Admins kommen als 'checked' (Kommaliste) mit. Ein einziger, noch nicht
-     * gewählter Treffer wird sofort übernommen und der Layer geschlossen.
+     * With src_field (name of the calling lookup field) the list becomes a
+     * selection list: first column checkbox, tick = cApp.ui.slookupUpdate(); already
+     * selected admins come along as 'checked' (comma list). A single, not yet
+     * selected hit is applied immediately and the layer is closed.
      *
-     * Request: filter, sort, order, skip (über select 'request'), src_field, checked
+     * Request: filter, sort, order, skip (via select 'request'), src_field, checked
      */
     public function list()
     {
@@ -231,12 +231,12 @@ class AdminBackend {
         // H1
         echo $this->backend->headline('#admin.headline_admin_list');
 
-        // Reiter: Administratoren | Gruppen (nur Superuser, nicht im Lookup)
+        // Tabs: Admins | Groups (superuser only, not in lookup)
         if ($srcField === '') {
             echo $this->groupBackend->moduleTabs('admins');
         }
         
-        // Buttons (Anlegen nur mit dem Zusatzrecht admin_create)
+        // Buttons (create only with the additional right admin_create)
         $canCreate = $this->_canCreate();
         $canChange = $this->_canChange($this->_ownGroupId());
         $this->backend->buttonBarReset();
@@ -258,8 +258,8 @@ class AdminBackend {
 
         // Liste
         // --------------------
-        // Owner-Lookup der Datensatz-Maske (src_field owner_id): ein Nicht-Superuser
-        // darf nur Admins seiner eigenen Gruppe als Owner wählen (12-group-rights.md)
+        // Owner lookup of the record mask (src_field owner_id): a non-superuser
+        // may only select admins of his own group as owner (developer docs, chapter 11 (Permissions))
         $sql = '';
         if ($srcField === 'owner_id' && !$this->backend->isSuperuser()) {
             $sql = '`admin`.`group_id` = ' . $this->_ownGroupId();
@@ -272,7 +272,7 @@ class AdminBackend {
             'sql' => $sql,
         ], $this->admin);
 
-        // Suchbegriffe oder geänderte Sortierung als lesbarer Text
+        // Search terms or changed sort order as readable text
         echo $this->backend->filterText($f);
 
         if ($this->db->num_rows > 0) {
@@ -308,15 +308,15 @@ class AdminBackend {
             $tplTableRow = $this->backend->template('admin.admin_table_row');
             $tableRows = '';
             
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+            // Fetch results (Dataset::fetch: with post-processing of the data)
             $destId = 0;
             $isLinked = false;
             $groupLabels = $this->backend->getGroups();
             while ($data = $this->admin->fetch()) {
                 $destId = (int)$data['admin_id'];
 
-                // Lookup-Aufruf: Checkbox-Spalte. Die Auswahl wandert in das Feld des
-                // aufrufenden Formulars (Layer darunter), geschrieben wird hier nichts.
+                // Lookup call: checkbox column. The selection goes into the field of the
+                // calling form (layer below); nothing is written here.
                 $checkboxColumn = '';
                 if ($srcField !== '') {
                     $isLinked = in_array($destId, $checkedIds, true);
@@ -354,9 +354,9 @@ class AdminBackend {
                 '{table_rows}' => $tableRows
             ]);
 
-            // Context menu (Bearbeiten mit admin_change, Kopieren mit admin_create,
-            // Löschen nur Superuser - ein Menü für alle Zeilen, edit() prüft je
-            // Datensatz noch einmal)
+            // Context menu (edit with admin_change, copy with admin_create,
+            // delete only superuser - one menu for all rows, edit() checks each
+            // record again)
             $menu = match (true) {
                 $this->backend->isSuperuser() => 'admin.admin_context_menu',
                 $canCreate && $canChange => 'admin.admin_context_menu_write',
@@ -369,10 +369,10 @@ class AdminBackend {
             // Pagination bottom
             echo $this->backend->paginationBottom();
 
-            // Lookup-Aufruf mit genau einem, noch nicht gewählten Treffer (z. B. nach
-            // Eingabe eines Namens im Lookup-Feld): sofort übernehmen und schließen.
-            // slookupUpdate() schließt bei einem Einzelfeld (max 1) selbst - ohne
-            // preventClosing ginge sonst auch das Formular darunter zu
+            // Lookup call with exactly one hit not yet selected (e.g. after
+            // entering a name in the lookup field): apply and close immediately.
+            // slookupUpdate() closes itself for a single field (max 1) - without
+            // preventClosing, the form below would otherwise close as well
             if ($srcField !== '' && $this->db->num_rows_unlimited === 1 && !$isLinked) {
                 $this->backend->script("
                     cApp.ui.slookupUpdate('{$srcField}','link',{$destId},true);
@@ -388,13 +388,13 @@ class AdminBackend {
     /**
      * Ajax: Vorschaublock eines Admin-Lookup-Feldes (backend/ajax_lookup_preview.php).
      *
-     * Aufgerufen von cApp.ui.slookupUpdate() / slookupUnlink(), nachdem in der
-     * Auswahlliste ein Häkchen gesetzt oder entfernt wurde. Geschrieben wird nichts:
-     * der Block enthält je gewähltem Admin ein verstecktes Feld data[{src_field}],
-     * das erst mit dem aufrufenden Formular abgeht.
+     * Called by cApp.ui.slookupUpdate() / slookupUnlink() after a tick was set or removed in the
+     * selection list. Nothing is written:
+     * the block contains per selected admin a hidden field data[{src_field}],
+     * which only goes out with the calling form.
      *
      * Request: src_field (Pflicht), ids (Kommaliste), max, function, prefix
-     *          ('filter' für die Suchmaske, sonst 'data')
+     *          ('filter' for the search mask, otherwise 'data')
      */
     public function lookupPreview(): void
     {
@@ -407,7 +407,7 @@ class AdminBackend {
             return;
         }
         $ids = explode(',', preg_replace('/[^0-9,]/', '', (string)($_REQUEST['ids'] ?? '')));
-        // prefix=filter: Suchfeld der Suchmaske (filter[...]), sonst Formularfeld
+        // prefix=filter: search field of the search mask (filter[...]), otherwise form field
         $prefix = ((string)($_REQUEST['prefix'] ?? '') === 'filter') ? 'filter' : 'data';
         echo $this->lookupPreviewCreate($srcField, $ids, $prefix, $max);
         if ($function == 'link') {
@@ -416,19 +416,19 @@ class AdminBackend {
     }
 
     /**
-     * Den Vorschaublock eines Admin-Lookup-Feldes rendern.
+     * Render the preview block of an admin lookup field.
      *
-     * Gemeinsamer Kern von lookupPreview() und dem erstmaligen Formularaufbau in
-     * anderen Modulen (MessagingBackend::_editForm()). Je gewähltem Admin eine Zeile
-     * mit Icon und Name, Entfernen-Button und dem versteckten Feld mit der Id - der
-     * Block IST das Eingabefeld. Gelöschte und deaktivierte Admins bleiben wählbar
-     * sichtbar, wenn sie schon gespeichert sind (load statt select), damit ein
-     * bestehender Wert nicht stillschweigend verschwindet.
+     * Common core of lookupPreview() and the initial form setup in
+     * other modules (MessagingBackend::_editForm()). One row per selected admin
+     * with icon and name, remove button and the hidden field with the id - the
+     * block IS the input field. Deleted and deactivated admins remain selectable
+     * visible if they are already saved (load instead of select), so that an
+     * existing value does not silently disappear.
      *
-     * @param string $srcField  Name des Lookup-Feldes (= Name des Formularfeldes)
-     * @param array  $ids       gewählte admin_ids
-     * @param string $prefix    Formularpräfix ('data' / 'filter')
-     * @param int    $max       1: höchstens ein Admin
+     * @param string $srcField  Name of the lookup field (= name of the form field)
+     * @param array  $ids       selected admin_ids
+     * @param string $prefix    form prefix ('data' / 'filter')
+     * @param int    $max       1: at most one admin
      */
     public function lookupPreviewCreate(string $srcField, array $ids, string $prefix, int $max): string
     {
@@ -463,8 +463,8 @@ class AdminBackend {
     /**
      * Detailansicht eines Benutzers (backend/admin_info.php).
      *
-     * Das Passwort taucht nicht auf - Dataset::load() gibt Felder vom Typ 'password'
-     * gar nicht erst zurück.
+     * The password does not appear - Dataset::load() does not return fields of type 'password'
+     * at all.
      */
     public function info()
     {
@@ -498,7 +498,7 @@ class AdminBackend {
         $icon = ($data['group_id'] == 1) ? $this->iconSuperuser : $this->iconAdmin;
         echo $this->backend->headline("{$icon} {$data['name']}");
 
-        // Reiter: Info | Einstellungen | … (nur für Superuser, siehe _infoTabs())
+        // Tabs: Info | Settings | … (superuser only, see _infoTabs())
         $auditActive = $this->backend->isSuperuser() && $this->backend->auditTabActive();
         echo $this->_infoTabs($id, $auditActive ? 'changes' : 'info');
         
@@ -515,7 +515,7 @@ class AdminBackend {
                 $this->backend->buttonAdd('button_delete', "cApp.layers.replace('Admin/admin_edit.php?id={$id}&function=delete');");
             }
         }
-        // Gelöscht und noch nicht anonymisiert: "Anonymisieren" (Modul Privacy,
+        // Deleted and not yet anonymized: "Anonymize" (module Privacy,
         // Zusatzrecht admin_anonymize - AdminAnonymizer)
         elseif (!AdminAnonymizer::isAnonymized($data) && $this->backend->access()->module('Privacy')
             && $GLOBALS['app']->get(PrivacyBackend::class)->canAnonymizeAdmins()) {
@@ -560,12 +560,12 @@ class AdminBackend {
     }
     
     /**
-     * Reiter "Aktivitäten" der Detailansicht (backend/admin_audit.php): was der
-     * Admin im Audit-Log hinterlassen hat - zuletzt bearbeitete Datensätze und alle
-     * Einträge (AuditBackend::adminActivity()). Nur für Superuser, wie das Modul
+     * "Activities" tab of the detail view (backend/admin_audit.php): what the
+     * admin left in the audit log - recently edited records and all
+     * entries (AuditBackend::adminActivity()). Superuser only, as the module
      * Audit selbst.
      *
-     * Request: id, skip (Blättern)
+     * Request: id, skip (paging)
      */
     public function audit(): void
     {
@@ -599,12 +599,12 @@ class AdminBackend {
     }
 
     /**
-     * Reiterleiste der Detailansicht: Info | Einstellungen | Zwei-Faktor-Anmeldung |
-     * Geräte | Aktivitäten | Änderungen. Die Reiter sieht nur ein Superuser - nur er
-     * darf die Einstellungen eines anderen Admins vorgeben (settings()), dessen TOTP
-     * zurücksetzen (totp()), seine Geräte entfernen (devices()) und das Audit-Log
-     * einsehen: was der Admin getan hat (audit(), "Aktivitäten") und was an seinem
-     * Konto geändert wurde (info() mit tab=audit, "Änderungen").
+     * Tab bar of the detail view: Info | Settings | Two-factor login |
+     * Devices | Activities | Changes. Only a superuser sees the tabs - only he
+     * may preset the settings of another admin (settings()), reset their TOTP
+     * (totp()), remove their devices (devices()) and view the audit log
+     * : what the admin did (audit(), "Activities") and what was changed on their
+     * account (info() with tab=audit, "Changes").
      *
      * @param int    $id      admin_id
      * @param string $active  'info' | 'settings' | 'totp' | 'devices' | 'audit' | 'changes'
@@ -618,44 +618,44 @@ class AdminBackend {
         $this->backend->tabAdd('#admin.headline_totp', "cApp.layers.replace('Admin/totp.php?id={$id}')", $active === 'totp');
         $this->backend->tabAdd('#admin.headline_devices', "cApp.layers.replace('Admin/devices.php?id={$id}')", $active === 'devices');
         $this->backend->tabAdd('#admin.headline_audit', "cApp.layers.replace('Admin/admin_audit.php?id={$id}')", $active === 'audit');
-        // "Änderungen": Audit-Log DES Admin-Kontos (tab=audit auf admin_info.php) -
-        // "Aktivitäten" oben ist, was der Admin selbst geändert hat
+        // "Changes": audit log OF the admin account (tab=audit on admin_info.php) -
+        // "Activities" above is what the admin changed themselves
         $this->backend->auditTabAdd("Admin/admin_info.php?id={$id}");
         return $this->backend->tabBar();
     }
 
     /**
-     * Persönliche Einstellungen (backend/settings.php).
+     * Personal settings (backend/settings.php).
      *
-     * Ohne id (Zahnrad rechts oben) die eigenen; mit id die eines anderen Admins -
-     * das darf nur ein Superuser, als Reiter in dessen Detailansicht. Gespeichert
-     * wird in `admin`.`settings` (Admin::saveSettings()), Admin::hookOnSaved()
-     * trägt die Werte in die laufenden Sessions nach.
+     * Without id (gear icon top right) the own ones; with id those of another admin -
+     * only a superuser may do that, as a tab in their detail view. Saved
+     * in `admin`.`settings` (Admin::saveSettings()), Admin::hookOnSaved()
+     * carries the values into the running sessions.
      *
-     * Was sich einstellen lässt:
-     *     language_id    bevorzugte Sprachversion in der Eingabemaske
+     * What can be set:
+     *     language_id    preferred language version in the input mask
      *     backend_code   Backend-Sprache
-     *     locale         Locale der Datums-, Zeit- und Zahlenformate
+     *     locale         locale of the date, time and number formats
      *     timezone       eigene Zeitzone
-     *     fed            Frontend-Editing (nur eigene Einstellungen: es ist ein Cookie
+     *     fed            frontend editing (own settings only: it is a cookie
      *                    dieses Browsers)
-     *     widgets        Widgets der Startseite als Liste aus Modul + Platz
+     *     widgets        widgets of the start page as a list of module + slot
      *                    (Camindo\Core\Widgets)
-     *     reports        abonnierte Berichte (scheduler_ids, Aufgaben mit "wählbarer
-     *                    Bericht" für die Gruppe des Admins) - nach jedem Lauf kommt
-     *                    das Ergebnis als interne Nachricht (SchedulerRunner)
-     *     message_digest Zusammenfassung der internen Nachrichten per E-Mail
-     *                    (0 aus, 1 täglich - Messaging\MessageDigest)
+     *     reports        subscribed reports (scheduler_ids, tasks with "selectable
+     *                    report" for the admin's group) - after each run the result comes as
+     *                    an internal message (SchedulerRunner)
+     *     message_digest summary of the internal messages by email
+     *                    (0 off, 1 daily - Messaging\MessageDigest)
      *
-     * Neben '' (anzeigen), 'save' und 'errors' gibt es 'update': Hinzufügen und
-     * Entfernen eines Widgets schicken das Formular an sich selbst zurück, ohne zu
-     * speichern - die Liste wandert dabei als verstecktes Feld mit. Gespeichert wird
-     * erst mit "Speichern", wie bei jedem anderen Feld auch.
+     * Besides '' (display), 'save' and 'errors' there is 'update': adding and
+     * removing a widget send the form back to itself without
+     * saving - the list travels along as a hidden field. Saving only happens
+     * with "Save", as with every other field.
      *
-     * Beim Speichern der eigenen Einstellungen wird das Cookie 'fed' gesetzt bzw.
-     * gelöscht, die Wahl von Sprache, Locale und Zeitzone im localStorage abgelegt (Vorbelegung
-     * des Anmeldeformulars) und das Backend neu geladen - die statischen Teile der
-     * Oberfläche (Kopfzeile, Menü) stehen sonst weiter in der alten Sprache.
+     * When saving one's own settings, the cookie 'fed' is set or
+     * deleted, the choice of language, locale and time zone is stored in localStorage (pre-fill
+     * of the login form) and the backend is reloaded - the static parts of the
+     * interface (header, menu) would otherwise stay in the old language.
      */
     public function settings(): void
     {
@@ -665,25 +665,25 @@ class AdminBackend {
         if ($isOwn) $id = $sessionAdminId;
         $function = (string)($_REQUEST['function'] ?? '');
 
-        // Erst verarbeiten, dann ausgeben: das Cookie des Frontend-Editings muss vor
-        // dem ersten Byte gesetzt werden (kein Output-Buffering)
+        // Process first, then output: the frontend editing cookie must be set before
+        // the first byte is output (no output buffering)
         $denied = (!$isOwn && !$this->backend->isSuperuser());
         $data = $denied ? null : $this->admin->load($id);
         $settings = [];
         $saved = false;
         $fedChanged = false;
         if ($data) {
-            // Aktuelle Werte: Vorgaben + gespeicherte Einstellungen + Eingaben des Requests
+            // Current values: defaults + saved settings + input from the request
             $defaults = (array)($this->admin->init()['settings'] ?? []);
             $settings = array_replace($defaults, (array)($data['settings'] ?? []));
             if ($function === 'save' || $function === 'update') {
                 $input = (array)($_REQUEST['data']['settings'] ?? []);
-                // Frontend-Editing ist ein Cookie DIESES Browsers - für andere nicht einstellbar
+                // Frontend editing is a cookie of THIS browser - not settable for others
                 if (!$isOwn) unset($input['fed']);
-                // Widget hinzufügen oder entfernen (siehe _settingsWidgets())
+                // Add or remove a widget (see _settingsWidgets())
                 $input[Widgets::SETTINGS_KEY] = $this->_settingsWidgetsFromRequest($input);
-                // Berichte: nur die, die die Gruppe des Admins abonnieren kann - ohne
-                // Häkchen kommt der Schlüssel gar nicht an, dann ist es keiner
+                // Reports: only those the admin's group may subscribe to - without
+                // a tick the key does not arrive at all, so then there is none
                 $input['reports'] = array_values(array_intersect(
                     $this->system->sanitizeIds((array)($input['reports'] ?? []), true),
                     array_keys($this->_reportOptions((int)$data['group_id']))
@@ -714,14 +714,14 @@ class AdminBackend {
             return;
         }
 
-        // Überschrift: eigene Einstellungen bzw. die des angezeigten Admins
+        // Heading: own settings or those of the admin shown
         if ($isOwn) {
             echo $this->backend->headline('#admin.headline_settings');
         }
         else {
             echo $this->backend->headline("{$this->iconAdmin} {$data['name']}");
             echo $this->_infoTabs($id, 'settings');
-            // Alle Nachrichten des Benutzers löschen (nur hier: Superuser, fremdes Konto)
+            // Delete all messages of the user (only here: superuser, foreign account)
             if ($function === 'messages_delete_form') {
                 echo $this->backend->template('admin.messages_delete_form', ['{id}' => (string)$id]);
                 echo $this->backend->template('container_footer');
@@ -756,11 +756,11 @@ class AdminBackend {
     }
 
     /**
-     * Eigene Einstellungen gespeichert: localStorage und Neuladen (siehe settings();
-     * das Cookie des Frontend-Editings ist dort bereits vor der Ausgabe gesetzt,
-     * aber nur unter der Domain des Backends). Hat sich Frontend-Editing geändert,
-     * läuft statt des Neuladens der Abgleich mit den Websites (cApp.ui.fedSync()),
-     * der ebenfalls im Backend endet.
+     * Own settings saved: localStorage and reload (see settings();
+     * the frontend editing cookie is already set there before output,
+     * but only under the domain of the backend). If frontend editing has changed,
+     * the sync with the websites (cApp.ui.fedSync()) runs instead of the reload,
+     * which likewise ends in the backend.
      */
     private function _settingsApplyOwn(array $settings, bool $fedChanged): void
     {
@@ -779,9 +779,9 @@ class AdminBackend {
     }
 
     /**
-     * Websites für das Frontend-Editing: primary_domain je Instanz, die die eigene
-     * Gruppe lesen darf - ohne die Domain, unter der das Backend gerade läuft (dort
-     * setzt Backend::setFedCookie() das Cookie direkt).
+     * Websites for frontend editing: primary_domain per instance, which the own
+     * group may read - without the domain under which the backend is currently running (there
+     * Backend::setFedCookie() sets the cookie directly).
      *
      * @return array<string,int>  Domain => instance_id
      */
@@ -800,7 +800,7 @@ class AdminBackend {
     }
 
     /**
-     * Daten für cApp.ui.fedSync() als JavaScript-Literal - '' ohne Website.
+     * Data for cApp.ui.fedSync() as a JavaScript literal - '' without website.
      */
     private function _fedSyncJson(int $mode): string
     {
@@ -814,17 +814,17 @@ class AdminBackend {
     }
 
     /**
-     * Das Einstellungsformular.
+     * The settings form.
      *
      * @param int   $id        admin_id
-     * @param bool  $isOwn     eigene Einstellungen (mit Frontend-Editing)
+     * @param bool  $isOwn     own settings (with frontend editing)
      * @param array $settings  aktuelle Werte
-     * @param bool  $changed   true: nach einem Fehler erneut angezeigt
+     * @param bool  $changed   true: shown again after an error
      */
     private function _settingsForm(int $id, bool $isOwn, array $settings, bool $changed): void
     {
         echo '<form action="Admin/settings.php" method="post"' . ($changed ? ' data-changed="true"' : '') . '>';
-        // Zwei-Faktor-Anmeldung: Stand und der Weg zur Einrichtung (totp())
+        // Two-factor login: status and the way to set it up (totp())
         $this->backend->formInit('admin.admin_settings_form', [
             '{data_second_factor}' => $this->_settingsSecondFactor($id, $isOwn),
             '{data_security}' => $isOwn ? $this->_settingsSecurity() : '',
@@ -832,9 +832,9 @@ class AdminBackend {
             '{data_messages}' => $isOwn ? '' : $this->_settingsMessages($id),
         ]);
 
-        // Bevorzugte Sprachversion: '' = Hauptsprache der Instanz; für die eigenen
-        // Einstellungen nur die Sprachen, die die eigene Gruppe lesen darf (A8,
-        // 12-group-rights.md) - ein Superuser sieht alle
+        // Preferred language version: '' = main language of the instance; for own
+        // settings only the languages the own group may read (A8,
+        // developer docs, chapter 11 (Permissions) - a superuser sees all
         $access = $this->backend->access();
         $languageOptions = ['' => $this->cms->snippet('admin.option_language_primary')];
         $this->db->query("SELECT `language_id`, `code`, `label` FROM `language` ORDER BY `position` ASC");
@@ -849,7 +849,7 @@ class AdminBackend {
             'options' => $languageOptions,
         ]);
 
-        // Backend-Sprache (ein früheres Kürzel wie "de" als "de_DE" vorbelegen)
+        // Backend language (pre-fill an earlier code such as "de" as "de_DE")
         $backendCode = (string)($settings['backend_code'] ?? '');
         $this->backend->formField($this->admin, [
             'name' => 'settings.backend_code',
@@ -874,7 +874,7 @@ class AdminBackend {
             'options' => $this->backend->timezoneOptions(),
         ]);
 
-        // Frontend-Editing - nur für die eigenen Einstellungen
+        // Frontend editing - only for own settings
         if ($isOwn) {
             $this->backend->formField($this->admin, [
                 'name' => 'settings.fed',
@@ -888,10 +888,10 @@ class AdminBackend {
             ]);
         }
 
-        // Widgets der Startseite
+        // Start page widgets
         $this->backend->formStatic($this->admin, 'settings.widgets', $this->_settingsWidgets($settings));
 
-        // Berichte abonnieren (wählbare Berichte des Zeitplaners für die Gruppe)
+        // Subscribe to reports (selectable scheduler reports for the group)
         $reports = $this->_reportOptions((int)($this->admin->load($id)['group_id'] ?? 0));
         if ($reports) {
             $this->backend->formField($this->admin, [
@@ -920,8 +920,8 @@ class AdminBackend {
     }
 
     /**
-     * Berichte, die Admins einer Gruppe abonnieren können
-     * (Scheduler::reportsForGroup(): Aufgaben url/php mit "wählbarer Bericht").
+     * Reports that admins of a group can subscribe to
+     * (Scheduler::reportsForGroup(): tasks url/php with "selectable report").
      *
      * @return array  scheduler_id => Bezeichnung
      */
@@ -931,15 +931,15 @@ class AdminBackend {
     }
 
     /**
-     * Frontend-Editing auf den Websites: das Cookie gilt je Domain, das Backend
-     * setzt es beim Speichern nur unter seiner eigenen. Beim Speichern einer
-     * geänderten Einstellung gleicht settings() alle Websites ab (cApp.ui.fedSync());
-     * hier zusätzlich ein Knopf für den Abgleich (z. B. in einem anderen Browser oder
-     * nach Ablauf des Cookies) und je Website (primary_domain, Instanz lesbar für die
-     * eigene Gruppe) ein Knopf, der sie in einem neuen Tab öffnet und das Cookie
-     * setzt (FrontendHandover::fedUrl(), 21-backend-domain.md §4). Ist
-     * Frontend-Editing aus (gespeicherte Einstellung), nur der Abgleich - er löscht
-     * die Cookies auf den Websites.
+     * Frontend editing on the websites: the cookie applies per domain, the backend
+     * only sets it under its own when saving. When saving a
+     * changed setting, settings() syncs all websites (cApp.ui.fedSync());
+     * here additionally a button for the sync (e.g. in another browser or
+     * after the cookie has expired) and per website (primary_domain, instance readable for the
+     * own group) a button that opens it in a new tab and sets the cookie
+     * (FrontendHandover::fedUrl(), developer docs, chapter 13 (Security: authentication)). If
+     * frontend editing is off (saved setting), only the sync - it deletes
+     * the cookies on the websites.
      */
     private function _settingsFedSites(int $mode): string
     {
@@ -981,9 +981,9 @@ class AdminBackend {
     }
 
     /**
-     * Block "Zwei-Faktor-Anmeldung" im Einstellungsformular: welcher Faktor gilt,
-     * dazu ein Knopf zur Seite totp() - eigene Einstellungen im neuen Layer,
-     * fremde (Superuser) als Reiter.
+     * Block "Two-factor login" in the settings form: which factor applies,
+     * plus a button to the totp() page - own settings in the new layer,
+     * foreign ones (superuser) as a tab.
      */
     private function _settingsSecondFactor(int $id, bool $isOwn): string
     {
@@ -1003,9 +1003,9 @@ class AdminBackend {
     }
 
     /**
-     * Zeile "Interne Nachrichten" in den Einstellungen eines anderen Benutzers
-     * (Superuser): Zahl im Posteingang/Postausgang und der Knopf, alle zu löschen
-     * (Message::deleteAllOf()) - etwa für einen gesperrten Mitarbeiter.
+     * Row "Internal messages" in the settings of another user
+     * (superuser): count in inbox/outbox and the button to delete all of them
+     * (Message::deleteAllOf()) - e.g. for a blocked employee.
      */
     private function _settingsMessages(int $id): string
     {
@@ -1025,8 +1025,8 @@ class AdminBackend {
     }
 
     /**
-     * Block "Passwort und Geräte" in den eigenen Einstellungen: Knöpfe zu
-     * password() und devices(), dazu der Stand des Passworts.
+     * Block "Password and devices" in the own settings: buttons for
+     * password() and devices(), plus the status of the password.
      */
     private function _settingsSecurity(): string
     {
@@ -1048,8 +1048,8 @@ class AdminBackend {
     }
 
     /**
-     * Stand des Passworts als Text: zuletzt geändert am …, ggf. "muss bei der
-     * nächsten Anmeldung geändert werden" (Admin::passwordChangeReason()).
+     * Status of the password as text: last changed on …, if applicable "must be changed at the
+     * next login" (Admin::passwordChangeReason()).
      */
     private function _passwordStateLabel(int $adminId): string
     {
@@ -1060,7 +1060,7 @@ class AdminBackend {
         $text = $changed === ''
             ? $this->cms->snippet('admin.text_password_changed_unknown')
             : strtr($this->cms->snippet('admin.text_password_changed_at'), [
-                // gespeichert wird nur der Tag (UTC) - ohne Umrechnung in die Zeitzone
+                // only the day (UTC) is stored - without conversion to the time zone
                 '{date}' => $this->cms->_formatDate(substr($changed, 0, 10) . ' 00:00:00') ?: substr($changed, 0, 10),
             ]);
         $reason = $this->admin->passwordChangeReason($adminId);
@@ -1071,8 +1071,8 @@ class AdminBackend {
     }
 
     /**
-     * Welcher zweite Faktor gilt für diesen Admin (Admin::secondFactor()) - als Text,
-     * bei TOTP mit Datum und Zahl der übrigen Wiederherstellungscodes.
+     * Which second factor applies to this admin (Admin::secondFactor()) - as text,
+     * for TOTP with date and number of the remaining recovery codes.
      */
     private function _secondFactorLabel(array $data): string
     {
@@ -1093,7 +1093,7 @@ class AdminBackend {
         elseif ($factor->name() === 'totp') {
             $state = $this->totpFactor->state($adminId);
             $text = strtr($this->cms->snippet('admin.option_second_factor_totp'), [
-                // gespeichert in UTC (wie alle timestampl-Spalten), gezeigt in der Zeitzone des Admins
+                // stored in UTC (like all timestamp columns), shown in the admin's time zone
                 '{date}' => $state['enabled_at'] === '' ? ''
                     : $this->backend->backendValue($this->cms->utcToUserTZ($state['enabled_at']), ['type' => 'timestampl'], 'medium'),
             ]) . ' – ' . $this->cms->snippet('admin.text_recovery_left', ['count' => $state['recovery_left']]);
@@ -1108,33 +1108,33 @@ class AdminBackend {
     }
 
     /**
-     * Der Block "Widgets" im Einstellungsformular.
+     * The "Widgets" block in the settings form.
      *
-     * Oben die bereits eingehängten Widgets mit ihrem Platz und einem
-     * Entfernen-Knopf, darunter die Auswahl "Widget" + "Position" und der Knopf
-     * "Hinzufügen". Angeboten wird nur, was noch nicht drin ist und was dieser
-     * Admin sehen darf - stellt ein Superuser die Einstellungen eines anderen ein,
-     * ist das die Liste des Superusers; was der andere nicht darf, bleibt auf
-     * dessen Startseite später einfach leer (Widgets::render()).
+     * At the top the widgets already attached, with their slot and a
+     * remove button, below that the selection "Widget" + "Position" and the button
+     * "Add". Only what is not yet included and what this
+     * admin may see is offered - if a superuser sets the settings of another admin,
+     * it is the superuser's list; what the other may not use remains on
+     * the other's start page later simply empty (Widgets::render()).
      *
-     * Die Liste selbst reist als verstecktes Feld mit, damit Hinzufügen und
-     * Entfernen ohne Zwischenspeichern auskommen. Hinzufügen und Entfernen setzen
-     * 'function' auf 'update' und schicken das Formular an sich selbst - ein Knopf
-     * überträgt seinen eigenen Wert nicht (FormData kennt keinen Submitter),
-     * deshalb steht der zu entfernende Eintrag in einem Hiddenfeld.
+     * The list itself travels as a hidden field, so that adding and
+     * removing get by without intermediate saving. Adding and removing set
+     * 'function' to 'update' and send the form to itself - a button
+     * does not transmit its own value (FormData knows no submitter),
+     * so the entry to be removed is in a hidden field.
      */
     private function _settingsWidgets(array $settings): string
     {
         $widgets = $this->widgets->normalize((array)($settings[Widgets::SETTINGS_KEY] ?? []), requireExists: false);
         $positions = $this->widgets->positionOptions();
 
-        // Die Erklärung steht als Hinweis im Block, nicht als Tooltip am Label:
-        // formStatic() rendert keinen Tooltip, und für einen Hover ist der Text zu lang
+        // The explanation is a note in the block, not a tooltip on the label:
+        // formStatic() renders no tooltip, and for a hover the text is too long
         $note = $this->backend->template('remark_block', [
             '{text}' => $this->cms->snippet('admin.note_widgets'),
         ]);
 
-        // Eingehängte Widgets
+        // Attached widgets
         $rows = '';
         foreach ($widgets as $i => $item) {
             $rows .= $this->backend->template('admin.settings_widget_row', [
@@ -1142,7 +1142,7 @@ class AdminBackend {
                 '{label}' => htmlspecialchars($this->widgets->label($item['module'])),
                 '{position}' => htmlspecialchars((string)($positions[$item['position']] ?? $item['position'])),
             ]);
-            // Der Eintrag muss den Umweg über das Formular überstehen
+            // The entry must survive the detour via the form
             $this->backend->formHidden("data[settings][widgets][$i][module]", $item['module']);
             $this->backend->formHidden("data[settings][widgets][$i][position]", $item['position']);
         }
@@ -1150,7 +1150,7 @@ class AdminBackend {
             ? $this->backend->template('admin.settings_widgets_none')
             : $this->backend->template('admin.settings_widget_table', ['{table_rows}' => $rows]));
 
-        // Auswahl "Widget": alles, was noch nicht eingehängt ist
+        // Selection "Widget": everything not yet attached
         $used = array_column($widgets, 'module');
         $moduleOptions = $this->widgets->options($used);
         if (!$moduleOptions) return $list . $this->backend->template('admin.settings_widgets_all_used');
@@ -1162,8 +1162,8 @@ class AdminBackend {
     }
 
     /**
-     * Options einer Auswahlliste des Widget-Blocks. Werte sind Modulnamen bzw.
-     * Plätze, maskiert wird trotzdem beides.
+     * Options of a selection list of the widget block. Values are module names or
+     * slots; both are escaped anyway.
      */
     private function _settingsWidgetOptions(array $options): string
     {
@@ -1176,23 +1176,23 @@ class AdminBackend {
     }
 
     /**
-     * Die Widget-Liste aus dem Request, mit dem gewünschten Hinzufügen bzw.
-     * Entfernen - siehe _settingsWidgets().
+     * The widget list from the request, with the desired addition or
+     * removal - see _settingsWidgets().
      *
-     * Ein neues Widget kommt ans Ende seines Platzes, weil die Liste die
-     * Reihenfolge auf der Startseite ist. Unsinnige Eingaben (Modul schon drin,
+     * A new widget goes to the end of its slot, because the list is the
+     * order on the start page. Nonsensical input (module already in it,
      * unbekannter Platz) fallen in Widgets::normalize() heraus.
      *
-     * @param array $input  data[settings] aus dem Request
-     * @return array        Liste aus ['module' => string, 'position' => int]
+     * @param array $input  data[settings] from the request
+     * @return array        list of ['module' => string, 'position' => int]
      */
     private function _settingsWidgetsFromRequest(array $input): array
     {
         $list = $this->widgets->normalize((array)($input[Widgets::SETTINGS_KEY] ?? []), requireExists: false);
 
-        // Was zu tun ist, sagt das Hiddenfeld, das der jeweilige Knopf setzt - NICHT
-        // der Inhalt der Auswahllisten: die stehen auch beim Speichern auf einem
-        // Modul, und "Speichern" darf kein Widget hinzufügen.
+        // What to do is said by the hidden field that the respective button sets - NOT
+        // the content of the selection lists: those also stand on a
+        // module when saving, and "Save" must not add a widget.
         $action = (string)($_REQUEST['widget_action'] ?? '');
 
         if ($action === 'remove') {
@@ -1206,7 +1206,7 @@ class AdminBackend {
             $module = trim((string)($_REQUEST['widget_add_module'] ?? ''));
             $position = (int)($_REQUEST['widget_add_position'] ?? 0);
             if ($module !== '' && $position > 0) {
-                // Ans Ende des Platzes - die Liste ist die Reihenfolge auf der Startseite
+                // To the end of the slot - the list is the order on the start page
                 $list[] = ['module' => $module, 'position' => $position];
                 $list = $this->widgets->normalize($list, requireExists: false);
             }
@@ -1215,13 +1215,13 @@ class AdminBackend {
     }
 
     // ====================
-    // Eigenes Passwort, Geräte und Sitzungen
+    // Own password, devices and sessions
 
     /**
-     * Eigenes Passwort ändern (backend/password.php): bisheriges, neues, Wiederholung.
-     * Das neue muss der Richtlinie genügen und sich vom bisherigen unterscheiden
-     * (Admin::changePassword()); danach enden die anderen Sitzungen des Kontos
-     * (Admin::hookOnSaved()) und der Admin bekommt eine E-Mail.
+     * Change own password (backend/password.php): previous, new, repeat.
+     * The new one must meet the policy and differ from the previous one
+     * (Admin::changePassword()); afterwards the other sessions of the account end
+     * (Admin::hookOnSaved()) and the admin receives an email.
      */
     public function password(): void
     {
@@ -1268,7 +1268,7 @@ class AdminBackend {
             ],
             'attr' => ['autocomplete' => 'current-password'],
         ]);
-        // Neues Passwort mit der Extension Password (Stärke, Richtlinie) aus dem Schema
+        // New password with the Password extension (strength, policy) from the schema
         $this->backend->formField($this->admin, [
             'name' => 'password',
             'value' => '',
@@ -1294,21 +1294,21 @@ class AdminBackend {
     }
 
     /**
-     * Anmeldegeräte und Sitzungen (backend/devices.php), 16-sicherheit.md §11.
+     * Login devices and sessions (backend/devices.php), developer docs, chapter 13 (Security: authentication).
      *
-     * Eigenes Konto (ohne id):
-     *     ''            Liste der Geräte mit ihren laufenden Sitzungen
-     *     remove        POST: ein Gerät entfernen - seine Sitzungen enden mit
-     *                   (admin_session.device_id); ist es dieses Gerät, lädt die
-     *                   Seite neu und fragt nach der Anmeldung
-     *     end_others    POST: alle anderen Sitzungen beenden (auch die ohne Gerät)
-     * Fremdes Konto (id, nur Superuser), Reiter der Detailansicht:
+     * Own account (without id):
+     *     ''            list of devices with their running sessions
+     *     remove        POST: remove a device - its sessions end with
+     *                   (admin_session.device_id); if it is this device, the
+     *                   page reloads and asks for login
+     *     end_others    POST: end all other sessions (including those without a device)
+     * Foreign account (id, superuser only), tab of the detail view:
      *     ''                Liste
-     *     remove_all_form   Rückfrage
-     *     remove_all        POST: alle Geräte entfernen und alle Sitzungen beenden
+     *     remove_all_form   confirmation prompt
+     *     remove_all        POST: remove all devices and end all sessions
      *
-     * Ein entferntes Gerät gilt bei der nächsten Anmeldung als neu - mit Hinweis per
-     * E-Mail. Einträge im Audit-Log unter dem Konto ('devices').
+     * A removed device counts as new at the next login - with a notice by
+     * email. Entries in the audit log under the account ('devices').
      */
     public function devices(): void
     {
@@ -1349,8 +1349,8 @@ class AdminBackend {
             if ($this->loginDevices->remove('admin', $id, $deviceId)) {
                 $this->_devicesAudit($data, $before);
                 if ($deviceId === $currentDevice) {
-                    // Die eigene Sitzung hing an diesem Gerät und ist damit beendet -
-                    // neu laden führt zur Anmeldung
+                    // The own session was attached to this device and is thereby ended -
+                    // reloading leads to the login
                     $this->backend->script("window.location.reload();");
                     echo $this->backend->template('container_footer');
                     return;
@@ -1359,9 +1359,9 @@ class AdminBackend {
             }
         }
         if ($isOwn && $function === 'end_others') {
-            // Bearbeitungssperren der anderen Sessions freigeben - wie beim Abmelden
-            // auf allen Geräten (StartBackend::_logout()), solange die Zuordnung
-            // der Arbeitskopien zu den Sessions noch besteht
+            // Release the edit locks of the other sessions - as on logout
+            // on all devices (StartBackend::_logout()), as long as the assignment
+            // of the working copies to the sessions still exists
             $this->record->cancelOtherSessions((string)$this->session->get('session_id'));
             $count = $this->session->closeAllOf($id, keepCurrent: true);
             $this->backend->balloon('success', $this->cms->snippet('admin.message_sessions_ended', ['count' => $count]));
@@ -1394,8 +1394,8 @@ class AdminBackend {
     }
 
     /**
-     * Tabelle der Geräte mit der Zahl ihrer laufenden Sitzungen; Sitzungen ohne
-     * Gerät (angelegt vor der Geräteverwaltung oder per CLI) als eigene Zeile.
+     * Table of devices with the number of their running sessions; sessions without a
+     * device (created before device management or via CLI) as their own row.
      */
     private function _devicesTable(int $id, bool $isOwn, int $currentDevice): string
     {
@@ -1444,7 +1444,7 @@ class AdminBackend {
         return $this->backend->template('admin.devices_table', ['{table_rows}' => $rows]);
     }
 
-    /** Audit-Log: Zahl der Geräte vorher/nachher */
+    /** Audit log: number of devices before/after */
     private function _devicesAudit(array $data, int $before): void
     {
         $after = count($this->loginDevices->listFor('admin', (int)$data['admin_id']));
@@ -1458,35 +1458,35 @@ class AdminBackend {
     // Zwei-Faktor-Anmeldung per Authenticator-App (TotpFactor)
 
     /**
-     * Zwei-Faktor-Anmeldung (backend/totp.php), 16-sicherheit.md §16.
+     * Two-factor login (backend/totp.php), developer docs, chapter 13 (Security: authentication).
      *
-     * Eigenes Konto (ohne id) - Zustandsautomat über 'function':
-     *     ''               Stand: aktiv seit, übrige Wiederherstellungscodes, Knöpfe
-     *     setup            QR-Code + Secret + Code-Feld (Setup-Token als Hiddenfeld,
-     *                      gespeichert wird noch nichts)
-     *     enable           POST: erster Code aus der App -> TOTP an, Codes zeigen
+     * Own account (without id) - state machine via 'function':
+     *     ''               status: active since, remaining recovery codes, buttons
+     *     setup            QR code + secret + code field (setup token as hidden field,
+     *                      nothing is saved yet)
+     *     enable           POST: first code from the app -> TOTP on, show codes
      *     recovery_form /
      *     recovery         POST: neuer Satz Wiederherstellungscodes
      *     disable_form /
-     *     disable          POST: TOTP abschalten (nicht, wenn es Pflicht ist)
+     *     disable          POST: switch off TOTP (not if it is mandatory)
      *     email_switch_form /
-     *     email_switch     POST: von der App zum Code per E-Mail wechseln (Code aus
-     *                      der App bestätigt; nicht, wenn TOTP Pflicht ist)
+     *     email_switch     POST: switch from the app to the code by email (code from
+     *                      the app confirms; not if TOTP is mandatory)
      *     email_on_form /
-     *     email_on         POST: Code per E-Mail als eigene Wahl einschalten, wenn er
-     *                      nicht ohnehin für alle gilt (admin.2_factor) - bestätigt
-     *                      mit einem Code, der dabei per E-Mail kommt
+     *     email_on         POST: enable the code by email as own choice, if it
+     *                      does not apply to everyone anyway (admin.2_factor) - confirmed
+     *                      with a code that comes by email in the process
      *     email_off_form /
-     *     email_off        POST: die eigene Wahl wieder abschalten (ebenso bestätigt)
-     * Die schreibenden Schritte verlangen einen gültigen Code aus der App (oder einen
-     * Wiederherstellungscode); jeder falsche zählt im LoginGuard wie ein falsches
-     * Passwort - eine gekaperte Sitzung soll den Faktor weder abschalten noch
-     * durchprobieren können.
+     *     email_off        POST: switch off the own choice again (likewise confirmed)
+     * The writing steps require a valid code from the app (or a
+     * recovery code); every wrong one counts in the LoginGuard like a wrong
+     * password - a hijacked session must be able neither to switch off the factor nor to
+     * guess it.
      *
-     * Fremdes Konto (id, nur Superuser), Reiter der Detailansicht:
+     * Foreign account (id, superuser only), tab of the detail view:
      *     ''          Stand
-     *     reset_form  Rückfrage
-     *     reset       POST: TOTP des Admins zurücksetzen - Audit-Log und E-Mail an ihn
+     *     reset_form  confirmation prompt
+     *     reset       POST: reset the admin's TOTP - audit log and email to them
      */
     public function totp(): void
     {
@@ -1514,7 +1514,7 @@ class AdminBackend {
             echo $this->_infoTabs($id, 'totp');
         }
 
-        // Passkeys unabhängig von security.admin_2fa (abschaltbar mit security.webauthn)
+        // Passkeys independent of security.admin_2fa (can be switched off with security.webauthn)
         if ($isOwn && str_starts_with($function, 'passkey_')) {
             $writing = in_array($function, ['passkey_options', 'passkey_add', 'passkey_remove', 'passkey_recovery'], true);
             if ($writing && !$this->backend->requirePost()) {
@@ -1536,8 +1536,8 @@ class AdminBackend {
             return;
         }
 
-        // Schreibende Schritte nur per POST (17-csrf.md §2.7); ebenso die Schritte,
-        // die einen Code per E-Mail verschicken
+        // Writing steps only via POST (developer docs, chapter 14 (Security: web)); likewise the steps
+        // that send a code by email
         $writing = in_array($function, ['enable', 'recovery', 'disable', 'reset', 'email_switch',
             'email_on_form', 'email_on', 'email_off_form', 'email_off'], true);
         if ($writing && !$this->backend->requirePost()) {
@@ -1548,7 +1548,7 @@ class AdminBackend {
         $active = $this->totpFactor->isActive($id);
 
         if (!$isOwn) {
-            // Zurücksetzen: App samt Passkeys (WebAuthnFactor::reset())
+            // Reset: app including passkeys (WebAuthnFactor::reset())
             $resettable = $active || $this->passkeys->count($id) > 0;
             if ($function === 'reset' && $resettable) {
                 $this->webAuthnFactor->reset($data);
@@ -1599,7 +1599,7 @@ class AdminBackend {
             case 'recovery_form':
             case 'disable_form':
                 $disable = $function === 'disable_form';
-                // Pflicht (totp_required für Superuser): nicht abschaltbar
+                // Mandatory (totp_required for superusers): cannot be switched off
                 if (!$active || ($disable && $this->totpFactor->requiredFor((int)$data['group_id']))) break;
                 $this->_totpCodeForm($disable ? 'disable' : 'recovery');
                 echo $this->backend->template('container_footer');
@@ -1619,7 +1619,7 @@ class AdminBackend {
                 return;
 
             case 'disable':
-                // Pflicht (totp_required für Superuser): nicht abschaltbar
+                // Mandatory (totp_required for superusers): cannot be switched off
                 if (!$active || $this->totpFactor->requiredFor((int)$data['group_id'])) break;
                 $ok = $this->_totpGuarded($data, fn() => $this->totpFactor->verify($data, $code) ?: null);
                 if ($ok === null) {
@@ -1640,8 +1640,8 @@ class AdminBackend {
                 return;
 
             case 'email_switch':
-                // Von der App zurück zum Code per E-Mail - bestätigt mit einem Code aus
-                // der App (oder Wiederherstellungscode), wie das Abschalten
+                // From the app back to the code by email - confirmed with a code from
+                // the app (or recovery code), as switching off
                 if (!$active || $this->totpFactor->requiredFor((int)$data['group_id'])) break;
                 if (!$this->_emailAddressOk($data)) break;
                 $ok = $this->_totpGuarded($data, fn() => $this->totpFactor->verify($data, $code) ?: null);
@@ -1681,7 +1681,7 @@ class AdminBackend {
                 $ok = $this->_totpGuarded($data, fn() => $this->_emailCodeOk($id, $code) ?: null,
                     'admin.error_email_code', 'admin.label_email_code');
                 if ($ok === null) {
-                    // Der Code ist mit dem Versuch verbraucht - neuer Anlauf über den Knopf
+                    // The code is used up with the attempt - new try via the button
                     $this->_editErrors();
                     break;
                 }
@@ -1700,16 +1700,16 @@ class AdminBackend {
     }
 
     /**
-     * Code-Prüfung mit dem LoginGuard des eigenen Namens: gesperrt -> gar nicht erst
-     * prüfen; Fehlschlag -> Fehlversuch verbuchen; Erfolg -> Zähler leeren.
+     * Code check with the LoginGuard of the own name: blocked -> do not even
+     * check; failure -> record a failed attempt; success -> clear the counter.
      *
-     * @param callable $check  liefert bei Erfolg einen Wert, sonst null
-     * @return mixed           Ergebnis von $check oder null (Fehler in Cms::errors)
+     * @param callable $check  returns a value on success, otherwise null
+     * @return mixed           result of $check or null (errors in Cms::errors)
      */
     private function _totpGuarded(array $data, callable $check, string $errorSnippet = 'admin.error_totp_code',
         string $labelSnippet = 'admin.label_totp_code'): mixed
     {
-        // Schlüssel wie bei der Anmeldung: am bekannten Gerät ein eigener Zähler
+        // Key as at login: on a known device a separate counter
         $name = $this->admin->guardKey((string)$data['name'], (int)$data['admin_id']);
         $label = $this->cms->snippet($labelSnippet);
         if ($blocked = $this->loginGuard->blockedFor($name)) {
@@ -1727,9 +1727,9 @@ class AdminBackend {
     }
 
     /**
-     * Lässt sich der Code per E-Mail als eigene Wahl ein- ($on) bzw. ausschalten?
-     * Nicht bei aktiver App (dafür email_switch) und nicht, wenn er ohnehin für
-     * alle gilt (admin.2_factor).
+     * Can the code by email be switched on ($on) or off as an own choice?
+     * Not while the app is active (use email_switch for that) and not if it already applies
+     * to everyone (admin.2_factor).
      */
     private function _emailFactorSwitchable(int $id, bool $totpActive, bool $on): bool
     {
@@ -1738,8 +1738,8 @@ class AdminBackend {
     }
 
     /**
-     * Hat der Admin eine E-Mail-Adresse? Sonst Fehlermeldung (ohne Adresse käme
-     * kein Code an - das Konto wäre gesperrt).
+     * Does the admin have an email address? Otherwise an error message (without an address
+     * no code would arrive - the account would be locked).
      */
     private function _emailAddressOk(array $data): bool
     {
@@ -1750,8 +1750,8 @@ class AdminBackend {
     }
 
     /**
-     * Bestätigungscode per E-Mail schicken (EmailFactor::start() schreibt ihn in
-     * admin.code); das Zeitfenster admin.2_factor_expiration läuft ab uid_date.
+     * Send confirmation code by email (EmailFactor::start() writes it into
+     * admin.code); the time window admin.2_factor_expiration runs from uid_date.
      */
     private function _emailCodeSend(array $data): bool
     {
@@ -1767,7 +1767,7 @@ class AdminBackend {
     }
 
     /**
-     * Code aus der E-Mail prüfen - ein Versuch, danach ist er verbraucht.
+     * Check the code from the email - one attempt, after which it is used up.
      */
     private function _emailCodeOk(int $adminId, string $code): bool
     {
@@ -1782,14 +1782,14 @@ class AdminBackend {
         return $stored !== '' && $code !== '' && hash_equals($stored, $code);
     }
 
-    /** Gerät, IP und Zeit für eine Benachrichtigung (LoginNotifier) */
+    /** Device, IP and time for a notification (LoginNotifier) */
     private function _eventContext(): array
     {
         return $this->loginDevices->context();
     }
 
     /**
-     * Stand der Zwei-Faktor-Anmeldung und die möglichen Schritte als Knöpfe.
+     * Status of the two-factor login and the possible steps as buttons.
      */
     private function _totpStatus(array $data, bool $isOwn): void
     {
@@ -1816,8 +1816,8 @@ class AdminBackend {
             else {
                 $this->backend->buttonAdd('button_secondary', "cApp.layers.replace('Admin/totp.php?function=recovery_form')", $this->cms->snippet('admin.button_recovery_regenerate'));
                 if (!$required) {
-                    // Rückweg zum Code per E-Mail; "Abschalten" nur, wenn danach nicht
-                    // ohnehin der E-Mail-Code gilt (dann wäre es derselbe Knopf)
+                    // Way back to the code by email; "Switch off" only if afterwards not
+                    // the email code applies anyway (then it would be the same button)
                     $this->backend->buttonAdd('button_secondary', "cApp.layers.replace('Admin/totp.php?function=email_switch_form')", $this->cms->snippet('admin.button_email_switch'));
                     if (!$emailForAll) {
                         $this->backend->buttonAdd('button_secondary', "cApp.layers.replace('Admin/totp.php?function=disable_form')", $this->cms->snippet('admin.button_totp_disable'));
@@ -1825,7 +1825,7 @@ class AdminBackend {
                 }
             }
         }
-        // Code per E-Mail als eigene Wahl (nur, wenn er nicht ohnehin für alle gilt)
+        // Code by email as own choice (only if it does not apply to everyone anyway)
         if ($isOwn && !$state['active'] && !$emailForAll) {
             $chosen = $this->admin->emailFactorChosen($id);
             $this->backend->buttonAdd($chosen ? 'button_danger' : 'button_secondary',
@@ -1843,12 +1843,12 @@ class AdminBackend {
     }
 
     // ====================
-    // Passkeys (WebAuthnFactor, developer_docs/22-webauthn.md)
+    // Passkeys (WebAuthnFactor, developer docs, chapter 13 (Security: authentication))
 
     /**
-     * Abschnitt "Passkeys" unter dem zweiten Faktor: Liste, beim eigenen Konto mit
-     * "Entfernen" und "Passkey hinzufügen". Ohne feste Backend-Domain nur ein
-     * Hinweis (WebAuthn bindet jeden Schlüssel an eine Domain).
+     * Section "Passkeys" under the second factor: list, for the own account with
+     * "Remove" and "Add passkey". Without a fixed backend domain only a
+     * note (WebAuthn binds every key to a domain).
      */
     private function _passkeyList(int $id, array $passkeys, bool $isOwn): void
     {
@@ -1882,7 +1882,7 @@ class AdminBackend {
             if (count($passkeys) < Passkeys::MAX_PER_ADMIN) {
                 $this->backend->buttonAdd('button_primary', "cApp.layers.replace('Admin/totp.php?function=passkey_form')", $this->cms->snippet('admin.button_passkey_add'));
             }
-            // Neue Wiederherstellungscodes ohne App (die TOTP-Variante fragt den App-Code)
+            // New recovery codes without the app (the TOTP variant asks for the app code)
             if ($passkeys && !$this->totpFactor->isActive($id)) {
                 $this->backend->buttonAdd('button_secondary', "cApp.layers.replace('Admin/totp.php?function=passkey_recovery_form')", $this->cms->snippet('admin.button_recovery_regenerate'));
             }
@@ -1891,16 +1891,16 @@ class AdminBackend {
     }
 
     /**
-     * Schritte function=passkey_*. Nur das eigene Konto.
+     * Steps function=passkey_*. Only the own account.
      *
      *     passkey_form         Bezeichnung + bisheriges Passwort
-     *     passkey_options      (POST) Passwort prüfen -> Knopf, der den Passkey
-     *                          auf dem Gerät anlegt (Token mit Challenge im Formular)
-     *     passkey_add          (POST) Antwort prüfen und speichern
-     *     passkey_remove_form  Rückfrage mit Passwort
+     *     passkey_options      (POST) check password -> button that creates the passkey
+     *                          on the device (token with challenge in the form)
+     *     passkey_add          (POST) check the response and save
+     *     passkey_remove_form  confirmation prompt with password
      *     passkey_remove       (POST) entfernen
      *
-     * @return bool  true: Ausgabe erledigt; false: weiter mit der Übersicht
+     * @return bool  true: output done; false: continue with the overview
      */
     private function _passkeyStep(array $data, string $function): bool
     {
@@ -1911,7 +1911,7 @@ class AdminBackend {
 
         switch ($function) {
             case 'passkey_form':
-                // Vorbelegung: Browser / System wie in der Geräteliste ('?' = unbekannt)
+                // Pre-fill: browser / system as in the device list ('?' = unknown)
                 $device = LoginDevices::label((string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
                 $this->_passkeyForm($label !== '' ? $label : ($device === '?' ? '' : $device));
                 return true;
@@ -1982,12 +1982,12 @@ class AdminBackend {
         return false;
     }
 
-    /** Rückfrage mit bisherigem Passwort (Entfernen, neue Wiederherstellungscodes) */
+    /** Confirmation prompt with the previous password (remove, new recovery codes) */
     private function _passkeyConfirm(string $textSnippet, string $function, int $passkeyId,
         string $style, string $buttonSnippet, array $vars = []): void
     {
         echo $this->backend->template('admin.passkey_confirm_form', [
-            // einfache Platzhalter {label} ersetzt Cms::snippet() nicht (nur ICU)
+            // simple placeholders {label} are not replaced by Cms::snippet() (ICU only)
             '{text}' => htmlspecialchars(strtr($this->cms->snippet($textSnippet, $vars),
                 array_combine(array_map(fn($k) => '{' . $k . '}', array_keys($vars)), array_map('strval', $vars)) ?: [])),
             '{function}' => $function,
@@ -2004,7 +2004,7 @@ class AdminBackend {
         $this->backend->script("document.getElementById('passkey-password')?.focus();");
     }
 
-    /** Passkey des eigenen Kontos, null = gibt es nicht */
+    /** Passkey of the own account, null = does not exist */
     private function _ownPasskey(int $adminId, int $passkeyId): ?array
     {
         foreach ($this->passkeys->forAdmin($adminId) as $passkey) {
@@ -2014,7 +2014,7 @@ class AdminBackend {
     }
 
     /**
-     * QR-Code, Secret zum Abtippen und das Feld für den ersten Code.
+     * QR code, secret to type in, and the field for the first code.
      *
      * @param array $setup  TotpFactor::newSetup() / setupFromToken()
      */
@@ -2029,7 +2029,7 @@ class AdminBackend {
     }
 
     /**
-     * Code abfragen vor 'disable' bzw. 'recovery'.
+     * Ask for code before 'disable' or 'recovery'.
      */
     private function _totpCodeForm(string $function): void
     {
@@ -2044,7 +2044,7 @@ class AdminBackend {
     }
 
     /**
-     * Neue Wiederherstellungscodes zeigen - nur dieses eine Mal im Klartext.
+     * Show new recovery codes - only this one time, in plain text.
      */
     private function _totpCodesDone(string $messageSnippet, array $codes): void
     {
@@ -2062,16 +2062,16 @@ class AdminBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/admin_edit.php).
+     * Create / copy / change / delete (backend/admin_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] - siehe
-     * docs/developers/03-backend-entwicklung.md für die Bedeutung der einzelnen Werte
+     * State machine via $_REQUEST['function'] - see
+     * developer docs, chapter 05 (Backend development), for the meaning of the individual values
      * (create, edit, copy, save, errors, skip, delete, delete_confirm).
      *
-     * Der Ablauf ist die Reihenfolge der if-Blöcke: Daten beschaffen, Überschrift,
-     * schreibende Aktion, dann das passende Formular. _editSave() setzt bei Fehlern
-     * $this->function auf 'errors' und fällt damit in den Formular-Zweig - deshalb
-     * kein Redirect nach dem Speichern.
+     * The sequence is the order of the if blocks: fetch data, heading,
+     * writing action, then the matching form. _editSave() sets on errors
+     * $this->function to 'errors' and thereby falls into the form branch - therefore
+     * no redirect after saving.
      */
     public function edit(): void
     {
@@ -2098,10 +2098,10 @@ class AdminBackend {
             $this->_editLoad();
         }
 
-        // Zusatzrechte: Löschen nur Superuser; Anlegen/Kopieren mit admin_create,
-        // Ändern mit admin_change - beides nur in der eigenen Gruppe (Superuser
-        // alles). Beim Speichern zählt die gespeicherte Gruppe des Datensatzes,
-        // nicht die aus dem Formular.
+        // Additional rights: delete only superuser; create/copy with admin_create,
+        // change with admin_change - both only in the own group (superuser
+        // everything). When saving, the stored group of the record counts,
+        // not the one from the form.
         if ($this->function !== 'skip' && !$this->_editAllowed()) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
@@ -2144,28 +2144,28 @@ class AdminBackend {
     // edit() Hilfsfunktionen
 
     /**
-     * Darf die laufende edit()-Funktion ausgeführt werden? (siehe edit())
+     * May the running edit() function be executed? (see edit())
      */
     private function _editAllowed(): bool
     {
         if ($this->backend->isSuperuser()) return true;
         if (in_array($this->function, ['delete', 'delete_confirm'], true)) return false;
         if ($this->id > 0) {
-            // Ändern (edit, save, errors): Gruppe des gespeicherten Datensatzes
+            // Change (edit, save, errors): group of the stored record
             $this->db->pushResult();
             $this->db->query("SELECT `group_id` FROM `admin` WHERE `admin_id` = ?", 'i', [$this->id]);
             $groupId = (int)($this->db->fetchNum()[0] ?? 0);
             $this->db->popResult();
             return $groupId > 0 && $this->_canChange($groupId);
         }
-        // Anlegen (create, copy, save ohne Id): eigene Gruppe
+        // Create (create, copy, save without id): own group
         return $this->_canCreate();
     }
 
     /**
-     * Darf das Formular ein Passwort setzen? Beim Anlegen immer (Startpasswort),
-     * sonst nur ein Superuser - das Passwort eines anderen Admins zu ändern hieße,
-     * sein Konto zu übernehmen. Das eigene Passwort ändert jeder über password.php.
+     * May the form set a password? On creation always (initial password),
+     * otherwise only a superuser - changing another admin's password would mean
+     * taking over their account. Everyone changes their own password via password.php.
      */
     private function _editPasswordAllowed(): bool
     {
@@ -2173,10 +2173,10 @@ class AdminBackend {
     }
 
     /**
-     * function=create: leeres Formular mit den Schema-Defaults.
+     * function=create: empty form with the schema defaults.
      *
-     * init() ohne Argument - anders als in AreaBackend werden Vorgaben aus der URL
-     * hier nicht übernommen.
+     * init() without argument - unlike in AreaBackend, defaults from the URL
+     * are not taken over here.
      */
     private function _editCreate(): void
     {
@@ -2187,29 +2187,29 @@ class AdminBackend {
     /**
      * function=edit|copy|delete: Benutzer laden.
      *
-     * Beim Kopieren wird nur die Id verworfen, damit save() einen neuen Datensatz
-     * anlegt. Der Name bleibt zunächst gleich und läuft beim Speichern in die
-     * unique-Prüfung - der Redakteur muss ihn also bewusst ändern.
+     * When copying, only the id is discarded, so that save() creates a new record.
+     * The name initially stays the same and runs into the
+     * unique check when saving - so the editor must deliberately change it.
      */
     private function _editLoad(): void
     {
         $this->data = $this->admin->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the id now
         if ($this->function == 'copy') {
             $this->id = 0;
         }
     }
 
     /**
-     * Überschrift des Formulars. Beim Löschen steht der Benutzername darüber, sonst
-     * die allgemeine Überschrift.
+     * Heading of the form. When deleting, the user name stands above it, otherwise
+     * the general heading.
      *
-     * (Als einzige der _edit-Hilfsmethoden public - ohne erkennbaren Grund, aufgerufen
-     * wird sie nur aus edit().)
+     * (The only _edit helper method that is public - for no apparent reason; it is called
+     * only from edit().)
      */
     private function _editHeadline() {
         if ($this->function == 'delete') {
@@ -2226,21 +2226,21 @@ class AdminBackend {
     /**
      * function=save: speichern.
      *
-     * Die Feldliste steht hier ausdrücklich - nur diese Spalten werden geschrieben.
-     * Damit kann ein manipuliertes Formular keine anderen Spalten setzen (etwa uid
-     * oder login_date aus der Zwei-Faktor-Anmeldung).
+     * The field list is explicit here - only these columns are written.
+     * This way a manipulated form cannot set other columns (such as uid
+     * or login_date from the two-factor login).
      *
-     * 'ft' ist die Volltextspalte; sie steht in der Liste, damit Dataset sie beim
-     * Speichern aus den Quellfeldern neu zusammensetzt.
+     * 'ft' is the full-text column; it is in the list so that Dataset rebuilds it when
+     * saving from the source fields.
      */
     private function _editSave(): void
     {
-        // Nicht-Superuser: die Gruppe ist fest die eigene (Formularwert zählt nicht)
+        // Non-superuser: the group is fixed to the own one (form value does not count)
         if (!$this->backend->isSuperuser()) {
             $this->data['group_id'] = $this->_ownGroupId();
         }
 
-        // Prüfe Daten und speichere
+        // Check data and save
         $fields= [
             'name',
             'password',
@@ -2255,7 +2255,7 @@ class AdminBackend {
             'ft'
         ];
         
-        // Passwort eines bestehenden Kontos: nur Superuser (_editPasswordAllowed())
+        // Password of an existing account: superuser only (_editPasswordAllowed())
         if (!$this->_editPasswordAllowed()) {
             $fields = array_values(array_diff($fields, ['password']));
             unset($this->data['password']);
@@ -2271,7 +2271,7 @@ class AdminBackend {
             $msg = $this->cms->snippet('admin.message_admin_saved');
             $this->backend->balloon('success', $msg);
 
-            // Referer aktualisieren und Fenster schließen
+            // Refresh referer and close the window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -2283,7 +2283,7 @@ class AdminBackend {
     }
 
     /**
-     * Bearbeitet der Admin seinen eigenen Datensatz?
+     * Is the admin editing their own record?
      */
     private function _isOwnAccount(): bool
     {
@@ -2291,14 +2291,14 @@ class AdminBackend {
     }
 
     /**
-     * Neues Passwort für ein bestehendes Konto: im Feld password_current muss das
-     * Passwort des ANGEMELDETEN Benutzers stehen - beim eigenen Konto also das
-     * bisherige, beim Konto eines anderen (nur Superuser) das eigene. Eine offen
-     * stehende Sitzung soll weder das eigene noch ein fremdes Konto übernehmen
-     * können (16-sicherheit.md §13). Fehlversuche zählen im LoginGuard wie eine
-     * falsche Anmeldung - sonst ließe sich das Passwort über dieses Formular
-     * durchprobieren. Ein Konto ohne Passwort (nur per CLI angelegt) braucht keins;
-     * beim Anlegen ist keins nötig.
+     * New password for an existing account: the field password_current must contain the
+     * password of the LOGGED-IN user - for one's own account, therefore the
+     * previous one, for another's account (superuser only) one's own. An open
+     * session left open must be able to take over neither one's own nor a foreign account
+     * (developer docs, chapter 13 (Security: authentication)). Failed attempts count in the LoginGuard like a
+     * wrong login - otherwise the password could be guessed via this form.
+     * An account without a password (created only via CLI) does not need one;
+     * none is needed when creating.
      */
     private function _editPasswordCurrentOk(): bool
     {
@@ -2308,9 +2308,9 @@ class AdminBackend {
     }
 
     /**
-     * Passwort des Kontos $adminId prüfen - mit LoginGuard (siehe
-     * _editPasswordCurrentOk()). Fehler am Feld password_current; $ownAccount =
-     * false: es ging um das Konto eines anderen (Feld "Ihr Passwort").
+     * Check the password of account $adminId - with LoginGuard (see
+     * _editPasswordCurrentOk()). Errors on field password_current; $ownAccount =
+     * false: it concerned another's account (field "Your password").
      */
     private function _passwordCurrentOk(int $adminId, string $current, bool $ownAccount = true): bool
     {
@@ -2338,12 +2338,12 @@ class AdminBackend {
     }
 
     /**
-     * function=delete_confirm: löschen.
+     * function=delete_confirm: delete.
      *
-     * `admin` kennt Soft-Delete, delete() markiert also nur. Wichtig, denn
-     * record.created_by und record.changed_by zeigen mit ON DELETE CASCADE auf
-     * admin.admin_id - ein endgültiges Löschen würde alle Datensätze mitreißen, die
-     * dieser Benutzer angelegt oder zuletzt geändert hat.
+     * `admin` knows soft delete, so delete() only marks. Important, because
+     * record.created_by and record.changed_by point with ON DELETE CASCADE to
+     * admin.admin_id - a final delete would take along all records that
+     * this user created or last changed.
      */
     private function _editDeleteConfirm(): void
     {
@@ -2352,7 +2352,7 @@ class AdminBackend {
             $msg = $this->cms->snippet('admin.message_admin_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -2364,7 +2364,7 @@ class AdminBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -2374,15 +2374,15 @@ class AdminBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Alle Textfelder laufen über dieselbe Schleife; Formulartyp, Beschriftung und
-     * Validierung kommen dabei aus dem Schema von Admin. Von Hand gebaut werden nur die
-     * beiden Auswahlfelder, deren Optionen nicht im Schema stehen können:
-     * group_id (aus Backend::getGroups()) und status_id (aus den Status-Datensätzen).
+     * All text fields run through the same loop; form type, label and
+     * validation come from the schema of Admin. Only the
+     * two selection fields built by hand, whose options cannot be in the schema:
+     * group_id (from Backend::getGroups()) and status_id (from the status records).
      *
-     * data-changed="true" nach einem fehlgeschlagenen Speichern markiert das Formular
-     * als verändert, damit das Javascript beim Schließen nachfragt.
+     * data-changed="true" after a failed save marks the form
+     * as changed, so that the JavaScript asks when closing.
      */
     private function _editForm(): void
     {
@@ -2392,7 +2392,7 @@ class AdminBackend {
 
         $this->backend->formInit('admin.admin_edit_form');
 
-        // Data Fields (Passwort nur, wenn es hier gesetzt werden darf)
+        // Data fields (password only if it may be set here)
         $dataFields = [
             'password',
             'primename',
@@ -2403,7 +2403,7 @@ class AdminBackend {
             'mobile'
         ];
         if ($this->data['name'] !== 'scheduler') {
-            // Name änderbar, außer für User 'scheduler'
+            // Name changeable, except for user 'scheduler'
             array_unshift($dataFields, 'name');
         }
         else {
@@ -2421,10 +2421,10 @@ class AdminBackend {
             ]);
         }
 
-        // Bestehendes Konto: ein neues Passwort nur zusammen mit dem Passwort des
-        // angemeldeten Benutzers - beim eigenen Konto dem bisherigen, sonst dem eigenen
-        // (_editPasswordCurrentOk()). Eine gekaperte oder offen stehende Sitzung soll
-        // kein Konto übernehmen können
+        // Existing account: a new password only together with the password of the
+        // logged-in user - for one's own account the previous one, otherwise one's own
+        // (_editPasswordCurrentOk()). A hijacked or left-open session must not be able to
+        // take over any account
         if ($this->id > 0 && $this->_editPasswordAllowed()) {
             $own = $this->_isOwnAccount();
             $this->backend->formField($this->admin, [
@@ -2443,7 +2443,7 @@ class AdminBackend {
        
         if (!$this->_editPasswordAllowed()) $this->backend->formReplace('{data_password}', '');
 
-        // group_id - nur ein Superuser darf sie wählen, sonst steht die eigene fest
+        // group_id - only a superuser may select it, otherwise the own one is fixed
         // --------------------
         if ($this->data['name'] === 'scheduler') {
             $groupOptions = [InstanceCache::SUPERUSER_GROUP_ID => $this->cms->snippet('group_label_superuser')];
@@ -2488,7 +2488,7 @@ class AdminBackend {
     }
 
     /**
-     * Wirklich löschen? Formular
+     * Really delete? Form
      */
     private function _editDeleteForm(): void
     {
@@ -2513,7 +2513,7 @@ class AdminBackend {
     /**
      * Suche (backend/admin_search.php).
      *
-     * Ohne function die Maske, mit function=search die Ausführung.
+     * Without function the mask, with function=search the execution.
      */
     public function search():void
     {
@@ -2529,29 +2529,29 @@ class AdminBackend {
     }
 
     /**
-     * function=search: Suche ausführen.
+     * function=search: run the search.
      *
-     * Rendert keine Trefferliste. Stattdessen schließt sich der Suchlayer und der
-     * darunterliegende Listenlayer wird mit den Suchparametern in der URL neu geladen;
-     * list() wertet sie über Cms::select(['request' => 'all']) aus. Dadurch
-     * funktionieren danach Sortierung und Paginierung wie sonst auch.
+     * Renders no result list. Instead, the search layer closes and the list layer
+     * below is reloaded with the search parameters in the URL;
+     * list() evaluates them via Cms::select(['request' => 'all']). As a result,
+     * sorting and pagination then work as usual.
      */
     private function _search(): void
     {
-        // Parameter aus Post
+        // Parameters from POST
         $queryString = http_build_query($_POST);
 
-        // Sicher für Javascript verpacken
-        // json_encode maskiert < > ' " & als \uXXXX - der String darf danach in das
-        // Javascript unten eingesetzt werden.
+        // Wrap safely for JavaScript
+        // json_encode escapes < > ' " & as \uXXXX - the string may then be inserted into the
+        // JavaScript below.
         $safeParams = json_encode($queryString, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
-        // json_encode liefert den String MIT Anführungszeichen. substr(..., 1) schneidet
-        // das öffnende ab und ein eigenes wird davorgesetzt - das schließende aus
-        // json_encode bleibt stehen und beendet unten das Javascript-Literal. Deshalb
-        // steht {$safeUri} dort ohne eigene Anführungszeichen.
+        // json_encode returns the string WITH quotation marks. substr(..., 1) cuts off
+        // the opening one and a custom one is prepended - the closing one from
+        // json_encode remains and ends the JavaScript literal below. Therefore
+        // {$safeUri} stands there without its own quotation marks.
         $safeUri = '"Admin/index.php?' . substr($safeParams, 1);
 
-        // Referer-Layer mit diesen Parametern neu laden
+        // Reload the referer layer with these parameters
         $this->backend->script("
             cApp.layers.close();
             cApp.layers.replace({$safeUri});
@@ -2607,8 +2607,8 @@ class AdminBackend {
         ]);
 
         // Sort, Order
-        // Achtung: der dritte Schlüssel muss 'status_id' heißen - so wie die Spalte im
-        // Schema. 'status' gibt es dort nicht, eine Sortierung danach läuft ins Leere.
+        // Caution: the third key must be called 'status_id' - like the column in the
+        // schema. 'status' does not exist there; sorting by it would run into nothing.
         $sortOptions = [
             'name' => $this->cms->snippet('admin.field_admin_name'),
             'primename' => $this->cms->snippet('admin.field_admin_primename'),
@@ -2618,7 +2618,7 @@ class AdminBackend {
 
         // function
         $this->backend->formHidden('function', 'search');
-        // Lookup-Zusammenhang durchreichen (die Trefferliste bleibt Auswahlliste)
+        // Pass on the lookup context (the result list remains a selection list)
         $srcField = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_REQUEST['src_field'] ?? '')));
         if ($srcField !== '') $this->backend->formHidden('src_field', $srcField);
 

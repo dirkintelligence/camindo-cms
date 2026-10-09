@@ -1,34 +1,34 @@
 <?php
 /**
- * Der Installer - die Schritte hinter `php Core/cron/camindo.php install`.
+ * The installer - the steps behind `php Core/cron/camindo.php install`.
  *
- * Läuft genau einmal je Installation (var/install.lock) und macht aus frischen
- * Dateien (composer create-project bzw. Git-Checkout + composer install) ein
- * laufendes CMS. Jeder Schritt ist eine Methode mit eigener Fehlermeldung; die
- * Datei-Schritte sind wiederholbar (sie legen nur an, was fehlt), die
- * Datenbank-Schritte laufen nur ohne Lock oder mit --force. Fragen stellt der
- * Installer nicht selbst - das macht InstallCommand und reicht die Antworten herein.
+ * Runs exactly once per installation (var/install.lock) and turns fresh
+ * files (composer create-project or Git checkout + composer install) into a
+ * running CMS. Each step is a method with its own error message; the
+ * file steps are repeatable (they only create what is missing), the
+ * database steps run only without lock or with --force. The
+ * installer does not ask questions itself - InstallCommand does that and passes the answers in.
  *
- * Schritte (docs/developers/14-installation-und-update.md, 4.1):
+ * Steps (developer docs, chapter 09 (Installation and update)):
  *
- *     1  checkRequirements()   PHP, Extensions, Schreibrechte, Programme (Symlinks nur mit --symlink-assets)
+ *     1  checkRequirements()   PHP, extensions, write permissions, programs (symlinks only with --symlink-assets)
  *     2  (Fragen - InstallCommand)
  *     3  writeKeyFile()        .camindo.key, 0600
- *     4  writeConfigFile()     .camindo.php aus templates/camindo.php.dist, 0600
- *     5  writeSqlpwdFile()     .sqlpwd für mysqldump, 0600
- *     6  createDirectories()   var/*, public/media/default, Backend-Assets (Kopie oder Symlink)
- *     7  createDatabase()      schema.sql + seed.sql, mit --fixtures schema.sql + dev.sql (--force: vorher leeren)
- *     8  createAdmin()         erster Admin, Gruppe 1; createSchedulerAdmin() - der
- *                              Admin, unter dem die Aufgaben des Zeitplaners laufen
+ *     4  writeConfigFile()     .camindo.php from templates/camindo.php.dist, 0600
+ *     5  writeSqlpwdFile()     .sqlpwd for mysqldump, 0600
+ *     6  createDirectories()   var/*, public/media/default, backend assets (copy or symlink)
+ *     7  createDatabase()      schema.sql + seed.sql, with --fixtures schema.sql + dev.sql (--force: empty beforehand)
+ *     8  createAdmin()         first admin, group 1; createSchedulerAdmin() - the
+ *                              admin under which the scheduler tasks run
  *     9  registerCore()        system.core_version, installed_at
- *    10  refreshComponents()   ComponentManager::refresh() - entdecken, nicht installieren
+ *    10  refreshComponents()   ComponentManager::refresh() - discover, not install
  *    11  buildRuntime()        Snippet-/HTML-Cache, InstanceCache, .htaccess, Versionsstempel
- *    12  createDefaultTasks()  Vorgabe-Aufgaben des Zeitplaners (Scheduler::DEFAULT_TASKS)
+ *    12  createDefaultTasks()  default tasks of the scheduler (Scheduler::DEFAULT_TASKS)
  *    13  finish()              var/install.lock
  *
- * Ab Schritt 7 braucht der Installer einen Container, dessen Config die eben
- * geschriebene .camindo.php kennt - boot() baut ihn (der Container des CLI-Aufrufs
- * kann mit einer leeren Konfiguration gestartet sein).
+ * From step 7 the installer needs a container whose config knows the just
+ * written .camindo.php - boot() builds it (the container of the CLI call
+ * may have been started with an empty configuration).
  */
 namespace Camindo\Core\Install;
 
@@ -53,7 +53,7 @@ class Installer {
     public const REQUIRED_EXTENSIONS = ['mysqli', 'intl', 'json', 'gd', 'mbstring'];
     public const VAR_DIRS = ['cache', 'config', 'custom', 'dbbackup', 'deleted', 'download', 'export', 'extensions',
         'import', 'log', 'php', 'templates', 'tmp', 'upload'];
-    // Programme, die der Installer sucht: Config-Schlüssel => Kandidaten
+    // programs the installer searches for: config key => candidates
     public const PROGRAMS = [
         'php'       => ['php'],
         'mysqldump' => ['mysqldump', 'mariadb-dump'],
@@ -113,7 +113,7 @@ class Installer {
     // ==== 1 Voraussetzungen ====
 
     /**
-     * @return array  Liste von ['ok' => bool, 'text' => string, 'fatal' => bool]
+     * @return array  list of ['ok' => bool, 'text' => string, 'fatal' => bool]
      */
     public function checkRequirements(bool $symlinkAssets = false): array
     {
@@ -143,7 +143,7 @@ class Installer {
     }
 
     /**
-     * Programme per `which` suchen: Config-Schlüssel => absoluter Pfad oder ''.
+     * Search programs via `which`: config key => absolute path or ''.
      */
     public function findPrograms(): array
     {
@@ -178,14 +178,14 @@ class Installer {
         return $ok;
     }
 
-    // ==== 2 Datenbankverbindung ====
+    // ==== 2 Database connection ====
 
     /**
-     * Verbindung mit den Antworten prüfen; fehlt die Datenbank, wird sie mit
+     * Check the connection with the answers; if the database is missing, it is created with
      * $createDb angelegt.
      *
      * @param array $db  host, port, name, user, pass
-     * @throws \RuntimeException  mit dem mysqli-Fehler
+     * @throws \RuntimeException  with the mysqli error
      */
     public function testDatabase(array $db, bool $createDb): void
     {
@@ -205,7 +205,7 @@ class Installer {
                 if (!$createDb) {
                     throw new \RuntimeException("database '{$db['name']}' does not exist (--create-db creates it)");
                 }
-                // neutrale Kollation des Servers (MySQL 8: utf8mb4_0900_ai_ci, siehe Collation)
+                // neutral collation of the server (MySQL 8: utf8mb4_0900_ai_ci, see Collation)
                 $available = array_column($mysqli->query("SHOW COLLATION WHERE `Charset` = 'utf8mb4'")->fetch_all(), 0);
                 $collation = Collation::neutral($available) ?: 'utf8mb4_unicode_ci';
                 $mysqli->query("CREATE DATABASE `{$db['name']}` CHARACTER SET utf8mb4 COLLATE $collation");
@@ -221,11 +221,11 @@ class Installer {
         }
     }
 
-    // ==== 3-5 Punkt-Dateien ====
+    // ==== 3-5 Dot files ====
 
     /**
-     * .camindo.key - 32 Zufallsbytes, base64. Nur wenn die Datei fehlt: Verlust =
-     * verschlüsselte Felder (E-Mail, Telefon) unlesbar.
+     * .camindo.key - 32 random bytes, base64. Only if the file is missing: loss =
+     * encrypted fields (email, phone) unreadable.
      */
     public function writeKeyFile(): bool
     {
@@ -240,7 +240,7 @@ class Installer {
     }
 
     /**
-     * .camindo.php aus Core/install/templates/camindo.php.dist.
+     * .camindo.php from Core/install/templates/camindo.php.dist.
      *
      * @param array $values  locale, timezone, development_version (bool), db (host,
      *                       port, name, user, pass), paths (php, mysqldump, magick,
@@ -258,7 +258,7 @@ class Installer {
         $dev = !empty($values['development_version']);
         $replace = [
             '{display_errors}'      => $dev ? 'true' : 'false',
-            // Ohne Angabe sicher (https); false nur, wenn der Installer "kein HTTPS" hört
+            // Without specification safe (https); false only if the installer hears "no HTTPS"
             '{cookie_secure}'       => ($values['https'] ?? true) ? 'true' : 'false',
             '{backend_domain}'      => var_export((string)($values['backend_domain'] ?? ''), true),
             '{development_version}' => $dev ? 'true' : 'false',
@@ -268,7 +268,7 @@ class Installer {
             '{db_port}'  => (string)(int)($values['db']['port'] ?: 3306),
             '{db_name}'  => var_export((string)$values['db']['name'], true),
             '{db_user}'  => var_export((string)$values['db']['user'], true),
-            // Passwort aus CAMINDO_DB_PASS: bleibt in der Umgebung (Config::ENV_SECRETS)
+            // password from CAMINDO_DB_PASS: stays in the environment (Config::ENV_SECRETS)
             '{db_pass}'  => var_export(!empty($values['db']['pass_from_env']) ? '' : (string)$values['db']['pass'], true),
         ];
         foreach (self::PROGRAMS as $key => $x) {
@@ -280,7 +280,7 @@ class Installer {
     }
 
     /**
-     * .sqlpwd - [client]-Block für mysqldump (--defaults-extra-file).
+     * .sqlpwd - [client] block for mysqldump (--defaults-extra-file).
      */
     public function writeSqlpwdFile(string $password): bool
     {
@@ -303,7 +303,7 @@ class Installer {
     }
 
     /**
-     * Warnung, wenn eine Punkt-Datei für andere lesbar ist.
+     * Warning if a dot file is readable by others.
      *
      * @return string[]
      */
@@ -318,10 +318,10 @@ class Installer {
         return $warnings;
     }
 
-    // ==== 6 Verzeichnisse ====
+    // ==== 6 Directories ====
 
     /**
-     * var/*, public/media/default (aus Core/install/media_default), public/backend/assets.
+     * var/*, public/media/default (from Core/install/media_default), public/backend/assets.
      */
     public function createDirectories(bool $symlinkAssets = false): void
     {
@@ -351,10 +351,10 @@ class Installer {
     }
 
     /**
-     * public/backend/assets aus Core/public_master/backend/assets: standardmäßig eine
-     * Kopie (läuft auf jedem Webserver, auch ohne FollowSymLinks; upgrade frischt sie
-     * auf - refreshAssets()), mit $symlink ein relativer Symlink für die Entwicklung
-     * am Core (scheitert er, wird kopiert). Vorhandenes bleibt.
+     * public/backend/assets from Core/public_master/backend/assets: by default a
+     * copy (runs on every web server, even without FollowSymLinks; upgrade refreshes it
+     * - refreshAssets()), with $symlink a relative symlink for development
+     * on the core (if it fails, it is copied). Existing content stays.
      */
     public function createAssets(Config $config, bool $symlink = false): void
     {
@@ -366,7 +366,7 @@ class Installer {
             return;
         }
         if (is_link($link)) {
-            // Link ohne Ziel (Verzeichnis verschoben, alter Core-Pfad): neu anlegen
+            // link without target (directory moved, old core path): create anew
             @unlink($link);
             $this->log('backend/assets: dangling symlink removed');
         }
@@ -384,9 +384,9 @@ class Installer {
     }
 
     /**
-     * Kopierte Backend-Assets auf den Stand des Cores bringen (upgrade): neu kopieren
-     * und austauschen - so verschwinden auch Dateien, die der Core nicht mehr hat.
-     * Ein Symlink bleibt, wie er ist.
+     * Bring copied backend assets to the state of the core (upgrade): copy anew
+     * and replace - so files that the core no longer has also disappear.
+     * A symlink stays as it is.
      *
      * @return string  'symlink' | 'refreshed' | 'created'
      */
@@ -446,11 +446,11 @@ class Installer {
         }
     }
 
-    // ==== 7 Datenbank ====
+    // ==== 7 Database ====
 
     /**
-     * schema.sql, seed.sql und mit $fixtures dev.sql. Ist die Datenbank nicht leer,
-     * bricht der Schritt ab - außer mit $force (dann werden alle Tabellen gelöscht).
+     * schema.sql, seed.sql and with $fixtures dev.sql. If the database is not empty,
+     * the step aborts - except with $force (then all tables are deleted).
      */
     public function createDatabase(bool $fixtures, bool $force): void
     {
@@ -471,8 +471,8 @@ class Installer {
         }
         $sqlFile = new SqlFile($db);
         $dir = $this->coreDir . '/install/database';
-        // dev.sql ist ein vollständiger Datenbestand (enthält die Stammdaten) - mit
-        // Fixtures entfällt seed.sql
+        // dev.sql is a complete data set (contains the master data) - with
+        // fixtures, seed.sql is omitted
         $files = ['schema.sql', $fixtures ? 'dev.sql' : 'seed.sql'];
         foreach ($files as $name) {
             $file = "$dir/$name";
@@ -483,7 +483,7 @@ class Installer {
     }
 
     /**
-     * Enthält die Datenbank schon einen Admin? (mit --fixtures: ja, `claude` und `dirk`)
+     * Does the database already contain an admin? (with --fixtures: yes, `claude` and `dirk`)
      */
     public function hasAdmin(): bool
     {
@@ -492,11 +492,11 @@ class Installer {
         return (int)($db->fetchNum()[0] ?? 0) > 0;
     }
 
-    // ==== 8 Erster Admin ====
+    // ==== 8 First admin ====
 
     /**
-     * Superuser in Gruppe 1 über die Dataset-Klasse Admin (Passwort-Hash,
-     * verschlüsselte E-Mail, Einstellungen).
+     * superuser in group 1 via the dataset class Admin (password hash,
+     * encrypted email, settings).
      *
      * @param array $admin  name, password, email, backend_code, timezone
      * @return int  admin_id
@@ -504,7 +504,7 @@ class Installer {
     public function createAdmin(array $admin): int
     {
         $app = $this->boot();
-        // Die Eingabeprüfung meldet über Snippets - der Cache muss dafür da sein
+        // The input check reports via snippets - the cache must be there for this
         $varDir = (string)$app->get(Config::class)->get('paths.var_dir');
         if (!is_dir($varDir . '/cache/lang/' . Cms::FALLBACK_LANG)) $app->get(SnippetCache::class)->build();
         $dataset = $app->get(Admin::class);
@@ -521,7 +521,7 @@ class Installer {
                 'fed'          => '0',
             ],
         ]);
-        // Feldliste wie AdminBackend::_editSave(): uid/uid_date setzt hookOnCreate()
+        // Field list as in AdminBackend::_editSave(): uid/uid_date is set by hookOnCreate()
         $id = $dataset->save(['name', 'password', 'group_id', 'displayname', 'email', 'settings', 'ft'], $data);
         if ($id === null) {
             throw new \RuntimeException('admin could not be created: ' . $app->get(\Camindo\Core\Cms::class)->errorMsg());
@@ -531,11 +531,11 @@ class Installer {
     }
 
     /**
-     * Admin des Zeitplaners ('scheduler', Scheduler::DEFAULT_ADMIN): jede Aufgabe läuft
-     * unter einem Admin (SchedulerRunner, ApiSession::runAs()); neue Aufgaben
-     * bekommen diesen vorgegeben. Superuser-Gruppe, ein zufälliges Passwort, das
-     * niemand kennt - eine Anmeldung im Backend gibt es für ihn nicht. Besteht er
-     * schon (Entwicklungsdaten), bleibt es dabei.
+     * administrator of the scheduler ('scheduler', Scheduler::DEFAULT_ADMIN): every task runs
+     * under one admin (SchedulerRunner, ApiSession::runAs()); new tasks
+     * get this one. Superuser group, a random password that
+     * nobody knows - there is no login to the backend for it. If it
+     * already exists (development data), it stays that way.
      *
      * @return int  admin_id
      */
@@ -573,9 +573,9 @@ class Installer {
     }
 
     /**
-     * Vorgabe-Aufgaben des Zeitplaners anlegen (Scheduler::createDefaults()): Wartung
-     * wie Papierkorb, var/tmp, Lösch-Policies, Fristen, Logs, Backup - nachts verteilt.
-     * Wiederholbar: vorhandene Typen bleiben unangetastet.
+     * Create the default tasks of the scheduler (Scheduler::createDefaults()): maintenance
+     * like trash, var/tmp, deletion policies, deadlines, logs, backup - distributed at night.
+     * Repeatable: existing types remain untouched.
      */
     public function createDefaultTasks(): void
     {
@@ -588,7 +588,7 @@ class Installer {
         $this->log($created ? 'scheduler tasks created: ' . implode(', ', array_keys($created)) : 'scheduler tasks exist');
     }
 
-    // ==== 9-12 Registrieren, Komponenten, Laufzeit, Abschluss ====
+    // ==== 9-12 Register, components, runtime, finish ====
 
     public function registerCore(): void
     {
@@ -639,8 +639,8 @@ class Installer {
     // ==== Container ====
 
     /**
-     * Container mit der Konfiguration aus .camindo.php - unabhängig vom Container
-     * des CLI-Aufrufs, der vor dem Schreiben der Datei gestartet sein kann.
+     * container with the configuration from .camindo.php - independent of the container
+     * of the CLI call, which may have been started before the file was written.
      */
     public function boot(): ContainerInterface
     {
@@ -654,8 +654,8 @@ class Installer {
         })($file);
         $app = new Container();
         $app->set(Config::class, function () use ($cfg) { return new Config($cfg); });
-        // Klassen, die den Container global holen (InstanceCache, Area, …), sollen
-        // denselben sehen - der des CLI-Aufrufs kennt die Datenbank nicht
+        // Classes that fetch the container globally (InstanceCache, Area, …) should
+        // see the same one - the CLI call's container does not know the database
         $GLOBALS['app'] = $app;
         return $this->app = $app;
     }

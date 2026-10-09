@@ -1,92 +1,92 @@
 <?php
 /**
- * Datensatzliste eines Inhaltsbereichs (Erweiterung für RecordBackend).
+ * Record list of a content area (extension for RecordBackend).
  *
- * Einstiegspunkt: backend/record_list.php -> list()
+ * Entry point: backend/record_list.php -> list()
  *
- * Die aufwendigste Liste im Backend, weil sie im Gegensatz zu allen anderen keine
- * festen Spalten hat: welche Felder erscheinen, entscheidet der Redakteur je Bereich
- * über das Kennzeichen visibility_list der Felddefinition.
+ * The most elaborate list in the backend, because unlike all others it has no
+ * fixed columns: which fields appear is decided by the editor per area
+ * via the flag visibility_list of the field definition.
  *
- * DAS SCHEMA WIRD ZUR LAUFZEIT GEBAUT
+ * THE SCHEMA IS BUILT AT RUNTIME
  * --------------------
- * Record::virtualSchema($areaId) liefert die Felddefinitionen des Bereichs als Schema -
- * Meta-Felder und benutzerdefinierte zusammen. Daraus ergeben sich Spaltenköpfe,
- * Sortierbarkeit und die Aufbereitung der Werte (RecordPresenter::listFields() /
- * listValue()). Ohne eindeutigen Bereich (globale Suche) gibt es das nicht; dann
- * bleibt eine einzige Spalte mit dem Default-Feld. Ein Listen-Template des Bereichs
- * (`area`.`list_template_id`) ergänzt eine letzte Spalte ohne Überschrift.
+ * Record::virtualSchema($areaId) returns the field definitions of the area as a schema -
+ * meta fields and user-defined ones together. From this come column headers,
+ * sortability and the preparation of the values (RecordPresenter::listFields() /
+ * listValue()). Without a unique area (global search) this does not exist; then
+ * a single column with the default field remains. A list template of the area
+ * (`area`.`list_template_id`) adds a last column without a heading.
  *
- * DREI BETRIEBSARTEN
+ * THREE OPERATING MODES
  * --------------------
- *     ein Bereich       Spalten nach visibility_list, Baumdarstellung wenn der Bereich
- *                       ein parent_id-Feld hat
- *     mehrere Bereiche  globale Suche - nur die Default-Feld-Spalte
- *     Lookup            src_field gesetzt: zusätzliche Checkbox-Spalte, mit der sich
- *                       die Verknüpfung im aufrufenden Formular setzen lässt
+ *     one area          columns by visibility_list, tree display if the area
+ *                       has a parent_id field
+ *     several areas     global search - only the default field column
+ *     lookup            src_field set: additional checkbox column with which
+ *                       the link can be set in the calling form
  *
- * SORTIERUNG
+ * SORTING
  * --------------------
- * Ohne Angabe im Request gilt die Vorgabe des Bereichs (area.sort_field_id /
- * sort_order), sonst changed_at DESC.
+ * Without a specification in the request, the default of the area applies (area.sort_field_id /
+ * sort_order), otherwise changed_at DESC.
  *
- * @see Camindo\Core\Modules\Record\RecordBackend        gemeinsame Basis, _resolveParams()
- * @see Camindo\Core\Record::virtualSchema()               Schema eines Bereichs
- * @see Camindo\Core\Backend::backendValue()               Werte für die Anzeige aufbereiten
- * @see docs/developers/05-select-und-filter.md
+ * @see Camindo\Core\Modules\Record\RecordBackend        shared base, _resolveParams()
+ * @see Camindo\Core\Record::virtualSchema()               schema of an area
+ * @see Camindo\Core\Backend::backendValue()               prepare values for display
+ * @see developer docs, chapter 04 (Select and filter)
  */
 namespace Camindo\Core\Modules\Record;
 
 class RecordBackendList extends RecordBackend {
 
     /**
-     * Datensatzliste ausgeben (backend/record_list.php).
+     * Output the record list (backend/record_list.php).
      *
-     * Ablauf:
+     * Sequence:
      *
-     *  1. Ohne jeden Bezug (kein Bereich, kein Filter, kein Lookup) schließt sich der
-     *     Layer, statt sämtliche Datensätze des Systems zu listen. Das passiert, wenn
-     *     der Filter einer globalen Suche über den Schließen-Knopf entfernt wurde.
-     *  2. Seitenparameter auflösen (RecordBackend::_resolveParams()).
-     *  3. Schema des Bereichs holen - daraus entstehen die Spalten.
-     *  4. Bereichsfilter als fertiges SQL-Fragment ('sql'), damit er nicht im
-     *     Filtertext über der Liste erscheint, den der Redakteur als seine
-     *     Sucheingabe liest. Die Ids sind vorher zu int gecastet bzw. durch
-     *     sanitizeIds() gelaufen.
-     *  5. Sortierung festlegen (siehe Klassenkommentar).
-     *  6. Kopfzeile, dann Zeile für Zeile die Tabelle.
+     *  1. Without any reference (no area, no filter, no lookup) the layer closes,
+     *     instead of listing all records of the system. This happens when
+     *     the filter of a global search was removed via the close button.
+     *  2. Resolve the page parameters (RecordBackend::_resolveParams()).
+     *  3. Get the schema of the area - the columns are derived from it.
+     *  4. Area filter as a finished SQL fragment ('sql'), so that it does not appear
+     *     in the filter text above the list that the editor reads as their
+     *     search input. The ids have been cast to int beforehand or have
+     *     passed through sanitizeIds().
+     *  5. Set the sorting (see class comment).
+     *  6. Header, then the table row by row.
      *
-     * Einige Felder bekommen in der Tabelle eine eigene Darstellung statt der
-     * allgemeinen aus backendValue(): status_id als farbiges Symbol (mit
-     * Gegenlese-Hinweis), template_id, parent_id und needs_review als Klartext
-     * (RecordPresenter::listValue()). Das Default-Feld wird hervorgehoben und trägt bei
-     * hierarchischen Bereichen die Baum-Einrückung. Hat der Bereich ein
-     * Listen-Template (`area`.`list_template_id`), folgt als letzte Spalte ohne
-     * Kopf dessen Ausgabe je Datensatz (RecordPresenter::listTemplateHtml()).
+     * Some fields get their own display in the table instead of the general one from
+     * backendValue(): status_id as a colored symbol (with a read-back hint),
+     * template_id, parent_id and needs_review as plain text
+     * (RecordPresenter::listValue()). The default field is highlighted and carries the
+     * tree indentation for hierarchical areas. If the area has a
+     * list template (`area`.`list_template_id`), its output per record follows as the last
+     * column without a header (RecordPresenter::listTemplateHtml()).
      *
-     * Die Statusspalte trägt zusätzlich ein Schnellfilter-Menü im Kopf und steht
-     * deshalb immer ganz vorn (array_unshift).
+     * The status column additionally carries a quick filter menu in the header and is
+     * therefore always placed first (array_unshift).
      *
-     * pushResult()/popResult() klammern jeden Schleifendurchlauf: teaser() und
-     * backendValue() setzen selbst Abfragen ab und würden das Ergebnis der Liste
-     * sonst überschreiben.
+     * pushResult()/popResult() bracket each loop iteration: teaser() and
+     * backendValue() run queries themselves and would otherwise overwrite the
+     * result of the list.
      *
-     * Request: area_id | filter | src_field | dest_id (mindestens eines), src_id,
+     * Request: area_id | filter | src_field | dest_id (at least one), src_id,
      *          checked, sort, order, page, relation
      *
-     * relation + dest_id: die Datensätze, die über das Verweisfeld (bzw. mit
-     * relation=any über irgendeines) auf dest_id zeigen - "Alle Verweise auf diesen
-     * Datensatz" im Metafeld-Reiter der Detailansicht.
-     * relation + src_id (ohne src_field): die Datensätze, auf die das Verweisfeld von
-     * src_id zeigt - "mehr" hinter einem gekürzten Verknüpfungsfeld der Detailansicht.
-     * select() übernimmt beides nicht aus dem Request (request=all gilt nur für
-     * filter, sort …), deshalb reicht _list() es geprüft weiter. Mit src_field ist
-     * src_id die Quelle eines Lookup-Aufrufs, nicht die der Verknüpfung.
+     * relation + dest_id: the records that point to dest_id via the link field (or with
+     * relation=any via any of them) - "All references to this record" in the
+     * meta field tab of the detail view.
+     * relation + src_id (without src_field): the records to which the link field of
+     * src_id points - "more" behind a truncated link field of the detail view.
+     * select() does not take either from the request (request=all only applies to
+     * filter, sort …), so _list() passes it on after checking. With src_field
+     * src_id is the source of a lookup call, not that of the link.
      */
     public function list(): void
     {
-        // Wenn keine filter und keine area_id angegeben ist (filter wurde aus globaler Suche wurde per Close-Button gelöscht)
-        // dann Layer schließen - anstatt ALLE Datensätze zu listen
+        // If no filter and no area_id is given (filter was removed from the global search via the close button)
+        // then close the layer - instead of listing ALL records
         if (empty($_REQUEST['area_id']) && empty($_REQUEST['filter']) && empty($_REQUEST['src_field'])
             && empty($_REQUEST['dest_id']) && empty($_REQUEST['relation'])) {
             $this->backend->script('cApp.layers.close();');
@@ -97,8 +97,8 @@ class RecordBackendList extends RecordBackend {
         echo $this->backend->template('container_header');
         $this->function = 'list';
 
-        // Suchfeld '_url' (Id, Slug oder URL) in Filterwerte übersetzen - vor
-        // _resolveParams(), das filter[area_id] auswertet
+        // translate the search field '_url' (id, slug or URL) into filter values - before
+        // _resolveParams(), which evaluates filter[area_id]
         $this->_applyUrlFilter();
 
         $this->_resolveParams();
@@ -109,7 +109,7 @@ class RecordBackendList extends RecordBackend {
             return;
         }
 
-        // Leserecht der Benutzergruppe auf den Bereich (12-group-rights.md)
+        // read right of the user group on the area (developer docs, chapter 11 (Permissions))
         $access = $this->backend->access();
         if ($this->areaId > 0 && !$access->areaRead($this->areaId)) {
             echo $access->deniedHtml();
@@ -131,37 +131,37 @@ class RecordBackendList extends RecordBackend {
 
         if (!empty($this->areaData['note'])) {
             echo $this->backend->template('module_main_note', [
-                '{text}' => $this->cms->_nl2br($this->cms->textOrSnippet((string)$this->areaData['note'])) // Notiz darf ein Snippet sein (#custom.…)
+                '{text}' => $this->cms->_nl2br($this->cms->textOrSnippet((string)$this->areaData['note'])) // note may be a snippet (#custom.…)
             ]);
         }
 
-        // Record-Liste mit Rückgabewerten
+        // record list with return values
         [$destId, $count, $isLinked] = $this->_list();
 
-        // Gelisteten Datensatz direkt verknüpfen?
+        // link the listed record directly?
         $this->_linkImmediately((int)($destId ?? 0), (int)($count ?? 0), (bool)($isLinked ?? false));
 
         echo $this->backend->template('container_footer');
     }
 
     /**
-     * Datensatzliste
-     * Rückgabewert Array:
-     *  $destId   (int)  letzter gelisteter Datensatz (record_id)
-     *  $count    (int)  num_rows_unlimited der Liste
-     *  $isLinked (bool) 
+     * Record list
+     * Return value array:
+     *  $destId   (int)  last listed record (record_id)
+     *  $count    (int)  num_rows_unlimited of the list
+     *  $isLinked (bool)
      */
     private function _list(): array
     {
         $isLinked = false;
 
-        // Bei Suchmaske direkt übergebene Ids:
+        // ids passed directly from the search mask:
         $checkedIds = $this->system->sanitizeIds(
             explode(',', (string)($_REQUEST['checked'] ?? ''))
         );
 
-        // Buttons ("Neu" nur, wenn die Gruppe im Bereich anlegen darf; ohne
-        // festen Bereich entscheidet die Bereichsliste der Maske)
+        // buttons ("New" only if the group may create in the area; without a
+        // fixed area the area list of the mask decides)
         $access = $this->backend->access();
         $canCreate = ($this->areaId < 1) || $access->areaCreate($this->areaId);
         $this->backend->buttonBarReset();
@@ -182,13 +182,13 @@ class RecordBackendList extends RecordBackend {
             $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
 
             if (!empty($this->areaId)) {
-                // Vorschau der Übersicht des Bereichs (Übersichts-Template + Slug-Präfix)
+                // preview of the overview of the area (overview template + slug prefix)
                 $this->backend->buttonAddAreaPreview((int)$this->areaId);
 
-                // Menü rechts: Export, Import, Medien-Import, Stapelverarbeitung, Einstellungen des
-                // Bereichs - je nach Zusatzrecht bzw. Modulzugriff (Area). Export und
-                // Stapelverarbeitung bekommen die Seitenparameter dieser Liste mit
-                // (cApp.layers.queryString(): Filter, Sortierung)
+                // menu on the right: export, import, media import, batch processing, settings of the
+                // area - depending on the additional right or module access (Area). Export and
+                // batch processing receive the page parameters of this list
+                // (cApp.layers.queryString(): filter, sorting)
                 $items = '';
                 if (!empty($this->allowedTypes('export'))) $items .= $this->backend->template('record.record_list_more_item_export');
                 if (!empty($this->allowedTypes('import'))) $items .= $this->backend->template('record.record_list_more_item_import');
@@ -207,21 +207,21 @@ class RecordBackendList extends RecordBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Schema
+        // schema
         if ($this->areaId > 0) {
             $schemaVirtual = $this->record->virtualSchema($this->areaId, false);
-            // schema mit virtuellen Feldern und Metafeldern,
-            // korrekt markierte Felder mit "meta=1", die auf Meta-Feld basieren
+            // schema with virtual fields and meta fields,
+            // correctly marked fields with "meta=1" that are based on a meta field
             $completedSchema = $this->record->virtualSchema($this->areaId, true);
         }
         else {
-            // Nur Felder, die in allen Content-Bereichen vorkommen (Meta-Felder)
+            // only fields that occur in all content areas (meta fields)
             $schemaVirtual = [];
             $completedSchema = $this->cms->schema;
         }
         $this->hasParentId = isset($schemaVirtual['parent_id']);
 
-        // area-Filer (nicht im Filtertext)
+        // area filter (not in the filter text)
         // --------------------
         $sql = '';
         if (!empty($this->areaId)) {
@@ -231,21 +231,21 @@ class RecordBackendList extends RecordBackend {
             $ids =  implode(',', $this->areaIds);
             $sql = "`record`.`area_id` IN ({$ids})";
         }
-        // Ohne festen Bereich (globale Suche, Verweise): nur Bereiche, die die Gruppe
-        // lesen darf - auch ein filter[area_id] darf daran nichts ändern
+        // without a fixed area (global search, references): only areas that the group
+        // may read - a filter[area_id] may not change this either
         if (empty($this->areaId)) {
             $accessSql = $this->backend->areaAccessSql(false, '`record`.`area_id`');
             if ($accessSql !== '') {
-                $accessSql = substr($accessSql, 5); // führendes " AND "
+                $accessSql = substr($accessSql, 5); // leading " AND "
                 $sql = ($sql === '') ? $accessSql : $sql . ' AND ' . $accessSql;
             }
         }
 
-        // Verweise auf einen Datensatz (siehe list())
+        // references to a record (see list())
         $relationParams = $this->_relationParams();
 
-        // Auswahl des Vaterdatensatzes: der Datensatz selbst und sein eigener Zweig
-        // scheiden aus - sonst hinge der Baum an sich selbst.
+        // selection of the parent record: the record itself and its own branch
+        // are excluded - otherwise the tree would hang on itself.
         if ($this->srcIsParent) {
             $excludeSql = $this->_parentExcludeSql();
             if ($excludeSql !== '') {
@@ -253,17 +253,17 @@ class RecordBackendList extends RecordBackend {
             }
         }
 
-        // Sortierung
+        // sorting
         // --------------------
         if (empty($_REQUEST['sort'])) {
-            // Fallback
+            // fallback
             $sort = 'changed_at';
             $order = 'DESC';
-            // Ein Bereich?
+            // one area?
             if ($this->areaId > 0) {
-                // Default-Sortierung des Bereichs ermitteln - die Richtung gilt auch
-                // ohne Sortierfeld (dann changed_at), sonst zeigte filterText() die
-                // Sortierung als geändert an und ließe sie nicht entfernen
+                // determine the default sorting of the area - the direction applies also
+                // without a sort field (then changed_at), otherwise filterText() would show the
+                // sorting as changed and would not let it be removed
                 if ($sortFieldId = (int)($this->areaData['sort_field_id'] ?? 0)) {
                     if ($fieldData = $this->record->fieldData($sortFieldId)) {
                         $sort = $fieldData['name'];
@@ -275,13 +275,13 @@ class RecordBackendList extends RecordBackend {
             $_REQUEST['order'] = $order;
         }
 
-        // Baumbereich: nach `position` sortieren hieße flach über alle Zweige hinweg
-        // sortieren - `position` zählt je Vaterdatensatz und beginnt in JEDEM Zweig
-        // wieder bei 1 (siehe TreeManagerTrait). Die Reihenfolge des Baums steht
-        // allein in `lft`; gemeint ist also lft.
-        // ASC ist dabei zwingend, auch wenn der Bereich DESC vorgibt: die Liste rückt
-        // die Zeilen nach `depth` ein (Baumdarstellung), was nur aufgeht, wenn jeder
-        // Vaterdatensatz vor seinen Kindern steht.
+        // tree area: sorting by `position` would mean sorting flat across all branches -
+        // `position` counts per parent record and starts again at 1 in EVERY branch
+        // (see TreeManagerTrait). The order of the tree is held
+        // solely in `lft`; so lft is meant.
+        // ASC is mandatory here, even if the area specifies DESC: the list indents
+        // the rows by `depth` (tree display), which only works if each
+        // parent record comes before its children.
         if ($_REQUEST['sort'] === 'position' && $this->areaId > 0 && $this->hasParentId) {
             $_REQUEST['sort'] = 'lft';
             $_REQUEST['order'] = 'ASC';
@@ -297,31 +297,31 @@ class RecordBackendList extends RecordBackend {
             'sql' => $sql,
         ] + $relationParams, null, $completedSchema);
 
-        // Suchbegriffe oder geänderte Sortierung als lesbarer Text
+        // search terms or changed sorting as readable text
         echo $this->filterText($f);
 
-        // Pagination top
+        // pagination top
         echo $this->backend->paginationTop();
-        // Gesamtzahl gleich hier - die Zeilen unten stapeln eigene Abfragen
+        // total count right here - the rows below stack their own queries
         $count = (int)$this->db->num_rows_unlimited;
 
         if ($this->db->num_rows < 1) {
-            // Keine Ergebnisse keine Tabelle
+            // no results, no table
             echo $this->backend->template('container_footer');
             return [0, 0, false];
         }
-        
-        // Create Head columns
+
+        // create head columns
         if ($this->hasLookup()) {
-            // Wenn lookup call, dann zusätzliche erste Spalte
+            // if lookup call, then an additional first column
             $headColumns = $this->backend->template('record.lookup_table_head_column');
         }
         else {
             $headColumns = '';
         }
 
-        // Listen-Template des Bereichs: zusätzliche letzte Spalte ohne Kopf
-        // (siehe RecordPresenter::listTemplateHtml())
+        // list template of the area: additional last column without a header
+        // (see RecordPresenter::listTemplateHtml())
         $listTemplateId = (int)($this->areaData['list_template_id'] ?? 0);
         $hasListTemplate = ($this->areaId > 0 && $listTemplateId > 0);
 
@@ -330,8 +330,8 @@ class RecordBackendList extends RecordBackend {
             $headColumns .= '<td>' . $this->cms->snippet('record.field_default') . "</td>\n";
         }
         else {
-            // Eine Spalte je sichtbarem Feld - Verknüpfungsfelder nur, wenn die
-            // Gruppe mindestens einen Zielbereich lesen darf
+            // one column per visible field - link fields only if the
+            // group may read at least one target area
             $visibleFields = array_values(array_filter(
                 $this->presenter->listFields($schemaVirtual),
                 fn($name) => $this->record->relationTargetReadable($schemaVirtual[$name])
@@ -339,7 +339,7 @@ class RecordBackendList extends RecordBackend {
             foreach ($visibleFields as $name) {
                 $headColumn = $this->backend->tableHeadColumn($schemaVirtual[$name], $f, $name);
                 if ($name == 'status_id') {
-                    // Status has dropdown
+                    // status has dropdown
                     $statusItems = [];
                     $statusDropdownItems = $this->_statusDropdownItems(icon:true);
                     foreach ($statusDropdownItems as $statusValue => $statusLabel) {
@@ -364,44 +364,44 @@ class RecordBackendList extends RecordBackend {
             if ($hasListTemplate) $headColumns .= "<td></td>\n";
         }
 
-        // Baumdarstellung nur, wenn der Bereich überhaupt eine Hierarchie hat -
-        // also ein Eingabefeld für parent_id definiert ist. Sonst ist die Liste flach.
+        // tree display only if the area has a hierarchy at all -
+        // i.e. an input field for parent_id is defined. Otherwise the list is flat.
         $hasParentId = isset($schemaVirtual['parent_id']);
 
-        // Create table rows
+        // create table rows
         $tplTableRow = $this->backend->template('record.record_table_row');
         $tableRows = '';
         $destId = 0;
         for ($i = 0; $i < $this->db->num_rows; $i++) {
             $row = $this->cms->fetch();
             $this->db->pushResult();
-            // Neue Zeile
+            // new row
             $destId = (int)$row['record_id'];
 
-            // Wenn lookup call, dann zusätzliche erste Spalte
+            // if lookup call, then an additional first column
             if ($this->hasLookup()) {
                 $srcFieldJs = $this->srcFieldJs();
 
                 if ($this->srcIsParent && $this->srcId > 0) {
-                    // 0. Vaterdatensatz für die EINGABEMASKE wählen: es wird nichts
-                    // geschrieben, die Wahl wandert in das Formular im darunter-
-                    // liegenden Layer. Welcher bereits gewählt ist, steht im Seiten-
-                    // parameter 'checked' - die Arbeitskopie selbst weiß es nicht.
-                    // (Ohne src_id kommt der Aufruf aus der Suchmaske; dort sind
-                    //  mehrere Vaterdatensätze erlaubt und Fall 3 greift.)
+                    // 0. choose the parent record for the INPUT MASK: nothing is
+                    // written, the choice moves into the form in the layer below.
+                    // Which one is already chosen is in the page parameter
+                    // 'checked' - the working copy itself does not know it.
+                    // (Without src_id the call comes from the search mask; there
+                    //  several parent records are allowed and case 3 applies.)
                     $isLinked = in_array($destId, $checkedIds, false);
                     $clickHandler = "cApp.ui.plookupUpdate($srcFieldJs,\$(this).prop('checked')?'link':'unlink',$destId);";
                 }
                 elseif ($this->srcId > 0) {
-                    // 1. srcId angegeben: Verknüpfung mit src-Datensatz soll hegestellt werden können
-                    // Prüfen ob Verknüpfung bereits besteht        
+                    // 1. srcId given: the link with the src record should be possible to set
+                    // check whether the link already exists
                     $isLinked = $this->record->checkRelation($this->srcField, $this->srcId, $destId);
                     $clickHandler = "cApp.ui.lookupRUpdate($srcFieldJs,\$(this).prop('checked')?'link':'unlink',$destId,0,false,{$this->srcId});";
                 }
                 else {
-                    // 2. srcId nicht angegeben: der Datensatz wandert in das Feld des
-                    // aufrufenden Formulars (Suchmaske oder ein fremdes Formular wie
-                    // instance.record_id). Seitenparameter 'checked' wird ausgewertet.
+                    // 2. srcId not given: the record moves into the field of the
+                    // calling form (search mask or a foreign form such as
+                    // instance.record_id). Page parameter 'checked' is evaluated.
                     $isLinked = in_array($destId, $checkedIds, false);
                     $clickHandler = "cApp.ui.slookupUpdate($srcFieldJs,\$(this).prop('checked')?'link':'unlink',$destId);";
                 };
@@ -411,7 +411,7 @@ class RecordBackendList extends RecordBackend {
                     '{checked}' => $isLinked ? ' checked' : ''
                 ]);
 
-                // Checkbox in Spalte packen
+                // wrap the checkbox in a column
                 $tableCols = $this->backend->template('table_column_noctx_lg', [
                     '{html}' => $formCheck
                 ]);
@@ -421,9 +421,9 @@ class RecordBackendList extends RecordBackend {
             }
             $defaultField = $this->backend->getDefaultField($row['area_id']);
             if (empty($schemaVirtual)) {
-                // Mehrere Bereiche: eine einzige Spalte mit dem Default-Feld.
-                // Das Default-Feld wird je ZEILE bestimmt - bei einer bereichsüber-
-                // greifenden Trefferliste kann es in jeder Zeile ein anderes sein.
+                // several areas: a single column with the default field.
+                // The default field is determined per ROW - in a result list spanning
+                // areas it can be a different one in every row.
 
                 $defaultFieldName = $defaultField['name'] ?? 'record_id';
                 $value = $this->backend->backendValue($row[$defaultFieldName], $defaultField, id: $row['record_id']);
@@ -432,14 +432,14 @@ class RecordBackendList extends RecordBackend {
                 ]);
             }
             else {
-                // Eine Spalte je sichtbarem Feld hinzufügen
+                // add one column per visible field
                 foreach ($visibleFields as $name) {
                     $defaultField = (int)($schemaVirtual[$name]['default_field'] ?? 0);
                     $value = $this->presenter->listValue($name, $row, $schemaVirtual);
                     if ($defaultField == 1) {
                         if ($hasParentId) {
-                            // Gefettet mit Baumstruktur
-                            // depth ist 0-basiert: Wurzelknoten rücken nicht ein
+                            // bold with tree structure
+                            // depth is 0-based: root nodes are not indented
                             $depth = (int)($row['depth'] ?? 0);
                             if ($depth > 0) {
                                 $tableCols .= $this->backend->template('table_column_tree_x', [
@@ -455,7 +455,7 @@ class RecordBackendList extends RecordBackend {
                             }
                         }
                         else {
-                            // Nur gefettet
+                            // bold only
                             $tableCols .= $this->backend->template('table_column_default', [
                                 '{text}' => $value
                             ]);
@@ -465,13 +465,13 @@ class RecordBackendList extends RecordBackend {
                         $tableCols .= '<td>' .$value . "</td>\n";
                     }
                 }
-                // Listen-Template des Bereichs als letzte Spalte
+                // list template of the area as last column
                 if ($hasListTemplate) {
                     $tableCols .= '<td>' . $this->presenter->listTemplateHtml($this->areaId, $row) . "</td>\n";
                 }
             }
-            // Kontextmenü: Einträge ohne Recht für diesen Datensatz ausblenden
-            // (Owner-Gruppe entscheidet über Bearbeiten/Löschen, Kopieren = Anlegen)
+            // context menu: hide entries without the right for this record
+            // (owner group decides on edit/delete, copy = create)
             $rowAreaId = (int)$row['area_id'];
             $rowOwnerId = isset($row['owner_id']) ? (int)$row['owner_id'] : null;
             $hide = [];
@@ -479,7 +479,7 @@ class RecordBackendList extends RecordBackend {
             if (!$access->areaCreate($rowAreaId)) $hide[] = 'copy';
             if (!$access->areaDelete($rowAreaId, $rowOwnerId)) $hide[] = 'delete';
 
-            // Zur Zeilen-Sammlung hinzufügen
+            // add to the row collection
             $tableRows .= strtr($tplTableRow, [
                 '{data_id}' => $row['record_id'],
                 '{ctx_hide}' => $hide ? ' data-ctx-hide="' . implode(',', $hide) . '"' : '',
@@ -504,24 +504,24 @@ class RecordBackendList extends RecordBackend {
         // Pagination bottom
         echo $this->backend->paginationBottom();
 
-        // positionsweise - list() zerlegt mit [$destId, $count, $isLinked]
+        // positional - list() splits it with [$destId, $count, $isLinked]
         return [$destId ?? null, $count, $isLinked];
     }
 
 
     /**
-     * SQL-Bedingung, die den bearbeiteten Datensatz und seinen Zweig ausschließt.
+     * SQL condition that excludes the edited record and its branch.
      *
-     * Gebraucht nur beim Lookup-Aufruf für `parent_id`: weder man selbst noch ein
-     * eigener Nachkomme kann der eigene Vaterdatensatz sein - der Baum hinge sonst an
-     * sich selbst. Der Zweig wird über das Nested Set (lft/rgt) begrenzt.
+     * Only needed for the lookup call for `parent_id`: neither the record itself nor
+     * one of its own descendants can be its own parent record - otherwise the tree would hang
+     * on itself. The branch is delimited via the nested set (lft/rgt).
      *
-     * src_id ist die Arbeitskopie; gemeint ist das Original, das getProdData()
-     * liefert - das prüft zugleich, dass die Arbeitskopie dem angemeldeten Redakteur
-     * gehört. Ein neu angelegter Datensatz hat noch kein Original und noch keinen
-     * Zweig, dann gibt es nichts auszuschließen.
+     * src_id is the working copy; what is meant is the original, which getProdData()
+     * returns - this also checks that the working copy belongs to the signed-in editor.
+     * A newly created record has no original yet and no branch,
+     * so there is nothing to exclude.
      *
-     * @return string  '' oder eine WHERE-Teilbedingung
+     * @return string  '' or a WHERE sub-condition
      */
     private function _parentExcludeSql(): string
     {
@@ -537,25 +537,25 @@ class RecordBackendList extends RecordBackend {
         $rgt = (int)$rgt;
         $areaId = (int)$areaId;
 
-        // Ohne gültige Nested-Set-Grenzen (Bereich ohne Baum) gibt es keinen Zweig,
-        // dann ist nur der Datensatz selbst auszuschließen.
+        // without valid nested-set boundaries (area without tree) there is no branch,
+        // then only the record itself is to be excluded.
         if ($lft < 1 || $rgt <= $lft) {
             return "`record`.`record_id` != {$originId}";
         }
-        // lft/rgt zählen je Inhaltsbereich ab 1 (siehe TreeManagerTrait) - ohne den
-        // Bereichsfilter träfe der Zweig-Ausschluss auch fremde Bereiche.
+        // lft/rgt count per content area from 1 (see TreeManagerTrait) - without the
+        // area filter the branch exclusion would also hit foreign areas.
         return "`record`.`record_id` != {$originId}"
             . " AND NOT (`record`.`area_id` = {$areaId}"
             . " AND `record`.`lft` > {$lft} AND `record`.`rgt` < {$rgt})";
     }
 
     /**
-     * filter[_url] auflösen (RecordService::urlFilter()) und durch record_id bzw.
-     * slug ersetzen. Grenzt ein Slug-Präfix auf Bereiche ein, gilt in einer Liste
-     * mit festem Bereich: ist er nicht darunter, gibt es keinen Treffer; in der
-     * globalen Liste die Schnittmenge mit einer Bereichsauswahl.
-     * Der Wert bleibt als filter[_url] in der Adresse (die Suchmaske zeigt ihn
-     * wieder an), select() sieht ihn nicht.
+     * Resolve filter[_url] (RecordService::urlFilter()) and replace it by record_id or
+     * slug. If a slug prefix limits to areas, in a list with a fixed area it
+     * applies: if the area is not below it, there is no hit; in the global list
+     * the intersection with an area selection.
+     * The value remains as filter[_url] in the address (the search mask shows it
+     * again), select() does not see it.
      */
     private function _applyUrlFilter(): void
     {
@@ -578,12 +578,12 @@ class RecordBackendList extends RecordBackend {
     }
 
     /**
-     * relation + dest_id bzw. src_id aus dem Request für select() (siehe list()):
-     * Ids als positive Zahlen, relation 'any' oder Feldnamen (kommasepariert).
-     * src_id nur ohne Lookup-Aufruf (src_field). relation ohne beides: keine
-     * Treffer (select() findet mit relation ohne Quelle nichts).
+     * relation + dest_id or src_id from the request for select() (see list()):
+     * ids as positive numbers, relation 'any' or field names (comma-separated).
+     * src_id only without lookup call (src_field). relation without either: no
+     * hits (select() finds nothing with relation but no source).
      *
-     * @return array  ['relation' => …, 'dest_id' => …, 'src_id' => …] oder []
+     * @return array  ['relation' => …, 'dest_id' => …, 'src_id' => …] or []
      */
     private function _relationParams(): array
     {
@@ -599,21 +599,21 @@ class RecordBackendList extends RecordBackend {
     }
 
     /**
-     * Ergebnisse aus Dataset::select aufbereiten
-     * Inkl. Close-Button, analog zu Backend->filterText()
-     * aber mit Default-Sortierung des Bereichs und
-     * Ausnahme 'lft' ist gemeint, wenn 'position' bei vorhandenem 'parent_id' angefordert wird
-     * 
-     * @param array $f           Rückgabewerte von Dataset::select
+     * Prepare results from Dataset::select
+     * Including close button, analogous to Backend->filterText()
+     * but with the default sorting of the area and
+     * the exception that 'lft' is meant when 'position' is requested with an existing 'parent_id'
+     *
+     * @param array $f           return values of Dataset::select
      */
     public function filterText(array $f): string
     {
         $filterText = (string) $f['filter_text'] ?? '';
-        // defaultSort kommt bei Record aus dem Area
+        // defaultSort comes from the area for Record
         $sortOrder = strtoupper((string)($this->areaData['sort_order'] ?? '')) === 'ASC' ? 'ASC' : 'DESC';
         if ($sortFieldName = $this->areaData['sort_field_name'] ?? '') {
             if ($sortFieldName === 'position' && $this->hasParentId) {
-                // wie oben in list(): Baumreihenfolge ist lft ASC
+                // as above in list(): tree order is lft ASC
                 $sortFieldName = 'lft';
                 $sortOrder = 'ASC';
             }
@@ -646,14 +646,14 @@ class RecordBackendList extends RecordBackend {
     }
 
     /**
-     * Prüft ob (der eine gelistete) Datensatz direkt verknüpft werden soll
-     * Wenn
-     *   - von Lookup geöffnete Liste
-     *   - genau ein Datensatz gefunden wurde
-     *   - der noch nicht verknüpft ist,
-     * dann diesen direkt verknüpfen und Layer schließen
-     * Erspart bei eindeutiger Suche den zusätzlichen Klick.
-     * num_rows_unlimited ist die Gesamtzahl OHNE Paginierung.
+     * Checks whether the (one listed) record should be linked directly
+     * if
+     *   - the list was opened by a lookup
+     *   - exactly one record was found
+     *   - it is not yet linked,
+     * then link this one directly and close the layer.
+     * Saves the extra click for an unambiguous search.
+     * num_rows_unlimited is the total count WITHOUT pagination.
      */
     private function _linkImmediately(?int $destId, ?int $count, bool $isLinked): void
     {
@@ -663,7 +663,7 @@ class RecordBackendList extends RecordBackend {
         ) {
             $srcFieldJs = $this->srcFieldJs();
             if ($this->srcIsParent && $this->srcId > 0) {
-                // Vaterdatensatz: Fenster schließen, übernehmen, Lookup-Feld leeren
+                // parent record: close the window, take over, clear the lookup field
                 $this->backend->script("
                     cApp.layers.close();
                     cApp.ui.plookupUpdate({$srcFieldJs},'link',$destId,true);
@@ -671,8 +671,8 @@ class RecordBackendList extends RecordBackend {
                 ");
             }
             elseif (!empty($this->srcId)) {
-                // direkt verlinken, Fenster schließen, lookupfeld leeren und focussieren
-                $preventClosing = 'true'; // verhindert doppetes Schließen bei max 1 Verknüpfung
+                // link directly, close the window, clear the lookup field and focus it
+                $preventClosing = 'true'; // prevents double closing with max 1 link
                 $this->backend->script("
                     cApp.ui.lookupRUpdate({$srcFieldJs},'link',$destId,0,$preventClosing,{$this->srcId});
                     cApp.layers.close();
@@ -680,7 +680,7 @@ class RecordBackendList extends RecordBackend {
                 ");
             }
             else {
-                // Suchmaske bzw. fremdes Formular
+                // search mask or foreign form
                 $this->backend->script("
                     cApp.ui.slookupUpdate({$srcFieldJs},'link',$destId);
                 ");

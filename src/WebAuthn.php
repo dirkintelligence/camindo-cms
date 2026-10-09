@@ -1,39 +1,39 @@
 <?php
 /**
- * WebAuthn (Passkeys, Sicherheitsschlüssel) - die Prüfung auf dem Server, ohne
- * Bibliothek. developer_docs/22-webauthn.md.
+ * WebAuthn (passkeys, security keys) - the check on the server, without a
+ * library. Developer docs, chapter 13 (Security: authentication).
  *
- * Die Klasse kennt keine Datenbank: sie baut die Optionen für den Browser
- * (navigator.credentials.create()/get()) und prüft, was er zurückschickt. Wo die
- * Schlüssel liegen und wer sie benutzen darf, regelt der Aufrufer
+ * The class knows no database: it builds the options for the browser
+ * (navigator.credentials.create()/get()) and checks what the browser sends back. The
+ * caller decides where the keys are stored and who may use them
  * (Modules\Admin\Passkeys, WebAuthnFactor).
  *
  * RELYING PARTY
  * --------------------
- * Ein Passkey gehört genau einer Domain (RP ID). Das ist die feste Backend-Domain
- * (admin.backend_domain, BackendDomain) ohne Port; ohne sie ist WebAuthn nicht
- * verfügbar (available()). Origin = Schema + Backend-Domain (+ Port), https - http
- * nur bei admin.cookie_secure = false (lokaler Test; Browser erlauben WebAuthn ohne
- * TLS nur unter localhost).
+ * A passkey belongs to exactly one domain (RP ID). That is the fixed backend domain
+ * (admin.backend_domain, BackendDomain) without a port; without it WebAuthn is not
+ * available (available()). Origin = scheme + backend domain (+ port), https - http
+ * only with admin.cookie_secure = false (local testing; browsers allow WebAuthn
+ * without TLS only on localhost).
  *
- * WAS GEPRÜFT WIRD (W3C WebAuthn Level 2, §7.1 / §7.2)
+ * WHAT IS CHECKED (W3C WebAuthn Level 2, §7.1 / §7.2)
  * --------------------
- *     clientDataJSON   type (webauthn.create | webauthn.get), challenge (wörtlich,
- *                      base64url), origin, crossOrigin nicht true
- *     authenticatorData  rpIdHash = SHA-256(RP ID), Flag UP (Benutzer anwesend);
- *                      UV (Benutzer verifiziert, PIN/Biometrie) wird gemeldet,
- *                      nicht verlangt - der Passkey ist hier der ZWEITE Faktor
- *     Registrierung    Flag AT, Credential-Id, öffentlicher Schlüssel (COSE)
- *     Anmeldung        Signatur über authenticatorData || SHA-256(clientDataJSON)
- *                      mit dem gespeicherten Schlüssel; Signaturzähler muss steigen,
- *                      wenn der Authenticator einen führt (sonst geklont)
+ *     clientDataJSON   type (webauthn.create | webauthn.get), challenge (verbatim,
+ *                      base64url), origin, crossOrigin not true
+ *     authenticatorData  rpIdHash = SHA-256(RP ID), flag UP (user present);
+ *                      UV (user verified, PIN/biometrics) is reported,
+ *                      not required - here the passkey is the SECOND factor
+ *     Registration     flag AT, credential id, public key (COSE)
+ *     Sign-in          signature over authenticatorData || SHA-256(clientDataJSON)
+ *                      with the stored key; the signature counter must increase
+ *                      if the authenticator keeps one (otherwise cloned)
  *
- * Attestation: angefordert wird 'none'. Liefert ein Authenticator trotzdem eine
- * (fmt packed, tpm, …), wird sie nicht ausgewertet - camindo verlässt sich nicht
- * auf die Herkunft des Geräts, nur auf den Besitz des Schlüssels.
+ * Attestation: 'none' is requested. If an authenticator still returns one
+ * (fmt packed, tpm, …), it is not evaluated - camindo does not rely on where the
+ * device comes from, only on possession of the key.
  *
- * Algorithmen: ES256 (-7, P-256), EdDSA (-8, Ed25519, über libsodium), RS256 (-257).
- * Die Schlüssel werden als PEM (SubjectPublicKeyInfo) gespeichert.
+ * Algorithms: ES256 (-7, P-256), EdDSA (-8, Ed25519, via libsodium), RS256 (-257).
+ * The keys are stored as PEM (SubjectPublicKeyInfo).
  *
  * @see Camindo\Core\Modules\Admin\WebAuthnFactor
  * @see Camindo\Core\Modules\Admin\Passkeys
@@ -46,10 +46,10 @@ class WebAuthn
     public const ALG_EDDSA = -8;
     public const ALG_RS256 = -257;
 
-    /** Zeit für die Geste am Gerät, in Millisekunden (Browser-Vorgabe) */
+    /** Time for the gesture on the device, in milliseconds (browser default) */
     public const TIMEOUT_MS = 120000;
 
-    /** Länge einer Challenge in Bytes */
+    /** Length of a challenge in bytes */
     public const CHALLENGE_BYTES = 32;
 
     private const FLAG_UP = 0x01;
@@ -64,13 +64,13 @@ class WebAuthn
     // ====================
     // Relying Party
 
-    /** WebAuthn nutzbar? Braucht die feste Backend-Domain; abschaltbar mit security.webauthn = false */
+    /** Is WebAuthn usable? Requires the fixed backend domain; can be switched off with security.webauthn = false */
     public function available(): bool
     {
         return $this->config->get('security.webauthn') !== false && $this->rpId() !== '';
     }
 
-    /** RP ID: Backend-Domain ohne Port, '' ohne feste Domain */
+    /** RP ID: backend domain without port, '' without a fixed domain */
     public function rpId(): string
     {
         $domain = $this->backendDomain->configured();
@@ -78,7 +78,7 @@ class WebAuthn
         return (string)preg_replace('/:\d+$/', '', $domain);
     }
 
-    /** Erwarteter Origin (Schema://Host[:Port]) */
+    /** Expected origin (scheme://host[:port]) */
     public function origin(): string
     {
         $domain = $this->backendDomain->configured();
@@ -87,16 +87,16 @@ class WebAuthn
     }
 
     // ====================
-    // Optionen für den Browser (Binärwerte base64url, das Script wandelt sie)
+    // Options for the browser (binary values base64url, the script converts them)
 
     /**
-     * Optionen für navigator.credentials.create().
+     * Options for navigator.credentials.create().
      *
-     * @param string   $userHandle   stabile, nicht sprechende Kennung des Kontos (Bytes, ≤ 64)
-     * @param string   $name         Anmeldename (Anzeige im Passkey-Dialog)
-     * @param string   $displayName  Anzeigename
-     * @param string   $challenge    CHALLENGE_BYTES rohe Bytes
-     * @param string[] $excludeIds   Credential-Ids (roh), die das Konto schon hat
+     * @param string   $userHandle   stable, non-descriptive identifier of the account (bytes, ≤ 64)
+     * @param string   $name         sign-in name (shown in the passkey dialog)
+     * @param string   $displayName  display name
+     * @param string   $challenge    CHALLENGE_BYTES raw bytes
+     * @param string[] $excludeIds   credential ids (raw) that the account already has
      */
     public function creationOptions(string $userHandle, string $name, string $displayName,
         string $challenge, array $excludeIds = []): array
@@ -118,8 +118,8 @@ class WebAuthn
             'timeout' => self::TIMEOUT_MS,
             'attestation' => 'none',
             'authenticatorSelection' => [
-                // Passkey auf dem Gerät speichern, wenn es geht - Grundlage für eine
-                // spätere Anmeldung ohne Namen
+                // Store the passkey on the device if possible - basis for a later
+                // sign-in without a name
                 'residentKey' => 'preferred',
                 'userVerification' => 'preferred',
             ],
@@ -131,10 +131,10 @@ class WebAuthn
     }
 
     /**
-     * Optionen für navigator.credentials.get().
+     * Options for navigator.credentials.get().
      *
-     * @param string   $challenge  CHALLENGE_BYTES rohe Bytes
-     * @param array    $allow      Liste aus ['id' => roh, 'transports' => string[]]
+     * @param string   $challenge  CHALLENGE_BYTES raw bytes
+     * @param array    $allow      list of ['id' => raw, 'transports' => string[]]
      */
     public function requestOptions(string $challenge, array $allow): array
     {
@@ -153,17 +153,17 @@ class WebAuthn
     }
 
     // ====================
-    // Prüfen
+    // Checking
 
     /**
-     * Antwort von navigator.credentials.create() prüfen.
+     * Check the response of navigator.credentials.create().
      *
-     * @param string $clientDataJSON     roh (nicht base64)
-     * @param string $attestationObject  roh
-     * @param string $challenge          die ausgegebene Challenge, roh
-     * @return array  credential_id (roh), public_key (PEM), alg, sign_count, aaguid (16 Bytes),
+     * @param string $clientDataJSON     raw (not base64)
+     * @param string $attestationObject  raw
+     * @param string $challenge          the issued challenge, raw
+     * @return array  credential_id (raw), public_key (PEM), alg, sign_count, aaguid (16 bytes),
      *                uv (bool), backup_eligible (bool)
-     * @throws \RuntimeException  mit kurzem englischem Grund (fürs Log)
+     * @throws \RuntimeException  with a short English reason (for the log)
      */
     public function verifyRegistration(string $clientDataJSON, string $attestationObject, string $challenge): array
     {
@@ -189,12 +189,12 @@ class WebAuthn
     }
 
     /**
-     * Antwort von navigator.credentials.get() prüfen.
+     * Check the response of navigator.credentials.get().
      *
-     * @param string $publicKeyPem  gespeicherter Schlüssel
-     * @param int    $alg           gespeicherter Algorithmus
-     * @param int    $storedCount   gespeicherter Signaturzähler
-     * @return int   neuer Signaturzähler
+     * @param string $publicKeyPem  stored key
+     * @param int    $alg           stored algorithm
+     * @param int    $storedCount   stored signature counter
+     * @return int   new signature counter
      * @throws \RuntimeException
      */
     public function verifyAssertion(string $clientDataJSON, string $authenticatorData, string $signature,
@@ -207,7 +207,7 @@ class WebAuthn
         if (!self::verifySignature($signed, $signature, $publicKeyPem, $alg)) {
             throw new \RuntimeException('signature invalid');
         }
-        // Zähler: 0 = der Authenticator führt keinen (Passkeys in iCloud/Google)
+        // Counter: 0 = the authenticator does not keep one (passkeys in iCloud/Google)
         $count = $auth['sign_count'];
         if (($count !== 0 || $storedCount !== 0) && $count <= $storedCount) {
             throw new \RuntimeException('signature counter did not increase (cloned authenticator?)');
@@ -218,7 +218,7 @@ class WebAuthn
     // ====================
     // Hilfen
 
-    /** Neue Challenge (rohe Bytes) */
+    /** New challenge (raw bytes) */
     public static function challenge(): string
     {
         return random_bytes(self::CHALLENGE_BYTES);
@@ -229,7 +229,7 @@ class WebAuthn
         return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
     }
 
-    /** base64url (auch mit Standard-Alphabet oder Padding) - '' bei Unsinn */
+    /** base64url (also with standard alphabet or padding) - '' on invalid input */
     public static function b64uDecode(string $text): string
     {
         $text = strtr(trim($text), '-_', '+/');
@@ -254,8 +254,8 @@ class WebAuthn
     }
 
     /**
-     * authenticatorData zerlegen (§6.1): rpIdHash 32, flags 1, signCount 4, danach
-     * bei AT: aaguid 16, Länge 2, Credential-Id, COSE-Schlüssel.
+     * Split authenticatorData (§6.1): rpIdHash 32, flags 1, signCount 4, then
+     * with AT: aaguid 16, length 2, credential id, COSE key.
      */
     private function parseAuthData(string $data): array
     {
@@ -285,7 +285,7 @@ class WebAuthn
     }
 
     /**
-     * COSE_Key (RFC 8152 §13) -> [PEM, alg]. Nur die drei angebotenen Verfahren.
+     * COSE_Key (RFC 8152 §13) -> [PEM, alg]. Only the three offered algorithms.
      */
     private static function coseToPem(mixed $cose): array
     {
@@ -321,7 +321,7 @@ class WebAuthn
             throw new \RuntimeException('unsupported key type/algorithm');
         }
         $pem = "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
-        // Gegenprobe: OpenSSL muss den Schlüssel lesen können (Ed25519 prüft libsodium)
+        // Cross-check: OpenSSL must be able to read the key (Ed25519 is checked by libsodium)
         if ($alg !== self::ALG_EDDSA && openssl_pkey_get_public($pem) === false) {
             throw new \RuntimeException('public key not readable');
         }
@@ -338,7 +338,7 @@ class WebAuthn
             return sodium_crypto_sign_verify_detached($signature, $data, substr($der, 12));
         }
         if ($alg !== self::ALG_ES256 && $alg !== self::ALG_RS256) return false;
-        // ES256: WebAuthn liefert die Signatur schon DER-kodiert, wie OpenSSL sie will
+        // ES256: WebAuthn already delivers the signature DER-encoded, as OpenSSL expects it
         return openssl_verify($data, $signature, $pem, OPENSSL_ALGO_SHA256) === 1;
     }
 
@@ -363,15 +363,15 @@ class WebAuthn
         return "\x02" . self::derLength(strlen($unsigned)) . $unsigned;
     }
 
-    // ---- CBOR (RFC 8949) - nur, was WebAuthn braucht ----
+    // ---- CBOR (RFC 8949) - only what WebAuthn needs ----
 
     /**
-     * Ein CBOR-Datenelement ab $offset lesen.
+     * Read a CBOR data item starting at $offset.
      *
-     * Byte- und Textstrings werden beide zu PHP-Strings, Maps zu Arrays (Schlüssel
-     * int oder string). Keine unbestimmten Längen, keine Tags, Tiefe höchstens 16.
+     * Byte and text strings both become PHP strings, maps become arrays (keys
+     * int or string). No indefinite lengths, no tags, depth at most 16.
      *
-     * @return array{0:mixed,1:int}  [Wert, Offset danach]
+     * @return array{0:mixed,1:int}  [value, offset after it]
      */
     public static function cborDecode(string $data, int $offset = 0, int $depth = 0): array
     {

@@ -1,8 +1,8 @@
 <?php
 /**
- * Stylesheet aus var/extensions/htmlvisual/ ausliefern (13 §3.8) - var/ liegt nicht im
- * Docroot. Aufruf: backendExtensions/HTMLVisual/css.php?file={name}.css; Session ist
- * durch Backend::backendPath() geprüft.
+ * Serves the stylesheet from var/extensions/htmlvisual/ (developer docs, chapter 08 (Components and extensions)) - var/ is not in the
+ * docroot. Call: backendExtensions/HTMLVisual/css.php?file={name}.css; the session is
+ * checked by Backend::backendPath().
  */
 // @var Camindo\Core\ContainerInterface $app
 use Camindo\Core\Backend;

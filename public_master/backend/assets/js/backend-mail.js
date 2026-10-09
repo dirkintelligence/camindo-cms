@@ -1,11 +1,11 @@
 /*
- * cApp.mail – Brief-Symbol im Backend-Kopf (Modul Messaging)
+ * cApp.mail – Envelope icon in the backend header (module Messaging)
  *
- * Klick öffnet den Posteingang als Layer (Messaging/message_list.php). Das
- * Abzeichen auf dem Symbol zeigt die ungelesenen Nachrichten des angemeldeten
- * Admins - gesetzt serverseitig beim Laden des Backends (index.php), von jeder
- * Antwort des Moduls (MessagingBackend::_badgeScript()) und alle 30 Sekunden
- * vom Timer (cApp.polling -> refreshBadge() -> ajax_unread.php).
+ * A click opens the inbox as a layer (Messaging/message_list.php). The
+ * badge on the icon shows the unread messages of the logged-in
+ * admin - set server-side when the backend loads (index.php), by every
+ * response of the module (MessagingBackend::_badgeScript()) and every 30 seconds
+ * by the timer (cApp.polling -> refreshBadge() -> ajax_unread.php).
  */
 (function (cApp) {
     'use strict';
@@ -20,17 +20,17 @@
         },
 
         /**
-         * Posteingang als Layer öffnen - nur einmal: liegt schon ein Layer des
-         * Moduls (Ein- oder Ausgang) oben, wird der Klick ignoriert (cApp.layers.addOnce())
+         * Open the inbox as a layer - only once: if a layer of the
+         * module (inbox or outbox) is already on top, the click is ignored (cApp.layers.addOnce())
          */
         open() {
             cApp.layers.addOnce('Messaging/message_list.php');
         },
 
         /**
-         * Alle offenen Listen-Layer des Moduls neu laden (Ein-/Ausgang) - nach dem
-         * Lesen oder Markieren einer Nachricht, deren Layer darüber liegt, und nach
-         * Speichern/Löschen. Andere Layer bleiben unberührt.
+         * Reload all open list layers of the module (inbox/outbox) - after
+         * reading or marking a message whose layer lies above them, and after
+         * saving/deleting. Other layers remain untouched.
          */
         refreshList() {
             $('article .c9-layer').each(function () {
@@ -41,7 +41,7 @@
         },
 
         /**
-         * Abzeichen setzen (der Server deckelt bereits auf 99)
+         * Set the badge (the server already caps it at 99)
          * @param {number} count
          */
         setBadge(count) {
@@ -51,15 +51,15 @@
         },
 
         /**
-         * Abzeichen vom Server aktualisieren (Timer). Die Antwort ist nur das
-         * Javascript für setBadge(); der Zielcontainer bleibt unsichtbar.
+         * Update the badge from the server (timer). The response is only the
+         * JavaScript for setBadge(); the target container stays invisible.
          * @param {number} timeoutMs
          * @returns {Promise<boolean>}
          */
         refreshBadge(timeoutMs = 5000) {
-            // Abgemeldet (Anmeldedialog offen): nicht anfragen - die Antwort
-            // ##accessdenied## würde den Anmeldedialog neu laden und dabei die
-            // gerade getippte Eingabe verwerfen
+            // Logged out (login dialog open): do not request - the response
+            // ##accessdenied## would reload the login dialog and discard
+            // the input just typed
             if (cApp.layers && cApp.layers.loginOpen && cApp.layers.loginOpen()) {
                 return Promise.resolve(false);
             }
@@ -67,7 +67,7 @@
                 $('#c9-mail-container').cLoadContent({
                     url: 'Messaging/ajax_unread.php',
                     spinner: false,
-                    // Polling: kein Zeichen von Aktivität, hält die Session nicht offen
+                    // Polling: not a sign of activity, does not keep the session open
                     background: true,
                     timeout: timeoutMs,
                     callback: () => resolve(true)

@@ -8,10 +8,10 @@ return [
 'description' => '#status.module_description',
 'icon' => 'check',
 'listed' => true,
-// API: lesen und anlegen/ändern (StatusApi)
+// API: read and create/change (StatusApi)
 'api' => ['StatusApi'],
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+// Additional module permissions:
+// none (purely superuser module)
 'access' => [
 ]
 

@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\Cms $this->cms
@@ -9,8 +9,8 @@
  * @var array $data
  */
 
-// Installiertes ImageMagick: veraltete Stände sind ungepatcht gegen die bekannten
-// Lücken in den Delegates und Binärformaten - deshalb hier sichtbar markieren.
+// Installed ImageMagick: outdated versions are unpatched against the known
+// gaps in the delegates and binary formats - therefore mark them visibly here.
 // Siehe developer_docs/18-imagemagick.md
 $versionState = $this->converter->getProcessor()->versionState();
 $versionHtml = htmlspecialchars(
@@ -27,17 +27,17 @@ if ($versionState['snippet'] !== '') {
 }
 $this->backend->infoStatic('#proc.magick.label_version', $versionHtml, ['monospace']);
 
-// Eigene Sicherheits-Policy (MagickPolicy): was security.magick_allow freigibt, und für
-// SVG/PDF in den Medientypen dieses Konverters, ob sie wirklich laufen - gesperrt, von
-// der Policy des Servers verhindert (z. B. PDF unter Debian) oder in Ordnung.
+// Own security policy (MagickPolicy): what security.magick_allow releases, and for
+// SVG/PDF in the media types of this converter, whether they really run - blocked, from
+// the server's policy prevents (e.g. PDF under Debian) or is in order.
 // Siehe developer_docs/18-imagemagick.md, 2.2.2
 $processor = $this->converter->getProcessor();
 $allowed = $processor->policy()->allowed();
 $policyHtml = htmlspecialchars(str_replace('{value}',
     $allowed ? strtoupper(implode(', ', $allowed)) : $this->cms->snippet('proc.magick.policy_none'),
     $this->cms->snippet('proc.magick.policy_summary')));
-// Die Datei entsteht beim ersten Aufruf - hier auch, damit die Anzeige stimmt und ein
-// nicht beschreibbares var/config/ auffällt, bevor die erste Umwandlung scheitert
+// The file is created on the first call - here too, so that the display is correct and a
+// non-writable var/config/ is noticed before the first conversion fails
 if (!$processor->policy()->apply()) {
     $policyHtml .= '<br>' . $this->backend->template('note_warning', [
         '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.error_policy_file'))

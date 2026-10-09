@@ -1,49 +1,49 @@
 <?php
 /**
- * Die Logdateien unter var/log lesen, zerlegen und einordnen - ohne Oberfläche.
- * Instanzname im Code: $logfiles.
+ * Read, split and classify the log files under var/log - without UI.
+ * Instance name in the code: $logfiles.
  *
- * KEIN DATASET, KEINE DATENBANK
+ * NO DATASET, NO DATABASE
  * --------------------
- * Die Ablage sind die Dateien, die System::log() und das PHP-eigene Fehlerlog
- * schreiben: var/log/{Y-m-d}_{name}.log, eine Datei je Tag und Zweck. Geschrieben
- * wird hier nichts - das Modul liest nur.
+ * The storage is the files that System::log() and PHP's own error log
+ * write: var/log/{Y-m-d}_{name}.log, one file per day and purpose. Nothing is
+ * written here - the module only reads.
  *
- * EINE ZEILE IST NICHT IMMER EIN EINTRAG
+ * A LINE IS NOT ALWAYS AN ENTRY
  * --------------------
- * Drei Zeilenformate kommen im Bestand vor:
+ * Three line formats occur in the existing logs:
  *
  *     [14:22:07] text                              System::log()
- *     [22-Sep-2026 00:18:23 Europe/Berlin] text    PHP-Fehlerlog (Config)
- *     2026-09-21 17:45:47 text                     Upgrade-Protokoll
+ *     [22-Sep-2026 00:18:23 Europe/Berlin] text    PHP error log (Config)
+ *     2026-09-21 17:45:47 text                     upgrade log
  *
- * Alles, was mit keinem dieser Zeitstempel beginnt, gehört zum Eintrag davor -
- * typischerweise der Stacktrace einer Exception. entries() fügt solche Zeilen
- * deshalb an den laufenden Eintrag an, statt sie einzeln zu zeigen; sonst zerfällt
- * ein Fatal Error in zwanzig sinnlose Zeilen.
+ * Everything that does not begin with one of these timestamps belongs to the entry before -
+ * typically the stack trace of an exception. entries() therefore appends such lines
+ * to the current entry instead of showing them individually; otherwise a
+ * fatal error falls apart into twenty meaningless lines.
  *
- * KATEGORIE UND DRINGLICHKEIT
+ * CATEGORY AND URGENCY
  * --------------------
- * classify() ordnet jeden Eintrag einer Kategorie zu (CATEGORIES) - aus dem
- * Dateinamen und, wo der nicht reicht, aus dem Text. Die Reihenfolge in CATEGORIES
- * ist die Rangfolge: was oben steht, zeigt das Widget zuerst. Sie folgt dem, was
- * ein Betreiber zuerst wissen will - gesperrte Anmeldungen, nicht zugestellte
- * E-Mails, abgestürzte Requests, Datenbankfehler - und nicht der Häufigkeit.
+ * classify() assigns each entry to a category (CATEGORIES) - from the
+ * file name and, where that is not enough, from the text. The order in CATEGORIES
+ * is the ranking: what is at the top, the widget shows first. It follows what
+ * an operator wants to know first - blocked logins, undelivered
+ * emails, crashed requests, database errors - and not frequency.
  *
- * GROSSE DATEIEN
+ * LARGE FILES
  * --------------------
- * Ein durchgelaufenes Fehlerlog kann sehr groß werden. Gelesen wird deshalb immer
- * nur das ENDE einer Datei (MAX_BYTES) - das Neueste steht hinten - und die erste,
- * womöglich angeschnittene Zeile fliegt weg. truncated() sagt, ob das passiert ist.
+ * An error log that has run for a long time can become very large. Therefore only the END
+ * of a file (MAX_BYTES) is ever read - the newest is at the back - and the first,
+ * possibly cut-off line is dropped. truncated() says whether that has happened.
  *
- * DIE DATEINAMEN KOMMEN AUS DEM VERZEICHNIS, NICHT AUS DEM REQUEST
+ * THE FILE NAMES COME FROM THE DIRECTORY, NOT FROM THE REQUEST
  * --------------------
- * files() liefert die vorhandenen Dateien; alles, was von außen kommt (Name, Datum),
- * wird gegen diese Liste geprüft, bevor es einen Pfad ergibt. Zusammengesetzt wird
- * ein Pfad nur hier, aus geprüften Bestandteilen.
+ * files() returns the existing files; everything that comes from outside (name, date)
+ * is checked against this list before it yields a path. A path is assembled
+ * only here, from checked components.
  *
- * @see Camindo\Core\System::log()                            schreibt die Dateien
- * @see Camindo\Core\Modules\Logfiles\LogfilesBackend         Oberfläche und Widget
+ * @see Camindo\Core\System::log()                            writes the files
+ * @see Camindo\Core\Modules\Logfiles\LogfilesBackend         UI and widget
  */
 namespace Camindo\Core\Modules\Logfiles;
 
@@ -51,40 +51,40 @@ use Camindo\Core\Config;
 
 class Logfiles {
 
-    /** Je Datei wird höchstens dieses Ende gelesen (siehe Klassenkommentar) */
+    /** At most this end of each file is read (see class comment) */
     public const MAX_BYTES = 2097152;   // 2 MB
 
-    /** Obergrenze der Einträge je Aufruf von entries() */
+    /** Upper limit of entries per call of entries() */
     public const MAX_ENTRIES = 500;
 
-    /** Einträge je Seite der Recherche (LogfilesBackend::list(), blätterbar) */
+    /** Entries per page of the search (LogfilesBackend::list(), paginated) */
     public const PAGE_SIZE = 100;
 
-    /** Zeitraum des Widgets in Tagen */
+    /** Period of the widget in days */
     public const SUMMARY_DAYS = 7;
 
     /**
-     * Kategorien in ihrer Rangfolge (siehe Klassenkommentar), je mit der Stufe für
-     * die farbliche Darstellung.
+     * Categories in their ranking order (see class comment), each with the level for
+     * the color display.
      */
     public const CATEGORIES = [
-        'login'    => 'danger',    // gesperrte Anmeldungen (LoginGuard)
-        'security' => 'danger',    // manipulierte Signaturen u. Ä. (Integrity)
-        'mail'     => 'warning',   // nicht versendete E-Mails (Email)
+        'login'    => 'danger',    // blocked logins (LoginGuard)
+        'security' => 'danger',    // tampered signatures etc. (Integrity)
+        'mail'     => 'warning',   // unsent emails (Email)
         'php'      => 'danger',    // Fatal Error, Uncaught, Parse Error
-        'database' => 'danger',    // SQL-Fehler
-        'job'      => 'warning',   // Hintergrundprozesse: *-errors
-        'warning'  => 'warning',   // PHP-Warnungen und -Notices
-        'info'     => 'secondary', // alles Übrige (scheduler, upgrade, trash, sql …)
+        'database' => 'danger',    // SQL errors
+        'job'      => 'warning',   // background processes: *-errors
+        'warning'  => 'warning',   // PHP warnings and notices
+        'info'     => 'secondary', // everything else (scheduler, upgrade, trash, sql …)
     ];
 
-    /** Logdateien, deren Einträge grundsätzlich 'job' sind */
+    /** Log files whose entries are always 'job' */
     private const JOB_LOGS = [
         'batch-errors', 'cron-errors', 'export-errors', 'file-errors', 'import-errors',
         'massdelete-errors', 'thumbnails-errors', 'widget-errors', 'template-sync',
     ];
 
-    /** Beim letzten read() wurde am Anfang abgeschnitten */
+    /** The last read() cut off at the beginning */
     private bool $truncated = false;
 
     public function __construct(
@@ -92,10 +92,10 @@ class Logfiles {
     )
     {}
 
-    // ==== Dateien ====
+    // ==== Files ====
 
     /**
-     * Vorhandene Logdateien, die neueste zuerst.
+     * Existing log files, newest first.
      *
      * @return array  ['2026-09-22_php_errors.log' => ['name' => 'php_errors',
      *                'date' => '2026-09-22', 'size' => int], …]
@@ -112,13 +112,13 @@ class Logfiles {
                 'size' => (int)filesize((string)$path),
             ];
         }
-        // Neueste zuerst; bei gleichem Tag nach Name
+        // Newest first; for the same day by name
         uasort($list, fn(array $a, array $b): int => [$b['date'], $a['name']] <=> [$a['date'], $b['name']]);
         return $list;
     }
 
     /**
-     * Vorkommende Logbezeichnungen mit der Anzahl ihrer Dateien.
+     * Occurring log names with the number of their files.
      *
      * @return array  'php_errors' => 5, …  (alphabetisch)
      */
@@ -133,7 +133,7 @@ class Logfiles {
     }
 
     /**
-     * Vorkommende Tage, der neueste zuerst.
+     * Occurring days, newest first.
      *
      * @return array  ['2026-09-22', …]
      */
@@ -146,23 +146,23 @@ class Logfiles {
         return $dates;
     }
 
-    // ==== Lesen ====
+    // ==== Reading ====
 
     /**
-     * Einträge lesen und filtern, die jüngsten zuerst.
+     * Read and filter entries, the most recent first.
      *
-     * Gelesen wird Datei für Datei in der Reihenfolge von files() (Tag absteigend)
-     * und abgebrochen, sobald $limit erreicht ist - bei mehreren Protokollen eines
-     * Tages ist die Reihenfolge innerhalb des Tages also die der Dateinamen, nicht
-     * die der Uhrzeiten. Wer eine Zeitleiste braucht, schränkt auf ein Protokoll ein.
+     * Reading goes file by file in the order of files() (day descending)
+     * and stops as soon as $limit is reached - with several logs of one
+     * day, the order within the day is thus that of the file names, not
+     * that of the times. Anyone who needs a timeline restricts it to one log.
      *
-     * @param string $name    Logbezeichnung, '' = alle
-     * @param string $date    Tag (Y-m-d), '' = alle
-     * @param string $search  Suchtext (Teilstring, ohne Beachtung der Groß-/Kleinschreibung)
-     * @param string $category Kategorie aus CATEGORIES, '' = alle
-     * @param int    $limit   Höchstzahl der Einträge
-     * @param int    $skip    so viele passende Einträge überspringen (Blättern)
-     * @return array  ['file', 'name', 'date', 'time', 'text', 'category'] je Eintrag
+     * @param string $name    log name, '' = all
+     * @param string $date    day (Y-m-d), '' = all
+     * @param string $search  search text (substring, case-insensitive)
+     * @param string $category category from CATEGORIES, '' = all
+     * @param int    $limit   maximum number of entries
+     * @param int    $skip    skip this many matching entries (paging)
+     * @return array  ['file', 'name', 'date', 'time', 'text', 'category'] per entry
      */
     public function entries(string $name = '', string $date = '', string $search = '', string $category = '', int $limit = self::MAX_ENTRIES, int $skip = 0): array
     {
@@ -171,14 +171,14 @@ class Logfiles {
         $search = trim($search);
 
         $entries = [];
-        // files() ist bereits nach Datum absteigend sortiert: die jüngsten Dateien
-        // zuerst lesen und aufhören, sobald genug beisammen ist
+        // files() is already sorted by date descending: read the newest files
+        // first and stop as soon as there are enough
         foreach ($this->files() as $file => $info) {
             if ($name !== '' && $info['name'] !== $name) continue;
             if ($date !== '' && $info['date'] !== $date) continue;
 
             $fileEntries = $this->parse($file, $info);
-            // Innerhalb einer Datei steht das Neueste unten
+            // Within a file, the newest is at the bottom
             $fileEntries = array_reverse($fileEntries);
             foreach ($fileEntries as $entry) {
                 if ($category !== '' && $entry['category'] !== $category) continue;
@@ -195,17 +195,16 @@ class Logfiles {
     }
 
     /**
-     * Zusammenfassung für das Widget: je Kategorie die Anzahl der Einträge der
-     * letzten $days Tage und der jüngste Eintrag als Beispiel.
+     * Summary for the widget: per category the number of entries of the
+     * last $days days and the newest entry as an example.
      *
-     * Die Rangfolge ist die von CATEGORIES, nicht die Häufigkeit (Klassenkommentar).
-     * 'info' bleibt draußen: das sind die Zeilen, die im Normalbetrieb ohnehin
-     * anfallen (jeder erfolgreiche Cron-Lauf), und ein paar hundert davon würden
-     * die drei Meldungen zudecken, auf die es ankommt. In der Recherche sind sie
-     * weiterhin da.
+     * The ranking is that of CATEGORIES, not frequency (class comment).
+     * 'info' stays out: these are the lines that occur anyway in normal operation
+     * (every successful cron run), and a few hundred of them would
+     * cover the three messages that matter. They are still there in the search.
      *
-     * @return array  Kategorie => ['count' => int, 'level' => string,
-     *                'latest' => ?array (Eintrag)]
+     * @return array  category => ['count' => int, 'level' => string,
+     *                'latest' => ?array (entry)]
      */
     public function summary(int $days = self::SUMMARY_DAYS): array
     {
@@ -213,7 +212,7 @@ class Logfiles {
 
         $counts = [];
         foreach ($this->files() as $file => $info) {
-            if ($info['date'] < $from) continue;   // files() ist absteigend sortiert
+            if ($info['date'] < $from) continue;   // files() is sorted descending
             foreach ($this->parse($file, $info) as $entry) {
                 $category = $entry['category'];
                 if ($category === 'info') continue;
@@ -228,7 +227,7 @@ class Logfiles {
             }
         }
 
-        // In die Rangfolge von CATEGORIES bringen
+        // Put into the ranking of CATEGORIES
         $summary = [];
         foreach (self::CATEGORIES as $category => $level) {
             if (isset($counts[$category])) $summary[$category] = $counts[$category];
@@ -237,7 +236,7 @@ class Logfiles {
     }
 
     /**
-     * Wurde beim letzten Lesen am Anfang einer Datei abgeschnitten (MAX_BYTES)?
+     * Was the start of a file cut off during the last read (MAX_BYTES)?
      */
     public function truncated(): bool
     {
@@ -245,10 +244,10 @@ class Logfiles {
     }
 
     /**
-     * Kategorie eines Eintrags - siehe CATEGORIES.
+     * Category of an entry - see CATEGORIES.
      *
-     * @param string $name  Logbezeichnung (Dateiname ohne Datum)
-     * @param string $text  Text des Eintrags
+     * @param string $name  log name (file name without date)
+     * @param string $text  text of the entry
      */
     public function classify(string $name, string $text): string
     {
@@ -256,15 +255,15 @@ class Logfiles {
             return str_contains($text, 'Login blocked') ? 'login' : 'security';
         }
         if ($name === 'mail') return 'mail';
-        // Verstöße gegen die Script-Policy des Backends (StartCspReport)
+        // Violations of the script policy of the backend (StartCspReport)
         if ($name === 'csp') return 'warning';
         if ($name === 'sql-errors') return 'database';
         if (in_array($name, self::JOB_LOGS, true)) return 'job';
 
         if ($name === 'php_errors') {
-            // Datenbankfehler sind auch dann Datenbankfehler, wenn sie als
-            // unbehandelte Exception im PHP-Log landen (System::handleException()
-            // ist nicht registriert)
+            // Database errors are still database errors when they end up as an
+            // unhandled exception in the PHP log (System::handleException()
+            // is not registered)
             if (stripos($text, 'mysqli') !== false || stripos($text, 'SQLSTATE') !== false) return 'database';
             if (preg_match('/\b(Fatal error|Parse error|Uncaught)\b/i', $text)) return 'php';
             if (preg_match('/\b(Warning|Notice|Deprecated)\b/i', $text)) return 'warning';
@@ -275,17 +274,17 @@ class Logfiles {
 
     // ====================
 
-    /** Verzeichnis der Logdateien */
+    /** Directory of the log files */
     private function dir(): string
     {
         return rtrim((string)$this->config->get('paths.var_dir'), '/\\') . '/log';
     }
 
     /**
-     * Eine Datei in Einträge zerlegen (siehe Klassenkommentar).
+     * Split a file into entries (see class comment).
      *
-     * @param string $file  Dateiname aus files() - bereits geprüft
-     * @return array        Einträge in Dateireihenfolge (ältester zuerst)
+     * @param string $file  file name from files() - already checked
+     * @return array        entries in file order (oldest first)
      */
     private function parse(string $file, array $info): array
     {
@@ -311,7 +310,7 @@ class Logfiles {
                 ];
                 continue;
             }
-            // Fortsetzung (Stacktrace) - an den laufenden Eintrag anhängen
+            // Continuation (stack trace) - append to the current entry
             if ($current !== null) $current['text'] .= "\n" . $line;
         }
         if ($current !== null) $entries[] = $current;
@@ -323,10 +322,10 @@ class Logfiles {
     }
 
     /**
-     * Beginnt die Zeile mit einem der drei Zeitstempel (Klassenkommentar)?
+     * Does the line begin with one of the three timestamps (class comment)?
      *
-     * @param ?string $rest  Rest der Zeile ohne Zeitstempel
-     * @return ?string       Uhrzeit H:i:s, null wenn es kein Zeilenanfang ist
+     * @param ?string $rest  rest of the line without timestamp
+     * @return ?string       time H:i:s, null if it is not the start of a line
      */
     private function lineTime(string $line, ?string &$rest): ?string
     {
@@ -350,9 +349,9 @@ class Logfiles {
     }
 
     /**
-     * Das Ende einer Datei lesen - höchstens MAX_BYTES (siehe Klassenkommentar).
+     * Read the end of a file - at most MAX_BYTES (see class comment).
      *
-     * @param string $file  Dateiname aus files()
+     * @param string $file  file name from files()
      */
     private function read(string $file, int $size): string
     {
@@ -370,7 +369,7 @@ class Logfiles {
         $content = (string)stream_get_contents($handle);
         fclose($handle);
 
-        // Die erste Zeile ist angeschnitten
+        // The first line is cut off
         $pos = strpos($content, "\n");
         return $pos === false ? '' : substr($content, $pos + 1);
     }

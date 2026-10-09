@@ -2,14 +2,14 @@
 /**
  * Kommandozeile: php Core/cron/camindo.php <befehl> [argumente] [--optionen]
  *
- * Ein Dispatcher, keine Bibliothek. Befehle sind Klassen in diesem Verzeichnis
- * ({Name}Command, Command::run()); registriert sind sie in COMMANDS. Optionen:
- * --key=value oder --flag (=true); alles andere sind Argumente in Reihenfolge.
+ * A dispatcher, not a library. Commands are classes in this directory
+ * ({Name}Command, Command::run()); they are registered in COMMANDS. Options:
+ * --key=value or --flag (=true); everything else are arguments in order.
  *
- * Exit-Codes: 0 ok, 1 Fehler, 2 Bedienfehler (unbekannter Befehl, fehlendes
- * Argument). --quiet unterdrückt die normale Ausgabe, Fehler gehen immer nach STDERR.
+ * Exit codes: 0 ok, 1 error, 2 usage error (unknown command, missing
+ * argument). --quiet suppresses the normal output, errors always go to STDERR.
  *
- * @see docs/developers/14-installation-und-update.md, Kapitel 8
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core\Cli;
 
@@ -46,7 +46,7 @@ class Cli {
     }
 
     /**
-     * @param string[] $argv  wie $argv des Scripts (Index 0 = Scriptname)
+     * @param string[] $argv  like $argv of the script (index 0 = script name)
      */
     public function run(array $argv): int
     {
@@ -132,7 +132,7 @@ class Cli {
         TXT);
     }
 
-    // ==== Ausgabe ====
+    // ==== Output ====
 
     public function out(string $line = ''): void
     {

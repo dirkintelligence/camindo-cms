@@ -1,63 +1,63 @@
 <?php
 /**
- * Startseiten-Widgets der Module: welche es gibt, wer sie sehen darf, wie sie
- * gerendert werden. Instanzname im Code: $widgets.
+ * Start page widgets of the modules: which ones exist, who may see them, how they are
+ * rendered. Instance name in the code: $widgets.
  *
- * DIE STARTSEITE HAT VIER PLÄTZE
+ * THE START PAGE HAS FOUR SLOTS
  * --------------------
- * Position 1 (links oben) ist fest mit den Modulkacheln belegt. Die Plätze 2 bis 4
- * füllt jeder Admin selbst. In seinen persönlichen Einstellungen (`admin`.`settings`)
- * steht dafür unter 'widgets' eine LISTE:
+ * Position 1 (top left) is permanently filled with the module tiles. Slots 2 to 4
+ * are filled by each admin themselves. In their personal settings (`admin`.`settings`)
+ * there is a LIST under 'widgets' for this:
  *
  *     [['module' => 'Logfiles', 'position' => 2],
  *      ['module' => 'User',     'position' => 2], …]
  *
- * In einen Platz passen also beliebig viele Widgets; sie erscheinen dort in der
- * Reihenfolge der Liste, also in der, in der sie hinzugefügt wurden. Ein Modul kommt
- * höchstens einmal vor - deshalb bietet die Auswahlliste der Einstellungen nur an,
- * was noch nicht drin ist. StartBackend::start() fragt hier nach dem fertigen HTML.
+ * So any number of widgets fit into a slot; they appear there in the order of the
+ * list, i.e. in the order in which they were added. A module occurs at most once -
+ * that is why the selection list of the settings only offers what is not in yet.
+ * StartBackend::start() asks here for the finished HTML.
  *
- * WAS EIN MODUL MITBRINGEN MUSS
+ * WHAT A MODULE MUST PROVIDE
  * --------------------
- * Einen Abschnitt 'widget' in seiner install/settings.php:
+ * A section 'widget' in its install/settings.php:
  *
  *     'widget' => [
- *         'class'  => 'UserBackend',            // relativ zum Modul-Namespace
+ *         'class'  => 'UserBackend',            // relative to the module namespace
  *         'method' => 'widget',                 // Standard: 'widget'
  *         'label'  => '#user.widget_label',     // Standard: '#{modul}.module_label'
  *         'icon'   => 'rate_review',            // Material-Symbol, optional
  *     ],
  *
- * Der Klassenname ist bewusst RELATIV: so kann eine fremde settings.php nicht
- * irgendeine Klasse des Systems instanziieren, sondern nur eine aus dem eigenen
- * Modul. Die Klasse holt der Container (Autowiring), die Methode bekommt keine
- * Parameter und gibt das HTML des Widget-Inhalts als String ZURÜCK - sie gibt
- * nichts aus. Die Karte drumherum (Überschrift, Rahmen) kommt von hier.
+ * The class name is deliberately RELATIVE: this way a foreign settings.php cannot
+ * instantiate an arbitrary class of the system, only one from its own
+ * module. The container fetches the class (autowiring), the method takes no
+ * parameters and RETURNS the HTML of the widget content as a string - it does not
+ * output anything. The card around it (heading, frame) comes from here.
  *
- * RECHTE
+ * PERMISSIONS
  * --------------------
- * Ein Widget zeigt nur, wer auch das Modul darf (Access::module(), damit auch die
- * Superuser-Regel aus settings.php 'superuser'). Das gilt für die Auswahlliste in
- * den Einstellungen wie für das Rendern: eine Einstellung, die nach einem
- * Gruppenwechsel nicht mehr erlaubt ist, liefert einfach nichts.
+ * A widget is only shown to whoever may also use the module (Access::module(), which
+ * includes the superuser rule from settings.php 'superuser'). This applies to the
+ * selection list in the settings as well as to rendering: a setting that is no longer
+ * allowed after a group change simply yields nothing.
  *
- * FEHLER EINES WIDGETS BLEIBEN IM WIDGET
+ * ERRORS OF A WIDGET STAY IN THE WIDGET
  * --------------------
- * render() fängt jeden Throwable ab und macht daraus eine Fehlermeldung an Ort und
- * Stelle - ein kaputtes Widget darf die Startseite nicht mitreißen.
+ * render() catches every Throwable and turns it into an error message in place -
+ * a broken widget must not take down the start page.
  *
- * @see Camindo\Core\Modules\Start\StartBackend::start()      Ausgabe der vier Plätze
- * @see Camindo\Core\Modules\Admin\AdminBackend::settings()   Auswahl je Platz
+ * @see Camindo\Core\Modules\Start\StartBackend::start()      Output of the four slots
+ * @see Camindo\Core\Modules\Admin\AdminBackend::settings()   Selection per slot
  * @see Camindo\Core\ComponentManager                         'widget' in settings.php
  */
 namespace Camindo\Core;
 
 class Widgets {
 
-    /** Plätze der Startseite, die frei belegt werden können (1 = Modulkacheln) */
+    /** Start page slots that can be filled freely (1 = module tiles) */
     public const POSITIONS = [2, 3, 4];
 
-    /** Schlüssel der persönlichen Einstellung (`admin`.`settings`) */
+    /** Key of the personal setting (`admin`.`settings`) */
     public const SETTINGS_KEY = 'widgets';
 
     public function __construct(
@@ -68,9 +68,9 @@ class Widgets {
     {}
 
     /**
-     * Alle Widgets, die der angemeldete Admin einbinden darf.
+     * All widgets the logged-in admin may add.
      *
-     * @return array  Modulname => ['label' => string, 'icon' => string]
+     * @return array  Module name => ['label' => string, 'icon' => string]
      */
     public function available(array $exclude = []): array
     {
@@ -87,17 +87,17 @@ class Widgets {
                 'icon'  => $widget['icon'],
             ];
         }
-        // Reihenfolge der Auswahlliste: nach Beschriftung, nicht nach Verzeichnis
+        // Order of the selection list: by label, not by directory
         uasort($list, fn(array $a, array $b): int => strcasecmp($a['label'], $b['label']));
         return $list;
     }
 
     /**
-     * Auswahlliste "Widget" der persönlichen Einstellungen.
+     * Selection list "Widget" of the personal settings.
      *
-     * @param array $exclude  Modulnamen, die schon eingehängt sind - sie fehlen in
-     *                        der Liste, weil ein Modul nur einmal vorkommen darf
-     * @return array          Modulname => Beschriftung
+     * @param array $exclude  Module names that are already added - they are missing from
+     *                        the list, because a module may only occur once
+     * @return array          Module name => label
      */
     public function options(array $exclude = []): array
     {
@@ -109,9 +109,9 @@ class Widgets {
     }
 
     /**
-     * Auswahlliste "Position": die frei belegbaren Plätze.
+     * Selection list "Position": the slots that can be filled freely.
      *
-     * @return array  Platz => Beschriftung (Snippet start.position_{n})
+     * @return array  Slot => label (snippet start.position_{n})
      */
     public function positionOptions(): array
     {
@@ -123,18 +123,18 @@ class Widgets {
     }
 
     /**
-     * Die gespeicherte Liste in Form bringen: nur wohlgeformte Einträge, jedes Modul
-     * höchstens einmal, Reihenfolge bleibt.
+     * Bring the stored list into shape: only well-formed entries, each module
+     * at most once, order is kept.
      *
-     * Was hier wegfällt, ist entweder unsinnig (unbekannter Platz, leerer Name) oder
-     * inzwischen verschwunden (Modul deinstalliert). Ein Eintrag, dessen Modul es
-     * nicht mehr gibt, soll das Speichern anderer Einstellungen NICHT scheitern
-     * lassen - deshalb lässt sich die Existenzprüfung abschalten: Admin::hookOnSave()
-     * prüft damit nur die Form, gezeigt wird später ohnehin nur, was es gibt.
+     * What is dropped here is either nonsense (unknown slot, empty name) or
+     * has since disappeared (module uninstalled). An entry whose module no longer
+     * exists must NOT make saving other settings fail - that is why the existence check
+     * can be switched off: Admin::hookOnSave() then only checks the form,
+     * since only what exists is shown later anyway.
      *
-     * @param array $list           Rohwert aus den Einstellungen bzw. dem Formular
-     * @param bool  $requireExists  false: Module, die es nicht (mehr) gibt, bleiben drin
-     * @return array                Liste aus ['module' => string, 'position' => int]
+     * @param array $list           Raw value from the settings or the form
+     * @param bool  $requireExists  false: modules that no longer exist (or do not yet) stay in
+     * @return array                List of ['module' => string, 'position' => int]
      */
     public function normalize(array $list, bool $requireExists = true): array
     {
@@ -155,10 +155,10 @@ class Widgets {
     }
 
     /**
-     * Die eingehängten Widgets eines Admins nach Platz sortiert - für die Startseite.
+     * The widgets added by an admin, sorted by slot - for the start page.
      *
      * @param array $settings  `admin`.`settings` (Backend::adminSettings())
-     * @return array           Platz => Liste von Modulnamen, jeder Platz vorhanden
+     * @return array           Slot => list of module names, every slot present
      */
     public function byPosition(array $settings): array
     {
@@ -170,8 +170,8 @@ class Widgets {
     }
 
     /**
-     * Beschriftung eines Widgets - für die Liste in den Einstellungen.
-     * Unbekanntes Modul: der Modulname selbst.
+     * Label of a widget - for the list in the settings.
+     * Unknown module: the module name itself.
      */
     public function label(string $module): string
     {
@@ -180,9 +180,9 @@ class Widgets {
     }
 
     /**
-     * Gibt es dieses Widget überhaupt? Ohne Rechteprüfung - für das Prüfen einer
-     * gespeicherten Einstellung (Admin::hookOnSave()), die auch ein Superuser für
-     * einen anderen Admin setzen darf. Ob sie sich zeigt, entscheidet render().
+     * Does this widget exist at all? Without a permission check - for checking a
+     * stored setting (Admin::hookOnSave()), which a superuser may also set for
+     * another admin. Whether it is shown is decided by render().
      */
     public function exists(string $module): bool
     {
@@ -190,7 +190,7 @@ class Widgets {
     }
 
     /**
-     * Gibt es dieses Widget und darf der angemeldete Admin es sehen?
+     * Does this widget exist and may the logged-in admin see it?
      */
     public function allowed(string $module): bool
     {
@@ -199,11 +199,11 @@ class Widgets {
     }
 
     /**
-     * Ein Widget als fertige Karte.
+     * A widget as a finished card.
      *
-     * @param string $module  Modulname aus der Einstellung - ungeprüft
-     * @return string         HTML, leer wenn es das Widget nicht (mehr) gibt oder
-     *                        der Admin das Modul nicht darf
+     * @param string $module  Module name from the setting - unchecked
+     * @return string         HTML, empty if the widget does not (or no longer) exist or
+     *                        the admin may not use the module
      */
     public function render(string $module): string
     {
@@ -219,8 +219,8 @@ class Widgets {
             $body = $this->body($module, $widget);
         }
         catch (\Throwable $e) {
-            // Ein Widget darf die Startseite nicht mitreißen (siehe Klassenkommentar).
-            // Die Ausnahme selbst gehört ins Log, nicht in die Oberfläche.
+            // A widget must not take down the start page (see class comment).
+            // The exception itself belongs in the log, not in the user interface.
             $this->container->get(System::class)->log('widget-errors', "$module: " . $e->getMessage());
             $body = $this->backend->template('alert_danger', [
                 '{text}' => $this->cms->snippet('start.error_widget_failed'),
@@ -236,10 +236,10 @@ class Widgets {
     // ====================
 
     /**
-     * Die 'widget'-Angabe eines Moduls, auf Vollständigkeit gebracht.
+     * The 'widget' entry of a module, completed.
      *
-     * @return ?array  'class' (voller Klassenname), 'method', 'label', 'icon';
-     *                 null, wenn das Modul kein Widget anbietet
+     * @return ?array  'class' (full class name), 'method', 'label', 'icon';
+     *                 null if the module offers no widget
      */
     private function definition(string $module): ?array
     {
@@ -248,7 +248,7 @@ class Widgets {
         $widget = $settings['widget'] ?? null;
         if (!is_array($widget) || empty($widget['class'])) return null;
 
-        // Nur Klassen des eigenen Moduls - der Name ist relativ (Klassenkommentar)
+        // Only classes of the module itself - the name is relative (class comment)
         $class = trim((string)$widget['class'], '\\');
         if ($class === '' || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $class)) return null;
         $namespace = (string)($settings['namespace'] ?? '');
@@ -263,9 +263,9 @@ class Widgets {
     }
 
     /**
-     * Den Inhalt eines Widgets erzeugen.
+     * Build the content of a widget.
      *
-     * @throws \RuntimeException  Klasse oder Methode fehlt
+     * @throws \RuntimeException  class or method is missing
      */
     private function body(string $module, array $widget): string
     {

@@ -1,12 +1,12 @@
 <?php
 /**
- * API-Methoden des Zeitplaners: auflisten, lesen, anlegen, ändern, jetzt ausführen.
+ * API methods of the scheduler: list, read, create, change, run now.
  *
- * Welche Einstellungen unter details gelten, hängt vom Typ ab (url, php, dbbackup,
- * logcleanup, cachecleanup, template, fulltext; die Wartungsaufgaben
- * Scheduler::MAINTENANCE_TYPES haben keine). Das Passwort einer URL-Aufgabe
- * (details.password) schreibt die API nicht - Zugangsdaten gehören nicht in einen
- * Chat; es bleibt, wie es ist, und wird in der Oberfläche gesetzt.
+ * Which settings apply under details depends on the type (url, php, dbbackup,
+ * logcleanup, cachecleanup, template, fulltext; the maintenance tasks
+ * Scheduler::MAINTENANCE_TYPES have none). The password of a URL task
+ * (details.password) is not written by the API - credentials do not belong in a
+ * chat; it stays as it is and is set in the UI.
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -26,7 +26,7 @@ class SchedulerApi extends DatasetApi
         'cron_minute', 'cron_hour', 'cron_day', 'cron_month', 'cron_year', 'cron_weekday',
         'details', 'next_run', 'last_run', 'last_status', 'last_message',
     ];
-    /** Scheduler::editableFields() ohne type, details einzeln ohne Passwort */
+    /** Scheduler::editableFields() without type, details individually without password */
     protected const WRITABLE = [
         'label', 'admin_id', 'enabled', 'max_minutes', 'log',
         'cron_minute', 'cron_hour', 'cron_day', 'cron_month', 'cron_year', 'cron_weekday',
@@ -48,9 +48,9 @@ class SchedulerApi extends DatasetApi
     }
 
     /**
-     * Alle Aufgaben mit Zeitplan und letztem Lauf.
+     * All tasks with schedule and last run.
      *
-     * @param bool $withSchema  dazu die Beschreibung der Felder (für scheduler.create)
+     * @param bool $withSchema  plus the description of the fields (for scheduler.create)
      */
     #[ApiMethod('scheduler.list', '#scheduler.api_list')]
     public function list(bool $withSchema = false): array
@@ -59,10 +59,10 @@ class SchedulerApi extends DatasetApi
     }
 
     /**
-     * Eine Aufgabe mit allen Einstellungen.
+     * A task with all settings.
      *
      * @param int  $id          scheduler_id
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param bool $withSchema  plus the description of the fields
      */
     #[ApiMethod('scheduler.info', '#scheduler.api_info')]
     public function info(int $id, bool $withSchema = false): array
@@ -71,11 +71,11 @@ class SchedulerApi extends DatasetApi
     }
 
     /**
-     * Eine Aufgabe anlegen.
+     * Create a task.
      *
-     * @param string $type      einer aus Scheduler::TYPES
-     * @param array  $data      Feld => Wert: label, Zeitplan (cron_*), details je nach Typ
-     * @param bool   $simulate  nur prüfen, nichts anlegen
+     * @param string $type      one of Scheduler::TYPES
+     * @param array  $data      Field => value: label, schedule (cron_*), details depending on type
+     * @param bool   $simulate  only check, create nothing
      */
     #[ApiMethod('scheduler.create', '#scheduler.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(string $type, array $data, bool $simulate = false): array
@@ -87,11 +87,11 @@ class SchedulerApi extends DatasetApi
     }
 
     /**
-     * Eine Aufgabe ändern.
+     * Change a task.
      *
      * @param int   $id        scheduler_id
-     * @param array $data      Feld => Wert, nur die zu ändernden
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param array $data      Field => value, only the ones to change
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('scheduler.update', '#scheduler.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array
@@ -100,7 +100,7 @@ class SchedulerApi extends DatasetApi
     }
 
     /**
-     * Eine Aufgabe jetzt als Hintergrundprozess ausführen (wie "Jetzt ausführen").
+     * Run a task now as a background process (like "Run now").
      *
      * @param int $id  scheduler_id
      * @return array  token (system.process), started

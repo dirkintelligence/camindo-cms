@@ -1,49 +1,48 @@
 <?php
 /**
- * Papierkorb: gelöschte Datensätze und Bereiche finden und wiederherstellen.
- * Instanzname im Code: $trash.
+ * Trash: find and restore deleted records and areas.
+ * Instance name in the code: $trash.
  *
- * Das Modul hat keine eigene Tabelle. "Im Papierkorb" ist alles mit `deleted` = 1;
- * wer gelöscht hat und wann, steht in `changed_by` / `changed_at` - Dataset::delete()
- * gibt allen Datensätzen EINES Löschvorgangs exakt denselben Zeitstempel (siehe
- * Dataset::newTimestamp()), und genau daran erkennt Dataset::restore() später, was
- * zusammengehört.
+ * The module has no table of its own. "In the trash" is everything with `deleted` = 1;
+ * who deleted it and when is stored in `changed_by` / `changed_at` - Dataset::delete()
+ * gives all records of ONE deletion operation exactly the same timestamp (see
+ * Dataset::newTimestamp()), and Dataset::restore() later recognizes by exactly this what
+ * belongs together.
  *
- * WAS IN DER LISTE STEHT: NUR DIE WURZEL EINES VORGANGS
+ * WHAT APPEARS IN THE LIST: ONLY THE ROOT OF AN OPERATION
  * --------------------
- * Datensätze
- *     `deleted` = 1, keine Arbeitskopie, der Bereich ist NICHT gelöscht und der
- *     Vaterdatensatz (Baum) auch nicht. Kinder, die mit ihrem Zweig gelöscht wurden,
- *     stehen damit nicht einzeln da - sie kommen beim Wiederherstellen des Zweigs mit
- *     (Record::restore($id, withChilds: true) nimmt genau die Kinder mit demselben
- *     Löschzeitpunkt). Ein Kind, das schon VORHER einzeln gelöscht wurde, taucht
- *     erst wieder auf, wenn sein Vater wiederhergestellt ist - sonst stünde es nach
- *     dem Wiederherstellen unter einem gelöschten Vater.
- *     Ebenso fehlen fest verbundene Inhalte (Feldtyp 'link') eines gelöschten
- *     Datensatzes - LinkTrait::cascadeDependents() holt sie mit ihm zurück.
- *     Ohne 'alle' nur, was der Admin selbst gelöscht hat (`changed_by`), und nur aus
- *     Bereichen, die er lesen darf (Access::areaRead()).
- * Bereiche (nur Superuser)
- *     `deleted` = 1 und der übergeordnete Bereich nicht gelöscht. Ein Bereich nimmt
- *     beim Wiederherstellen seine Unterbereiche und alle Datensätze mit demselben
- *     Löschzeitpunkt mit (Area::hookOnRestore()). Datensätze eines gelöschten
- *     Bereichs erscheinen deshalb nie einzeln.
+ * Records
+ *     `deleted` = 1, no working copy, the area is NOT deleted and the
+ *     parent record (tree) is not either. Children that were deleted with their branch
+ *     therefore do not appear individually - they come back with the branch when it is restored
+ *     (Record::restore($id, withChilds: true) takes exactly the children with the same
+ *     deletion time). A child that was already deleted individually BEFORE only reappears
+ *     when its parent is restored - otherwise it would stand under a deleted
+ *     parent after restoring.
+ *     Likewise, permanently linked content (field type 'link') of a deleted
+ *     record is missing - LinkTrait::cascadeDependents() brings it back with it.
+ *     Without 'all', only what the administrator deleted themselves (`changed_by`), and only from
+ *     areas they may read (Access::areaRead()).
+ * Areas (superusers only)
+ *     `deleted` = 1 and the parent area not deleted. When restored, an area takes its
+ *     subareas and all records with the same deletion time along (Area::hookOnRestore()).
+ *     Records of a deleted area therefore never appear individually.
  *
- * Neueste Löschung zuerst. Endgültig gelöscht wird nach admin.trash_retention_days
- * (Zeitplaner-Aufgabe trash, ToolDatabase::purgeTrash()) - expiresAt() nennt den Tag.
+ * Most recent deletion first. Permanently deleted after admin.trash_retention_days
+ * (scheduler task trash, ToolDatabase::purgeTrash()) - expiresAt() gives the day.
  *
- * WIEDERHERSTELLEN
+ * RESTORING
  * --------------------
- * restore() prüft zuerst, ob der Eintrag für diesen Admin tatsächlich in der Liste
- * stünde (restorable()) - die Id kommt aus dem Request. Danach läuft derselbe Weg wie
- * beim Löschen: Record::restore() bzw. Area::restore() mit Kindern, große Vorgänge
- * ab admin.mass_delete_threshold als Hintergrundprozess (MassDeletion). Die
- * Gruppenrechte prüft Dataset::restoreOneCore() je Datensatz (Löschrecht).
+ * restore() first checks whether the entry would actually be in the list for this administrator
+ * (restorable()) - the id comes from the request. Then the same path as
+ * for deleting runs: Record::restore() or Area::restore() with children, large operations
+ * from admin.mass_delete_threshold as a background process (MassDeletion). The
+ * group permissions are checked by Dataset::restoreOneCore() per record (delete permission).
  *
- * @see Camindo\Core\Modules\Trash\TrashBackend  Liste, Widget
+ * @see Camindo\Core\Modules\Trash\TrashBackend  list, widget
  * @see Camindo\Core\Dataset                     delete() / restore()
  * @see Camindo\Core\Modules\Area\Area           hookOnSoftDelete() / hookOnRestore()
- * @see Camindo\Core\MassDeletion                Hintergrundprozess
+ * @see Camindo\Core\MassDeletion                background process
  */
 namespace Camindo\Core\Modules\Trash;
 
@@ -59,7 +58,7 @@ use Camindo\Core\Modules\Record\Record;
 
 class Trash {
 
-    /** Höchstens so viele Einträge je Liste */
+    /** At most this many entries per list */
     public const MAX_ENTRIES = 200;
 
     public function __construct(
@@ -76,22 +75,22 @@ class Trash {
     {}
 
     // ====================
-    // Listen
+    // Lists
 
     /**
-     * Gelöschte Datensätze (nur Wurzeln der Löschvorgänge, siehe Klassenkommentar).
+     * Deleted records (only roots of the deletion operations, see class comment).
      *
-     * @param bool $all  true: alle Admins (nur Superuser, sonst ignoriert)
+     * @param bool $all  true: all administrators (superusers only, otherwise ignored)
      * @param int  $limit
-     * @return array  Zeilen: record_id, area_id, instance_id, owner_id, changed_by,
-     *                changed_at (UTC), children (mitgelöschte Kinder)
+     * @return array  rows: record_id, area_id, instance_id, owner_id, changed_by,
+     *                changed_at (UTC), children (children deleted along)
      */
     public function records(bool $all = false, int $limit = self::MAX_ENTRIES): array
     {
         [$where, $types, $values] = $this->recordConditions($all);
         $sql = "SELECT `r`.`record_id`, `r`.`area_id`, `r`.`instance_id`, `r`.`owner_id`,"
              . " `r`.`changed_by`, `r`.`changed_at`,"
-             // Mitgelöschte Kinder: Teilbaum (lft/rgt je Bereich) mit demselben Zeitstempel
+             // Children deleted along: subtree (lft/rgt per area) with the same timestamp
              . " (SELECT COUNT(*) FROM `record` `c` WHERE `r`.`lft` > 0"
              . "     AND `c`.`area_id` = `r`.`area_id` AND `c`.`lft` > `r`.`lft` AND `c`.`rgt` < `r`.`rgt`"
              . "     AND `c`.`tmp` = 0 AND `c`.`deleted` = 1 AND `c`.`changed_at` = `r`.`changed_at`) AS `children`"
@@ -110,10 +109,10 @@ class Trash {
     }
 
     /**
-     * Gelöschte Bereiche (nur Wurzeln) - nur für Superuser, sonst leer.
+     * Deleted areas (only roots) - only for superusers, otherwise empty.
      *
-     * @return array  Zeilen: area_id, instance_id, type, name, label, icon, changed_by,
-     *                changed_at (UTC), subareas, records (mitgelöscht)
+     * @return array  rows: area_id, instance_id, type, name, label, icon, changed_by,
+     *                changed_at (UTC), subareas, records (deleted along)
      */
     public function areas(int $limit = self::MAX_ENTRIES): array
     {
@@ -140,8 +139,8 @@ class Trash {
     }
 
     /**
-     * Anzahl der Einträge für das Widget: eigene Datensätze plus - beim Superuser -
-     * gelöschte Bereiche. Gezählt werden Wurzeln, also das, was die Liste zeigt.
+     * Number of entries for the widget: own records plus - for superusers -
+     * deleted areas. Roots are counted, i.e. what the list shows.
      *
      * @return array  ['records' => int, 'areas' => int]
      */
@@ -170,9 +169,9 @@ class Trash {
     }
 
     /**
-     * Tag, an dem der Papierkorb-Cronjob einen Eintrag endgültig löscht - in der
-     * Zeitzone des Admins, 'Y-m-d H:i:s'. Der Cronjob läuft nachts; gemeint ist
-     * "ab diesem Zeitpunkt beim nächsten Lauf".
+     * Day on which the trash cron job permanently deletes an entry - in the
+     * time zone of the administrator, 'Y-m-d H:i:s'. The cron job runs at night; meant is
+     * "from this point on at the next run".
      *
      * @param string $changedAt  `changed_at` (UTC)
      */
@@ -191,7 +190,7 @@ class Trash {
     }
 
     /**
-     * `changed_at` (UTC) in der Zeitzone des Admins, 'Y-m-d H:i:s'.
+     * `changed_at` (UTC) in the time zone of the administrator, 'Y-m-d H:i:s'.
      */
     public function localTime(string $changedAt): string
     {
@@ -206,11 +205,11 @@ class Trash {
     }
 
     // ====================
-    // Wiederherstellen
+    // Restoring
 
     /**
-     * Steht der Eintrag für den angemeldeten Admin in der Liste? Nur dann darf er
-     * über das Modul wiederhergestellt werden.
+     * Is the entry in the list for the logged-in administrator? Only then may it
+     * be restored via the module.
      *
      * @param string $table  'record' | 'area'
      */
@@ -231,7 +230,7 @@ class Trash {
         }
         if ($table !== 'record') return false;
 
-        // Superuser dürfen auch Einträge anderer Admins (Liste "alle")
+        // Superusers may also restore entries of other administrators (list "all")
         [$where, $types, $values] = $this->recordConditions($this->backend->isSuperuser());
         $this->db->pushResult();
         $this->db->query(
@@ -247,24 +246,24 @@ class Trash {
     }
 
     /**
-     * Einen Eintrag samt seinem Zweig bzw. seinen Datensätzen wiederherstellen.
+     * Restore an entry together with its branch or its records.
      *
      * @param string $table  'record' | 'area'
-     * @return string        'restored' | 'background' | 'failed' (Meldung in Cms::errors)
-     *                       | 'denied' (nicht in der Liste des Admins)
+     * @return string        'restored' | 'background' | 'failed' (message in Cms::errors)
+     *                       | 'denied' (not in the list of the administrator)
      */
     public function restore(string $table, int $id): string
     {
         if (!$this->restorable($table, $id)) return 'denied';
 
-        // Große Vorgänge in den Hintergrund - derselbe Weg wie beim Löschen
+        // Large operations in the background - the same path as when deleting
         $count = $this->massDeletion->affectedCount($table, $id, true, 'restore');
         if ($this->massDeletion->needsBackground($count)) {
             $error = '';
             if ($this->massDeletion->start($table, $id, 'restore', true, $error)) {
                 return 'background';
             }
-            // Start fehlgeschlagen -> im Request weitermachen
+            // Start failed -> continue in the request
             $this->system->log('massdelete-errors', "restore {$table} {$id}: {$error}");
         }
 
@@ -275,7 +274,7 @@ class Trash {
     // ====================
 
     /**
-     * Feldtypen fest verbundener Inhalte (Cms::$dependentTypes) als SQL-Liste.
+     * Field types of permanently linked content (Cms::$dependentTypes) as an SQL list.
      */
     private function dependentTypeList(): string
     {
@@ -284,17 +283,17 @@ class Trash {
     }
 
     /**
-     * WHERE-Bedingung der Datensatzliste (Aliase r = record, a = area, p = Vater).
+     * WHERE condition of the record list (aliases r = record, a = area, p = parent).
      *
-     * @param bool $all  true: alle Admins - nur für Superuser wirksam
+     * @param bool $all  true: all administrators - only effective for superusers
      * @return array     [sql, bindTypes, values]
      */
     private function recordConditions(bool $all): array
     {
         $where = "`r`.`tmp` = 0 AND `r`.`deleted` = 1"
                . " AND (`p`.`record_id` IS NULL OR `p`.`deleted` = 0)"
-               // Fest verbundener Inhalt (link-Feld) eines gelöschten Besitzers: kommt
-               // mit diesem zurück (LinkTrait::cascadeDependents()), steht nicht allein da
+               // Permanently linked content (link field) of a deleted owner: comes
+               // back with it (LinkTrait::cascadeDependents()), does not stand alone
                . " AND NOT EXISTS (SELECT 1 FROM `data_rel` `d`"
                . "     JOIN `field` `f` ON `f`.`field_id` = `d`.`field_id` AND `f`.`type` IN (" . $this->dependentTypeList() . ")"
                . "     JOIN `record` `o` ON `o`.`record_id` = `d`.`src_id` AND `o`.`tmp` = 0 AND `o`.`deleted` = 1"
@@ -308,8 +307,8 @@ class Trash {
             $values[] = (int)$this->session->get('admin_id');
         }
 
-        // Nur lesbare Bereiche (null = keine Einschränkung: Superuser, ungeladen).
-        // Ohne einen einzigen lesbaren Bereich bleibt die Liste leer.
+        // Only readable areas (null = no restriction: superuser, not loaded).
+        // Without a single readable area the list stays empty.
         $areaIds = $this->backend->access()->areaFilter();
         if ($areaIds !== null) {
             $areaIds = array_values(array_filter(array_map('intval', $areaIds), fn(int $id): bool => $id > 0));

@@ -1,3 +1,3 @@
 <?php
-// Frontend-Einstieg - Stub, der Code liegt im Core (Entwicklerdoku, Kapitel 09)
+// Frontend entry point - stub, the code is in the core (developer docs, chapter 09 (Installation and update))
 require dirname(__DIR__) . '/Core/public_master/index.php';

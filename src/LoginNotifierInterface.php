@@ -1,42 +1,42 @@
 <?php
 /**
- * Benachrichtigung bei sicherheitsrelevanten Anmelde-Ereignissen
- * (16-sicherheit.md §11). Die Vorgabe Camindo\Core\LoginNotifier schreibt Admins
- * eine E-Mail; ein Projekt kann per security.login_notifier eine eigene Klasse
- * nennen - etwa für eine SMS-API. Sie wird aus dem Container geholt (Autowiring),
- * kann also Config, Database usw. im Konstruktor verlangen.
+ * Notification for security-relevant sign-in events (developer docs, chapter 13 (Security: authentication)):
+ * Security: authentication). The default Camindo\Core\LoginNotifier sends admins
+ * an email; a project can name its own class via security.login_notifier - for
+ * example for an SMS API. It is fetched from the container (autowiring), so it can
+ * require Config, Database etc. in its constructor.
  *
- * Beispiel (Projektcode, per Composer-Autoload erreichbar):
+ * Example (project code, reachable via Composer autoload):
  *
  *     class SmsNotifier implements \Camindo\Core\LoginNotifierInterface {
  *         public function __construct(private \Camindo\Core\LoginNotifier $mail) {}
  *         public function notify(string $event, string $kind, array $account, array $context): void {
  *             $mobile = (string)($account['mobile'] ?? ''); // Profil: Feldname des Bereichs
  *             if ($mobile === '') { $this->mail->notify($event, $kind, $account, $context); return; }
- *             // … SMS-API aufrufen: "Neue Anmeldung: {$context['label']}, {$context['ip']}"
+ *             // … call the SMS API: "New sign-in: {$context['label']}, {$context['ip']}"
  *         }
  *     }
  *
- * Fehler wirft die Klasse nicht nach außen: die Anmeldung ist in dem Moment schon
- * erfolgt. LoginDevices fängt Ausnahmen trotzdem ab und schreibt sie ins Log.
+ * The class does not pass errors on: the sign-in has already happened at that point.
+ * LoginDevices catches exceptions anyway and writes them to the log.
  */
 namespace Camindo\Core;
 
 interface LoginNotifierInterface {
 
     /**
-     * @param string $event    'new_device' (Anmeldung von einem unbekannten Gerät),
-     *                         'password_changed' (Frontend: neues Passwort gesetzt),
-     *                         'totp_enabled' / 'totp_disabled' (Backend: Authenticator-
-     *                         App ein- bzw. ausgeschaltet; $context['reset'] = true,
-     *                         wenn ein Superuser zurückgesetzt hat) oder
-     *                         'recovery_code_used' (Backend: Anmeldung mit
-     *                         Wiederherstellungscode; $context['remaining'])
-     * @param string $kind     'admin' (Backend) oder 'user' (Frontend-Profil)
-     * @param array  $account  Admin-Datensatz (Admin::load(), E-Mail entschlüsselt) bzw.
-     *                         Profil-Datensatz (Cms-Zeile des Profils)
-     * @param array  $context  label (Browser/Betriebssystem), ip, time (UTC, Y-m-d H:i:s)
-     *                         und je Ereignis reset bzw. remaining (siehe oben)
+     * @param string $event    'new_device' (sign-in from an unknown device),
+     *                         'password_changed' (frontend: new password set),
+     *                         'totp_enabled' / 'totp_disabled' (backend: authenticator
+     *                         app switched on or off; $context['reset'] = true
+     *                         if a superuser reset it) or
+     *                         'recovery_code_used' (backend: sign-in with a
+     *                         recovery code; $context['remaining'])
+     * @param string $kind     'admin' (backend) or 'user' (frontend profile)
+     * @param array  $account  Admin record (Admin::load(), email decrypted) or
+     *                         profile record (Cms row of the profile)
+     * @param array  $context  label (browser/operating system), ip, time (UTC, Y-m-d H:i:s)
+     *                         and per event reset or remaining (see above)
      */
     public function notify(string $event, string $kind, array $account, array $context): void;
 }

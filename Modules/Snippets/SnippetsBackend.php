@@ -1,36 +1,35 @@
 <?php
 /**
- * Backend-Oberfläche des Moduls Snippets: die Snippet-Sets der Instanzen
- * (var/custom/snippets/{instance_id}/lang/{code}.ini) ansehen und je Snippet
- * bearbeiten.
+ * Backend UI of the module Snippets: view the snippet sets of the instances
+ * (var/custom/snippets/{instance_id}/lang/{code}.ini) and edit each snippet.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     index.php         -> list()   Instanzen, deren Set der Admin sehen darf
- *     set_table.php     -> table()  Snippets einer Instanz: Liste, Sprachauswahl
- *     snippet_edit.php  -> edit()   ein Snippet anlegen, kopieren, ändern oder löschen
- *                                   (eigener Layer)
+ *     index.php         -> list()   instances whose set the administrator may see
+ *     set_table.php     -> table()  snippets of an instance: list, language selection
+ *     snippet_edit.php  -> edit()   create, copy, change or delete a snippet
+ *                                   (own layer)
  *
- * Kein Dataset dahinter - die Dateien sind die Ablage (Snippets); Sets werden nicht
- * angelegt oder gelöscht, sie gehören zur Instanz. Wer die Instanz nicht darf
- * (Snippets::allowed()), bekommt die Zugriffsmeldung von Access.
+ * No dataset behind it - the files are the storage (snippets); sets are not
+ * created or deleted, they belong to the instance. Whoever may not use the instance
+ * (Snippets::allowed()) gets the access message from Access.
  *
- * DIE TABELLE
+ * THE TABLE
  * --------------------
- * Eine Zeile je Schlüssel, eine Spalte je ANGEZEIGTER Backend-Sprache - bei 13
- * Sprachen wäre die Tabelle sonst unlesbar. Welche Sprachen, wählt der Admin im
- * Dropdown über der Tabelle; die Auswahl steht in der Admin-Session
- * (Session::uiState('snippets_languages'), gilt für alle Instanzen), ohne Auswahl
- * nur FALLBACK_LANG. Die Tabelle ist nur Anzeige: Klick auf eine Zeile öffnet die
- * Maske (Layer mit allen Sprachen untereinander), das Kontextmenü (rechte Maustaste)
- * bietet Bearbeiten, Kopieren (neue Maske mit den Texten, Schlüssel leer) und Löschen
- * (Rückfrage-Layer, dann POST). Schlüssel bestehender Snippets sind nicht änderbar -
- * Templates und Beschriftungsfelder verweisen über ihn auf das Snippet.
+ * One row per key, one column per DISPLAYED backend language - with 13
+ * languages the table would otherwise be unreadable. The administrator chooses which languages in the
+ * dropdown above the table; the selection is kept in the administrator session
+ * (Session::uiState('snippets_languages'), applies to all instances); without a selection
+ * only FALLBACK_LANG. The table is display only: clicking a row opens the
+ * mask (layer with all languages one below the other), the context menu (right mouse button)
+ * offers Edit, Copy (new mask with the texts, key empty) and Delete
+ * (confirmation layer, then POST). Keys of existing snippets cannot be changed -
+ * templates and label fields refer to the snippet via it.
  *
- * Die Instanzliste zeigt statt einer Spalte je Sprache nur die Lücken: Sprachen, in
- * denen Texte fehlen, mit ihrer Anzahl.
+ * Instead of one column per language, the instance list shows only the gaps: languages in
+ * which texts are missing, with their number.
  *
- * @see Camindo\Core\Modules\Snippets\Snippets   Dateien, Prüfung, Zugriff, Cache
+ * @see Camindo\Core\Modules\Snippets\Snippets   files, checks, access, cache
  */
 namespace Camindo\Core\Modules\Snippets;
 
@@ -40,7 +39,7 @@ use Camindo\Core\Session;
 
 class SnippetsBackend {
 
-    /** Schlüssel des Oberflächen-Zustands in der Admin-Session */
+    /** Key of the UI state in the administrator session */
     private const UI_LANGUAGES = 'snippets_languages';
 
     protected int $instanceId = 0;
@@ -55,7 +54,7 @@ class SnippetsBackend {
     {}
 
     /**
-     * Liste der Instanzen (backend/index.php).
+     * List of the instances (backend/index.php).
      */
     public function list(): void
     {
@@ -93,10 +92,10 @@ class SnippetsBackend {
     }
 
     /**
-     * Snippets einer Instanz als Tabelle (backend/set_table.php).
+     * Snippets of an instance as a table (backend/set_table.php).
      *
-     *     function=''         Tabelle
-     *     function=languages  angezeigte Sprachen (languages[]) in der Session merken
+     *     function=''         table
+     *     function=languages  remember displayed languages (languages[]) in the session
      */
     public function table(): void
     {
@@ -118,8 +117,8 @@ class SnippetsBackend {
             '{prefix}' => $this->backend->escape($prefix),
         ])]);
 
-        // Schließen: die Instanzliste darunter neu laden (Anzahl und Übersetzungsstand
-        // können sich geändert haben)
+        // Close: reload the instance list below (count and translation status
+        // may have changed)
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(); cApp.layers.close()");
         echo $this->backend->buttonBar();
@@ -160,16 +159,16 @@ class SnippetsBackend {
     }
 
     /**
-     * Eingabemaske für EIN Snippet (backend/snippet_edit.php) - alle Sprachen
-     * untereinander, eigener Layer.
+     * Input mask for ONE snippet (backend/snippet_edit.php) - all languages
+     * one below the other, own layer.
      *
-     *     key=''                   neues Snippet (Schlüssel eingeben)
-     *     copy={schlüssel}         neues Snippet mit den Texten von {schlüssel}
-     *     key={schlüssel}          vorhandenes Snippet (Schlüssel fest)
-     *     function=save            speichern (nur POST): Erfolg -> Tabelle neu laden,
-     *                              Layer zu; Fehler -> Maske mit Eingaben und Meldung
-     *     function=delete          Rückfrage: das Snippet mit allen Texten
-     *     function=delete_confirm  löschen (nur POST): Tabelle neu laden, Layer zu
+     *     key=''                   new snippet (enter key)
+     *     copy={key}               new snippet with the texts of {key}
+     *     key={key}                existing snippet (key fixed)
+     *     function=save            save (POST only): success -> reload table,
+     *                              close layer; error -> mask with inputs and message
+     *     function=delete          confirmation: the snippet with all texts
+     *     function=delete_confirm  delete (POST only): reload table, close layer
      */
     public function edit(): void
     {
@@ -197,7 +196,7 @@ class SnippetsBackend {
         if ($this->function === 'save' && $this->backend->requirePost()) {
             $texts = [];
             foreach ($langs as $lang) {
-                // leere Eingaben schickt der Browser nicht (serializeFiles()) - sie gelten als ''
+                // the browser does not send empty inputs (serializeFiles()) - they count as ''
                 $texts[$lang] = (string)($_POST['text'][$lang] ?? '');
             }
             if ($this->snippets->saveSnippet($this->instanceId, $key, $texts, $isNew)) {
@@ -209,7 +208,7 @@ class SnippetsBackend {
             $error = $this->cms->errorMsg();
         }
         else {
-            // Kopie: die Texte des Vorbilds, der Schlüssel bleibt leer
+            // Copy: the texts of the template, the key stays empty
             $source = $isNew ? trim((string)($_REQUEST['copy'] ?? '')) : $key;
             $current = $source === '' ? [] : ($this->snippets->load($this->instanceId)[$source] ?? null);
             if ($current === null) {
@@ -233,7 +232,7 @@ class SnippetsBackend {
                 '{id}' => 'snippet-text-' . htmlspecialchars($lang),
                 '{lang}' => htmlspecialchars($lang),
                 '{lang_tag}' => htmlspecialchars(str_replace('_', '-', $lang)),
-                // Schreibrichtung der Sprache, nicht des Backends (Cms::isRtl())
+                // writing direction of the language, not of the backend (Cms::isRtl())
                 '{dir}' => $this->cms->textDirection($lang),
                 '{label}' => $this->_languageLabel($lang),
                 '{value}' => $this->backend->escape((string)($texts[$lang] ?? '')),
@@ -258,11 +257,11 @@ class SnippetsBackend {
     }
 
     // ====================
-    // Hilfsfunktionen
+    // Helper functions
 
     /**
-     * function=delete: Rückfrage mit den Texten aller Sprachen; delete_confirm (POST):
-     * löschen, Tabelle neu laden, Layer zu.
+     * function=delete: confirmation with the texts of all languages; delete_confirm (POST):
+     * delete, reload table, close layer.
      */
     private function _delete(string $key, array $langs): void
     {
@@ -303,11 +302,11 @@ class SnippetsBackend {
     }
 
     /**
-     * Zelle "Übersetzungen" der Instanzliste - kompakt auch bei vielen Sprachen: eine
-     * Zeile mit den vollständigen Sprachen, je teilweise übersetzter Sprache ein Badge
-     * (vorhandene/alle), eine Zeile mit den Sprachen ganz ohne Texte.
+     * Cell "Translations" of the instance list - compact even with many languages: one
+     * line with the complete languages, per partially translated language one badge
+     * (existing/all), one line with the languages without any texts.
      *
-     * @param array    $info   Eintrag aus Snippets::instances()
+     * @param array    $info   entry from Snippets::instances()
      * @param string[] $langs  Snippets::languages()
      */
     private function _translations(array $info, array $langs): string
@@ -335,8 +334,8 @@ class SnippetsBackend {
     }
 
     /**
-     * Angezeigte Sprachen aus der Session - nur noch vorhandene Backend-Sprachen, in
-     * der Reihenfolge von Snippets::languages(); ohne Auswahl FALLBACK_LANG.
+     * Displayed languages from the session - only backend languages that still exist, in
+     * the order of Snippets::languages(); without a selection FALLBACK_LANG.
      *
      * @param string[] $langs  Snippets::languages()
      * @return string[]
@@ -349,9 +348,9 @@ class SnippetsBackend {
     }
 
     /**
-     * Auswahl aus dem Dropdown (languages[]) übernehmen. Unbekannte Werte fallen
-     * weg; nichts angehakt = nur FALLBACK_LANG (die Checkbox schickt der Browser
-     * nicht, eine leere Auswahl ist also nicht von "nichts übermittelt" zu trennen).
+     * Take over the selection from the dropdown (languages[]). Unknown values are
+     * dropped; nothing checked = only FALLBACK_LANG (the browser does not send the checkbox,
+     * so an empty selection cannot be told apart from "nothing submitted").
      */
     private function _saveShownLanguages(array $langs): void
     {
@@ -361,7 +360,7 @@ class SnippetsBackend {
     }
 
     /**
-     * Checkboxen des Sprach-Dropdowns.
+     * Checkboxes of the language dropdown.
      */
     private function _languageOptions(array $langs, array $shown): string
     {
@@ -378,8 +377,8 @@ class SnippetsBackend {
     }
 
     /**
-     * Bezeichnung einer Backend-Sprache in ihrer eigenen Sprache plus Kürzel,
-     * z. B. "Svenska <code>sv_SE</code>" (HTML).
+     * Name of a backend language in its own language plus code,
+     * e.g. "Svenska <code>sv_SE</code>" (HTML).
      */
     private function _languageLabel(string $lang): string
     {
@@ -392,8 +391,8 @@ class SnippetsBackend {
     }
 
     /**
-     * Eine Zeile der Tabelle: Schlüssel, Texte der angezeigten Sprachen (Aktionen
-     * über Klick und Kontextmenü).
+     * One row of the table: key, texts of the displayed languages (actions
+     * via click and context menu).
      */
     private function _tableRow(string $key, array $texts, array $shown): string
     {

@@ -1,30 +1,29 @@
 <?php
 /**
- * Zuletzt geänderte Datensätze und Templates je Admin (Tabelle `history`).
- * Instanzname im Code: $history.
+ * Recently changed records and templates per admin (table `history`).
+ * Instance name in the code: $history.
  *
- * WAS HINEINKOMMT
+ * WHAT GETS IN
  * --------------------
- * Nur was ein Admin in einer Eingabemaske gespeichert hat - RecordBackendEdit und
- * TemplateBackend rufen touch() nach einem erfolgreichen Speichern auf. Import,
- * Stapelverarbeitung, Verschieben und der Abgleich der Template-Dateien bleiben
- * bewusst draußen: ein Import über tausend Datensätze würde die Liste sofort mit
- * Einträgen füllen, die niemand von Hand angefasst hat.
+ * Only what an admin saved in an input mask - RecordBackendEdit and
+ * TemplateBackend call touch() after a successful save. Import, batch processing,
+ * moving and the sync of the template files are deliberately left out: an import
+ * of a thousand records would fill the list at once with entries that nobody
+ * touched by hand.
  *
- * JE ADMIN UND ART HÖCHSTENS LIMIT EINTRÄGE
+ * AT MOST LIMIT ENTRIES PER ADMIN AND KIND
  * --------------------
- * Eine Zeile trägt entweder `record_id` oder `template_id`. Ein erneutes Speichern
- * desselben Datensatzes schreibt keine zweite Zeile, sondern setzt nur `changed_at`
- * neu (UNIQUE admin_id + record_id bzw. + template_id); danach werden alles über
- * dem zehnten Eintrag dieser Art gelöscht.
+ * A row carries either `record_id` or `template_id`. Saving the same record again
+ * does not write a second row, it only updates `changed_at` (UNIQUE admin_id +
+ * record_id or + template_id); afterwards everything beyond the tenth entry of
+ * this kind is deleted.
  *
- * AUFRÄUMEN ÜBERNIMMT DIE DATENBANK
+ * THE DATABASE DOES THE CLEANUP
  * --------------------
- * Alle drei Spalten sind Fremdschlüssel mit ON DELETE CASCADE: ein endgültig
- * gelöschter Datensatz, ein gelöschtes Template oder ein gelöschter Admin nimmt
- * seine Zeilen mit. Im Papierkorb liegende Datensätze bleiben stehen - die Anzeige
- * holt sie über Cms::select(), das sie ebenso ausfiltert wie Datensätze, die die
- * Benutzergruppe inzwischen nicht mehr lesen darf.
+ * All three columns are foreign keys with ON DELETE CASCADE: a record that is
+ * permanently deleted, a deleted template or a deleted admin takes its rows with
+ * it. Records in the trash remain: the display fetches them via Cms::select(),
+ * which filters them out just like records the user group may no longer read.
  *
  * @see Camindo\Core\Modules\Record\RecordBackendFolderList::_lastChangedRecords()
  * @see Camindo\Core\Modules\Template\TemplateBackend::_lastChangedTemplates()
@@ -33,7 +32,7 @@ namespace Camindo\Core;
 
 class History {
 
-    /** Einträge je Admin und Art */
+    /** Entries per admin and kind */
     public const LIMIT = 10;
 
     /** Art => Spalte in `history` */
@@ -49,13 +48,13 @@ class History {
     {}
 
     /**
-     * Einen gespeicherten Datensatz bzw. ein Template für den Session-Admin
-     * vermerken und die Liste auf LIMIT Einträge kürzen.
+     * Note a saved record or template for the session admin and trim the list
+     * to LIMIT entries.
      *
-     * Ohne Session-Admin (Cron, Frontend) passiert nichts.
+     * Without a session admin (cron, frontend) nothing happens.
      *
      * @param string $type  'record' | 'template'
-     * @param int    $id    record_id bzw. template_id (produktiv, keine Arbeitskopie)
+     * @param int    $id    record_id or template_id (live, not a working copy)
      */
     public function touch(string $type, int $id): void
     {
@@ -70,9 +69,9 @@ class History {
             'ii',
             [$adminId, $id]
         );
-        // Alles jenseits der LIMIT jüngsten Einträge dieser Art entfernen
-        // (MySQL erlaubt LIMIT nicht direkt in einer IN-Unterabfrage - daher die
-        // abgeleitete Tabelle)
+        // Remove everything beyond the LIMIT newest entries of this kind
+        // (MySQL does not allow LIMIT directly in an IN subquery - hence the
+        // derived table)
         $this->db->query(
             "DELETE FROM `history` WHERE `admin_id` = ? AND `$column` IS NOT NULL"
             . " AND `history_id` NOT IN (SELECT `history_id` FROM ("
@@ -86,7 +85,7 @@ class History {
     }
 
     /**
-     * Die vermerkten Ids des Session-Admins, jüngste zuerst.
+     * The noted ids of the session admin, newest first.
      *
      * @param string $type  'record' | 'template'
      * @return array        id => changed_at (UTC, 'Y-m-d H:i:s.v')

@@ -1,89 +1,89 @@
 <?php
 /**
- * Backend-Oberfläche für die Inhaltsbereiche (Tabelle `area`).
+ * Backend interface for the content areas (table `area`).
  *
- * Controller-Schicht nach dem üblichen Muster (siehe docs/developers/03-backend-entwicklung.md):
- * die drei-Zeilen-Scripte in backend/ holen diese Klasse aus dem Container und rufen
- * genau eine der öffentlichen Methoden auf.
+ * Controller layer following the usual pattern (see developer docs, chapter 05 (Backend development)):
+ * the three-line scripts in backend/ fetch this class from the container and call
+ * exactly one of the public methods.
  *
  *     backend/area_list.php     -> list()      Baumliste aller Bereiche
  *     backend/area_info.php     -> info()      Detailansicht eines Bereichs
- *     backend/area_edit.php     -> edit()      anlegen / kopieren / ändern / löschen
- *     backend/area_search.php   -> search()    Suchmaske und Suchausführung
+ *     backend/area_edit.php     -> edit()      create / copy / change / delete
+ *     backend/area_search.php   -> search()    search mask and search execution
  *     backend/area_previous.php -> updatePreviousOptions()   Ajax-Teilantwort
  *     backend/area_parent.php   -> updateParentOptions()     Ajax-Teilantwort
  *
- * DIE LISTE IST EIN BAUM
+ * THE LIST IS A TREE
  * --------------------
- * `Area` sortiert per Default nach `lft ASC` (Nested Set), die Zeilen kommen also bereits
- * in Anzeigereihenfolge. Die Einrückung entsteht allein aus `depth` * 20 Pixel - es gibt
- * keine verschachtelten <ul>, die Tabelle bleibt flach.
+ * `Area` sorts by default by `lft ASC` (nested set), so the rows already come
+ * in display order. The indentation comes solely from `depth` * 20 pixels - there are
+ * no nested <ul>, the table stays flat.
  *
- * MANDANTEN ALS HAUPTVERZEICHNISSE
+ * TENANTS AS MAIN DIRECTORIES
  * --------------------
- * Sind Mandanten eingerichtet (InstanceCache::hasMultipleInstances()), führt jeder
- * seinen eigenen Baum: die Liste sortiert dann nach Instanz (Pseudo-Sortierfeld
- * 'instance' von Cms::select(), Reihenfolge des Backends) und setzt vor die erste
- * Zeile jeder Instanz eine Ordnerzeile mit ihrem Label (area_table_row_instance.html);
- * die Bereiche rücken eine Stufe ein. Sortiert der Redakteur nach einer Spalte,
- * entfällt die Gruppierung. Damit ein Teilbaum immer zu EINEM Mandanten gehört,
- * lässt Area::hookOnSave() als Vater nur einen Ordner derselben Instanz zu; das
- * Formular zeigt entsprechend nur Ordner und Geschwister der gewählten Instanz und
- * lädt beide Listen per Ajax neu, wenn die Instanz wechselt.
+ * If tenants are set up (InstanceCache::hasMultipleInstances()), each one keeps
+ * its own tree: the list then sorts by instance (pseudo sort field
+ * 'instance' of Cms::select(), order of the backend) and puts a folder row with its label
+ * before the first row of each instance (area_table_row_instance.html);
+ * the areas are indented one level. If the editor sorts by a column,
+ * the grouping is dropped. So that a subtree always belongs to ONE tenant,
+ * Area::hookOnSave() only allows a folder of the same instance as parent; the
+ * form accordingly shows only folders and siblings of the selected instance and
+ * reloads both lists via Ajax when the instance changes.
  *
  * KOPIEREN (function=copy)
  * --------------------
- * Eine eigene Maske mit Label, Name, Icon, Instanz, Eltern-Ordner, Vorgänger und
- * Hinweis (vorbelegt vom Original, der Vorgänger mit dem Original selbst - die Kopie
- * steht damit direkt dahinter); alle übrigen Einstellungen übernimmt die Kopie vom
- * Original - bei Datensatzbereichen samt Eingabefeldern (mit Thumbnails, Verweisen,
- * Volltexten), Default-/Sortier-/Anmeldefeld und Template-Zuweisungen. Der Weg führt
- * über das Exportformat: RecordExport::areaBlueprintFile() schreibt das Original wie
- * einen Bauplan, RecordImport::importBlueprint() legt die Felder im neuen Bereich an -
- * derselbe Code wie beim Anlegen aus einem Bauplan (beides in AreaService, den auch
- * die API nutzt). Inhalte (Datensätze, Templates)
- * werden nicht kopiert. (Das frühere "Kopieren" - das volle Formular mit den Werten
- * des Originals, ohne Felder - ist damit abgelöst.)
+ * A separate mask with label, name, icon, instance, parent folder, predecessor and
+ * note (pre-filled from the original, the predecessor with the original itself - the copy
+ * is thus placed directly after it); the copy takes all other settings from the
+ * original - for record areas including input fields (with thumbnails, references,
+ * full texts), default/sort/login field and template assignments. The route goes
+ * via the export format: RecordExport::areaBlueprintFile() writes the original like
+ * a blueprint, RecordImport::importBlueprint() creates the fields in the new area -
+ * the same code as when creating from a blueprint (both in AreaService, which
+ * the API also uses). Content (records, templates)
+ * is not copied. (The earlier "copy" - the full form with the values
+ * of the original, without fields - is superseded by this.)
  *
- * DIE POSITION WIRD ÜBER "previous_id" EINGEGEBEN
+ * THE POSITION IS ENTERED VIA "previous_id"
  * --------------------
- * `previous_id` ist KEINE Datenbankspalte. Das Formular lässt den Redakteur den
- * VORGÄNGER-Bereich wählen; `Area` bzw. TreeManagerTrait rechnet daraus beim Speichern
- * die `position` aus. Umgekehrt muss _editForm() beim Laden aus der gespeicherten
- * `position` wieder den Vorgänger ermitteln (SQL: größte position unterhalb der
- * eigenen, gleicher Parent). Wechselt der Redakteur im Formular den Parent, ist die
- * Vorgängerliste hinfällig - dann lädt updatePreviousOptions() sie per Ajax neu.
+ * `previous_id` is NOT a database column. The form lets the editor select the
+ * PREDECESSOR area; `Area` resp. TreeManagerTrait calculates the
+ * `position` from it when saving. Conversely, _editForm() must determine the predecessor again when loading from the saved
+ * `position` (SQL: largest position below its own,
+ * same parent). If the editor changes the parent in the form, the
+ * predecessor list is obsolete - then updatePreviousOptions() reloads it via Ajax.
  *
  * TEMPLATE-ZUWEISUNG
  * --------------------
- * Drei Felder im Formular schreiben in dieselbe Kantentabelle `rel_area_template`:
+ * Three fields in the form write to the same edge table `rel_area_template`:
  *
- *     default_template_id    Spalte in `area`; Template, wenn der Datensatz keins wählt
- *     list_template_id       Spalte in `area`; Template für die Backend-Darstellung
- *                            (Listenspalte, ausführliche Lookup-Vorschau)
- *     trigger_template_ids   Tabelle `rel_area_trigger`; Ereignis-Methoden der
- *                            Datensätze, mehrere in Ausführungsreihenfolge (Lookup
- *                            mit Hoch/Runter-Schaltflächen)
- *     overview_template_id   Spalte in `area`; Übersicht unter der Präfix-Adresse
- *     selectable_templates   rel_area_template.selectable=1; im Datensatz wählbar
+ *     default_template_id    column in `area`; template if the record selects none
+ *     list_template_id       column in `area`; template for the backend display
+ *                            (list column, detailed lookup preview)
+ *     trigger_template_ids   table `rel_area_trigger`; event methods of the
+ *                            records, several in execution order (lookup
+ *                            with up/down buttons)
+ *     overview_template_id   column in `area`; overview under the prefix address
+ *     selectable_templates   rel_area_template.selectable=1; selectable in the record
  *     override_templates     rel_area_template.override=1;   per URL erzwingbar
  *
- * Geschrieben wird die Kantentabelle nicht hier, sondern in Area::hookOnSaved() - die
- * beiden Lookup-Felder reisen als `data[selectable_templates]` / `data[override_templates]`
- * im Formular mit; _editSave() setzt sie leer, wenn nichts gewählt ist (nur
- * übergebene Listen werden ersetzt). Gelesen werden sie hier über
+ * The edge table is not written here, but in Area::hookOnSaved() - the
+ * two lookup fields travel as `data[selectable_templates]` / `data[override_templates]`
+ * in the form; _editSave() sets them empty if nothing is selected (only
+ * passed lists are replaced). They are read here via
  * selectableTemplateIds() / overrideTemplateIds().
  *
- * LÖSCHEN
+ * DELETION
  * --------------------
- * Aus dem Backend heraus wird immer nur SOFT gelöscht (Papierkorb). Vor der
- * Bestätigung zählt _editDeleteForm() zusammen, was mit hängt - je nach Bereichstyp
- * Kind-Bereiche, Datensätze oder Templates - und formuliert daraus die Warnung.
- * Große Bereiche wandern in einen Hintergrundprozess (MassDeletion).
+ * From the backend, deletion is always SOFT only (trash). Before the
+ * confirmation, _editDeleteForm() totals what is attached - depending on the area type
+ * child areas, records or templates - and formulates the warning from it.
+ * Large areas go into a background process (MassDeletion).
  *
- * @see Camindo\Core\Modules\Area\Area          Dataset/Model der Tabelle `area`
- * @see Camindo\Core\Modules\Area\FieldBackend  Backend der Eingabefelder eines Bereichs
- * @see Camindo\Core\Backend                      Formular-, Tabellen- und Layer-Helfer
+ * @see Camindo\Core\Modules\Area\Area          Dataset/model of the table `area`
+ * @see Camindo\Core\Modules\Area\FieldBackend  backend of the input fields of an area
+ * @see Camindo\Core\Backend                      form, table and layer helpers
  */
 namespace Camindo\Core\Modules\Area;
 
@@ -107,7 +107,7 @@ class AreaBackend {
     protected int $id = 0;
     protected ?array $data = [];
     protected string $function = '';
-    /** Bauplan eines neuen Bereichs (Dateiname ohne .xml, siehe create()) */
+    /** Blueprint of a new area (file name without .xml, see create()) */
     protected string $blueprint = '';
 
     public function __construct(
@@ -132,12 +132,12 @@ class AreaBackend {
     // Volltext veraltet (FulltextState)
 
     /**
-     * Hinweis über der Detailansicht und der Feldliste eines Bereichs: der Volltext
-     * passt nach einer Strukturänderung nicht mehr zu den Quellfeldern - mit dem
-     * Button "Jetzt aktualisieren" (fulltext()). Läuft der Neuaufbau gerade, nur
-     * dieser Hinweis.
+     * Note above the detail view and the field list of an area: the full text
+     * no longer matches the source fields after a structural change - with the
+     * button "Update now" (fulltext()). If the rebuild is running right now, only
+     * this note.
      *
-     * @param string $return  'info' | 'fields' - wohin der Button danach zurückführt
+     * @param string $return  'info' | 'fields' - where the button leads back to afterwards
      */
     public function fulltextNotice(int $areaId, string $return = 'info'): string
     {
@@ -155,9 +155,9 @@ class AreaBackend {
     }
 
     /**
-     * "Jetzt aktualisieren" (backend/area_fulltext.php): den Neuaufbau des Volltexts
-     * als Hintergrundprozess starten (CLI-Befehl `fulltext`) - es sei denn, er läuft
-     * schon (Sperre von FulltextState). Danach zurück zur Detailansicht bzw. Feldliste.
+     * "Update now" (backend/area_fulltext.php): start the rebuild of the full text
+     * as a background process (CLI command `fulltext`) - unless it is already running
+     * (lock of FulltextState). Afterwards back to the detail view or field list.
      */
     public function fulltext(): void
     {
@@ -165,7 +165,7 @@ class AreaBackend {
         $return = (string)($_REQUEST['return'] ?? '') === 'fields'
             ? "Area/field_list.php?area_id={$id}" : "Area/area_info.php?id={$id}";
         echo $this->backend->template('container_header');
-        // Startet einen Hintergrundprozess - nur per POST
+        // Starts a background process - POST only
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
@@ -199,18 +199,18 @@ class AreaBackend {
     /**
      * Baumliste aller Bereiche (backend/area_list.php).
      *
-     * 'request' => 'all' lässt Cms::select() Filter, Sortierung und Seite aus dem
-     * Request übernehmen - deshalb funktionieren Suchmaske und Spalten-Sortierlinks
-     * ohne eigenes Zutun. Die Baumdarstellung kostet hier nichts: Area sortiert per
-     * Default nach `lft ASC`, die Einrückung ist ein Pixel-Padding aus `depth`.
+     * 'request' => 'all' lets Cms::select() take filter, sorting and page from the
+     * request - therefore search mask and column sort links work
+     * without any effort of their own. The tree display costs nothing here: Area sorts by
+     * default by `lft ASC`, the indentation is pixel padding from `depth`.
      */
     public function list()
     {
-        // Wenn es mehrere Instanzen gibt, dann dieses anzeigen
+        // If there are several instances, show this
         $this->db->query("SELECT `instance_id`,`label` FROM `instance` ORDER BY " . Instance::orderSql());
         $instances = $this->db->fetchPairs();
-        // Mandanten als Hauptverzeichnisse (siehe Klassenkommentar) - nur in der
-        // Baumsortierung; eine Spaltensortierung aus dem Request hebt sie auf
+        // Tenants as main directories (see class comment) - only in the
+        // tree sorting; a column sort from the request cancels them
         $grouped = $this->instanceCache->hasMultipleInstances() && empty($_REQUEST['sort']);
 
         // Seitenelemente
@@ -246,7 +246,7 @@ class AreaBackend {
         }
         $f = $this->cms->select($param, $this->area);
 
-        // Suchbegriffe oder geänderte Sortierung als lesbarer Text
+        // Search terms or changed sorting as readable text
         echo $this->backend->filterText($f);
 
         if ($this->db->num_rows > 0) {
@@ -273,10 +273,10 @@ class AreaBackend {
             $instanceLabels = $this->instanceCache->instanceLabels();
             $currentInstanceId = -1;
 
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+            // Fetch results (Dataset::fetch: with post-processing)
             while ($data = $this->area->fetch()) {
 
-                // Mandant gewechselt -> Ordnerzeile mit seinem Label
+                // Tenant changed -> folder row with its label
                 if ($grouped && (int)$data['instance_id'] !== $currentInstanceId) {
                     $currentInstanceId = (int)$data['instance_id'];
                     $tableRows .= $this->backend->template('area.area_table_row_instance', [
@@ -288,8 +288,8 @@ class AreaBackend {
                 $icon = $this->backend->template('icon_large', [
                     '{name}' => $data['icon'] ?: 'draft'
                 ]);
-                // depth ist 0-basiert - die Grundeinrückung der obersten Ebene bleibt
-                // erhalten; unter einem Mandanten-Verzeichnis eine Stufe mehr
+                // depth is 0-based - the base indentation of the top level remains
+                // preserved; under a tenant directory one level more
                 $paddingLeft = ((int)$data['depth'] + ($grouped ? 1 : 0)) * 20 + 20;
 
                 $label = $icon . ' ' . $this->cms->textOrSnippet($data['label'] ?? '');
@@ -327,12 +327,12 @@ class AreaBackend {
     /**
      * Detailansicht eines Bereichs (backend/area_info.php).
      *
-     * Welche Felder gezeigt werden, hängt am Typ: ein 'folder' hat weder Notiz noch
-     * Default-Feld, ein 'template'-Bereich bekommt statt des Datensatz-Tabs den
+     * Which fields are shown depends on the type: a 'folder' has neither note nor
+     * default field, a 'template' area gets the
      * Template-Tab.
      *
-     * Unten steht die Übersicht der Template-Zuweisungen aus `rel_area_template`
-     * (default / selectable / override als Häkchen-Spalten).
+     * Below is the overview of the template assignments from `rel_area_template`
+     * (default / selectable / override as tick columns).
      */
     public function info()
     {
@@ -355,7 +355,7 @@ class AreaBackend {
         $type = $data['type'];
 
         // Bread crum navi
-        $this->backend->setNaviLabel($data['label']); // wertet auch snippet aus
+        $this->backend->setNaviLabel($data['label']); // also evaluates snippet
 
         // H1
         $icon = $this->backend->template('icon', [
@@ -363,7 +363,7 @@ class AreaBackend {
         ]);
         echo $this->backend->headline($icon . ' ' . $this->cms->textOrSnippet($data['label']));
         
-        // Tabs ("Änderungen" = Audit-Log des Bereichs, Backend::auditTabAdd())
+        // Tabs ("Changes" = audit log of the area, Backend::auditTabAdd())
         $auditActive = $this->backend->auditTabActive();
         $this->backend->tabBarReset();
         $this->backend->tabAdd('#area.headline_settings', $auditActive ? "cApp.layers.replace('Area/area_info.php?id=$id')" : '', !$auditActive);
@@ -373,7 +373,7 @@ class AreaBackend {
         if ($type !== 'folder') {
             $this->backend->tabAdd('#area.headline_access', "cApp.layers.replace('Area/area_access.php?id=$id')");
         }
-        // (Reiter in andere Module nur, wenn die Gruppe dort Zugriff hat)
+        // (tabs into other modules only if the group has access there)
         if ($data['type'] == 'template' && $this->backend->access()->module('Template')) {
             $this->backend->tabAdd('#area.headline_templates', "cApp.layers.replace('Template/template_list.php?area_id=$id')");
         }
@@ -385,12 +385,12 @@ class AreaBackend {
 
         // Buttons
         $this->backend->buttonBarReset();
-        // Bearbeiten/Kopieren als eigener Layer über der Info-Seite: Abbrechen und
-        // Speichern (invalidate(null, 2) + close()) führen auf sie zurück
+        // Edit/copy as a separate layer above the info page: Cancel and
+        // Save (invalidate(null, 2) + close()) return to it
         $this->backend->buttonAdd('button_edit_primary', "cApp.layers.add('Area/area_edit.php?id={$id}')");
         $this->backend->buttonAdd('button_copy', "cApp.layers.add('Area/area_edit.php?id={$id}&function=copy')");
         $this->backend->buttonAdd('button_delete', "cApp.layers.replace('Area/area_edit.php?id={$id}&function=delete')");
-        // Vorschau der Übersicht (Übersichts-Template + Slug-Präfix)
+        // Preview of the overview (overview template + slug prefix)
         $this->backend->buttonAddAreaPreview($id);
         if (!empty($_REQUEST['back'])) {
             $this->backend->buttonAdd('button_back', "history.back()");
@@ -423,7 +423,7 @@ class AreaBackend {
         // note
         // --------------------
         if ($type !== 'folder') {
-            $this->backend->infoAdd($this->area, 'note', $this->cms->textOrSnippet((string)$data['note'])); // wie label: auch ein Snippet (#custom.…)
+            $this->backend->infoAdd($this->area, 'note', $this->cms->textOrSnippet((string)$data['note'])); // like label: also a snippet (#custom.…)
         }
 
         // sort_field_id
@@ -432,7 +432,7 @@ class AreaBackend {
         if (Area::isContentType($type)) {
             $sortFieldId = (int)$data['sort_field_id'];
             if (!empty($sortFieldId)) {
-                // ist FK, liefert immer Ergebnis
+                // is FK, always returns a result
                 $this->db->query("SELECT `name` FROM `field` WHERE `field_id` = ?", 'i', [$sortFieldId]);
                 $sortFieldName = $this->db->fetchNum()[0];
             }
@@ -443,7 +443,7 @@ class AreaBackend {
             $this->backend->infoStatic($this->cms->snippet('area.default_sort'), $sortFieldName . ' ' . $sortOrder);
         }
         
-        // details.slug_prefix (je Sprache, aufgelöst wie in der URL)
+        // details.slug_prefix (per language, resolved as in the URL)
         // --------------------
         if (Area::isContentType($type)) {
             $items = [];
@@ -464,7 +464,7 @@ class AreaBackend {
                 !empty($data['dependent']) ? $this->cms->snippet('yes') : $this->cms->snippet('no'));
         }
 
-        // Lösch-Policy (Modul Privacy)
+        // Deletion policy (module Privacy)
         // --------------------
         if (Area::isContentType($type)) {
             $policyId = (int)($data['privacy_policy_id'] ?? 0);
@@ -505,7 +505,7 @@ class AreaBackend {
             $html = $listTemplateId > 0 ? $this->backend->teaser('template', $listTemplateId) : '';
             $this->backend->infoAdd($this->area, 'list_template_id', $html, $html !== '' ? ['html'] : []);
 
-            // Trigger-Templates in Ausführungsreihenfolge, je Zeile eins
+            // Trigger templates in execution order, one per row
             $teasers = array_map(fn($id) => $this->backend->teaser('template', (int)$id), (array)($data['trigger_template_ids'] ?? []));
             $html = implode('<br>', $teasers);
             $this->backend->infoAdd($this->area, 'trigger_template_ids', $html, $html !== '' ? ['html'] : []);
@@ -515,7 +515,7 @@ class AreaBackend {
             $this->backend->infoAdd($this->area, 'overview_template_id', $html, $html !== '' ? ['html'] : []);
         }
 
-        // Anmeldung an der Website (type 'profile')
+        // Login to the website (type 'profile')
         // --------------------
         if ($type === 'profile') {
             foreach (['login_name_field_id', 'login_password_field_id'] as $key) {
@@ -580,33 +580,33 @@ class AreaBackend {
     }
 
     /**
-     * Ajax: Optionen des Select-Feldes "previous_id" neu liefern.
+     * Ajax: return the options of the select field "previous_id" again.
      *
-     * Wird aufgerufen, sobald der Redakteur im Formular den übergeordneten Ordner
-     * wechselt - die bisherige Vorgängerliste gehört dann zu den falschen
-     * Geschwistern. Die Antwort besteht absichtlich nur aus <option>-Zeilen, das
-     * Javascript ersetzt damit den Inhalt des vorhandenen <select>.
+     * Called as soon as the editor changes the parent folder in the form -
+     * the previous predecessor list then belongs to the wrong
+     * siblings. The response deliberately consists only of <option> rows, so the
+     * JavaScript replaces the content of the existing <select> with it.
      *
-     * Vorausgewählt wird immer der LETZTE Eintrag, der neue Bereich landet also ans
-     * Ende seiner neuen Geschwister - dieselbe Vorgabe wie in Area::hookOnCreate().
+     * The LAST entry is always preselected, so the new area ends up at the
+     * end of its new siblings - the same default as in Area::hookOnCreate().
      *
-     * Request: id = eigener Bereich (aus der Liste auszuschließen),
-     *          data[parent_id] = neu gewählter Ordner
+     * Request: id = own area (to be excluded from the list),
+     *          data[parent_id] = newly selected folder
      */
     /**
-     * Reiter "Zugriff" (backend/area_access.php): welche Benutzergruppen den Bereich
-     * lesen dürfen und was sie mit seinen Datensätzen tun dürfen (rel_group_area) -
-     * alle Gruppen, ein Bereich. Die andere Sicht (alle Bereiche, eine Gruppe) hat
-     * die Gruppe selbst (GroupBackend::access()).
+     * Tab "Access" (backend/area_access.php): which user groups may read the area
+     * and what they may do with its records (rel_group_area) -
+     * all groups, one area. The other view (all areas, one group) has
+     * the group itself (GroupBackend::access()).
      *
-     *     ''        Tabelle mit Häkchen, Button "Bearbeiten" (nur Superuser)
-     *     edit      Checkboxen; "Hinzufügen": Dropdown der Gruppen ohne Zeile, deren
-     *               Instanzliste den Bereich enthält - die Auswahl schickt das
-     *               Formular mit function=update
-     *     update    Formular mit der neuen Zeile (volle Rechte außer set_owner)
-     *     save      Area::saveAccess(), danach die Tabelle
+     *     ''        table with ticks, button "Edit" (superuser only)
+     *     edit      checkboxes; "Add": dropdown of the groups without a row, whose
+     *               instance list contains the area - the selection sends the
+     *               form with function=update
+     *     update    form with the new row (full rights except set_owner)
+     *     save      Area::saveAccess(), then the table
      *
-     * Bearbeiten und Speichern nur für Superuser (Rechte vergeben = Verwaltung).
+     * Edit and save only for superusers (granting rights = administration).
      */
     public function infoAccess(): void
     {
@@ -631,7 +631,7 @@ class AreaBackend {
             return;
         }
 
-        // H1 und Reiter wie in info()
+        // H1 and tabs as in info()
         $icon = $this->backend->template('icon', ['{name}' => $data['icon'] ?: 'draft']);
         echo $this->backend->headline($icon . ' ' . $data['label']);
         $this->backend->tabBarReset();
@@ -662,7 +662,7 @@ class AreaBackend {
             }
         }
 
-        // Zeilen: gespeichert (Anzeige) bzw. aus dem Formular (edit/update)
+        // Rows: saved (display) or from the form (edit/update)
         // --------------------
         $candidates = $this->area->accessCandidates($instanceId);
         $groupLabels = $this->backend->getGroups();
@@ -691,10 +691,10 @@ class AreaBackend {
                     $rows[$addGroupId] = ['group_write' => 1, 'group_delete' => 1, 'other_write' => 1, 'other_delete' => 1, 'set_owner' => 0];
                 }
             }
-            // nur Gruppen, die für den Bereich in Frage kommen
+            // only groups that come into question for the area
             $rows = array_intersect_key($rows, array_flip($candidates));
         }
-        // Reihenfolge wie getGroups() (Label)
+        // Order as getGroups() (label)
         $ordered = [];
         foreach ($groupLabels as $groupId => $label) {
             if (isset($rows[$groupId])) $ordered[$groupId] = $rows[$groupId];
@@ -762,7 +762,7 @@ class AreaBackend {
             return;
         }
 
-        // Formular: Hinzufügen-Dropdown, Tabelle, Speichern/Abbrechen
+        // Form: add dropdown, table, save/cancel
         // --------------------
         echo '<form action="Area/area_access.php" method="post">';
         $this->backend->formInit('area.access_form');
@@ -809,12 +809,12 @@ class AreaBackend {
     }
 
     /**
-     * Ajax: Optionen des Select-Feldes "parent_id" neu liefern - wenn der Redakteur
-     * im Formular die Instanz wechselt: als Vater kommen nur Ordner derselben
-     * Instanz in Frage (Area::hookOnSave()). Vorausgewählt ist "nichts" (Wurzel);
-     * die Vorgängerliste holt area_form_instance_select.html im selben Zug neu.
+     * Ajax: return the options of the select field "parent_id" again - when the editor
+     * changes the instance in the form: only folders of the same
+     * instance come into question as parent (Area::hookOnSave()). Preselected is "nothing" (root);
+     * the predecessor list is fetched again by area_form_instance_select.html in the same step.
      *
-     * Request: id = eigener Bereich, data[instance_id] = neu gewählte Instanz
+     * Request: id = own area, data[instance_id] = newly selected instance
      */
     public function updateParentOptions(): void
     {
@@ -828,20 +828,20 @@ class AreaBackend {
     }
 
     /**
-     * Schritt 1 beim Anlegen: Content-Typ auswählen (backend/area_create.php).
+     * Step 1 when creating: select the content type (backend/area_create.php).
      *
-     * Ein eigener Schritt, weil der Typ das gesamte Formular bestimmt und sich später
-     * nicht mehr ändern lässt. Jeder Eintrag der Auswahl ist ein Link, der den Layer
-     * durch area_edit.php mit function=create und dem gewählten Typ ersetzt.
+     * A separate step, because the type determines the entire form and cannot be changed later.
+     * Each entry of the selection is a link that replaces the layer
+     * with area_edit.php with function=create and the selected type.
      *
-     * Baupläne: unter jedem Typ stehen zusätzlich die Dateien aus
-     * blueprints/{type}/*.xml und var/area_blueprints/*.xml (Exportformat, ein
-     * Bereich mit Einstellungen und Feldern, keine Datensätze; AreaService::
-     * blueprints()) - je Datei ein Link (area_create_form_link.html)
-     * mit &blueprint={Dateiname ohne .xml}. Beschriftung und Notiz sind <label> und
-     * <note> des Bereichs der Datei (Snippet-Verweise erlaubt). Das Formular übernimmt
-     * die Einstellungen der Datei (_editCreate()), nach dem Speichern legt
-     * RecordImport::importBlueprint() die Felder an (_editSave()).
+     * Blueprints: under each type there are additionally the files from
+     * blueprints/{type}/*.xml and var/area_blueprints/*.xml (export format, one
+     * area with settings and fields, no records; AreaService::
+     * blueprints()) - one link per file (area_create_form_link.html)
+     * with &blueprint={file name without .xml}. Label and note are <label> and
+     * <note> of the area in the file (snippet references allowed). The form takes over
+     * the settings of the file (_editCreate()); after saving,
+     * RecordImport::importBlueprint() creates the fields (_editSave()).
      */
     public function create():void {
         // Bread crum navi
@@ -883,26 +883,26 @@ class AreaBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/area_edit.php).
+     * Create / copy / change / delete (backend/area_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] - der Ablauf ist in allen Modulen
-     * gleich (docs/developers/03-backend-entwicklung.md):
+     * State machine via $_REQUEST['function'] - the flow is the same in all modules
+     * the same (developer docs, chapter 05 (Backend development)):
      *
-     *     create          leeres Formular mit Defaults aus Area::init()
-     *     edit            Bereich laden und anzeigen (Default, wenn nichts gesetzt ist)
-     *     copy            laden, Kopier-Maske zeigen - siehe Klassenkommentar
-     *     copy_save       Kopie anlegen (Einstellungen, Felder, Zuweisungen); bei
-     *                     Fehlern 'copy_errors': Maske erneut mit den Eingaben
-     *     save            speichern; schlägt das fehl, wird auf 'errors' umgeschaltet
-     *     errors          Formular erneut zeigen, mit Eingaben und Fehlermeldung
-     *     skip            Bereich nicht ladbar - nur Fehlermeldung, kein Formular
-     *     delete          Löschbestätigung anzeigen
-     *     delete_confirm  Löschung ausführen
+     *     create          empty form with defaults from Area::init()
+     *     edit            load and show the area (default if nothing is set)
+     *     copy            load, show the copy mask - see class comment
+     *     copy_save       create the copy (settings, fields, assignments); on
+     *                     errors 'copy_errors': mask again with the input
+     *     save            save; if that fails, it switches to 'errors'
+     *     errors          show the form again, with input and error message
+     *     skip            area cannot be loaded - only error message, no form
+     *     delete          show deletion confirmation
+     *     delete_confirm  perform deletion
      *
-     * Die Reihenfolge der if-Blöcke ist der Ablauf: erst Daten beschaffen (create /
-     * load), dann Überschrift, dann die schreibende Aktion, dann das Formular. Weil
-     * _editSave() bei Fehlern $this->function auf 'errors' setzt, fällt es
-     * anschließend in den Formular-Zweig - ein Redirect ist nicht nötig.
+     * The order of the if blocks is the flow: first fetch data (create /
+     * load), then heading, then the writing action, then the form. Because
+     * _editSave() sets $this->function to 'errors' on errors, it falls
+     * then into the form branch - a redirect is not needed.
      */
     public function edit(): void
     {
@@ -912,10 +912,10 @@ class AreaBackend {
         if ($this->function == '') $this->function = 'edit';
         $this->data = (array) ($_REQUEST['data'] ?? []);
         $this->data['area_id'] = $this->id;
-        // Bauplan (nur beim Anlegen; bleibt über 'errors' als Hiddenfeld erhalten)
+        // Blueprint (only when creating; kept via 'errors' as a hidden field)
         $this->blueprint = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_REQUEST['blueprint'] ?? ''));
 
-        // Bread crum navi (copy, copy_save, copy_errors: ein Eintrag)
+        // Breadcrumb navigation (copy, copy_save, copy_errors: one entry)
         $naviFunction = str_starts_with($this->function, 'copy') ? 'copy' : $this->function;
         $this->backend->setNaviLabel('#area.menu_item_' . $naviFunction);
 
@@ -960,7 +960,7 @@ class AreaBackend {
             $this->_editForm();
         }
 
-        // Copy form (auch nach einem Fehler beim Kopieren)
+        // Copy form (also after an error while copying)
         if (in_array($this->function, ['copy', 'copy_errors'], true)) {
             $this->_copyForm();
         }
@@ -977,30 +977,30 @@ class AreaBackend {
     // edit() Hilfsfunktionen
 
     /**
-     * function=create: Formular mit den Schema-Defaults vorbelegen.
+     * function=create: pre-fill the form with the schema defaults.
      */
     private function _editCreate(): void
     {
-        // Seiten-Parameter dürfen Default-Werte überschreiben
-        // (init() nimmt bereits gesetzte Werte aus $data unverändert mit -
-        // so kann z. B. ein Aufruf mit ?data[parent_id]=5 den Ordner vorgeben)
-        // Bauplan: dessen Einstellungen als Vorgabe - Label und Notiz bleiben leer,
-        // die Feldbezüge (default_field_id …) entstehen erst mit den Feldern
+        // Page parameters may override default values
+        // (init() already takes values set in $data along unchanged -
+        // so e.g. a call with ?data[parent_id]=5 can preset the folder)
+        // Blueprint: its settings as defaults - label and note stay empty,
+        // the field references (default_field_id …) only arise with the fields
         $defaults = $this->service->blueprintDefaults($this->_blueprintArea((string)($this->data['type'] ?? '')));
         if ($defaults) $this->data = array_merge($defaults, $this->data);
         $this->data = $this->area->init($this->data);
         $this->id = 0;
     }
 
-    /** Baupläne eines Typs (AreaService::blueprints()) */
+    /** Blueprints of a type (AreaService::blueprints()) */
     private function _blueprints(string $type): array
     {
         return $this->service->blueprints($type);
     }
 
     /**
-     * Der gewählte Bauplan ($this->blueprint) für den Typ - null, wenn keiner
-     * gewählt ist, die Datei fehlt oder ihr Bereich einen anderen Typ hat.
+     * The selected blueprint ($this->blueprint) for the type - null if none
+     * is selected, the file is missing or its area has a different type.
      */
     private function _blueprintArea(string $type): ?array
     {
@@ -1008,22 +1008,22 @@ class AreaBackend {
     }
 
     /**
-     * function=edit|copy|delete|delete_confirm: Bereich aus der Datenbank holen.
+     * function=edit|copy|delete|delete_confirm: fetch the area from the database.
      */
     private function _editLoad(): void
     {
         $this->data = $this->area->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
     }
 
     /**
-     * Das Original einer Kopie: beim Aufruf der Maske aus id, danach aus dem
-     * Hiddenfeld source_id. (Die Maske führt bewusst KEIN Feld 'id': die Ajax-
-     * Aufrufe für Vater- und Vorgängerliste schlössen den Bereich dieser Id aus -
-     * das Original soll aber als Vorgänger wählbar bleiben.)
+     * The original of a copy: when the mask is called, from id, afterwards from the
+     * hidden field source_id. (The mask deliberately has NO field 'id': the Ajax
+     * calls for the parent and predecessor list would exclude the area with this id -
+     * but the original should remain selectable as predecessor.)
      */
     private function _copySource(): ?array
     {
@@ -1033,10 +1033,10 @@ class AreaBackend {
     }
 
     /**
-     * function=copy: die Kopier-Maske - Label, Name, Icon, Instanz, Eltern-Ordner,
-     * Vorgänger und Hinweis; alles andere übernimmt die Kopie vom Original (siehe
-     * Klassenkommentar). Vorbelegt mit den Werten des Originals, der Vorgänger mit
-     * dem Original selbst; nach einem Fehler mit den Eingaben des Requests.
+     * function=copy: the copy mask - label, name, icon, instance, parent folder,
+     * predecessor and note; everything else the copy takes from the original (see
+     * class comment). Pre-filled with the values of the original, the predecessor with
+     * the original itself; after an error with the inputs of the request.
      */
     private function _copyForm(): void
     {
@@ -1059,7 +1059,7 @@ class AreaBackend {
         $this->backend->formHidden('function', 'copy_save');
         $this->backend->formStatic($this->area, 'type', $type);
 
-        // Vorbelegung: "{label} (Kopie)" und "{name}_copy" (name: höchstens 32 Zeichen)
+        // Pre-fill: "{label} (copy)" and "{name}_copy" (name: at most 32 characters)
         $copyLabel = (string)($input['label'] ?? '');
         if ($copyLabel === '') {
             $copyLabel = $this->cms->textOrSnippet((string)$source['label']) . ' ' . $this->cms->snippet('area.suffix_copy_label');
@@ -1072,8 +1072,8 @@ class AreaBackend {
         $this->backend->formField($this->area, ['name' => 'name', 'value' => $copyName, 'id' => 0]);
         $this->backend->formField($this->area, ['name' => 'icon', 'value' => (string)($input['icon'] ?? $source['icon']), 'id' => 0]);
 
-        // Instanz, Eltern-Ordner, Vorgänger - dieselben Felder und Ajax-Wege wie im
-        // Bearbeitungsformular (_editForm()); Vater und Vorgänger je Instanz
+        // Instance, parent folder, predecessor - the same fields and Ajax paths as in the
+        // edit form (_editForm()); parent and predecessor per instance
         $instanceId = (int)($input['instance_id'] ?? $source['instance_id']);
         $parentId = (int)($input['parent_id'] ?? $source['parent_id'] ?? 0);
         $previousId = array_key_exists('previous_id', $input) ? (int)$input['previous_id'] : (int)$source['area_id'];
@@ -1108,34 +1108,34 @@ class AreaBackend {
             'value' => (string)($input['note'] ?? $source['note'] ?? '')
         ]);
 
-        // Der Rest: wird übernommen und kann danach geändert werden
+        // The rest: is taken over and can be changed afterwards
         foreach (['default_field_id', 'sort_field_id', 'default_template_id'] as $key) {
             if ($key !== 'default_template_id' && !Area::isContentType($type)) continue;
             $this->backend->formStatic($this->area, $key, $this->cms->snippet('area.blueprint_note_later'));
         }
 
-        // (Platzhalter der Felder, die der Typ nicht kennt, verschwinden)
+        // (placeholders of the fields that the type does not know disappear)
         echo $this->backend->form('area.form_copy_run', [], true);
         echo '</form>';
     }
 
     /**
-     * function=copy_save: die Kopie anlegen.
+     * function=copy_save: create the copy.
      *
-     * 1. den Bereich speichern: Label, Name, Icon, Instanz, Vater, Vorgänger und
-     *    Hinweis aus der Maske, Typ, Sortierrichtung und details vom Original
-     * 2. Datensatzbereiche: die Felder des Originals in der Kopie anlegen und die
-     *    Feldbezüge (Default-/Sortier-/Anmeldefeld) sowie Default-Template und
-     *    Template-Zuweisungen setzen - über den Bauplan-Import
+     * 1. save the area: label, name, icon, instance, parent, predecessor and
+     *    note from the mask, type, sort direction and details from the original
+     * 2. record areas: create the fields of the original in the copy and
+     *    set the field references (default/sort/login field) as well as default template and
+     *    template assignments - via the blueprint import
      *    (RecordImport::importBlueprint(), Quelle: RecordExport::areaBlueprintFile()).
-     *    Verweise des Originals auf sich selbst zeigen in der Kopie auf die Kopie,
-     *    Verweise auf andere Bereiche bleiben (dort entsteht je Relation ein neues
-     *    Gegenfeld, wie beim Anlegen eines Verweisfeldes von Hand).
-     *    Ordner und Template-Bereiche: nur Schritt 1 und die Template-Zuweisungen.
+     *    references of the original to itself point in the copy to the copy,
+     *    references to other areas remain (there a new per-relation
+     *    counter-field is created, as when a reference field is created by hand).
+     *    folders and template areas: only step 1 and the template assignments.
      *
-     * Fehler in Schritt 1 (etwa ein vergebener Name) zeigen die Maske erneut; Fehler
-     * in Schritt 2 lassen den Bereich bestehen - der Layer bleibt mit der Meldung
-     * offen (wie beim Anlegen aus einem Bauplan).
+     * Errors in step 1 (e.g. a name already taken) show the mask again; errors
+     * in step 2 leave the area in place - the layer stays open with the message
+     * open (as when creating from a blueprint).
      */
     private function _copySave(): void
     {
@@ -1163,10 +1163,10 @@ class AreaBackend {
         }
 
         $this->backend->balloon('success', $this->cms->snippet('area.message_area_copied'));
-        // Weiter auf der Info-Seite der Kopie: kam die Maske von der Info-Seite des
-        // Originals, ersetzt die Kopie diese (sonst führte "Zurück" auf das Original);
-        // aus dem Kontextmenü der Liste liegt die Info-Seite direkt über der Liste.
-        // Die Liste darunter neu laden (neuer Eintrag)
+        // Continue on the info page of the copy: if the mask came from the info page of the
+        // original, the copy replaces it (otherwise "Back" would lead to the original);
+        // from the context menu of the list, the info page lies directly above the list.
+        // Reload the list below it (new entry)
         $this->backend->script("
             const \$referer = $('article .c9-layer').eq(-2);
             if (\$referer.length && (\$referer.attr('data-url') || '').startsWith('Area/area_info.php')) cApp.layers.removeReferer();
@@ -1176,10 +1176,10 @@ class AreaBackend {
     }
 
     /**
-     * Überschrift des Formulars.
+     * Heading of the form.
      *
-     * Nur beim Löschen steht der Name des betroffenen Bereichs darüber - dort ist
-     * er die eigentliche Information. Sonst genügt die generische Überschrift.
+     * Only when deleting does the name of the affected area stand above it - there it is
+     * the actual information. Otherwise the generic heading is sufficient.
      */
     private function _editHeadline() {
         if ($this->function == 'delete') {
@@ -1199,20 +1199,20 @@ class AreaBackend {
     /**
      * function=save: speichern.
      *
-     * $fields leer bedeutet: alle Schema-Felder, die in $data stehen, werden
-     * geschrieben. Validierung, Transaktion und Baumpflege stecken in Dataset::save()
-     * bzw. in den Hooks von Area - hier bleibt nur die Rückmeldung an die Oberfläche.
+     * $fields empty means: all schema fields that are in $data are
+     * written. Validation, transaction and tree maintenance are in Dataset::save()
+     * or in the hooks of Area - here only the feedback to the interface remains.
      *
-     * Erfolg schließt den Layer und lädt den darunterliegenden neu; Misserfolg
-     * schaltet auf 'errors' um, edit() zeigt dann das Formular mit den Eingaben und
-     * der Fehlermeldung aus Cms::errors erneut.
+     * Success closes the layer and reloads the one below it; failure
+     * switches to 'errors', edit() then shows the form again with the inputs and
+     * the error message from Cms::errors.
      */
     private function _editSave(): void
     {
-        // Prüfe Daten und speichere - neu: mit Bauplan über AreaService
+        // Check data and save - new: with blueprint via AreaService
         $isNew = $this->id < 1;
-        // Lookups ohne Einträge schicken nichts - "keins mehr" muss trotzdem
-        // ankommen (Area::hookOnSaved() schreibt nur übergebene Listen)
+        // Lookups without entries send nothing - "none left" must still
+        // arrive (Area::hookOnSaved() only writes passed lists)
         if (Area::isContentType((string)($this->data['type'] ?? ''))) {
             $this->data['trigger_template_ids'] ??= [];
             $this->data['selectable_templates'] ??= [];
@@ -1226,9 +1226,9 @@ class AreaBackend {
             $msg = $this->cms->snippet('area.message_area_saved');
             $this->backend->balloon('success', $msg);
 
-            // Bauplan: Felder anlegen und verknüpfen. Fehler dabei lassen den
-            // Bereich bestehen - der Layer bleibt dann mit der Meldung offen,
-            // damit sie nicht in einem Balloon untergeht
+            // Blueprint: create and link fields. Errors here leave the
+            // area in place - the layer then stays open with the message,
+            // so that it does not get lost in a balloon
             if ($isNew && $this->service->blueprintFailed()) {
                 echo $this->backend->template('alert_danger', [
                     '{text}' => $this->cms->snippet('area.message_blueprint_errors') . '<br>' . $this->cms->errorMsg()
@@ -1240,8 +1240,8 @@ class AreaBackend {
                 return;
             }
 
-            // Referer aktualisieren und Fenster schließen - beim Bearbeiten über die
-            // Info-Seite auch die Liste darunter (neue Bezeichnung, Position)
+            // Refresh referer and close window - when editing via the
+            // info page also the list below it (new label, position)
             $this->backend->script("
                 cApp.layers.invalidate(null, 2);
                 cApp.layers.close();
@@ -1253,27 +1253,27 @@ class AreaBackend {
     }
 
     /**
-     * Löschung durchführen - immer nur SOFT.
+     * Perform deletion - always SOFT only.
      *
-     * Endgültig gelöscht wird ausschließlich vom Systemtool nach Ablauf von
+     * Final deletion is performed exclusively by the system tool after the expiry of
      * admin.trash_retention_days (Zeitplaner-Aufgabe "Papierkorb leeren").
      *
-     * Der Bereich nimmt seine Datensätze mit (Area::hookOnSoftDelete), und zwar jeden
-     * einzeln - deshalb kann der Vorgang bei großen Bereichen dauern. Ab
-     * admin.mass_delete_threshold wandert er deswegen in einen Hintergrundprozess;
-     * dort läuft derselbe Aufruf, nur außerhalb des Requests.
+     * The area takes its records along (Area::hookOnSoftDelete), each one
+     * individually - therefore the process can take a long time for large areas. From
+     * admin.mass_delete_threshold it is therefore moved into a background process;
+     * the same call runs there, only outside the request.
      *
-     * $withChilds steuert, was mit den Unterbereichen passiert:
-     *     true   der ganze Teilbaum wird mitmarkiert, der Baum bleibt unverändert
-     *     false  die Kinder rücken eine Ebene hoch (Dataset::liftChildren())
-     * Das Radio-Feld dafür steht in area_delete_with_option_form.html und kommt als
-     * $_REQUEST['deletechilds'] zurück.
+     * $withChilds controls what happens to the sub-areas:
+     *     true   the whole subtree is marked along, the tree remains unchanged
+     *     false  the children move up one level (Dataset::liftChildren())
+     * The radio field for this is in area_delete_with_option_form.html and comes back as
+     * $_REQUEST['deletechilds'].
      */
     private function _editDeleteConfirm(): void
     {
         $withChilds = (string)($_REQUEST['deletechilds'] ?? 'false') === 'true';
 
-        // Große Bereiche in den Hintergrund verlagern
+        // Move large areas to the background
         $count = $this->massDeletion->affectedCount('area', $this->id, $withChilds, 'delete');
         if ($this->massDeletion->needsBackground($count)) {
             $error = '';
@@ -1285,7 +1285,7 @@ class AreaBackend {
                 ");
                 return;
             }
-            // Start fehlgeschlagen -> im Request weitermachen statt gar nicht zu löschen
+            // Start failed -> continue within the request instead of not deleting at all
             $this->system->log('massdelete-errors', "area {$this->id}: {$error}");
         }
 
@@ -1294,7 +1294,7 @@ class AreaBackend {
             $msg = $this->cms->snippet('area.message_area_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -1307,7 +1307,7 @@ class AreaBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -1317,24 +1317,24 @@ class AreaBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Der Aufbau folgt der Reihenfolge im Formular:
+     * The structure follows the order in the form:
      *
      *  1. einfache Schema-Felder (type, name, icon, label)
-     *  2. parent_id      - Auswahl unter den Ordnern, mit eigener Vorlage, die bei
-     *                      Änderung updatePreviousOptions() per Ajax anstößt
-     *  3. previous_id    - kein Datenbankfeld, sondern Eingabehilfe für `position`
+     *  2. parent_id      - selection among the folders, with its own template that, on
+     *                      change, triggers updatePreviousOptions() via Ajax
+     *  3. previous_id    - not a database field, but an input aid for `position`
      *  4. note
-     *  5. default_field_id / sort_field_id / sort_order - Vorgaben für die Datensätze
-     *     des Bereichs; die Auswahllisten enthalten nur Feldtypen, die als Titel bzw.
-     *     als Sortierkriterium taugen
+     *  5. default_field_id / sort_field_id / sort_order - defaults for the records
+     *     of the area; the selection lists contain only field types that qualify as title or
+     *     as sort criterion
      *  6. default_template_id, selectable_templates, override_templates - drei
      *     Lookup-Felder auf `template`
      *
-     * data-changed="true" am <form> setzt das Formular nach einem fehlgeschlagenen
-     * Speichern als "verändert" - das Javascript fragt dann beim Schließen nach,
-     * statt die Eingaben stillschweigend zu verwerfen.
+     * data-changed="true" on the <form> marks the form as "changed" after a failed
+     * save - the JavaScript then asks when closing,
+     * instead of silently discarding the input.
      */
     private function _editForm(): void
     {
@@ -1345,8 +1345,8 @@ class AreaBackend {
         $type = $this->data['type'];
         $this->backend->formInit('area.area_edit_form_' . $type);
 
-        // Die Eingabemasken der 3 Typen sind unterschiedlich - daher wird 'type' im vorangehenden
-        // Schritt bestimmt - siehe create()
+        // The input masks of the 3 types differ - therefore 'type' is determined in the preceding
+        // step - see create()
         $this->backend->formStatic($this->area, 'type', $type);
         $this->backend->formHidden('data[type]', $type);
         if ($this->id < 1 && $this->blueprint !== '') $this->backend->formHidden('blueprint', $this->blueprint);
@@ -1374,11 +1374,11 @@ class AreaBackend {
 
         // instance_id
         // --------------------
-        // Zu welcher Website gehört der Container? Gilt für alle drei Typen.
-        // Die Datensätze bzw. Templates des Containers erben die Zuordnung
-        // (siehe Area::hookOnSaved()).
-        // Wechselt die Instanz, werden Vater- und Vorgängerliste per Ajax neu
-        // geladen (area_form_instance_select.html) - der Baum ist je Mandant.
+        // To which website does the container belong? Applies to all three types.
+        // The records or templates of the container inherit the assignment
+        // (see Area::hookOnSaved()).
+        // If the instance changes, the parent and predecessor lists are reloaded via Ajax
+        // (area_form_instance_select.html) - the tree is per tenant.
         $instanceId = (int)($this->data['instance_id'] ?? 0);
         $this->backend->formField($this->area, [
             'id' => $this->id,
@@ -1389,8 +1389,8 @@ class AreaBackend {
             'template' => 'area.area_form_instance_select'
         ]);
 
-        // access_group_ids - nur beim Anlegen (A4, 12-group-rights.md): Gruppen, die
-        // den Bereich lesen dürfen; vorgewählt sind die mit der gewählten Instanz
+        // access_group_ids - only when creating (A4, developer docs, chapter 11 (Permissions)): groups that
+        // may read the area; preselected are those with the selected instance
         // --------------------
         if ($this->id < 1 && $type !== 'folder') {
             $selected = ($this->function === 'create')
@@ -1404,13 +1404,13 @@ class AreaBackend {
                 'id' => $this->id,
                 'options' => $options,
             ]);
-            // damit "keine Gruppe" als Auswahl ankommt (ohne Häkchen fehlt das Feld im POST)
+            // so that "no group" arrives as a selection (without a tick the field is missing from the POST)
             $this->backend->formHidden('data[access_group_ids][]', 0);
         }
 
         // parent_id
         // --------------------
-        // Ordner der Instanz listen (außer den Datensatz selbst)
+        // List folders of the instance (except the record itself)
         $areaId = (int)($this->id ?? 0);
         $parentOptions = $this->_getParentOptions($areaId, $instanceId);
         // spezielles Template: update on change
@@ -1426,21 +1426,21 @@ class AreaBackend {
 
         // previous_id - vorangehender Datensatz
         // --------------------
-        // Kein Datenbank-Feld. Der Redakteur wählt den Vorgänger, gespeichert wird
-        // daraus die `position`. Hier der Rückweg: aus der gespeicherten position
-        // den Bereich suchen, der davor steht.
+        // Not a database field. The editor selects the predecessor, and what is saved is
+        // the `position` derived from it. Here the way back: from the saved position
+        // find the area that stands before it.
         $parentId = (int)($this->data['parent_id'] ?? 0);
         $positionOptions = $this->_getPreviousOptions($parentId, $areaId, $instanceId);
-        $previousId = 0; // Standard: An den Anfang
+        $previousId = 0; // Default: at the start
 
-        // Vorgänger = größte position, die noch kleiner ist als die eigene,
-        // unter demselben Parent. Kein Treffer -> der Bereich steht selbst am Anfang,
-        // $previousId bleibt 0.
-        // Wurzel-Bereiche haben parent_id IS NULL, nicht 0 - deshalb der Sonderzweig.
-        // Dort ist die position tabellenweit über alle Instanzen fortlaufend: ohne
-        // Instanzfilter wäre der Vorgänger oft ein Bereich einer anderen Instanz,
-        // den die Auswahl (_getPreviousOptions()) nicht enthält - angezeigt würde
-        // dann "(an den Anfang)".
+        // Predecessor = largest position that is still smaller than one's own,
+        // under the same parent. No match -> the area itself is at the start,
+        // $previousId stays 0.
+        // Root areas have parent_id IS NULL, not 0 - hence the special branch.
+        // There the position is continuous across all instances table-wide: without
+        // an instance filter the predecessor would often be an area of another instance,
+        // which the selection (_getPreviousOptions()) does not contain - it would be displayed
+        // then as "(at the start)".
         if ($areaId > 0 && isset($this->data['position'])) {
             $currentPos = (int)$this->data['position'];
             $sql = "SELECT `area_id` FROM `area` WHERE `area_id` != ? AND `deleted`=0";
@@ -1469,7 +1469,7 @@ class AreaBackend {
                 $previousId = (int)$row['area_id'];
             }
         } elseif ($this->function === 'create') {
-            // Bei neuem Datensatz standardmäßig das Ende der Liste wählen
+            // For a new record, select the end of the list by default
             $lastId = array_key_last($positionOptions);
             $previousId = $lastId !== null ? $lastId : 0;
         }
@@ -1492,8 +1492,8 @@ class AreaBackend {
         if (Area::isContentType($type)) {
             // default_field_id
             // --------------------
-            // Feld aus dem Inhalt für kompakte Datensatzliste ausgelesen wird
-            // (nur bestimmte Typen)
+            // field from whose content the compact record list is read
+            // (only certain types)
             if (!empty($this->blueprint)) {
                 $this->backend->formStatic($this->area, 'default_field_id', $this->cms->snippet('area.blueprint_note_later'));
             }
@@ -1533,7 +1533,7 @@ class AreaBackend {
             
             // sort_field_id
             // --------------------
-            // Feld für Standardsortierung im Bereich (nur bestimmte Typen)
+            // Field for default sorting in the area (only certain types)
             // Fallback: changed_at
             if (!empty($this->blueprint)) {
                 $this->backend->formStatic($this->area, 'sort_field_id', $this->cms->snippet('area.blueprint_note_later'));
@@ -1578,7 +1578,7 @@ class AreaBackend {
 
                 // sort_order
                 // --------------------
-                // Richtung für Standardsortierung
+                // Direction for default sorting
                 // Fallback: DESC
                 $sortOrderOptions = [
                     'ASC' => $this->cms->snippet('label_sort_asc'),
@@ -1595,11 +1595,11 @@ class AreaBackend {
 
             // details.slug_prefix
             // --------------------
-            // Erster Pfadteil der URLs der Datensätze (/farben/blau), je Sprache der
-            // Instanz ein Eingabefeld - alle untereinander, keine Reiter. Leere
-            // Sprachen übernehmen den Präfix der Hauptsprache (Area::slugPrefixErrors()).
-            // Die Sprachen sind die der Instanz beim Aufbau der Maske; wechselt die
-            // Instanz, fallen beim Speichern fremde Sprachen weg.
+            // First path part of the URLs of the records (/farben/blau), per language of the
+            // instance one input field - all one below the other, no tabs. Empty
+            // languages take the prefix of the main language (Area::slugPrefixErrors()).
+            // The languages are those of the instance when the mask is built; if the
+            // instance changes, foreign languages are dropped when saving.
             $languages = $this->instanceCache->languages((int)($this->data['instance_id'] ?? 0));
             $prefixes = $this->data['details']['slug_prefix'] ?? [];
             if (!is_array($prefixes)) $prefixes = [(int)array_key_first($languages) => (string)$prefixes];
@@ -1630,10 +1630,10 @@ class AreaBackend {
 
             // details.tabs
             // --------------------
-            // Darstellung mehrsprachiger Felder in der Eingabemaske: alle Sprachen
-            // untereinander (0) oder ein Reiter je Sprache (1). Nur angeboten, wenn
-            // überhaupt eine Instanz mehr als eine Sprache führt - sonst bliebe die
-            // Wahl ohne Wirkung (RecordBackendEdit::_editForm()).
+            // Display of multilingual fields in the input mask: all languages
+            // one below the other (0) or one tab per language (1). Only offered if
+            // an instance has more than one language at all - otherwise the
+            // choice would have no effect (RecordBackendEdit::_editForm()).
             $hasMultilingualInstance = false;
             foreach ((array)($this->instanceCache->all()['instance_ids'] ?? []) as $instanceId) {
                 if (count($this->instanceCache->languageIds((int)$instanceId)) > 1) {
@@ -1655,8 +1655,8 @@ class AreaBackend {
 
             // dependent
             // --------------------
-            // Abhängiger Bereich: Zielbereich von 'link'-Feldern (fest verknüpfte
-            // Inhalte, siehe Area::hookDefinition())
+            // Dependent area: target area of 'link' fields (firmly linked
+            // content, see Area::hookDefinition())
             $this->backend->formField($this->area, [
                 'id' => $this->id,
                 'name' => 'dependent',
@@ -1665,8 +1665,8 @@ class AreaBackend {
 
             // privacy_policy_id
             // --------------------
-            // Lösch-Policy (Modul Privacy): die für alle Instanzen und die der Instanz
-            // des Bereichs; ein neuer Bereich bekommt die Standard-Policy seines Typs
+            // Deletion policy (module Privacy): the one for all instances and the one of the instance
+            // of the area; a new area gets the default policy of its type
             $policies = $GLOBALS['app']->get(\Camindo\Core\Modules\Privacy\DeletePolicy::class);
             $this->backend->formField($this->area, [
                 'id' => $this->id,
@@ -1763,8 +1763,8 @@ class AreaBackend {
 
             // list_template_id
             // --------------------
-            // Darstellung im Backend: Template für die letzte Spalte der
-            // Datensatzliste und die ausführliche Lookup-Vorschau
+            // Display in the backend: template for the last column of the
+            // record list and the detailed lookup preview
             $this->backend->formField($this->area, [
                 'id' => $this->id,
                 'name' => 'list_template_id',
@@ -1789,9 +1789,9 @@ class AreaBackend {
 
             // trigger_template_ids
             // --------------------
-            // Ereignis-Methoden (onCreate, onSave ...) für die Datensätze des
-            // Bereichs, siehe TriggerTemplates - mehrere; die Reihenfolge der
-            // Vorschau ist die Ausführungsreihenfolge (ordered=1: Hoch/Runter)
+            // Event methods (onCreate, onSave ...) for the records of the
+            // area, see TriggerTemplates - several; the order of the
+            // preview is the execution order (ordered=1: up/down)
             $colDef = [
                 'type' => 'ids',
                 'label' => '#area.field_area_trigger_template_ids',
@@ -1822,8 +1822,8 @@ class AreaBackend {
 
             // overview_template_id
             // --------------------
-            // Übersicht unter der Adresse, die nur aus dem Slug-Präfix besteht
-            // (/de/modelle) - ohne Datensatz, siehe Area
+            // Overview under the address that consists only of the slug prefix
+            // (/de/modelle) - without record, see Area
             $this->backend->formField($this->area, [
                 'id' => $this->id,
                 'name' => 'overview_template_id',
@@ -1847,12 +1847,12 @@ class AreaBackend {
             $this->backend->formReplace('{preview}', $this->templateBackend->lookupPreviewCreate('overview_template_id', $ids, 'data', 1));
         }
 
-        // Anmeldung an der Website (type 'profile')
+        // Login to the website (type 'profile')
         // --------------------
-        // Welche Eingabefelder des Bereichs tragen Anmeldename und Passwort?
-        // Name: 'chars' oder 'encrypted' (E-Mail-Adressen liegen verschlüsselt),
-        // Passwort: 'password'. Ein neuer Bereich hat noch keine Felder - die
-        // Listen bleiben dann leer und werden nach dem Anlegen der Felder gefüllt.
+        // Which input fields of the area carry the login name and password?
+        // name: 'chars' or 'encrypted' (email addresses are stored encrypted),
+        // password: 'password'. A new area has no fields yet - the
+        // lists then remain empty and are filled after the fields are created.
         if ($type === 'profile') {
             if (!empty($this->blueprint)) {
                 $this->backend->formStatic($this->area, 'login_name_field_id', $this->cms->snippet('area.blueprint_note_later'));
@@ -1874,7 +1874,7 @@ class AreaBackend {
                     'selectPlease' => true,
                 ]);
             }
-            // Zweiter Faktor der Anmeldung (UserSecondFactor::POLICIES)
+            // Second factor of the login (UserSecondFactor::POLICIES)
             $options = [];
             foreach (UserSecondFactor::POLICIES as $policy) {
                 $options[$policy] = $this->cms->snippet('area.option_second_factor_' . $policy);
@@ -1889,9 +1889,9 @@ class AreaBackend {
 
         // Profil-Bereiche (type 'ugc')
         // --------------------
-        // Aus welchen Profil-Bereichen dürfen die Autoren stammen? Zur Wahl stehen
-        // die Profil-Bereiche der Instanz des Bereichs und ihrer lesbaren Instanzen -
-        // nur deren Datensätze sieht das Frontend dieser Instanz (Cms::$sqlAccess).
+        // From which profile areas may the authors come? Available for selection are
+        // the profile areas of the instance of the area and its readable instances -
+        // only their records are visible to the frontend of this instance (Cms::$sqlAccess).
         if ($type === 'ugc') {
             if (!empty($this->blueprint)) {
                 $this->backend->formStatic($this->area, 'profile_area_ids', $this->cms->snippet('area.blueprint_note_later'));
@@ -1922,23 +1922,23 @@ class AreaBackend {
 
 
     /**
-     * function=delete: Löschbestätigung.
+     * function=delete: deletion confirmation.
      *
-     * Der Text der Warnung hängt daran, was mit dem Bereich verschwindet - deshalb
-     * die Zählabfragen. Je Bereichstyp:
+     * The text of the warning depends on what disappears with the area - therefore
+     * the count queries. Per area type:
      *
-     *     folder    Kind-Bereiche im Nested-Set-Teilbaum (lft BETWEEN lft AND rgt),
-     *               darin enthaltene produktive Datensätze und Templates.
-     *               Nur wenn wirklich Inhalte daran hängen, kommt statt der einfachen
-     *               Bestätigung ein Formular mit der Auswahl "mit / ohne Unterbereiche".
-     *     template  Anzahl der Templates im Bereich selbst
-     *     record    Anzahl der produktiven Datensätze (tmp=0, deleted=0)
+     *     folder    child areas in the nested-set subtree (lft BETWEEN lft AND rgt),
+     *               live records and templates contained in it.
+     *               Only if content is really attached does a form with the choice "with / without sub-areas" appear instead of the simple
+     *               confirmation.
+     *     template  number of templates in the area itself
+     *     record    number of live records (tmp=0, deleted=0)
      *
-     * `tmp = 0` schließt die Arbeitskopien aus, die während einer Bearbeitung
-     * entstehen - sie würden die Zahl sonst verfälschen.
+     * `tmp = 0` excludes the working copies that arise during an edit
+     * - they would otherwise distort the number.
      *
-     * Die Zählungen laufen über das Nested Set und nicht über parent_id, weil der
-     * ganze Teilbaum gemeint ist und nicht nur die direkten Kinder.
+     * The counts run via the nested set and not via parent_id, because the
+     * whole subtree is meant and not only the direct children.
      */
     private function _editDeleteForm(): void
     {
@@ -1948,7 +1948,7 @@ class AreaBackend {
         $areaType = $this->data['type'];
 
         if ($areaType == 'folder') {
-            // Zählung der Kind-Bereiche
+            // Count of the child areas
             $sql = "SELECT COUNT(`_d2`.`area_id`)"
                 ." FROM `area` AS `_d1`"
                 ." JOIN `area` AS `_d2` ON `_d2`.`lft` BETWEEN `_d1`.`lft` AND `_d1`.`rgt`"
@@ -1959,7 +1959,7 @@ class AreaBackend {
             $countChilds = $this->db->fetchNum()[0];
 
             if ($countChilds > 0) {
-                // Zählung aller produktiver Datensätze in den Kind-Bereichen
+                // Count of all live records in the child areas
                 $sql = "SELECT COUNT(`r`.`record_id`)"
                     ." FROM `area` AS `_d1`"
                     ." JOIN `area` AS `_d2` ON `_d2`.`lft` BETWEEN `_d1`.`lft` AND `_d1`.`rgt`"
@@ -1972,7 +1972,7 @@ class AreaBackend {
                 $this->db->query($sql, 'ii', [$id, $id]);
                 $countChildDatasets = $this->db->fetchNum()[0];
 
-                // Zählung aller Templates in den Kind-Bereichen
+                // Count of all templates in the child areas
                 $sql = "SELECT COUNT(`t`.`template_id`)"
                     ." FROM `area` AS `_d1`"
                     ." JOIN `area` AS `_d2` ON `_d2`.`lft` BETWEEN `_d1`.`lft` AND `_d1`.`rgt`"
@@ -1985,9 +1985,9 @@ class AreaBackend {
 
                 if ($countChildDatasets + $countChildTemplates > 0) {
                     // Baue Meldung zusammen 
-                    // enthält ... Bereiche
+                    // contains ... areas
                     $childAreas = $this->cms->snippet('area.x_areas', ['count' => $countChilds]);
-                    // ... Datensätze und ... Templates (Anzahl im ICU Message Format)
+                    // ... records and ... templates (count in ICU message format)
                     $itemsArr = [];
                     if ($countChildDatasets > 0) {
                         $itemsArr[] = $this->cms->snippet('record.x_records', ['count' => $countChildDatasets]);
@@ -2016,7 +2016,7 @@ class AreaBackend {
             }
         }
         elseif ($areaType == 'template') {
-            // Zählung der Templates im Bereich selbst
+            // Count of the templates in the area itself
             $sql = "SELECT COUNT(`template_id`) FROM `template` WHERE `area_id` = ?";
             $this->db->query($sql, 'i', [$id]);
             $countTemplates = $this->db->fetchNum()[0];
@@ -2035,7 +2035,7 @@ class AreaBackend {
         }
         elseif (Area::isContentType($areaType)) {
             // Datensatzbereich (record, profile, ugc)
-            // Zählung produktiver Datensätze im Bereich selbst
+            // Count of live records in the area itself
             $sql = "SELECT COUNT(`record_id`) FROM `record` WHERE `area_id` = ? AND `tmp`=0 AND `deleted`=0";
             $this->db->query($sql, 'i', [$id]);
             $countRecords = $this->db->fetchNum()[0];
@@ -2074,10 +2074,10 @@ class AreaBackend {
     /**
      * Suche (backend/area_search.php).
      *
-     * Zwei Zustände: ohne function die Maske, mit function=search die Ausführung.
-     * Anders als list()/edit() gibt es hier keinen dritten Zweig - _search() rendert
-     * gar keine Trefferliste, sondern schickt die Suchparameter an die Bereichsliste
-     * zurück (siehe dort).
+     * Two states: without function the mask, with function=search the execution.
+     * Unlike list()/edit() there is no third branch here - _search() renders
+     * no result list at all, but sends the search parameters back to the area list
+     * (see there).
      */
     public function search(): void
     {
@@ -2096,8 +2096,8 @@ class AreaBackend {
     /**
      * Suchmaske.
      *
-     * searchField() statt formField(): Suchfelder sind nie Pflichtfelder und schreiben
-     * nach `filter[...]` statt nach `data[...]`.
+     * searchField() instead of formField(): search fields are never required fields and write
+     * to `filter[...]` instead of `data[...]`.
      */
     private function _searchForm():void
     {
@@ -2123,7 +2123,7 @@ class AreaBackend {
         // name
         $this->backend->searchField($this->area, ['name' => 'name', 'value' => $filter['name'] ?? '']);
 
-        // parent_id - in der Suchmaske wird kein Ordner ausgeschlossen
+        // parent_id - in the search mask no folder is excluded
         $parentOptions = $this->_getParentOptions(0);
         $this->backend->searchField($this->area, [
             'name' => 'parent_id',
@@ -2190,29 +2190,29 @@ class AreaBackend {
     }
 
     /**
-     * function=search: Suche ausführen.
+     * function=search: run the search.
      *
-     * Die Trefferliste wird nicht hier gerendert. Stattdessen schließt sich der
-     * Suchlayer und der darunterliegende Listenlayer wird mit den Suchparametern in
-     * der URL neu geladen - list() wertet sie über Cms::select(['request' => 'all'])
-     * aus. Vorteil: Sortierung, Paginierung und Filtertext funktionieren danach ganz
-     * normal weiter.
+     * The result list is not rendered here. Instead, the search layer closes and the
+     * list layer below it is reloaded with the search parameters in
+     * the URL - list() evaluates them via Cms::select(['request' => 'all']).
+     * Advantage: sorting, pagination and filter text then work entirely
+     * continues normally.
      */
     private function _search():void
     {
-        // Parameter aus Post
+        // Parameters from POST
         $queryString = http_build_query($_POST);
 
-        // Sicher für Javascript verpacken
-        // json_encode maskiert < > ' " & als \uXXXX, der String kann damit gefahrlos
-        // in das Javascript unten eingesetzt werden.
+        // Wrap safely for JavaScript
+        // json_encode escapes < > ' " & as \uXXXX, so the string can safely
+        // be inserted into the JavaScript below.
         $safeParams = json_encode($queryString, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
-        // Das Ergebnis ist ein JSON-String MIT Anführungszeichen ('"a=1&b=2"').
-        // substr(..., 1) schneidet nur das öffnende ab - das schließende bleibt
-        // stehen und beendet unten das Javascript-Stringliteral.
+        // The result is a JSON string WITH quotation marks ('"a=1&b=2"').
+        // substr(..., 1) only cuts off the opening one - the closing one remains
+        // and ends the JavaScript string literal below.
         $safeUri = 'Area/index.php?' . substr($safeParams, 1);
 
-        // Referer-Layer mit diesen Parametern neu laden
+        // Reload the referer layer with these parameters
         $this->backend->script("
             cApp.layers.close();
             cApp.layers.replace('{$safeUri}');
@@ -2224,8 +2224,8 @@ class AreaBackend {
     // Sonstige Hilfsfunktionen
 
     /**
-     * Instanzen (Websites) als key-value-Pairs für die Auswahl im Formular, in der
-     * Reihenfolge des Backends (Instance::orderSql(): die Standard-Instance zuletzt).
+     * Instances (websites) as key-value pairs for the selection in the form, in the
+     * order of the backend (Instance::orderSql(): the default instance last).
      */
     private function _getInstanceOptions(): array
     {
@@ -2237,7 +2237,7 @@ class AreaBackend {
     }
 
     /**
-     * Auswahlliste der Eingabefelder des Bereichs mit bestimmten Typen - für die
+     * Selection list of the input fields of the area with certain types - for the
      * Anmeldefelder eines Profil-Bereichs (details.login_*_field_id).
      *
      * @param string[] $types  Feldtypen (`field`.`type`)
@@ -2264,20 +2264,20 @@ class AreaBackend {
     }
 
     /**
-     * Auswahlliste "übergeordneter Bereich".
+     * Selection list "parent area".
      *
-     * Es kommen nur Bereiche vom Typ 'folder' in Frage - nur Ordner dürfen Kinder
-     * haben. Die Einrückung im Optionstext entsteht aus `depth`, die Reihenfolge aus
-     * `lft` (Nested Set), die Liste liest sich also wie der Baum.
+     * Only areas of type 'folder' come into question - only folders may have children.
+     * The indentation in the option text comes from `depth`, the order from
+     * `lft` (nested set), so the list reads like the tree.
      *
-     * @param int $areaId      Id eines Bereichs, der aus der Liste ausgeschlossen werden soll
-     *                         (man kann sich nicht selbst als Elternteil wählen)
-     * @param int $instanceId  nur Ordner dieser Instanz (0 = alle) - ein Bereich darf
-     *                         nur im Baum seines Mandanten stehen (Area::hookOnSave())
+     * @param int $areaId      id of an area to be excluded from the list
+     *                         (one cannot select oneself as parent)
+     * @param int $instanceId  only folders of this instance (0 = all) - an area may
+     *                         only stand in the tree of its tenant (Area::hookOnSave())
      */
     private function _getParentOptions(int $areaId = 0, int $instanceId = 0): array
     {
-        // Bitte wählen
+        // Please select
         $options = [0 => $this->cms->snippet('nothing_selected')];
 
         // Ordner auflisten
@@ -2295,19 +2295,19 @@ class AreaBackend {
     }
 
     /**
-     * Auswahlliste "vorangehender Bereich" - die Eingabehilfe für `position`.
+     * Selection list "preceding area" - the input aid for `position`.
      *
-     * Enthält alle Geschwister unter $parentId in ihrer aktuellen Reihenfolge, davor
-     * den Eintrag 0 ("an den Anfang").
+     * Contains all siblings under $parentId in their current order, before them
+     * the entry 0 ("at the start").
      *
-     * Wurzel-Bereiche haben in der Datenbank `parent_id IS NULL`, nicht 0 - deshalb
-     * bekommt $parentId === 0 einen eigenen WHERE-Zweig. Auf der Wurzelebene zählen
-     * nur die Bereiche derselben Instanz als Geschwister (jeder Mandant sein Baum);
-     * die `position` bleibt dabei tabellenweit über alle Wurzeln fortlaufend.
+     * Root areas have `parent_id IS NULL` in the database, not 0 - therefore
+     * $parentId === 0 gets its own WHERE branch. On the root level only
+     * the areas of the same instance count as siblings (each tenant its own tree);
+     * the `position` remains continuous table-wide across all roots.
      */
     private function _getPreviousOptions(int $parentId, int $areaId, int $instanceId = 0): array
     {
-        // An den Anfang
+        // At the start
         $options = [0 => $this->cms->snippet('position_at_start')];
 
         // Restliche Optionen
@@ -2332,10 +2332,10 @@ class AreaBackend {
     }
 
     /**
-     * Ids der im Bereich wählbaren Templates (rel_area_template.selectable = 1).
+     * ids of the templates selectable in the area (rel_area_template.selectable = 1).
      *
-     * Database::fetchAll() liefert bei einer einspaltigen Abfrage eine flache Liste
-     * von Werten (kein Array von Zeilen) - das Ergebnis ist also direkt ein Id-Array.
+     * Database::fetchAll() returns a flat list for a single-column query
+     * of values (not an array of rows) - the result is therefore directly an id array.
      */
     private function selectableTemplateIds(int $areaId): array
     {
@@ -2345,11 +2345,11 @@ class AreaBackend {
     }
 
     /**
-     * Ids der Templates, die per URL erzwungen werden dürfen
+     * ids of the templates that may be forced via URL
      * (rel_area_template.override = 1).
      *
-     * Damit ist ein Aufruf /{id},{template} erlaubt, auch wenn der Datensatz ein
-     * anderes Template gesetzt hat. Rückgabe wie oben eine flache Id-Liste.
+     * This allows a call /{id},{template}, even if the record has a
+     * another template. Return, as above, a flat id list.
      */
     private function overrideTemplateIds(int $areaId): array
     {
@@ -2359,7 +2359,7 @@ class AreaBackend {
     }
 
     /**
-     * Instanzen als Optionen listen
+     * List instances as options
      */
     private function _instanceOptions(): array
     {

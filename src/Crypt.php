@@ -1,129 +1,129 @@
 <?php
 /**
- * Verschlüsselung und Hashing auf Basis eines einzigen geheimen Schlüssels.
+ * Encryption and hashing based on a single secret key.
  *
- * Der Schlüssel steht als Rohinhalt in der Datei paths.key_file (.camindo.key) und wird
- * im Konstruktor eingelesen. Ohne Datei gilt die Umgebungsvariable CAMINDO_KEY
- * (Config::ENV_KEY) - die Datei hat Vorrang, damit nach `key rotate` der neue
- * Schlüssel gilt, bis die Variable von Hand nachgezogen ist. Fehlt beides, wird
- * sofort geworfen - bewusst kein stiller Fallback, sonst entstünden
- * unentschlüsselbare Daten. Ebenso, wenn die Variable allein einen abgelösten
- * Schlüssel enthält (Datei nach der Rotation entfernt, Variable nicht nachgezogen).
+ * The key is stored as raw content in the file paths.key_file (.camindo.key) and is
+ * read in the constructor. Without the file the environment variable CAMINDO_KEY
+ * applies (Config::ENV_KEY) - the file takes precedence, so that after `key rotate` the new
+ * key applies until the variable is updated by hand. If both are missing, it
+ * throws immediately - deliberately no silent fallback, otherwise undecryptable
+ * data would result. Likewise if the variable alone contains a retired
+ * key (file removed after the rotation, variable not updated).
  *
- * ACHTUNG: Geht .camindo.key verloren, sind alle Inhalte verschlüsselter Felder
- * (Typ `encrypted`, Tabelle data_enc) unwiederbringlich verloren. Die Datei gehört ins
- * Backup, aber nicht ins Repository.
+ * WARNING: if .camindo.key is lost, all contents of encrypted fields
+ * (type `encrypted`, table data_enc) are irrecoverably lost. The file belongs in the
+ * backup, but not in the repository.
  *
- * WOFÜR WAS
+ * WHAT IT IS USED FOR
  * --------------------
- *     encrypt()/decrypt()   Feldtyp `encrypted` und die varbinary-Spalten der Tabelle
- *                           `admin` (email, mobile, phone). Umkehrbar.
- *     hash()                Suchwert in data_enc.hash und die Signaturen der Klasse
- *                           Integrity. Nicht umkehrbar, deterministisch (siehe unten).
- *     passwordHash()        Passwörter (admin.password, data_pwd.data). Nicht umkehrbar,
- *     passwordVerify()      NICHT deterministisch, absichtlich langsam (Argon2id/bcrypt).
- *     passwordNeedsRehash() true, wenn ein gespeicherter Hash nachgezogen werden soll.
- *     randomKey()           Session-Ids, Tokens, Datei-Tokens.
+ *     encrypt()/decrypt()   field type `encrypted` and the varbinary columns of the table
+ *                           `admin` (email, mobile, phone). Reversible.
+ *     hash()                search value in data_enc.hash and the signatures of the class
+ *                           Integrity. Not reversible, deterministic (see below).
+ *     passwordHash()        passwords (admin.password, data_pwd.data). Not reversible,
+ *     passwordVerify()      NOT deterministic, deliberately slow (Argon2id/bcrypt).
+ *     passwordNeedsRehash() true if a stored hash should be recalculated.
+ *     randomKey()           session ids, tokens, file tokens.
  *
- * WARUM data_enc EINE EXTRA HASH-SPALTE HAT
+ * WHY data_enc HAS AN EXTRA HASH COLUMN
  * --------------------
- * encrypt() ist absichtlich NICHT deterministisch: jeder Aufruf zieht einen neuen
- * zufälligen IV, derselbe Klartext ergibt also jedes Mal einen anderen Geheimtext.
- * Das ist kryptografisch richtig, macht aber ein WHERE auf die Datenspalte unmöglich.
- * Deshalb speichert data_enc zusätzlich hash() des normalisierten Klartexts
- * (Cms::encryptedHash(): indexText(), klein, ohne Leerzeichen) - darüber läuft die
- * Gleichheitssuche in Cms::buildEncryptedCondition() und die unique-Prüfung in
- * Dataset::uniqueVirtualOk(). Groß-/Kleinschreibung, Leerraum und Satzzeichen zählen
- * also nicht; Wildcards, LIKE und Bereichsvergleiche sind ausgeschlossen. Daten von
- * vor der Normalisierung: `camindo.php key rehash` (KeyRotation::rehashEncrypted()).
+ * encrypt() is deliberately NOT deterministic: every call draws a new random
+ * IV, so the same plain text yields a different ciphertext each time.
+ * That is cryptographically correct, but makes a WHERE on the data column impossible.
+ * Therefore data_enc additionally stores hash() of the normalized plain text
+ * (Cms::encryptedHash(): indexText(), lower case, without spaces) - the equality
+ * search in Cms::buildEncryptedCondition() and the unique check in
+ * Dataset::uniqueVirtualOk() run over it. Case, whitespace and punctuation therefore
+ * do not count; wildcards, LIKE and range comparisons are excluded. Data from
+ * before the normalization: `camindo.php key rehash` (KeyRotation::rehashEncrypted()).
  *
- * WARUM PASSWÖRTER NICHT ÜBER hash() LAUFEN
+ * WHY PASSWORDS DO NOT GO THROUGH hash()
  * --------------------
- * hash() ist deterministisch und schnell - das braucht die Suche. Für Passwörter wäre
- * beides ein Nachteil: gleiche Passwörter ergäben gleiche Hashes, und wer Datenbank
- * und Schlüssel hat, könnte Milliarden Kandidaten je Sekunde durchprobieren.
- * passwordHash() nimmt deshalb password_hash() - Argon2id, wo PHP es mitbringt, sonst
- * bcrypt (security.password_hash, 16-sicherheit.md §1). Vorgeschaltet ist ein HMAC
- * mit dem Schlüssel aus .camindo.key (Pepper): ein Datenbankauszug allein ist nichts
- * wert, und bcrypt bekommt immer 44 Zeichen statt der Roheingabe (keine Kürzung
- * nach 72 Bytes, keine Null-Bytes).
+ * hash() is deterministic and fast - that is what the search needs. For passwords both
+ * would be a disadvantage: identical passwords would yield identical hashes, and whoever
+ * has the database and the key could try billions of candidates per second.
+ * passwordHash() therefore uses password_hash() - Argon2id where PHP provides it, otherwise
+ * bcrypt (security.password_hash, developer docs, chapter 13 (Security: authentication)).
+ * An HMAC with the key from .camindo.key (pepper) is applied first: a database extract
+ * alone is worth nothing, and bcrypt always gets 44 characters instead of the raw input
+ * (no truncation after 72 bytes, no null bytes).
  *
- * FORMAT DES GEHEIMTEXTS
+ * FORMAT OF THE CIPHERTEXT
  * --------------------
- *     [ IV (12 Bytes bei GCM) ][ Auth-Tag (16 Bytes) ][ Geheimtext ]
- * wahlweise roh (binary = true, für varbinary-Spalten) oder base64-kodiert.
+ *     [ IV (12 bytes with GCM) ][ auth tag (16 bytes) ][ ciphertext ]
+ * either raw (binary = true, for varbinary columns) or base64-encoded.
  *
- * FORMAT DES PASSWORT-HASHS
+ * FORMAT OF THE PASSWORD HASH
  * --------------------
- *     password_hash(base64(HMAC-SHA256(Passwort, key)))
- *     $argon2id$v=19$m=19456,t=2,p=1$…   97 Zeichen, bzw. $2y$11$…  60 Zeichen
- * Spalten admin.password und data_pwd.data: varchar(255). Das frühere Format (bis
- * 2026-09-24: [ Salt 16 Bytes ][ HMAC-SHA256(Salt . Passwort) ], kompakt kodiert,
- * 64 Zeichen) prüft passwordVerify() weiterhin; passwordNeedsRehash() meldet es, und
- * die Anmeldung schreibt den neuen Hash (Admin::loginByName(), RecordUser::cmsLogin()).
+ *     password_hash(base64(HMAC-SHA256(password, key)))
+ *     $argon2id$v=19$m=19456,t=2,p=1$…   97 characters, or $2y$11$…  60 characters
+ * Columns admin.password and data_pwd.data: varchar(255). The earlier format (until
+ * 2026-09-24: [ salt 16 bytes ][ HMAC-SHA256(salt . password) ], compactly encoded,
+ * 64 characters) is still checked by passwordVerify(); passwordNeedsRehash() reports it, and
+ * the sign-in writes the new hash (Admin::loginByName(), RecordUser::cmsLogin()).
  *
- * ZUM SALT-PARAMETER
+ * ABOUT THE SALT PARAMETER
  * --------------------
- * $salt ist kein Salt im üblichen Sinn, sondern AAD (Additional Authenticated Data):
- * Der Wert wird nicht mitverschlüsselt, geht aber in die Authentifizierung ein.
- * decrypt() liefert nur dann etwas zurück, wenn exakt derselbe Wert übergeben wird -
- * damit lässt sich ein Geheimtext an einen Kontext binden (z. B. eine Datensatz-Id),
- * sodass er nicht in einen anderen Datensatz kopiert werden kann.
+ * $salt is not a salt in the usual sense, but AAD (additional authenticated data):
+ * the value is not encrypted along, but it enters the authentication.
+ * decrypt() only returns something if exactly the same value is passed -
+ * this binds a ciphertext to a context (e.g. a record id), so that it cannot be
+ * copied into another record.
  *
- * SCHLÜSSELBUND UND ROTATION (Camindo\Core\KeyRotation, `camindo.php key …`)
+ * KEY RING AND ROTATION (Camindo\Core\KeyRotation, `camindo.php key …`)
  * --------------------
- * Neben dem aktuellen Schlüssel (.camindo.key) kann es abgelöste geben:
- * {key_file}.retired, je Zeile "{kid} {Schlüssel} {abgelöst am, ISO 8601}". Die
- * Schlüssel-Id (kid) sind die ersten 8 Hex-Zeichen von sha256(Schlüssel).
+ * Besides the current key (.camindo.key) there can be retired ones:
+ * {key_file}.retired, one per line "{kid} {key} {retired at, ISO 8601}". The
+ * key id (kid) is the first 8 hex characters of sha256(key).
  *
- *     encrypt(), hash(), passwordHash()   immer mit dem aktuellen Schlüssel
- *     decrypt()                           aktueller Schlüssel, bei Misserfolg die
- *                                         abgelösten (GCM erkennt den falschen)
- *     hashAll()                           HMAC unter allen Schlüsseln - für gespeicherte
- *                                         HMACs, deren Klartext unbekannt ist
- *                                         (Wiederherstellungscodes, Gerätekennungen)
- *     passwordVerify()                    mit dem Schlüssel aus der Kennung des Hashs
+ *     encrypt(), hash(), passwordHash()   always with the current key
+ *     decrypt()                           current key; on failure the
+ *                                         retired ones (GCM detects the wrong one)
+ *     hashAll()                           HMAC under all keys - for stored
+ *                                         HMACs whose plain text is unknown
+ *                                         (recovery codes, device identifiers)
+ *     passwordVerify()                    with the key from the id of the hash
  *
- * Passwort-Hashes tragen die Kennung ihres Pfeffer-Schlüssels: "{kid}:{hash}".
- * Hashes ohne Kennung (vor der ersten Rotation) gelten als mit dem aktuellen
- * Schlüssel gepfeffert; passwordNeedsRehash() versieht sie bei der nächsten Anmeldung
- * mit der Kennung, ebenso Hashes eines abgelösten Schlüssels mit dem aktuellen.
+ * Password hashes carry the id of their pepper key: "{kid}:{hash}".
+ * Hashes without an id (before the first rotation) count as peppered with the current
+ * key; passwordNeedsRehash() adds the id to them at the next sign-in, likewise hashes of a
+ * retired key with the current one.
  *
- * FEHLERVERHALTEN
+ * ERROR BEHAVIOR
  * --------------------
- * encrypt() wirft bei Fehlschlag. decrypt() wirft NICHT, sondern liefert '' -
- * bei falschem Schlüssel, falschem Salt, manipuliertem Geheimtext und ungültigem
- * Base64 gleichermaßen. Ein leeres Ergebnis ist also nicht von einem leer
- * gespeicherten Wert unterscheidbar.
+ * encrypt() throws on failure. decrypt() does NOT throw but returns '' -
+ * equally for a wrong key, wrong salt, a manipulated ciphertext and invalid
+ * base64. An empty result is therefore not distinguishable from a value that was
+ * stored empty.
  */
 namespace Camindo\Core;
 
 class Crypt {
-    /** Roher Inhalt von paths.key_file - dient sowohl als AES- als auch als HMAC-Schlüssel */
+    /** Raw content of paths.key_file - serves as both AES and HMAC key */
     private string $key;
 
-    /** Id des aktuellen Schlüssels (keyId()) */
+    /** Id of the current key (keyId()) */
     private string $keyId = '';
 
-    /** Abgelöste Schlüssel: kid => ['key' => …, 'retired_at' => ISO 8601] */
+    /** Retired keys: kid => ['key' => …, 'retired_at' => ISO 8601] */
     private array $retired = [];
 
-    /** Herkunft des aktuellen Schlüssels: 'file' oder 'env' */
+    /** Origin of the current key: 'file' or 'env' */
     private string $keySource = 'file';
 
-    // Konstante für das Verschlüsselungsverfahren
-    // GCM = authenticated encryption: liefert neben dem Geheimtext ein Auth-Tag,
-    // mit dem decrypt() Manipulationen erkennt.
+    // Constant for the encryption method
+    // GCM = authenticated encryption: returns an auth tag alongside the ciphertext,
+    // with which decrypt() detects manipulation.
     private const CIPHER = 'aes-256-gcm';
 
-    /** Länge des Salts im früheren Passwort-Format (passwordVerify()) in Bytes */
+    /** Length of the salt in the earlier password format (passwordVerify()) in bytes */
     private const PASSWORD_SALT_LENGTH = 16;
 
     public function __construct(
         private Config $config
     )
     {
-        // Pfüfe nötige Angaben
+        // Check required settings
         $keyFile = $this->config->get('paths.key_file');
         if (empty($keyFile)) {
             throw new \RuntimeException('CONFIGURATION ERROR: paths.key_file is empty!');
@@ -136,8 +136,8 @@ class Crypt {
     }
 
     /**
-     * Schlüssel (neu) einlesen: aktueller aus paths.key_file, abgelöste aus
-     * {key_file}.retired - nach einer Rotation (KeyRotation).
+     * Read the keys (again): current one from paths.key_file, retired ones from
+     * {key_file}.retired - after a rotation (KeyRotation).
      */
     public function reloadKeys(): void
     {
@@ -162,16 +162,16 @@ class Crypt {
                 $this->retired[$parts[0]] = ['key' => $parts[1], 'retired_at' => (string)($parts[2] ?? '')];
             }
         }
-        // Variable nach einer Rotation nicht nachgezogen und die Datei schon entfernt:
-        // mit dem alten Schlüssel weiterzuarbeiten hieße, Neues unter ihm zu
-        // verschlüsseln und alle Signaturen für manipuliert zu halten
+        // Variable not updated after a rotation and the file already removed:
+        // continuing with the old key would mean encrypting new data under it and
+        // treating all signatures as manipulated
         if ($this->keySource === 'env' && $this->isRetiredKey($this->key)) {
             throw new \RuntimeException('CONFIGURATION ERROR: ' . Config::ENV_KEY . ' holds the retired key '
                 . $this->keyId . ' - set it to the current key (or restore ' . basename($keyFile) . ')');
         }
     }
 
-    /** Steht der Schlüssel in {key_file}.retired? (Ids dort, deren Zeile übersprungen wurde, eingeschlossen) */
+    /** Is the key in {key_file}.retired? (ids there whose line was skipped included) */
     private function isRetiredKey(string $key): bool
     {
         $retiredFile = (string)$this->config->get('paths.key_file') . '.retired';
@@ -183,18 +183,18 @@ class Crypt {
         return false;
     }
 
-    /** Herkunft des aktuellen Schlüssels: 'file' (paths.key_file) oder 'env' (CAMINDO_KEY) */
+    /** Origin of the current key: 'file' (paths.key_file) or 'env' (CAMINDO_KEY) */
     public function keySource(): string
     {
         return $this->keySource;
     }
 
     /**
-     * Abgleich der Variablen CAMINDO_KEY mit dem aktuellen Schlüssel:
-     *     ''         Variable nicht gesetzt
-     *     'current'  enthält den aktuellen Schlüssel
-     *     'retired'  enthält einen abgelösten - nach `key rotate` nachziehen
-     *     'other'    enthält einen unbekannten Schlüssel
+     * Compare the variable CAMINDO_KEY with the current key:
+     *     ''         variable not set
+     *     'current'  contains the current key
+     *     'retired'  contains a retired one - update after `key rotate`
+     *     'other'    contains an unknown key
      */
     public function envKeyState(): string
     {
@@ -206,8 +206,8 @@ class Crypt {
     }
 
     /**
-     * Der aktuelle Schlüssel selbst - nur für KeyRotation (alter Schlüssel in den
-     * Schlüsselbund), auch wenn er aus der Umgebung kommt.
+     * The current key itself - only for KeyRotation (old key into the key ring),
+     * even if it comes from the environment.
      *
      * @internal
      */
@@ -216,25 +216,25 @@ class Crypt {
         return $this->key;
     }
 
-    /** Id eines Schlüssels: die ersten 8 Hex-Zeichen von sha256 */
+    /** Id of a key: the first 8 hex characters of sha256 */
     public static function keyId(string $key): string
     {
         return substr(hash('sha256', $key), 0, 8);
     }
 
-    /** Id des aktuellen Schlüssels */
+    /** Id of the current key */
     public function currentKeyId(): string
     {
         return $this->keyId;
     }
 
-    /** Abgelöste Schlüssel: kid => retired_at (ohne die Schlüssel selbst) */
+    /** Retired keys: kid => retired_at (without the keys themselves) */
     public function retiredKeys(): array
     {
         return array_map(fn($k) => $k['retired_at'], $this->retired);
     }
 
-    /** Schlüssel zu einer Id - aktueller oder abgelöster, sonst null */
+    /** Key for an id - current or retired, otherwise null */
     private function keyById(string $kid): ?string
     {
         if ($kid === $this->keyId) return $this->key;
@@ -242,7 +242,7 @@ class Crypt {
     }
 
     /**
-     * Mit genau dem aktuellen Schlüssel entschlüsselbar? (KeyRotation::status())
+     * Can it be decrypted with exactly the current key? (KeyRotation::status())
      */
     public function decryptsWithCurrent(string $text, string $salt = '', bool $binary = false): bool
     {
@@ -251,53 +251,53 @@ class Crypt {
     }
 
     /**
-     * Wert verschlüsseln (AES-256-GCM)
+     * Encrypt a value (AES-256-GCM)
      *
-     * @param string $text  zu verschlüsselnder Text
-     * @param string $salt  (Wird als Additional Authenticated Data - AAD - genutzt)
-     * @param bool $binary  true: liefere rohe Bytes, false: leifert base64-encodierten String (default)
-     * @return string       
+     * @param string $text  text to encrypt
+     * @param string $salt  (used as Additional Authenticated Data - AAD)
+     * @param bool $binary  true: return raw bytes, false: return base64-encoded string (default)
+     * @return string
      */
     public function encrypt(string $text, string $salt = '', bool $binary = false): string
     {
-        // Leerstring bleibt
+        // Empty string stays
         if ($text === '') return '';
         
-        // Zufälligen Initialisierungsvektor IV generieren
+        // Generate a random initialization vector IV
         $ivLength = openssl_cipher_iv_length(self::CIPHER);
         $iv = random_bytes($ivLength);
         $tag = '';
 
-        // Text verschlüsseln
-        // OPENSSL_RAW_DATA verhindert zusätzliche Formatierung durch OpenSSL
+        // Encrypt the text
+        // OPENSSL_RAW_DATA prevents additional formatting by OpenSSL
         $encrypted = openssl_encrypt($text, self::CIPHER, $this->key, OPENSSL_RAW_DATA, $iv, $tag, $salt);
 
         if ($encrypted === false) {
             throw new \RuntimeException('Verschlüsselung fehlgeschlagen.');
         }
 
-        // IV-Tag (für die Authentifizierung) und den verschlüsselten Text zusammenfügen
+        // Join IV, tag (for authentication) and the encrypted text
         if ($binary) return $iv . $tag . $encrypted;
         else return base64_encode($iv . $tag . $encrypted);
     }
 
    /**
-     * Wert entschlüsseln
+     * Decrypt a value
      *
-     * @param string $text  verschlüsselter Text
-     * @param string $salt  (Muss exakt dem Salt bei der Verschlüsselung entsprechen)
-     * @param bool $binary  true: verarbeitet rohe Bytes, false: verarbeitet base64-encodierten String (default)
-     * @return string   
+     * @param string $text  encrypted text
+     * @param string $salt  (must match the salt used for encryption exactly)
+     * @param bool $binary  true: processes raw bytes, false: processes base64-encoded string (default)
+     * @return string
      */
     public function decrypt(string $text, string $salt = '', bool $binary = false): string
     {
-        // Leerstring bleibt
+        // Empty string stays
         if ($text === '') return '';
 
         if (!$binary) {
             $decoded = base64_decode($text, true);
             if ($decoded === false) {
-                // Ungültiges Base64
+                // Invalid base64
                 return '';
             }
         }
@@ -306,14 +306,14 @@ class Crypt {
         }
 
         $ivLength = openssl_cipher_iv_length(self::CIPHER);
-        $tagLength = 16; // Standard-Tag-Länge bei GCM
+        $tagLength = 16; // Standard tag length for GCM
 
-        // Prüfen, ob die Mindestlänge für IV und Tag vorhanden ist
+        // Check whether the minimum length for IV and tag is present
         if (strlen($decoded) < ($ivLength + $tagLength)) {
             return ''; 
         }
 
-        // Aktueller Schlüssel, dann die abgelösten (Rotation, siehe Klassenkommentar)
+        // Current key first, then the retired ones (rotation, see class comment)
         $decrypted = $this->decryptWith($this->key, $decoded, $salt, true);
         if ($decrypted !== null) return $decrypted;
         foreach ($this->retired as $retired) {
@@ -324,7 +324,7 @@ class Crypt {
     }
 
     /**
-     * Mit einem bestimmten Schlüssel entschlüsseln - null, wenn er nicht passt.
+     * Decrypt with a specific key - null if it does not match.
      */
     private function decryptWith(string $key, string $text, string $salt, bool $binary): ?string
     {
@@ -334,45 +334,45 @@ class Crypt {
         $tagLength = 16;
         if (strlen($decoded) < ($ivLength + $tagLength)) return null;
 
-        // IV, Tag und den eigentlichen Geheimtext extrahieren
+        // Extract IV, tag and the actual ciphertext
         $iv = substr($decoded, 0, $ivLength);
         $tag = substr($decoded, $ivLength, $tagLength);
         $ciphertext = substr($decoded, $ivLength + $tagLength);
 
-        // Text entschlüsseln und Authentizität prüfen
+        // Decrypt the text and verify authenticity
         $decrypted = openssl_decrypt($ciphertext, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv, $tag, $salt);
         return $decrypted !== false ? $decrypted : null;
     }
 
     /**
-     * Erzeuge kryptografisch sicheren, kompakten HMAC-Hash
+     * Create a cryptographically secure, compact HMAC hash
      *
-     * @param string $text  Text, der gehasht wird
-     * @param bool $binary  true:  Binäres Format (32 Bytes)
-     *                      false: Lesbares Format (43 latin-1 Zeichen)
+     * @param string $text  text to be hashed
+     * @param bool $binary  true:  binary format (32 bytes)
+     *                      false: readable format (43 latin-1 characters)
      * @return string
      */
     public function hash(string $text, bool $binary = false): string
     {
         if ($text === '') return '';
         
-        // true = liefert 32 rohe Bytes anstatt 64 Hex-Zeichen
+        // true = returns 32 raw bytes instead of 64 hex characters
         $rawHash = hash_hmac('sha256', $text, $this->key, true);
         
         if ($binary) {
-            // 32 rohe Bytes
+            // 32 raw bytes
             return $rawHash;
         }
         else {
-            // 43 lesbare Zeichen
+            // 43 readable characters
             return $this->encodeCompact($rawHash);
         }
     }
 
     /**
-     * HMAC unter allen Schlüsseln, der aktuelle zuerst - zum Wiederfinden gespeicherter
-     * HMACs, deren Klartext erst beim Einlösen bekannt ist (Wiederherstellungscodes,
-     * Geräte-Tokens), auch nach einer Rotation.
+     * HMAC under all keys, the current one first - for finding stored HMACs
+     * whose plain text is only known when redeemed (recovery codes,
+     * device tokens), also after a rotation.
      *
      * @return string[]  wie hash()
      */
@@ -388,10 +388,10 @@ class Crypt {
     }
 
     /**
-     * HMAC mit einem bestimmten Schlüssel (aktuell oder abgelöst) - für Daten, die
-     * die Id ihres Schlüssels mitführen (Kette des Audit-Logs, AuditStore).
+     * HMAC with a specific key (current or retired) - for data that carries
+     * the id of its key along (chain of the audit log, AuditStore).
      *
-     * @return string|null  wie hash() (lesbar), null bei unbekannter Schlüssel-Id
+     * @return string|null  as hash() (readable), null for an unknown key id
      */
     public function hashWithKey(string $kid, string $text): ?string
     {
@@ -401,12 +401,12 @@ class Crypt {
     }
 
     /**
-     * Passwort hashen - password_hash() über den gepfefferten Wert (Format siehe
-     * Klassenkommentar). Zwei Aufrufe mit demselben Passwort liefern verschiedene
-     * Werte; vergleichen kann nur passwordVerify().
+     * Hash a password - password_hash() over the peppered value (format see
+     * class comment). Two calls with the same password return different
+     * values; only passwordVerify() can compare them.
      *
-     * @param string $password  Klartext
-     * @return string           60 (bcrypt) bzw. 97 Zeichen (Argon2id); '' bei leerem Passwort
+     * @param string $password  plain text
+     * @return string           60 (bcrypt) or 97 characters (Argon2id); '' for an empty password
      */
     public function passwordHash(string $password): string
     {
@@ -416,7 +416,7 @@ class Crypt {
     }
 
     /**
-     * Kennung und Hash trennen: "{kid}:{hash}" -> [kid, hash]; ohne Kennung ['', hash].
+     * Separate id and hash: "{kid}:{hash}" -> [kid, hash]; without an id ['', hash].
      */
     public static function splitPasswordHash(string $stored): array
     {
@@ -425,21 +425,21 @@ class Crypt {
     }
 
     /**
-     * Passwort gegen einen gespeicherten Hash prüfen - aktuelles Format oder das
-     * frühere (Salt + HMAC, 64 Zeichen).
+     * Check a password against a stored hash - current format or the
+     * earlier one (salt + HMAC, 64 characters).
      *
-     * Läuft auch bei leerem oder unbrauchbarem $stored durch dieselbe Rechnung (gegen
-     * einen Ersatz-Hash mit den aktuellen Parametern), damit die Antwortzeit nichts
-     * darüber verrät, ob es zum Namen ein Konto gibt (Admin::loginByName(),
+     * Also runs the same calculation with an empty or unusable $stored (against
+     * a substitute hash with the current parameters), so that the response time reveals
+     * nothing about whether an account exists for the name (Admin::loginByName(),
      * RecordUser::cmsLogin()).
      *
-     * @param string $password  Klartext
-     * @param string $stored    Wert aus admin.password bzw. data_pwd.data
+     * @param string $password  plain text
+     * @param string $stored    value from admin.password or data_pwd.data
      */
     public function passwordVerify(string $password, string $stored): bool
     {
-        // Schlüssel aus der Kennung; ohne Kennung der aktuelle (siehe Klassenkommentar).
-        // Eine unbekannte Kennung (Schlüssel entfernt) rechnet gegen den Ersatz-Hash.
+        // Key from the id; without an id the current one (see class comment).
+        // An unknown id (key removed) calculates against the substitute hash.
         [$kid, $stored] = self::splitPasswordHash($stored);
         $key = $kid === '' ? $this->key : $this->keyById($kid);
         if ($key !== null && str_starts_with($stored, '$')) {
@@ -448,30 +448,30 @@ class Crypt {
         }
         $raw = $key !== null ? $this->decodeCompact($stored) : '';
         if ($password !== '' && strlen($raw) === self::PASSWORD_SALT_LENGTH + 32) {
-            // früheres Format
+            // earlier format
             $salt = substr($raw, 0, self::PASSWORD_SALT_LENGTH);
             return hash_equals(substr($raw, self::PASSWORD_SALT_LENGTH), hash_hmac('sha256', $salt . $password, $key, true));
         }
-        // Kein brauchbarer Hash: trotzdem einmal rechnen
+        // No usable hash: calculate once anyway
         password_verify($this->passwordPepper($password, $this->key), $this->dummyHash());
         return false;
     }
 
     /**
-     * Soll ein gespeicherter Hash neu berechnet werden? Früheres Format, anderes
-     * Verfahren oder andere Parameter als in security.password_hash. Der Aufrufer
-     * hat das Passwort gerade geprüft und schreibt passwordHash() zurück.
+     * Should a stored hash be recalculated? Earlier format, a different
+     * method or different parameters than in security.password_hash. The caller
+     * has just checked the password and writes passwordHash() back.
      */
     public function passwordNeedsRehash(string $stored): bool
     {
         if ($stored === '') return false;
         [$kid, $hash] = self::splitPasswordHash($stored);
-        // ohne Kennung oder mit dem Pfeffer eines abgelösten Schlüssels
+        // without an id or with the pepper of a retired key
         if ($kid !== $this->keyId) return true;
         return $this->hashOutdated($hash);
     }
 
-    /** Früheres Format, anderes Verfahren oder andere Parameter (ohne Kennung) */
+    /** Earlier format, different method or different parameters (without an id) */
     private function hashOutdated(string $hash): bool
     {
         if (!str_starts_with($hash, '$')) return true;
@@ -480,8 +480,8 @@ class Crypt {
     }
 
     /**
-     * Verfahren und Parameter aus security.password_hash: algo 'auto' (Argon2id, wenn
-     * PHP es kann, sonst bcrypt), 'argon2id' oder 'bcrypt'.
+     * Method and parameters from security.password_hash: algo 'auto' (Argon2id if
+     * PHP supports it, otherwise bcrypt), 'argon2id' or 'bcrypt'.
      *
      * @return array{0: string, 1: array}
      */
@@ -501,8 +501,8 @@ class Crypt {
     }
 
     /**
-     * Pepper: HMAC mit dem Schlüssel, base64 - 44 Zeichen, unabhängig von Länge und
-     * Inhalt der Eingabe.
+     * Pepper: HMAC with the key, base64 - 44 characters, independent of the length and
+     * content of the input.
      */
     private function passwordPepper(string $password, string $key): string
     {
@@ -510,10 +510,10 @@ class Crypt {
     }
 
     /**
-     * Ersatz-Hash für passwordVerify() ohne gespeicherten Wert - mit den aktuellen
-     * Parametern, damit die Rechenzeit einer echten Prüfung entspricht. Einmal
-     * erzeugt und in var/cache abgelegt: ihn je Request neu zu berechnen, kostete
-     * gerade im Fall "Name unbekannt" die doppelte Zeit.
+     * Substitute hash for passwordVerify() without a stored value - with the current
+     * parameters, so that the computation time matches a real check. Created once
+     * and stored in var/cache: recalculating it per request would cost
+     * double the time, especially in the case "name unknown".
      */
     private function dummyHash(): string
     {
@@ -530,10 +530,10 @@ class Crypt {
     }
 
     /**
-     * Erzeuge einen kryptografisch sicheren, zufälligen Schlüssel
+     * Create a cryptographically secure, random key
      *
-     * @param int $length Länge der rohen Entropie in Bytes (Standard: 32 Bytes = 256 Bit)
-     * @return string Kompakter String (43 Zeichen bei 32 Bytes)
+     * @param int $length length of the raw entropy in bytes (default: 32 bytes = 256 bit)
+     * @return string compact string (43 characters for 32 bytes)
      */
     public function randomKey(int $length = 32): string 
     {
@@ -543,18 +543,18 @@ class Crypt {
     }
 
     /**
-     * Wandelt rohe Bytes in einen kompakten, URL-sicheren Base64-String um
-     * Nutzt a-z, A-Z, 0-9, - und _
+     * Converts raw bytes into a compact, URL-safe base64 string
+     * Uses a-z, A-Z, 0-9, - and _
      */
     private function encodeCompact(string $rawData): string 
     {
-        // Standard-Base64 erzeugt + und / (kann in URLs oder Systemen stören)
-        // Wir tauschen diese gegen - und _ aus und entfernen das = Füllzeichen
+        // Standard base64 produces + and / (can disturb URLs or systems)
+        // We swap these for - and _ and remove the = padding character
         return rtrim(strtr(base64_encode($rawData), '+/', '-_'), '=');
     }
 
     /**
-     * Umkehrung von encodeCompact(); '' bei ungültiger Eingabe
+     * Inverse of encodeCompact(); '' for invalid input
      */
     private function decodeCompact(string $data): string
     {

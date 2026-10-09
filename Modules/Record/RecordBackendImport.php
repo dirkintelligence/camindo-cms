@@ -1,59 +1,59 @@
 <?php
 /**
- * Import von Datensätzen - die Masken (Erweiterung für RecordBackend).
+ * Import of records - the masks (extension for RecordBackend).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
  *     record_import.php  -> import()
  *
- * Erreichbar über das Menü (more_vert) rechts in der Datensatzliste (global: in der
- * Ordnerliste); der Aufruf öffnet einen eigenen Layer über der Liste
- * (cApp.layers.add). Die Arbeit macht RecordImport - im Request oder als
- * Hintergrundprozess.
+ * Reachable via the menu (more_vert) on the right of the record list (global: in the
+ * folder list); the call opens its own layer above the list
+ * (cApp.layers.add). The work is done by RecordImport - in the request or as a
+ * background process.
  *
- * NAVIGATION: Zur Liste geht es aus dem Layer nur mit cApp.layers.close() zurück;
- * innerhalb der Schritte wird der Layer mit cApp.layers.replace() ersetzt. Abbrechen
- * mit Importverzeichnis läuft über function=cancel (replace), das aufräumt und dann
- * schließt.
+ * NAVIGATION: back to the list from the layer only works with cApp.layers.close();
+ * within the steps the layer is replaced with cApp.layers.replace(). Cancelling
+ * with an import directory runs via function=cancel (replace), which cleans up and then
+ * closes.
  *
- * VIER SCHRITTE, EIN SCRIPT (function)
+ * FOUR STEPS, ONE SCRIPT (function)
  * --------------------
- *     ''        Importdatei wählen: Upload (Zip, XML, CSV, DOCX) oder eine Datei aus
- *               var/upload (wie beim Upload-Feld der Eingabemaske)
- *     prepare   Datei nach var/tmp/import-{token}/ bringen, Zip entpacken
- *               (RecordImport::prepare()). Genau eine Importdatei: weiter zur
- *               Analyse; mehrere: Auswahl
- *     analyze   die gewählte Datei prüfen und die Einstellungen zeigen -
- *               je nach Typ (XML: Herkunft, Bereiche; CSV: Spaltenzuordnung, die
- *               CSV-Einstellungen lesen die Datei neu ein; DOCX: Übersetzungs-
- *               optionen), dazu Modus, Einfügeposition neuer Datensätze (Bereich
- *               mit Baum bzw. Handsortierung: Vater und Vorgänger, vorgewählt der
- *               letzte vorhandene - siehe RecordImport, EINFÜGEPOSITION), Umfang
- *               (nur CSV: Zeilen), Schreiben erzwingen, Hintergrund (ab
- *               admin.import_background_threshold Datensätzen fest), erweiterte
- *               Analyse
- *     preview   Analyse (RecordImport::analyze()): was der Import tun würde, ohne
- *               zu schreiben - je Bereich Struktur, Felder, Templates, Datensätze
- *               (gezählt; erweitert: einzeln). Eigener Layer über den Einstellungen
- *     run       importieren; Protokoll auf der Seite bzw. als interne Nachricht.
- *               Das Importverzeichnis ist danach weg - die Einstellungsmaske
- *               darunter wird sofort entfernt (cApp.layers.removeReferer()),
- *               "Schließen" schließt nur noch das Protokoll
- *     cancel    Importverzeichnis entfernen, Layer schließen
+ *     ''        choose the import file: upload (zip, XML, CSV, DOCX) or a file from
+ *               var/upload (as with the upload field of the input mask)
+ *     prepare   bring the file to var/tmp/import-{token}/, unpack zip
+ *               (RecordImport::prepare()). Exactly one import file: continue to
+ *               analysis; several: selection
+ *     analyze   check the chosen file and show the settings -
+ *               depending on the type (XML: origin, areas; CSV: column mapping, the
+ *               CSV settings read the file anew; DOCX: translation
+ *               options), plus mode, insertion position of new records (area
+ *               with tree or manual sorting: parent and predecessor, the
+ *               last existing one preselected - see RecordImport, INSERTION POSITION), scope
+ *               (CSV only: rows), force writing, background (from
+ *               admin.import_background_threshold records fixed), extended
+ *               analysis
+ *     preview   analysis (RecordImport::analyze()): what the import would do, without
+ *               writing - per area structure, fields, templates, records
+ *               (counted; extended: individually). Own layer above the settings
+ *     run       import; protocol on the page or as an internal message.
+ *               The import directory is gone afterwards - the settings mask
+ *               beneath it is removed immediately (cApp.layers.removeReferer()),
+ *               "Close" only closes the protocol
+ *     cancel    remove the import directory, close the layer
  *
- * Das Importverzeichnis (Hiddenfeld 'dir') reist durch die Schritte und wird nach
- * dem Import bzw. beim Abbrechen entfernt.
+ * The import directory (hidden field 'dir') travels through the steps and is removed
+ * after the import or on cancelling.
  *
- * GLOBAL (global=1, ohne area_id - Startseite des Moduls)
+ * GLOBAL (global=1, without area_id - start page of the module)
  * --------------------
- * XML: Zielebene (Ordner für neue Bereiche) und je Bereich der Datei Modus und
- * Update-Kriterium für Struktur, Datensätze und Templates (RecordImport, Job
- * 'areas'). CSV und DOCX brauchen einen Zielbereich: die Maske bietet die
- * Inhaltsbereiche an und springt mit der bereitgestellten Datei in die Maske des
- * gewählten Bereichs.
+ * XML: target level (folder for new areas) and for each area of the file mode and
+ * update criterion for structure, records and templates (RecordImport, job
+ * 'areas'). CSV and DOCX need a target area: the mask offers the
+ * content areas and jumps with the provided file into the mask of the
+ * selected area.
  *
- * @see Camindo\Core\Modules\Record\RecordImport         die Arbeit
- * @see Camindo\Core\Modules\Record\RecordBackendExport  das Gegenstück
+ * @see Camindo\Core\Modules\Record\RecordImport         the work
+ * @see Camindo\Core\Modules\Record\RecordBackendExport  the counterpart
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -72,7 +72,7 @@ use Camindo\Core\Modules\Area\Area;
 class RecordBackendImport extends RecordBackend {
 
     private string $listQuery = '';
-    /** Aufruf von der Startseite (ohne Bereich) */
+    /** Call from the start page (without area) */
     private bool $isGlobal = false;
     private string $dir = '';
     private string $file = '';
@@ -106,9 +106,9 @@ class RecordBackendImport extends RecordBackend {
      *          background, extended, source_area_id, data[csv][...], mapping[],
      *          data[docx][...], data[parent_id], data[previous_id]
      *
-     * Schritte: Datei wählen -> Einstellungen (analyze) -> Analyse (preview, eigener
-     * Layer über den Einstellungen: was der Import tun würde, ohne zu schreiben) ->
-     * Import (run, ersetzt den Analyse-Layer; "Schließen" schließt beide).
+     * Steps: choose file -> settings (analyze) -> analysis (preview, own
+     * layer above the settings: what the import would do, without writing) ->
+     * import (run, replaces the analysis layer; "Close" closes both).
      */
     public function import(): void
     {
@@ -126,9 +126,9 @@ class RecordBackendImport extends RecordBackend {
             return;
         }
 
-        // Zusatzrechte: ohne ein erlaubtes Format kein Import; global (XML) nur
-        // Superuser; im Bereich muss die Gruppe anlegen dürfen (Änderungen an
-        // einzelnen Datensätzen prüft Record::save() je Datensatz)
+        // additional rights: without an allowed format no import; global (XML) only
+        // superuser; in the area the group must be allowed to create (changes to
+        // individual records are checked by Record::save() per record)
         if (empty($this->allowedTypes('import'))
             || ($this->isGlobal && !$this->backend->isSuperuser())
             || (!$this->isGlobal && !$this->backend->access()->areaCreate($this->areaId))
@@ -154,9 +154,9 @@ class RecordBackendImport extends RecordBackend {
 
         switch ($function) {
             case 'cancel':
-                // Löscht das Importverzeichnis - nur per POST (17-csrf.md §2.7).
-                // Geschlossen wird der Layer in jedem Fall; ein übrig gebliebenes
-                // Verzeichnis räumt spätestens das Modul Tools ab.
+                // Deletes the import directory - POST only (developer docs, chapter 14 (Security: web)).
+                // The layer is closed in any case; a leftover
+                // directory is removed by the module Tools at the latest.
                 if ($this->dir !== '' && $this->backend->requirePost()) {
                     $this->import->removeDir($this->dir);
                 }
@@ -181,12 +181,12 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 0: Datei wählen
+    // Step 0: choose file
 
     private function _importUploadForm(): void
     {
-        // wie das Upload-Feld der Eingabemaske: Datei-Input plus Knopf für eine Datei
-        // aus var/upload (Record/server_file.php -> ajax_import_file.php)
+        // like the upload field of the input mask: file input plus button for a file
+        // from var/upload (Record/server_file.php -> ajax_import_file.php)
         $preview = '';
         $serverFile = trim((string)($_REQUEST['serverfile'] ?? ''));
         if ($serverFile !== '') $preview = $this->_serverFilePreviewHtml($serverFile);
@@ -202,11 +202,11 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Ajax (backend/ajax_import_file.php): gewählte Server-Datei als Vorschau mit
-     * Hiddenfeld 'serverfile' in die Import-Maske setzen (cApp.ui.selectUploadFile()
-     * mit data-select-url).
+     * Ajax (backend/ajax_import_file.php): put the chosen server file as a preview with
+     * hidden field 'serverfile' into the import mask (cApp.ui.selectUploadFile()
+     * with data-select-url).
      *
-     * Request: filename (relativ zu paths.upload_dir)
+     * Request: filename (relative to paths.upload_dir)
      */
     public function serverFilePreview(): void
     {
@@ -230,7 +230,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 1a: bereitstellen
+    // Step 1a: provide
 
     private function _importPrepare(): void
     {
@@ -273,7 +273,7 @@ class RecordBackendImport extends RecordBackend {
             $this->_importAnalyze();
             return;
         }
-        // mehrere Importdateien: wählen
+        // several import files: choose
         $radios = '';
         foreach ($files as $index => $file) {
             $radios .= $this->backend->template('record.import_file_radio', [
@@ -294,7 +294,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Query-String des Abbrechen-Knopfs: entfernt das Importverzeichnis.
+     * Query string of the cancel button: removes the import directory.
      */
     private function _cancelQuery(): string
     {
@@ -302,7 +302,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 1b: analysieren, Einstellungen
+    // Step 1b: analyze, settings
 
     private function _importAnalyze(): void
     {
@@ -328,9 +328,9 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * CSV-Ziele auf schreibbare Sprachen der Benutzergruppe beschränken: Ziele
-     * "{feld}.{code}" nach ihrem Sprachkürzel, mehrsprachige Felder ohne Kürzel
-     * ("{feld}") nach der Hauptsprache der Instanz (12-group-rights.md).
+     * Restrict CSV targets to the writable languages of the user group: targets
+     * "{field}.{code}" by their language code, multilingual fields without a code
+     * ("{field}") by the primary language of the instance (developer docs, chapter 11 (Permissions)).
      *
      * @param array $targets  RecordImport::csvTargets()
      * @return array          Teilmenge in derselben Reihenfolge
@@ -362,8 +362,8 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Darf die Gruppe Dateien dieses Formats importieren (allowedTypes())? Sonst
-     * Meldung, Importverzeichnis entfernen und zurück zur Dateiauswahl.
+     * May the group import files of this format (allowedTypes())? Otherwise
+     * message, remove the import directory and back to the file selection.
      */
     private function _typeAllowed(): bool
     {
@@ -377,8 +377,8 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Global mit CSV/DOCX: einen Zielbereich wählen - weiter geht es in der Maske
-     * dieses Bereichs mit der bereits bereitgestellten Datei.
+     * Global with CSV/DOCX: choose a target area - continue in the mask
+     * of this area with the file that has already been provided.
      */
     private function _chooseAreaForm(): void
     {
@@ -404,7 +404,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Kopf der Einstellungsmaske: Datei, Meldungen.
+     * Head of the settings mask: file, messages.
      */
     private function _analysisHead(array $errors, array $warnings): string
     {
@@ -424,7 +424,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Die Hiddenfelder der Einstellungsmaske.
+     * The hidden fields of the settings mask.
      */
     private function _analysisHidden(): void
     {
@@ -437,7 +437,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Modus-Auswahl (RecordImport::MODES) als Radio-Gruppe.
+     * Mode selection (RecordImport::MODES) as a radio group.
      */
     private function _modeHtml(string $default): string
     {
@@ -451,7 +451,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Modus-Auswahl der globalen Maske als Select (mit 'ignore').
+     * Mode selection of the global mask as a select (with 'ignore').
      */
     private function _modeSelect(string $name, string $selected, ?array $allowed = null): string
     {
@@ -474,8 +474,8 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Global, XML: Zielebene, je Bereich der Datei Modus und Kriterium für
-     * Struktur, Datensätze und Templates.
+     * Global, XML: target level, for each area of the file the mode and criterion for
+     * structure, records and templates.
      */
     private function _analyzeXmlGlobal(string $path): void
     {
@@ -494,7 +494,7 @@ class RecordBackendImport extends RecordBackend {
             . $this->_infoRow($this->cms->snippet('record.label_import_templates'), (int)$analysis['templates'])
             . $this->_infoRow($this->cms->snippet('record.label_import_files'), $this->cms->snippet(!empty($header['files']) ? 'yes' : 'no'));
 
-        // Mandant neuer Bereiche: aus der Datei (nur aus derselben Datenbank) oder gewählt
+        // instance of new areas: from the file (only from the same database) or chosen
         $sameDb = $this->import->isSameDatabase($path);
         $instanceId = isset($_REQUEST['instance_id']) ? (int)$_REQUEST['instance_id'] : 0;
         $instances = [];
@@ -513,8 +513,8 @@ class RecordBackendImport extends RecordBackend {
             '{label}' => $this->cms->snippet('record.label_import_instance'),
             '{tooltip}' => $this->cms->snippet('record.note_import_instance')
         ]);
-        // Zielebene: Ordner, je mit seiner Instanz (data-instance) - die Maske zeigt
-        // nur die Ordner der gewählten Instanz (record_import_form_global)
+        // target level: folders, each with its instance (data-instance) - the mask shows
+        // only the folders of the chosen instance (record_import_form_global)
         $folderId = (int)($_REQUEST['folder_id'] ?? 0);
         $folderOptions = $this->backend->template('record.import_folder_option', [
             '{value}' => 0,
@@ -531,7 +531,7 @@ class RecordBackendImport extends RecordBackend {
         foreach ($this->db->fetchAll() as $folder) {
             $id = (int)$folder['area_id'];
             $folderInstanceId = (int)$folder['instance_id'];
-            // ein Ordner eines anderen Mandanten ist nicht wählbar
+            // a folder of another instance cannot be chosen
             $selected = $id === $folderId && ($instanceId < 1 || $folderInstanceId === $instanceId);
             $folderOptions .= $this->backend->template('record.import_folder_option', [
                 '{value}' => $id,
@@ -542,7 +542,7 @@ class RecordBackendImport extends RecordBackend {
         }
         $defaultMode = $sameDb ? 'update_or_insert' : 'insert';
 
-        // Je Bereich der Datei: Einrückung nach der Hierarchie der Datei
+        // per area of the file: indentation by the hierarchy of the file
         $requested = (array)($_REQUEST['areas'] ?? []);
         $icons = ['folder' => 'folder', 'record' => 'draft', 'template' => 'extension', 'profile' => 'face', 'ugc' => 'chat_bubble'];
         $depths = [];
@@ -553,8 +553,8 @@ class RecordBackendImport extends RecordBackend {
             $depths[$fileAreaId] = ($parentId > 0 && isset($depths[$parentId])) ? $depths[$parentId] + 1 : 0;
             $isContent = in_array((string)$area['type'], RecordImport::CONTENT_TYPES, true);
             $isTemplate = (string)$area['type'] === 'template';
-            // Ziel: gleicher Name; die gleiche Id zählt nur bei einer Datei aus dieser
-            // Datenbank (fremde Ids sind Zufall)
+            // target: same name; the same id counts only for a file from this
+            // database (foreign ids are coincidence)
             $targetByName = (int)$area['target_by_name'];
             $targetById = $sameDb ? (int)$area['target_by_id'] : 0;
             $isNew = $targetByName < 1 && $targetById < 1;
@@ -564,8 +564,8 @@ class RecordBackendImport extends RecordBackend {
                     ? $this->backend->teaser('area', $targetById, linked: false) . ' ' . $this->_muted('(area_id)', small: true)
                     : $this->_muted($this->cms->snippet('record.note_import_area_new')));
             $prefix = "areas[{$fileAreaId}]";
-            // Neuer Bereich: nur INSERT oder IGNORE, kein Update-Kriterium; Ids als
-            // Kriterium nur aus derselben Datenbank
+            // new area: only INSERT or IGNORE, no update criterion; ids as
+            // criterion only from the same database
             $modes = $isNew ? ['insert', 'ignore'] : null;
             $byArea = $isNew ? [] : ($sameDb ? ['name' => 'name', 'area_id' => 'area_id'] : ['name' => 'name']);
             $byRecord = $isNew ? [] : ($sameDb ? ['slug' => 'slug / record_id', 'record_id' => 'record_id'] : ['slug' => 'slug / record_id']);
@@ -598,9 +598,9 @@ class RecordBackendImport extends RecordBackend {
                 '{templates}' => $templatesHtml !== '' ? $templatesHtml : $this->_muted('-'),
             ]);
         }
-        // Konverter der Thumbnail-Felder: Treffer und Entscheidung je Konverter der Datei
+        // converters of the thumbnail fields: match and decision per converter of the file
         $convertersHtml = $this->_convertersHtml((array)$analysis['converters'], $sameDb);
-        // Pulldown je Spalte: ganze Spalte auf einen Modus setzen
+        // drop-down per column: set the whole column to one mode
         $columnItems = '';
         foreach (RecordImport::GLOBAL_MODES as $option) {
             $columnItems .= $this->backend->template('record.import_column_mode_item', [
@@ -627,19 +627,19 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Global, XML: die Konverter der Thumbnail-Felder der Datei (RecordImport,
-     * KONVERTER). Je Konverter der Treffer in der Zieldatenbank und die Wahl:
-     * vorhandenen verwenden (Treffer bzw. ein beliebiger vorhandener Konverter),
-     * neu anlegen (nur mit installiertem Prozessor), ignorieren. Vorgewählt ist,
-     * was der Import automatisch täte. Ohne Konverter in der Datei: nichts.
+     * Global, XML: the converters of the thumbnail fields of the file (RecordImport,
+     * CONVERTERS). For each converter the match in the target database and the choice:
+     * use an existing one (match, or any existing converter), create a new one (only with an
+     * installed processor), ignore. What the import would do automatically is preselected.
+     * Without converters in the file: nothing.
      *
-     * @param array $converters  RecordImport::converterMatches() (aus analyzeXml())
+     * @param array $converters  RecordImport::converterMatches() (from analyzeXml())
      */
     private function _convertersHtml(array $converters, bool $sameDb): string
     {
         if (empty($converters)) return '';
         $requested = (array)($_REQUEST['converters'] ?? []);
-        // vorhandene Konverter als Alternativen
+        // existing converters as alternatives
         $this->db->query("SELECT `converter_id`, `processor`, `label` FROM `converter` ORDER BY `type` ASC, `processor` ASC, `label` ASC");
         $existing = [];
         foreach ($this->db->fetchAll() as $row) {
@@ -692,12 +692,12 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Optionen aller Importer: Schreiben erzwingen, Hintergrund, erweiterte Analyse -
-     * beim CSV-Import dazu Anzahl und Überspringen (in Zeilen der Datei).
+     * Options of all importers: force writing, background, extended analysis -
+     * for the CSV import additionally count and skip (in rows of the file).
      *
-     * @param int  $total        Datensätze bzw. Zeilen in der Datei
-     * @param int  $skipDefault  Vorgabe für Überspringen (CSV mit Kopfzeile: 1)
-     * @param bool $rows         CSV: Anzahl/Überspringen anbieten, Zahlen sind Zeilen
+     * @param int  $total        records or rows in the file
+     * @param int  $skipDefault  default for skip (CSV with header row: 1)
+     * @param bool $rows         CSV: offer count/skip, numbers are rows
      */
     private function _optionsHtml(int $total, int $skipDefault, bool $rows = false): string
     {
@@ -728,15 +728,15 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Einfügeposition neuer Datensätze (RecordImport, EINFÜGEPOSITION) - nur in
-     * Bereichen mit Baum (Eingabefeld `parent_id`) oder Handsortierung (`position`):
-     * Vaterdatensatz (Baum) und Vorgänger, wie in der Eingabemaske. Vorgewählt ist
-     * der letzte vorhandene Datensatz der Ebene - die neuen kommen ans Ende. Ein
-     * Wechsel des Vaters lädt die Vorgängerliste per Ajax neu (record_previous.php).
+     * Insertion position of new records (RecordImport, INSERTION POSITION) - only in
+     * areas with a tree (input field `parent_id`) or manual sorting (`position`):
+     * parent record (tree) and predecessor, as in the input mask. Preselected is
+     * the last existing record of the level - the new ones come at the end. A
+     * change of the parent reloads the predecessor list via Ajax (record_previous.php).
      *
-     * Die Felder selbst setzt _placementFields() nach formInit() ein.
+     * The fields themselves are inserted by _placementFields() after formInit().
      *
-     * @return string  Fieldset mit den Platzhaltern der Felder, '' ohne Baum/Sortierung
+     * @return string  fieldset with the placeholders of the fields, '' without tree/sorting
      */
     private function _placementHtml(): string
     {
@@ -750,7 +750,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Die Felder der Einfügeposition: data[parent_id] (Baum) und data[previous_id].
+     * The fields of the insertion position: data[parent_id] (tree) and data[previous_id].
      */
     private function _placementFields(): void
     {
@@ -758,7 +758,7 @@ class RecordBackendImport extends RecordBackend {
         $tree = isset($schemaVirtual['parent_id']);
         if (!$tree && !isset($schemaVirtual['position'])) return;
         $this->data = (array)($_REQUEST['data'] ?? []);
-        $this->data['origin_id'] = 0; // keine Arbeitskopie (_parentOptions / _previousOptions)
+        $this->data['origin_id'] = 0; // not a working copy (_parentOptions / _previousOptions)
         $parentId = $tree ? (int)($this->data['parent_id'] ?? 0) : 0;
         if ($tree) {
             $this->backend->formField($this->record, [
@@ -790,7 +790,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * XML: Herkunft, Warnhinweise, Bereiche, Modus.
+     * XML: origin, warnings, areas, mode.
      */
     private function _analyzeXml(string $path): void
     {
@@ -808,11 +808,11 @@ class RecordBackendImport extends RecordBackend {
             . $this->_infoRow($this->cms->snippet('record.label_import_records'), htmlspecialchars($this->cms->snippet('record.x_records', ['count' => (int)$analysis['count']])))
             . $this->_infoRow($this->cms->snippet('record.label_import_files'), $this->cms->snippet(!empty($header['files']) ? 'yes' : 'no'));
 
-        // Quellbereich: welche Datensätze der Datei kommen HIERHER?
+        // source area: which records of the file come HERE?
         // --------------------
-        // Aus derselben Datenbank: sind Datensätze dieses Bereichs enthalten, nur die;
-        // sonst (und bei einer fremden Datei) einen Bereich der Datei wählen - bei
-        // einer fremden Datei mit gleichem Namen vorgewählt, ein einzelner steht fest.
+        // From the same database: if records of this area are contained, only those;
+        // otherwise (and for a foreign file) choose an area of the file - for
+        // a foreign file with the same name preselected, a single one is fixed.
         $areas = $analysis['areas'];
         $sameDb = $this->import->isSameDatabase($path);
         $requestedSource = (int)($_REQUEST['source_area_id'] ?? 0);
@@ -872,7 +872,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * CSV: Einstellungen (lesen die Datei neu ein), Spaltenzuordnung, Modus.
+     * CSV: settings (read the file anew), column mapping, mode.
      */
     private function _analyzeCsv(string $path): void
     {
@@ -888,7 +888,7 @@ class RecordBackendImport extends RecordBackend {
         $requestedMapping = isset($_REQUEST['mapping']) ? (array)$_REQUEST['mapping'] : null;
         $stored = isset($_REQUEST['data']['csv']) ? !empty($csv['stored']) : $analysis['stored'];
 
-        // Zuordnungstabelle: Spalte | Beispiel (2. Zeile) | Zielfeld
+        // mapping table: column | example (2nd row) | target field
         $example = (array)($analysis['example'] ?? []);
         $tableRows = '';
         foreach ($analysis['columns'] as $index => $column) {
@@ -928,7 +928,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * DOCX: Prüfung, Zielsprache, Optionen.
+     * DOCX: check, target language, options.
      */
     private function _analyzeDocx(string $path): void
     {
@@ -973,11 +973,11 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 2: ausführen
+    // Step 2: run
 
     /**
-     * Auftrag (RecordImport::run() / analyze()) aus den Einstellungen des Requests.
-     * Bei Fehlern wird die passende Maske erneut gezeigt und null geliefert.
+     * Job (RecordImport::run() / analyze()) from the settings of the request.
+     * On errors the matching mask is shown again and null is returned.
      */
     private function _jobFromRequest(): ?array
     {
@@ -996,12 +996,12 @@ class RecordBackendImport extends RecordBackend {
             'dir' => $this->dir,
             'file' => $this->file,
             'mode' => (string)($_REQUEST['mode'] ?? 'insert'),
-            // Anzahl / Überspringen (Zeilen) gibt es nur beim CSV-Import
+            // count / skip (rows) only exist for the CSV import
             'skip' => $this->type === 'csv' ? max(0, (int)($_REQUEST['skip'] ?? 0)) : 0,
             'limit' => $this->type === 'csv' ? max(0, (int)($_REQUEST['count'] ?? 0)) : 0,
             'force' => !empty($_REQUEST['force']),
         ];
-        // Einfügeposition neuer Datensätze (RecordImport, EINFÜGEPOSITION)
+        // insertion position of new records (RecordImport, INSERTION POSITION)
         $placement = (array)($_REQUEST['data'] ?? []);
         if (array_key_exists('parent_id', $placement)) $job['parent_id'] = (int)$placement['parent_id'];
         if (array_key_exists('previous_id', $placement)) $job['previous_id'] = (int)$placement['previous_id'];
@@ -1022,7 +1022,7 @@ class RecordBackendImport extends RecordBackend {
                 $clean['templates_by'] = (string)($set['templates_by'] ?? 'name') === 'template_id' ? 'template_id' : 'name';
                 $job['areas'][(int)$fileAreaId] = $clean;
             }
-            // Konverter der Thumbnail-Felder: 'new', 'ignore' oder converter_id (RecordImport, KONVERTER)
+            // converters of the thumbnail fields: 'new', 'ignore' or converter_id (RecordImport, CONVERTERS)
             $job['converters'] = [];
             foreach ((array)($_REQUEST['converters'] ?? []) as $fileConverterId => $choice) {
                 $choice = (string)$choice;
@@ -1056,7 +1056,7 @@ class RecordBackendImport extends RecordBackend {
                 'stored' => !empty($csv['stored']),
             ];
             $job['mapping'] = array_map('strval', (array)($_REQUEST['mapping'] ?? []));
-            // Ziele nur schreibbarer Sprachen (ein manipuliertes Formular zählt nicht)
+            // only targets of writable languages (a manipulated form does not count)
             $writable = $this->_writableTargets($this->import->csvTargets($this->areaId));
             $job['mapping'] = array_map(fn($key) => isset($writable[$key]) ? $key : '', $job['mapping']);
             if (empty(array_filter($job['mapping'], fn($v) => $v !== ''))) {
@@ -1087,12 +1087,12 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 2: Analyse
+    // Step 2: analysis
 
     /**
-     * Was der Import tun würde (RecordImport::analyze()), in einem eigenen Layer
-     * über den Einstellungen. Die Einstellungen reisen als Hiddenfelder weiter zum
-     * Import; "Zurück" schließt den Layer, die Einstellungen bleiben.
+     * What the import would do (RecordImport::analyze()), in its own layer
+     * above the settings. The settings travel on to the import as hidden fields;
+     * "Back" closes the layer, the settings remain.
      */
     private function _importPreview(): void
     {
@@ -1108,7 +1108,7 @@ class RecordBackendImport extends RecordBackend {
         }
         echo $this->_analysisHtml($analysis, $extended);
 
-        // Weiter zum Import: alle Einstellungen erneut senden
+        // continue to the import: send all settings again
         echo '<form action="Record/record_import.php" method="post">';
         $this->backend->formInit('record.form_import_analysis_run');
         $this->_hiddenAll($_POST, '', ['function', 'extended']);
@@ -1118,8 +1118,8 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * Die Analyse als HTML: Hinweis, je Bereich Struktur, Felder, Templates,
-     * Datensätze - erweitert mit der Liste der Datensätze.
+     * The analysis as HTML: note, per area structure, fields, templates,
+     * records - extended with the list of the records.
      */
     private function _analysisHtml(array $analysis, bool $extended): string
     {
@@ -1133,7 +1133,7 @@ class RecordBackendImport extends RecordBackend {
             $isTemplate = (string)$area['type'] === 'template';
             $lines = '';
 
-            // Struktur
+            // structure
             $structure = $action === 'ignore'
                 ? ((int)$area['target_id'] > 0 ? $this->cms->snippet('record.analysis_area_unchanged') : $this->cms->snippet('record.analysis_area_missing'))
                 : $this->cms->snippet('record.analysis_area_' . $action);
@@ -1142,7 +1142,7 @@ class RecordBackendImport extends RecordBackend {
                 '{class}' => $classes[$action] ?? 'secondary',
                 '{text}' => htmlspecialchars($structure),
             ]);
-            // Felder
+            // fields
             if ($isContent && $action !== 'ignore' && $action !== 'skipped') {
                 $parts = [];
                 foreach (['added' => 'success', 'updated' => 'info', 'removed' => 'danger', 'failed' => 'danger', 'skipped' => 'secondary'] as $key => $class) {
@@ -1158,7 +1158,7 @@ class RecordBackendImport extends RecordBackend {
                     '{text}' => $parts ? implode($this->backend->template('br'), $parts) : htmlspecialchars($this->cms->snippet('record.analysis_none')),
                 ]);
             }
-            // Templates
+            // templates
             if ($isTemplate) {
                 $lines .= $this->backend->template('record.import_analysis_line', [
                     '{label}' => $this->cms->snippet('record.label_import_templates'),
@@ -1166,7 +1166,7 @@ class RecordBackendImport extends RecordBackend {
                     '{text}' => $this->_analysisCounts((array)$area['templates']),
                 ]);
             }
-            // Datensätze
+            // records
             if ($isContent) {
                 $lines .= $this->backend->template('record.import_analysis_line', [
                     '{label}' => $this->cms->snippet('record.label_import_records'),
@@ -1174,7 +1174,7 @@ class RecordBackendImport extends RecordBackend {
                     '{text}' => $this->_analysisCounts((array)$area['records']),
                 ]);
             }
-            // Erweitert: jeder Datensatz
+            // extended: every record
             $items = '';
             if ($extended && !empty($area['items'])) {
                 $rows = '';
@@ -1207,7 +1207,7 @@ class RecordBackendImport extends RecordBackend {
                 '{items}' => $items,
             ]);
         }
-        // Konverter der Thumbnail-Felder (global): was mit jedem geschieht
+        // converters of the thumbnail fields (global): what happens with each
         if (!empty($analysis['converters'])) {
             $lines = '';
             $classes['create'] = 'success';
@@ -1241,7 +1241,7 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * "n hinzugefügt, n geändert, …" mit Badges - nur die Zähler > 0.
+     * "n added, n changed, …" with badges - only the counters > 0.
      */
     private function _analysisCounts(array $counts): string
     {
@@ -1255,26 +1255,26 @@ class RecordBackendImport extends RecordBackend {
         return $parts ? implode(', ', $parts) : htmlspecialchars($this->cms->snippet('record.analysis_none'));
     }
 
-    /** Badge (Vorlage badge) */
+    /** Badge (template badge) */
     private function _badge(string $color, string $text): string
     {
         return $this->backend->template('badge', ['{color}' => $color, '{text}' => $this->backend->escape($text)]);
     }
 
-    /** Grauer Hinweis (Vorlagen text-muted / small-muted) */
+    /** Gray note (templates text-muted / small-muted) */
     private function _muted(string $text, bool $small = false): string
     {
         return $this->backend->template($small ? 'small-muted' : 'text-muted', ['{text}' => $this->backend->escape($text)]);
     }
 
-    /** Einrückung nach der Tiefe im Bereichsbaum (geschützte Leerzeichen, Text für options()) */
+    /** Indentation by the depth in the area tree (non-breaking spaces, text for options()) */
     private function _indent(int $depth): string
     {
         return str_repeat("\u{00A0} ", $depth * 2);
     }
 
     /**
-     * Alle Request-Werte als Hiddenfelder (verschachtelte Arrays als name[key]).
+     * All request values as hidden fields (nested arrays as name[key]).
      */
     private function _hiddenAll(array $data, string $prefix, array $except = []): void
     {
@@ -1287,14 +1287,14 @@ class RecordBackendImport extends RecordBackend {
     }
 
     // ====================
-    // Schritt 3: importieren
+    // Step 3: import
 
     /**
-     * Im Request oder im Hintergrund. Das Protokoll ersetzt den Analyse-Layer; die
-     * Einstellungsmaske darunter wird sofort entfernt - ihre Importdatei gibt es
-     * nicht mehr. Die Liste darunter ist als veraltet markiert (cApp.layers.invalidate())
-     * und lädt neu, sobald sie wieder oben liegt - über "Schließen", die
-     * Breadcrumb-Navi oder "Zurück" des Browsers.
+     * In the request or in the background. The protocol replaces the analysis layer; the
+     * settings mask beneath it is removed immediately - its import file no
+     * longer exists. The list beneath it is marked as outdated (cApp.layers.invalidate())
+     * and reloads as soon as it is on top again - via "Close", the
+     * breadcrumb navigation or the browser's "Back".
      */
     private function _importRun(): void
     {
@@ -1313,14 +1313,14 @@ class RecordBackendImport extends RecordBackend {
                 return;
             }
             $this->backend->balloon('success', $this->cms->snippet('record.message_import_started'));
-            // Einstellungsmaske entfernen, Liste als veraltet markieren, Analyse schließen
+            // remove the settings mask, mark the list as outdated, close the analysis
             $this->backend->script("cApp.layers.removeReferer(); cApp.layers.invalidate(); cApp.layers.close();");
             return;
         }
 
         $result = $this->import->run($job);
         $this->import->removeDir($this->dir);
-        // die Liste darunter hat sich geändert: beim Wiederanzeigen neu laden
+        // the list beneath has changed: reload when it is shown again
         $this->backend->script('cApp.layers.removeReferer(); cApp.layers.invalidate();');
         echo $this->import->protocolHtml($job, $result);
         echo $this->backend->template('record.form_import_result_close');

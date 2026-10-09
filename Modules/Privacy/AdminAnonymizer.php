@@ -1,29 +1,29 @@
 <?php
 /**
- * Gelöschten Benutzer anonymisieren (Modul Privacy, Reiter "Gelöschte Benutzer",
- * Zusatzrecht admin_anonymize). Instanzname im Code: $adminAnonymizer.
+ * Anonymize a deleted user (module Privacy, tab "Deleted users",
+ * additional right admin_anonymize). Instance name in the code: $adminAnonymizer.
  *
- * Ein gelöschter Benutzer bleibt als Zeile in `admin` stehen (Soft-Delete) - Datensätze,
- * Templates und das Audit-Log verweisen auf seine admin_id. Anonymisieren entfernt
- * alles, was zur Person führt, und lässt die Id stehen:
+ * A deleted user remains as a row in `admin` (soft delete) - records,
+ * templates and the audit log refer to their admin_id. Anonymizing removes
+ * everything that leads to the person and keeps the id:
  *
- *     admin            name -> admin_{id} (reserviert, Admin::hookOnSave()), Vor-/
- *                      Anzeige-/Sortiername, E-Mail, Telefon, Mobil, Einstellungen,
- *                      Passwort und zweiter Faktor geleert; neu signiert
- *     Anmeldedaten     Sessions, Geräte, Passkeys, Wiederherstellungscodes, Verlauf
- *                      (Admin::removeCredentials() - beim Löschen schon geschehen,
- *                      hier für früher gelöschte Konten)
- *     audit_log        Bezeichnung der Einträge zu seinem Konto; ältere Fehlversuche
- *                      unter Objekt 0 mit seinem Namen (Handelnder und Bezeichnung)
- *     var/audit        der Verlauf seines Kontos (Bezeichnung, Vorher/Nachher der
- *                      persönlichen Felder) und die älteren Fehlversuche unter Objekt 0
- *                      (AuditStore::rewriteObject(), Kontrollpunkt 'privacy')
+ *     admin            name -> admin_{id} (reserved, Admin::hookOnSave()), first/
+ *                      display/sort name, email, phone, mobile, settings,
+ *                      password and second factor emptied; re-signed
+ *     credentials      sessions, devices, passkeys, recovery codes, history
+ *                      (Admin::removeCredentials() - already done on deletion,
+ *                      here for accounts deleted earlier)
+ *     audit_log        label of the entries for its account; older failed logins
+ *                      under object 0 with its name (actor and label)
+ *     var/audit        the history of its account (label, before/after of the
+ *                      personal fields) and the older failed logins under object 0
+ *                      (AuditStore::rewriteObject(), checkpoint 'privacy')
  *
- * Wo er gehandelt hat und wo andere Objekte auf ihn verweisen (owner_id …), steht er im
- * Audit-Log nur als Id (AuditLog, Klassenkommentar) - die Anzeige zeigt nach dem
- * Umbenennen von selbst admin_{id}. Deshalb bleibt der Vorgang schnell, unabhängig
- * davon, wie viel der Benutzer bearbeitet hat. Der Vorgang steht im
- * Audit-Log des Kontos (Aktion 'privacy') und im Log 'security'.
+ * Where it acted and where other objects refer to it (owner_id …), the audit log
+ * holds only the id (AuditLog, class comment) - the display shows admin_{id} by itself
+ * after the renaming. The process therefore stays fast, regardless of
+ * how much the user has edited. The process is recorded in the
+ * audit log of the account (action 'privacy') and in the log 'security'.
  *
  * @see Camindo\Core\Modules\Privacy\PrivacyBackend::adminAnonymize()
  */
@@ -40,7 +40,7 @@ use Camindo\Core\Modules\Admin\Admin;
 
 class AdminAnonymizer {
 
-    /** Persönliche Felder des Kontos - im eigenen Verlauf werden ihre Werte geleert */
+    /** Personal fields of the account - their values are emptied in its own history */
     public const PERSONAL_FIELDS = ['name', 'primename', 'displayname', 'sortname', 'email', 'phone', 'mobile'];
 
     public function __construct(
@@ -55,27 +55,27 @@ class AdminAnonymizer {
     )
     {}
 
-    /** Name eines anonymisierten Kontos */
+    /** Name of an anonymized account */
     public static function anonymousName(int $adminId): string
     {
         return 'admin_' . $adminId;
     }
 
-    /** Ist das Konto (Zeile aus `admin`) schon anonymisiert? */
+    /** Is the account (row from `admin`) already anonymized? */
     public static function isAnonymized(array $row): bool
     {
         return (string)($row['name'] ?? '') === self::anonymousName((int)($row['admin_id'] ?? 0));
     }
 
     /**
-     * Gelöschten Benutzer anonymisieren - schnell: höchstens zwei Audit-Dateien, der
-     * Rest sind wenige UPDATEs. Erst das Audit-Log, zuletzt die Zeile: bricht der
-     * Vorgang ab, steht der alte Name noch da, und ein zweiter Lauf findet alles
-     * wieder (jeder Schritt ist wiederholbar). Den Abschluss kennzeichnet der Name
+     * Anonymize a deleted user - fast: at most two audit files, the
+     * rest are a few UPDATEs. First the audit log, the row last: if the
+     * process aborts, the old name is still there, and a second run finds everything
+     * again (every step is repeatable). The completion is marked by the name
      * admin_{id} (isAnonymized()).
      *
-     * @return array|null  ['entries' => geänderte Einträge in den Dateien,
-     *                      'objects' => umgeschriebene Dateien]; null: Fehler in Cms::errors
+     * @return array|null  ['entries' => changed entries in the files,
+     *                      'objects' => rewritten files]; null: error in Cms::errors
      */
     public function anonymize(int $adminId): ?array
     {
@@ -88,11 +88,11 @@ class AdminAnonymizer {
         $oldName = (string)$row['name'];
         $newName = self::anonymousName($adminId);
 
-        // Dateien: nur der Verlauf des Kontos selbst (Bezeichnung, persönliche Felder,
-        // seine Fehlversuche) und - für ältere Einträge - die Fehlversuche unter Objekt 0
-        // mit seinem Namen. Wo er gehandelt hat, steht er nur als Id (AuditLog,
-        // Klassenkommentar): diese Dateien bleiben unberührt, die Anzeige zeigt nach dem
-        // Umbenennen von selbst admin_{id}.
+        // Files: only the history of the account itself (label, personal fields,
+        // its failed logins) and - for older entries - the failed logins under object 0
+        // with its name. Where it acted, it is only stored as an id (AuditLog,
+        // class comment): these files stay untouched, the display shows admin_{id} by itself
+        // after renaming.
         $objects = [['admin', $adminId]];
         $this->db->query("SELECT 1 FROM `audit_log` WHERE `object_type` = 'admin' AND `object_id` = 0"
             . " AND `action` = 'login_failed' AND (`actor_name` = ? OR `label` = ?) LIMIT 1", 'ss', [$oldName, $oldName]);
@@ -108,10 +108,10 @@ class AdminAnonymizer {
             if ($changed > 0) $files++;
         }
 
-        // Metazeilen, Konto, Audit-Eintrag - eine Transaktion
+        // Meta rows, account, audit entry - one transaction
         $this->db->beginTransaction();
         try {
-            // (Einträge aus der Zeit vor "nur Ids" - siehe audit strip-names)
+            // (entries from the time before "only ids" - see audit strip-names)
             $this->db->query("UPDATE `audit_log` SET `actor_name` = '' WHERE `actor_type` = 'admin' AND `admin_id` = ? AND `actor_name` <> ''",
                 'i', [$adminId]);
             $this->db->query("UPDATE `audit_log` SET `actor_name` = ? WHERE `action` = 'login_failed' AND `actor_name` = ?",
@@ -121,8 +121,8 @@ class AdminAnonymizer {
             $this->db->query("UPDATE `audit_log` SET `label` = ? WHERE `object_type` = 'admin' AND `object_id` = ?",
                 'si', [$newName, $adminId]);
 
-            // Konto: ohne Admin::save() - der Name admin_* ist dort für genau diesen
-            // Zweck gesperrt. Ein leeres Passwort lässt keine Anmeldung zu.
+            // Account: without Admin::save() - the name admin_* is locked there for exactly
+            // this purpose. An empty password allows no login.
             $this->db->query(
                 "UPDATE `admin` SET `name` = ?, `primename` = '', `displayname` = '', `sortname` = '',"
                 . " `email` = '', `phone` = '', `mobile` = '', `settings` = '', `ft` = ?,"
@@ -148,19 +148,19 @@ class AdminAnonymizer {
     }
 
     /**
-     * Einen Eintrag einer Audit-Datei anonymisieren: Handelnder bzw. eingegebener
-     * Name eines Fehlversuchs; im Verlauf des Kontos selbst ($own) dazu Bezeichnung
-     * und die Werte der persönlichen Felder.
+     * Anonymize an entry of an audit file: actor resp. entered
+     * name of a failed login; in the history of the account itself ($own) additionally the label
+     * and the values of the personal fields.
      */
     private function anonymizeEntry(array $body, int $adminId, string $oldName, string $newName, bool $own): array
     {
         $actor = (array)($body['actor'] ?? []);
         if ((string)($actor['type'] ?? '') === 'admin' && (int)($actor['admin_id'] ?? 0) === $adminId) {
-            // Handelnde nur als Id (Einträge aus der Zeit davor tragen noch den Namen)
+            // Actor only as id (entries from the time before still carry the name)
             unset($body['actor']['name']);
         }
         elseif ((string)($body['action'] ?? '') === 'login_failed') {
-            // Fehlversuch: der eingegebene Name steht als Handelnder und als Bezeichnung
+            // Failed login: the entered name stands as actor and as label
             if ((string)($actor['name'] ?? '') === $oldName) $body['actor']['name'] = $newName;
             if ((string)($body['label'] ?? '') === $oldName) $body['label'] = $newName;
         }

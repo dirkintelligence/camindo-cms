@@ -1,88 +1,88 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `scheduler` - zeitgesteuerte Aufgaben.
+ * Dataset child class for the table `scheduler` - time-controlled tasks.
  *
- * Eine Aufgabe ist eine Zeile: was zu tun ist (`type`), wann (sechs Spalten in
- * Cron-Syntax) und wie lange es höchstens dauern darf (`max_minutes`). Ausgeführt
- * wird sie nicht hier, sondern von SchedulerRunner (Core/cron/scheduler.php), den
- * TriggerCron (Core/cron/cron.php, der einzige Cronjob) jede Minute anstößt.
+ * A task is one row: what is to be done (`type`), when (six columns in
+ * cron syntax) and how long it may take at most (`max_minutes`). It is executed
+ * not here but by SchedulerRunner (Core/cron/scheduler.php), which the
+ * TriggerCron (Core/cron/cron.php, the only cron job) starts every minute.
  *
- * AUFGABENTYPEN
+ * TASK TYPES
  * --------------------
- *     url        eine Adresse abrufen (curl), wahlweise mit HTTP-Auth; die Antwort
- *                wird unter var/custom/html abgelegt oder verworfen
- *     php        ein PHP-Script aus var/custom/php auf der Kommandozeile ausführen;
- *                Ausgabe wie oben
+ *     url        fetch an address (curl), optionally with HTTP auth; the response
+ *                is stored under var/custom/html or discarded
+ *     php        run a PHP script from var/custom/php on the command line;
+ *                output as above
  *
- * Ausgaben (var/custom/html) und Scripte (var/custom/php) liegen getrennt: was eine
- * Aufgabe abholt oder erzeugt, kann nie als Script ausgeführt werden. Ausgabedateien
- * mit PHP-Endung sind zusätzlich gesperrt, Pfade dürfen nicht aufsteigen, und beide
- * Seiten prüfen den aufgelösten Pfad (realpath) - ein Symlink führt nicht hinaus.
- *     dbbackup   mysqldump nach var/dbbackup, backup-1.sql ist immer das jüngste;
- *                höchstens einmal am Tag, ältere über die Anzahl hinaus fallen weg
- *     logcleanup alte Protokolle löschen: Logdateien unter var/log (Sicherheits-
- *                protokolle mit eigener Frist) und die protokollierten Anmelde-
- *                versuche samt IP-Adresse in der Datenbank
- *     cachecleanup den Ausgabe-Cache von CMS:INCLUDE aufräumen (IncludeCache::cleanup()):
- *                abgelaufene Dateien und solche zu gelöschten oder geänderten
- *                Templates, liegen gebliebene Sperr- und temporäre Dateien
- *     template   ein Frontend-Template mit der Verwendung "zeitgesteuert"
- *                (template.type = 'scheduler') in einer Sprache seiner Instanz
- *                ausführen (Page::renderScheduled()) - mit dem Zeitfenster seit dem
- *                letzten erfolgreichen Lauf (details.window_end); Ausgabe wie oben
- *     fulltext   den Volltext der gewählten Bereiche (details.area_ids, leer = alle;
- *                details.only_stale: nur die als veraltet markierten)
- *                neu aufbauen (RecordService::rebuildFulltext()) - nach einer
- *                Änderung der Quellfelder eines Volltextfelds
+ * Outputs (var/custom/html) and scripts (var/custom/php) are kept separate: what a
+ * task fetches or creates can never be run as a script. Output files
+ * with a PHP extension are additionally blocked, paths may not ascend, and both
+ * sides check the resolved path (realpath) - a symlink does not lead out.
+ *     dbbackup   mysqldump to var/dbbackup, backup-1.sql is always the newest;
+ *                at most once a day, older ones beyond the count are removed
+ *     logcleanup delete old logs: log files under var/log (security logs
+ *                with their own retention) and the logged login attempts
+ *                including IP address in the database
+ *     cachecleanup clean up the output cache of CMS:INCLUDE (IncludeCache::cleanup()):
+ *                expired files and those of deleted or changed
+ *                templates, leftover lock and temporary files
+ *     template   run a frontend template with the usage "scheduled"
+ *                (template.type = 'scheduler') in a language of its instance
+ *                (Page::renderScheduled()) - with the time window since the
+ *                last successful run (details.window_end); output as above
+ *     fulltext   rebuild the full text of the selected areas (details.area_ids, empty = all;
+ *                details.only_stale: only those marked as stale)
+ *                (RecordService::rebuildFulltext()) - after a change of the source
+ *                fields of a full-text field
  *
- * Wartungsaufgaben (MAINTENANCE_TYPES, ohne Einstellungen) - früher fest im
- * Cronjob verdrahtet, jetzt hier terminierbar:
- *     trash       Papierkorb leeren (ToolDatabase::purgeTrash(), admin.trash_retention_days)
- *     tmpcleanup  var/tmp und abgelaufene Exportdateien aufräumen
+ * Maintenance tasks (MAINTENANCE_TYPES, without settings) - previously hard-wired in the
+ * cron job, now schedulable here:
+ *     trash       empty the trash (ToolDatabase::purgeTrash(), admin.trash_retention_days)
+ *     tmpcleanup  clean up var/tmp and expired export files
  *                 (admin.tmp_retention_hours, admin.export_retention_hours)
- *     privacy     fällige Aufträge der Lösch-Policies ausführen (PrivacyJobs::runDue())
- *     retention   Aufbewahrungsfristen: IP-Adressen kürzen (IpAnonymizer), abgelaufene
- *                 Audit-Einträge (AuditLog::purge()), interne Nachrichten
- *                 (Message::purgeExpired()), nie bestätigte Registrierungen
+ *     privacy     run due orders of the deletion policies (PrivacyJobs::runDue())
+ *     retention   retention periods: shorten IP addresses (IpAnonymizer), expired
+ *                 audit entries (AuditLog::purge()), internal messages
+ *                 (Message::purgeExpired()), never confirmed registrations
  *                 (RecordUser::purgeUnconfirmed())
- *     auditverify Audit-Log prüfen (AuditLog::verifyAll(), Ergebnis für SystemHealth)
- *     updatecheck nach Updates und Sicherheitslücken suchen (UpdateCheck::run())
+ *     auditverify check the audit log (AuditLog::verifyAll(), result for SystemHealth)
+ *     updatecheck search for updates and security vulnerabilities (UpdateCheck::run())
  *
- * Ebenfalls ohne Einstellungen, aber keine Wartung (fehlt sie, warnt die Startseite
- * nicht):
- *     messagedigest  Zusammenfassung der internen Nachrichten per E-Mail an die
- *                 Benutzer, die sie eingeschaltet haben (MessageDigest)
+ * Also without settings, but not maintenance (if one is missing, the start page does
+ * not warn):
+ *     messagedigest  summary of the internal messages by e-mail to the
+ *                 users who switched it on (MessageDigest)
  *
- * VORGABE-AUFGABEN
+ * DEFAULT TASKS
  * --------------------
- * DEFAULT_TASKS legt der Installer an (createDefaults(), nachts zwischen 2 und 4 Uhr
- * verteilt, tmpcleanup stündlich, messagedigest morgens um 7); `camindo.php scheduler defaults` ergänzt fehlende Typen in einer
- * bestehenden Installation. Gibt es einen Typ schon, bleibt er unangetastet.
+ * DEFAULT_TASKS are created by the installer (createDefaults(), spread at night between 2 and 4 o'clock,
+ * tmpcleanup hourly, messagedigest in the morning at 7); `camindo.php scheduler defaults` adds missing types to an
+ * existing installation. If a type already exists, it stays untouched.
  *
- * Die typabhängigen Einstellungen liegen im JSON `details` (Punktschreibweise im
- * Schema, wie bei Field und Converter). Das Passwort der HTTP-Auth wird
- * verschlüsselt abgelegt (hookOnSave()/hookOnLoaded()); ein leeres Passwortfeld
- * beim Speichern bedeutet "bisheriges behalten".
+ * The type-dependent settings are in the JSON `details` (dot notation in the
+ * schema, as with Field and Converter). The password of the HTTP auth is
+ * stored encrypted (hookOnSave()/hookOnLoaded()); an empty password field
+ * when saving means "keep the previous one".
  *
- * UNTER WELCHEM ADMIN
+ * UNDER WHICH ADMIN
  * --------------------
- * `admin_id`: jede Aufgabe läuft unter einem Admin (SchedulerRunner) - neue unter
- * dem Admin 'scheduler' (DEFAULT_ADMIN, vom Installer angelegt). Er muss aktiv sein
- * und seine Gruppe die Oberfläche Kommandozeile benutzen dürfen (adminError()).
- * Wird er gelöscht, bleibt die Aufgabe ohne Admin stehen und läuft nicht mehr.
+ * `admin_id`: every task runs under an admin (SchedulerRunner) - new ones under
+ * the admin 'scheduler' (DEFAULT_ADMIN, created by the installer). It must be active
+ * and its group must be allowed to use the command-line interface (adminError()).
+ * If it is deleted, the task remains without an admin and no longer runs.
  *
- * ZEITSTEUERUNG
+ * SCHEDULING
  * --------------------
- * Je Spalte ein Cron-Ausdruck: `*`, ein Wert, ein Bereich `1-5`, ein Schritt `* / 10`
- * oder `1-5/2`, und davon Listen mit Komma (`1,15,30`). Aus den sechs Ausdrücken
- * rechnet nextRun() den nächsten Lauf - in der Zeitzone system.timezone, in der
- * auch der Cronjob läuft - und legt ihn in `next_run` ab; der Runner vergleicht nur
- * noch mit der Uhr. Ein Ausdruck, der nie zutrifft (31. Februar), lässt `next_run`
- * leer, die Aufgabe läuft dann nicht.
+ * One cron expression per column: `*`, a value, a range `1-5`, a step `* / 10`
+ * or `1-5/2`, and lists of these separated by commas (`1,15,30`). From the six expressions
+ * nextRun() computes the next run - in the time zone system.timezone, in which
+ * the cron job runs too - and stores it in `next_run`; the runner only compares
+ * with the clock. An expression that never matches (31 February) leaves `next_run`
+ * empty, and the task then does not run.
  *
- * @see Camindo\Core\Modules\Scheduler\SchedulerRunner   Ausführung
- * @see Camindo\Core\Modules\Scheduler\SchedulerBackend  Backend-Oberfläche
- * @see Camindo\Core\cron\TriggerCron::tick1m()          der Anstoß je Minute
+ * @see Camindo\Core\Modules\Scheduler\SchedulerRunner   execution
+ * @see Camindo\Core\Modules\Scheduler\SchedulerBackend  backend UI
+ * @see Camindo\Core\cron\TriggerCron::tick1m()          triggers it every minute
  * @see Camindo\Core\Dataset
  */
 namespace Camindo\Core\Modules\Scheduler;
@@ -96,16 +96,16 @@ class Scheduler extends Dataset {
     public const TYPES = ['url', 'php', 'dbbackup', 'logcleanup', 'cachecleanup', 'template', 'fulltext',
         'trash', 'tmpcleanup', 'privacy', 'retention', 'auditverify', 'updatecheck', 'messagedigest'];
 
-    /** Wartungsaufgaben ohne eigene Einstellungen (siehe Klassenkommentar) */
+    /** Maintenance tasks without own settings (see class comment) */
     public const MAINTENANCE_TYPES = ['trash', 'tmpcleanup', 'privacy', 'retention', 'auditverify', 'updatecheck'];
 
     /**
-     * Aufgaben einer neuen Installation (createDefaults()): Typ => Minute, Stunde und
-     * Details - täglich, nachts zwischen 2 und 4 Uhr verteilt. Die Sicherung läuft
-     * zuerst, also vor dem Leeren des Papierkorbs. Ausnahme tmpcleanup: stündlich -
-     * Exportdateien (auch Datenauskünfte) sollen nicht bis zu einem Tag über
-     * admin.export_retention_hours hinaus liegen bleiben - und messagedigest
-     * morgens, zu Beginn des Arbeitstags.
+     * Tasks of a new installation (createDefaults()): type => minute, hour and
+     * details - daily, spread at night between 2 and 4 o'clock. The backup runs
+     * first, i.e. before emptying the trash. Exception tmpcleanup: hourly -
+     * export files (also data disclosures) should not remain up to a day beyond
+     * admin.export_retention_hours - and messagedigest
+     * in the morning, at the start of the working day.
      */
     public const DEFAULT_TASKS = [
         'dbbackup'     => ['minute' => 0,  'hour' => 2, 'details' => ['backups' => 7]],
@@ -121,25 +121,25 @@ class Scheduler extends Dataset {
         'messagedigest' => ['minute' => 0, 'hour' => 7],
     ];
 
-    /** Typen, deren Ausgabe als Bericht abonniert werden kann (details.report) */
+    /** Types whose output can be subscribed to as a report (details.report) */
     public const REPORT_TYPES = ['url', 'php'];
 
-    /** Name des Admins, unter dem neue Aufgaben laufen (Installer::createSchedulerAdmin()) */
+    /** Name of the admin under which new tasks run (Installer::createSchedulerAdmin()) */
     public const DEFAULT_ADMIN = 'scheduler';
 
-    /** Logdateien mit eigener, meist längerer Frist (details.security_days) */
+    /** Log files with their own, usually longer retention (details.security_days) */
     public const SECURITY_LOGS = ['security', 'csp'];
 
-    // Ergebnis des letzten Laufs (`last_status`)
+    // Result of the last run (`last_status`)
     public const STATUS_OK      = 0;
     public const STATUS_RUNNING = 1;
     public const STATUS_ERROR   = 2;
 
-    /** Unterverzeichnisse von var/custom: Ausgaben der Aufgaben bzw. PHP-Scripte (Typ 'php') */
+    /** Subdirectories of var/custom: outputs of the tasks resp. PHP scripts (type 'php') */
     public const OUTPUT_DIR = 'html';
     public const SCRIPT_DIR = 'php';
 
-    // Die sechs Cron-Spalten mit ihrem Wertebereich
+    // The six cron columns with their value range
     public const CRON_FIELDS = [
         'cron_minute'  => [0, 59],
         'cron_hour'    => [0, 23],
@@ -149,10 +149,10 @@ class Scheduler extends Dataset {
         'cron_weekday' => [0, 6],
     ];
 
-    // Wie weit nextRun() höchstens vorausrechnet (Tage)
+    // How far nextRun() calculates ahead at most (days)
     private const NEXT_RUN_HORIZON = 366 * 11;
 
-    // Audit-Log: der Laufzeitstand gehört dem Runner, nicht der Maske
+    // Audit log: the runtime state belongs to the runner, not to the mask
     protected array $auditIgnore = ['next_run', 'last_run', 'last_status', 'last_message'];
 
     protected function hookDefinition(): void
@@ -169,7 +169,7 @@ class Scheduler extends Dataset {
                 'type'  => 'chars',
                 'label' => '#scheduler.field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'type' => [
@@ -178,9 +178,9 @@ class Scheduler extends Dataset {
                 'max'   => 16,
                 'flags' => ['not_empty'],
             ],
-            // Admin, unter dem die Aufgabe läuft (SchedulerRunner, ApiSession::runAs()):
-            // seine Rechte gelten, im Audit-Log erscheint er mit der Herkunft
-            // 'scheduler'; seine Gruppe braucht die Oberfläche Kommandozeile
+            // Admin under which the task runs (SchedulerRunner, ApiSession::runAs()):
+            // its rights apply, in the audit log it appears with the origin
+            // 'scheduler'; its group needs the command-line interface
             'admin_id' => [
                 'type'  => 'id',
                 'display_type' => 'select',
@@ -315,7 +315,7 @@ class Scheduler extends Dataset {
                 'label' => '#scheduler.field_only_stale',
                 'tooltip' => '#scheduler.tooltip_field_only_stale',
             ],
-            // url + php: wählbarer Bericht (Abo in den persönlichen Einstellungen)
+            // url + php: selectable report (subscription in personal settings)
             'details.report' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
@@ -388,7 +388,7 @@ class Scheduler extends Dataset {
                 'max'   => 3650,
                 'default' => 30,
             ],
-            // Laufzeitstand - schreibt nur SchedulerRunner (direkt per SQL)
+            // Runtime state - only SchedulerRunner writes it (directly via SQL)
             'next_run' => [
                 'type'  => 'datetime',
                 'label' => '#scheduler.field_next_run',
@@ -409,14 +409,14 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Felder, die die Eingabemaske speichert - ohne den Laufzeitstand (next_run,
-     * last_*), den ausschließlich der Runner schreibt.
+     * Fields the input mask saves - without the runtime state (next_run,
+     * last_*), which only the runner writes.
      *
      * @return string[]
      */
     /**
-     * Kann die Aufgabe unter diesem Admin laufen? null = ja, sonst die Snippet-Id der
-     * Meldung (Speichern, SchedulerRunner).
+     * May the task run under this admin? null = yes, otherwise the snippet ID of the
+     * message (saving, SchedulerRunner).
      */
     public function adminError(int $adminId): ?string
     {
@@ -430,8 +430,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Admins, unter denen Aufgaben laufen können (Auswahl der Maske):
-     * admin_id => Name - aktiv und mit der Oberfläche Kommandozeile.
+     * Admins under which tasks can run (choice of the mask):
+     * admin_id => name - active and with the command-line interface.
      */
     public function adminOptions(): array
     {
@@ -451,11 +451,11 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Vorgabe-Aufgaben anlegen (DEFAULT_TASKS) - nur Typen, für die es noch keine
-     * Aufgabe gibt (auch keine ausgeschaltete). Beschriftung ist das Snippet des Typs,
-     * Admin der des Zeitplaners (hookOnCreate()); mit Protokoll.
+     * Create default tasks (DEFAULT_TASKS) - only types for which there is no
+     * task yet (not even a switched-off one). The label is the snippet of the type,
+     * admin that of the scheduler (hookOnCreate()); with log.
      *
-     * @return array  Typ => scheduler_id der angelegten Aufgaben; Fehler in Cms::errors
+     * @return array  type => scheduler_id of the created tasks; errors in Cms::errors
      */
     public function createDefaults(): array
     {
@@ -497,8 +497,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Audit-Log: das HTTP-Auth-Passwort liegt verschlüsselt (bei jedem Speichern ein
-     * neuer Geheimtext) - verglichen wird der Klartext (siehe Dataset::auditSecret()).
+     * Audit log: the HTTP auth password is stored encrypted (a new ciphertext on each
+     * saving) - the plaintext is compared (see Dataset::auditSecret()).
      */
     protected function auditSecret(string $key, string $value): string
     {
@@ -512,7 +512,7 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Nach dem Laden: Passwort entschlüsseln (für den Runner - die Maske zeigt es nie).
+     * After loading: decrypt the password (for the runner - the mask never shows it).
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -523,14 +523,14 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: Typ prüfen und festhalten, Cron-Ausdrücke prüfen,
-     * typabhängige Pflichtangaben, Passwort verschlüsseln.
+     * Before saving: check and record the type, check cron expressions,
+     * type-dependent required details, encrypt the password.
      *
-     * Der Typ steht nach dem Anlegen fest - die Details passen nur zu ihm.
+     * The type is fixed after creation - the details only fit it.
      */
     /**
-     * Neue Aufgabe: läuft unter dem Admin des Zeitplaners (DEFAULT_ADMIN), sofern es
-     * ihn gibt.
+     * New task: runs under the admin of the scheduler (DEFAULT_ADMIN), if
+     * it exists.
      */
     protected function hookOnCreate(array &$data): void
     {
@@ -551,7 +551,7 @@ class Scheduler extends Dataset {
         $isNew = empty($data['scheduler_id']);
         $type = (string)($data['type'] ?? '');
 
-        // Typ
+        // Type
         if (!$isNew) {
             $type = (string)($previousData['type'] ?? $type);
             $data['type'] = $type;
@@ -561,14 +561,14 @@ class Scheduler extends Dataset {
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
 
-        // Admin: vorhanden, aktiv, Gruppe mit der Oberfläche Kommandozeile
-        // (ein Feld vom Typ 'id' läuft nicht in die not_empty-Prüfung)
+        // Admin: present, active, group with the command-line interface
+        // (a field of type 'id' does not run through the not_empty check)
         if (in_array('admin_id', $fields, true) && ($error = $this->adminError((int)($data['admin_id'] ?? 0))) !== null) {
             $this->createFieldError($error, 'admin_id', $schema['admin_id']['label']);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
 
-        // Cron-Ausdrücke
+        // Cron expressions
         foreach (self::CRON_FIELDS as $name => [$min, $max]) {
             if (!in_array($name, $fields, true)) continue;
             $expr = str_replace(' ', '', (string)($data[$name] ?? ''));
@@ -579,14 +579,14 @@ class Scheduler extends Dataset {
             }
         }
 
-        // Details je Typ
+        // Details per type
         if (in_array('details', $fields, true)) {
             $details = (array)($data['details'] ?? []);
             $previous = (array)($previousData['details'] ?? []);
             $output = (string)($details['output'] ?? 'save');
             $details['output'] = ($output === 'discard') ? 'discard' : 'save';
-            // Angaben anderer Typen neutral halten - die Subfelder werden alle
-            // geprüft, auch die, die zu diesem Typ nicht gehören
+            // Keep details of other types neutral - the subfields are all
+            // checked, including those that do not belong to this type
             $details['backups'] = max(1, (int)($details['backups'] ?? 7));
             foreach (['log_days' => 90, 'security_days' => 365, 'attempt_days' => 30] as $key => $default) {
                 $details[$key] = max(1, (int)($details[$key] ?? $default));
@@ -598,7 +598,7 @@ class Scheduler extends Dataset {
                 $details['password'] = '';
             }
             if ($type !== 'php') $details['script'] = '';
-            // Wählbarer Bericht (url, php): mindestens eine Benutzergruppe
+            // Selectable report (url, php): at least one user group
             if (in_array($type, self::REPORT_TYPES, true) && !empty($details['report'])) {
                 $details['report'] = 1;
                 $details['report_group_ids'] = array_values(array_intersect(
@@ -618,14 +618,14 @@ class Scheduler extends Dataset {
                 $details['template_id'] = 0;
                 $details['language_id'] = 0;
             }
-            // Bereiche (fulltext): nur bekannte, leer = alle
+            // Areas (fulltext): only known ones, empty = all
             $details['area_ids'] = ($type === 'fulltext')
                 ? array_values(array_intersect($this->system->sanitizeIds((array)($details['area_ids'] ?? []), true), array_keys($this->fulltextAreas())))
                 : [];
-            // nur Bereiche, deren Volltext als veraltet markiert ist (FulltextState)
+            // only areas whose full text is marked as stale (FulltextState)
             $details['only_stale'] = ($type === 'fulltext' && !empty($details['only_stale'])) ? 1 : 0;
-            // Ende des letzten Zeitfensters: schreibt nur der Runner, die Maske
-            // kennt es nicht - beim Speichern behalten
+            // End of the last time window: only the runner writes it, the mask
+            // does not know it - keep it when saving
             $details['window_end'] = (string)($previous['window_end'] ?? '');
 
             if ($type === 'url') {
@@ -638,8 +638,8 @@ class Scheduler extends Dataset {
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
                 $details['auth'] = (int)!empty($details['auth']);
-                // Passwort: leer = bisheriges behalten (das liegt entschlüsselt in
-                // previousData, siehe hookOnLoaded()); gespeichert wird verschlüsselt
+                // Password: empty = keep previous (which is stored decrypted in
+                // previousData, see hookOnLoaded()); saved encrypted
                 $password = (string)($details['password'] ?? '');
                 if ($password === '') $password = (string)($previous['password'] ?? '');
                 $details['password'] = ($password !== '') ? $this->crypt->encrypt($password) : '';
@@ -656,7 +656,7 @@ class Scheduler extends Dataset {
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
                 $details['template_id'] = $templateId;
-                // Sprache der Instanz des Templates; 0 = deren Hauptsprache
+                // Language of the template's instance; 0 = its main language
                 $languageId = (int)($details['language_id'] ?? 0);
                 $details['language_id'] = isset($templates[$templateId]['languages'][$languageId]) ? $languageId : 0;
             }
@@ -683,10 +683,10 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: nächsten Lauf berechnen und eintragen.
+     * After saving: calculate the next run and enter it.
      *
-     * Hier und nicht in hookOnSave(), weil `next_run` nicht zu den Feldern der
-     * Maske gehört (editableFields()); ein direktes UPDATE, noch in der Transaktion.
+     * Here and not in hookOnSave(), because `next_run` does not belong to the fields of the
+     * mask (editableFields()); a direct UPDATE, still inside the transaction.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
@@ -700,12 +700,12 @@ class Scheduler extends Dataset {
         );
     }
 
-    // Cron-Syntax
+    // Cron syntax
     // ====================
 
     /**
-     * Ist ein Cron-Ausdruck gültig? Liste (Komma) von `*`, `n`, `a-b`, `* /s`, `a-b/s`,
-     * alle Zahlen im erlaubten Bereich.
+     * Is a cron expression valid? List (comma) of `*`, `n`, `a-b`, `* /s`, `a-b/s`,
+     * all numbers within the allowed range.
      */
     public function cronValid(string $expr, int $min, int $max): bool
     {
@@ -723,7 +723,7 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Trifft ein Cron-Ausdruck auf einen Wert zu?
+     * Does a cron expression match a value?
      */
     public function cronMatches(string $expr, int $value, int $min): bool
     {
@@ -745,15 +745,15 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Nächster Lauf einer Aufgabe nach einem Zeitpunkt - als Unix-Zeit, oder null,
-     * wenn die Ausdrücke im Horizont (rund elf Jahre) nie zutreffen.
+     * Next run of a task after a point in time - as Unix time, or null,
+     * if the expressions never match within the horizon (about eleven years).
      *
-     * Gerechnet wird in der Zeitzone des Systems (system.timezone), in der der
-     * Cronjob läuft: erst der Tag (Jahr, Monat, Tag, Wochentag), darin die Stunde,
-     * darin die Minute - so bleibt die Suche auch bei seltenen Ausdrücken kurz.
+     * Calculated in the time zone of the system (system.timezone), in which the
+     * cron job runs: first the day (year, month, day, weekday), within it the hour,
+     * within it the minute - so the search stays short even for rare expressions.
      *
-     * @param array    $data  Zeile aus `scheduler` (die sechs cron_*-Spalten)
-     * @param int|null $from  Zeitpunkt, nach dem gesucht wird (null = jetzt)
+     * @param array    $data  row from `scheduler` (the six cron_* columns)
+     * @param int|null $from  point in time after which to search (null = now)
      */
     public function nextRun(array $data, ?int $from = null): ?int
     {
@@ -781,7 +781,7 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Zeitzone des Systems (system.timezone) - die des Cronjobs.
+     * Time zone of the system (system.timezone) - that of the cron job.
      */
     public function systemTimezone(): \DateTimeZone
     {
@@ -789,8 +789,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Unix-Zeit als "Y-m-d H:i:s" in der Zeitzone des Systems - das Format der
-     * Spalten next_run / last_run (unabhängig von der Zeitzone des Admins).
+     * Unix time as "Y-m-d H:i:s" in the time zone of the system - the format of the
+     * columns next_run / last_run (independent of the admin's time zone).
      */
     public function systemTime(?int $timestamp = null): string
     {
@@ -798,16 +798,16 @@ class Scheduler extends Dataset {
             ->setTimezone($this->systemTimezone())->format('Y-m-d H:i:s');
     }
 
-    // Dateien unter var/custom
+    // Files under var/custom
     // ====================
 
     /**
-     * Wählbare Templates für den Aufgabentyp template: Verwendung "zeitgesteuert"
-     * (template.type = 'scheduler'), aus Instanzen, auf die der Admin Zugriff hat
-     * (auf der Kommandozeile ohne Admin: alle).
+     * Selectable templates for the task type template: usage "scheduled"
+     * (template.type = 'scheduler'), from instances to which the admin has access
+     * (on the command line without admin: all).
      *
-     * @return array  template_id => ['label' => "Instanz · bereich.name",
-     *                'instance_id' => int, 'languages' => [language_id => Name]]
+     * @return array  template_id => ['label' => "Instance · area.name",
+     *                'instance_id' => int, 'languages' => [language_id => name]]
      */
     public function schedulerTemplates(): array
     {
@@ -842,10 +842,10 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Bereiche für den Typ 'fulltext': die Inhaltsbereiche (Area::CONTENT_TYPES),
-     * in Baumreihenfolge - für die Detailansicht und die Prüfung beim Speichern.
+     * Areas for the type 'fulltext': the content areas (Area::CONTENT_TYPES),
+     * in tree order - for the detail view and the check when saving.
      *
-     * @return array  area_id => "Instanz · Bezeichnung (name)"
+     * @return array  area_id => "Instance · label (name)"
      */
     public function fulltextAreas(): array
     {
@@ -867,16 +867,16 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Auswahl der Bereiche für den Typ 'fulltext' (Mehrfachauswahl der Maske) -
-     * hierarchisch wie der Bereichsbaum im Modul Record
-     * (RecordBackendFolderList::folderList()): Ordner nur, wenn darunter ein
-     * Inhaltsbereich liegt (Area::loadAreas()), eingerückt nach `depth`; sind
-     * Mandanten eingerichtet, je Instanz ein Hauptordner darüber.
+     * Selection of areas for the type 'fulltext' (multi-select of the mask) -
+     * hierarchical like the area tree in the module Record
+     * (RecordBackendFolderList::folderList()): folder only if a content area lies below it
+     * (Area::loadAreas()), indented by `depth`; if
+     * tenants are set up, one main folder above per instance.
      *
-     * Mandanten und Ordner sind nicht wählbar: ihre Schlüssel tragen den Präfix
-     * 'disabled' (Backend::formField() rendert sie als disabled).
+     * Tenants and folders cannot be selected: their keys carry the prefix
+     * 'disabled' (Backend::formField() renders them as disabled).
      *
-     * @return array  area_id|'disabled_'.area_id|'disabled_i'.instance_id => Label
+     * @return array  area_id|'disabled_'.area_id|'disabled_i'.instance_id => label
      */
     public function fulltextAreaOptions(): array
     {
@@ -906,9 +906,9 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Zeilen von Area::loadAreas() als eingerückte Optionen; Ordner gesperrt.
+     * Rows of Area::loadAreas() as indented options; folders locked.
      *
-     * @param int $depthOffset  1 unter einem Mandanten-Hauptordner
+     * @param int $depthOffset  1 under a tenant main folder
      */
     private function areaTreeOptions(array $rows, int $depthOffset): array
     {
@@ -925,9 +925,9 @@ class Scheduler extends Dataset {
     // ====================
 
     /**
-     * Benutzergruppen für details.report_group_ids.
+     * User groups for details.report_group_ids.
      *
-     * @return array  group_id => Bezeichnung
+     * @return array  group_id => label
      */
     public function groupOptions(): array
     {
@@ -947,11 +947,11 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Berichte, die Admins einer Gruppe abonnieren können (persönliche
-     * Einstellungen): Aufgaben vom Typ url/php mit details.report und der Gruppe in
-     * details.report_group_ids - auch ausgesetzte.
+     * Reports that admins of a group can subscribe to (personal
+     * settings): tasks of type url/php with details.report and the group in
+     * details.report_group_ids - also suspended ones.
      *
-     * @return array  scheduler_id => Bezeichnung
+     * @return array  scheduler_id => label
      */
     public function reportsForGroup(int $groupId): array
     {
@@ -978,8 +978,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Abonnenten eines Berichts: aktive Admins, deren Gruppe (noch) zugelassen ist
-     * und die ihn in ihren Einstellungen (settings.reports) gewählt haben.
+     * Subscribers of a report: active admins whose group is (still) allowed
+     * and who selected it in their settings (settings.reports).
      *
      * @return int[]  admin_ids
      */
@@ -994,8 +994,8 @@ class Scheduler extends Dataset {
             $this->db->query(
                 "SELECT `admin_id` FROM `admin` WHERE `deleted` = 0 AND `status_id` = 0"
                 . " AND `group_id` IN (" . implode(',', $groupIds) . ")"
-                // settings ist '' bei Benutzern, die ihre Einstellungen nie gespeichert
-                // haben - JSON_EXTRACT('') wäre ein Fehler für die ganze Abfrage
+                // settings is '' for users who never saved their settings
+                // - JSON_EXTRACT('') would be an error for the whole query
                 . " AND JSON_CONTAINS(COALESCE(JSON_EXTRACT(IF(JSON_VALID(`settings`), `settings`, '{}'), '$.reports'), JSON_ARRAY()), CAST(? AS JSON))",
                 's', [(string)(int)$task['scheduler_id']]
             );
@@ -1007,8 +1007,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * PHP-Scripte in var/custom/php (auch in Unterverzeichnissen), Pfade relativ
-     * dazu - die Auswahl für den Typ 'php'. Nur Dateien, die scriptFile() annimmt.
+     * PHP scripts in var/custom/php (also in subdirectories), paths relative
+     * to it - the choice for the type 'php'. Only files that scriptFile() accepts.
      *
      * @return string[]
      */
@@ -1028,9 +1028,9 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Absoluter Pfad eines Scripts (relativ zu var/custom/php) - nur, wenn der Pfad
-     * sauber ist (cleanPath()), auf .php endet, die Datei existiert und ihr
-     * aufgelöster Pfad innerhalb von var/custom/php liegt. Sonst null.
+     * Absolute path of a script (relative to var/custom/php) - only if the path
+     * is clean (cleanPath()), ends in .php, the file exists and its
+     * resolved path lies within var/custom/php. Otherwise null.
      */
     public function scriptFile(string $script): ?string
     {
@@ -1043,9 +1043,9 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Ausgabepfad relativ zu var/custom/html bereinigen (cleanPath()); keine Datei
-     * mit einer Endung, die ein Webserver als PHP ausführen könnte. null, wenn
-     * unbrauchbar.
+     * Clean up an output path relative to var/custom/html (cleanPath()); no file
+     * with an extension a web server could execute as PHP. null if
+     * unusable.
      */
     public function outputPath(string $path): ?string
     {
@@ -1056,8 +1056,8 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Relativen Pfad bereinigen: keine Aufstiege (. und ..), nur gewöhnliche
-     * Zeichen, ein Dateiname am Ende. null, wenn unbrauchbar.
+     * Clean up a relative path: no ascents (. and ..), only ordinary
+     * characters, a file name at the end. null if unusable.
      */
     public static function cleanPath(string $path): ?string
     {
@@ -1070,7 +1070,7 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Absoluter Pfad von var/custom/html - Ablage der Ausgaben.
+     * Absolute path of var/custom/html - storage of the outputs.
      */
     public function outputDir(): string
     {
@@ -1078,7 +1078,7 @@ class Scheduler extends Dataset {
     }
 
     /**
-     * Absoluter Pfad von var/custom/php - die ausführbaren Scripte.
+     * Absolute path of var/custom/php - the executable scripts.
      */
     public function scriptDir(): string
     {

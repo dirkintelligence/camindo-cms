@@ -8,10 +8,10 @@ return [
 'description' => '#converter.module_description',
 'icon' => 'manufacturing',
 'listed' => true,
-// API: lesen und anlegen/ändern (ConverterApi)
+// API: read and create/change (ConverterApi)
 'api' => ['ConverterApi'],
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+// Additional module rights:
+// none (superuser-only module)
 'access' => [
 ]
 

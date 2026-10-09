@@ -1,30 +1,30 @@
 <?php
 /**
- * Medien-Prozessor FFmpegAudio
+ * Media processor FFmpegAudio
  *
- * Erzeugt Audio-Versionen mit dem Kommandozeilen-Werkzeug ffmpeg.
+ * Creates audio versions with the command-line tool ffmpeg.
  *
- * Anders als bei Video dauert eine Tonumwandlung meist nur Sekunden. Deshalb
- * läuft dieser Prozessor standardmäßig im VORDERGRUND (siehe Feld
- * details.background_process). Für sehr lange Aufnahmen (Predigten, Konzerte,
- * Hörbücher) kann der Hintergrundbetrieb eingeschaltet werden; er arbeitet dann
- * genau wie bei FFmpegVideo mit "-progress" und einer temporären Datei unter
+ * Unlike video, an audio conversion usually takes only seconds. Therefore
+ * this processor runs in the FOREGROUND by default (see field
+ * details.background_process). For very long recordings (sermons, concerts,
+ * audiobooks) background operation can be switched on; it then works
+ * exactly as in FFmpegVideo with "-progress" and a temporary file under
  * paths.tmp_dir.
  *
- * Der Cronjob trigger_ff.php liest diese Datei aus. Weil eine Tonspur keine
- * Frames hat, wird in `bgproc`.`message` bewusst 'frames' => 0 eingetragen; der
- * Fortschritt ergibt sich dann aus 'dur' (Laufzeit der Zieldatei) und
- * out_time_us aus der Fortschrittsdatei.
+ * The cron job trigger_ff.php reads this file. Because an audio track has no
+ * frames, 'frames' => 0 is deliberately entered in `bgproc`.`message`; the
+ * progress then results from 'dur' (runtime of the target file) and
+ * out_time_us from the progress file.
  *
- * Kommandozeile (Expertenmodus):
- *     ffmpeg [parameter1] -i QUELLE [erzeugte Parameter] [parameter2] ZIEL
- * parameter1 sind also Eingabe-Optionen, parameter2 Ausgabe-Optionen.
+ * Command line (expert mode):
+ *     ffmpeg [parameter1] -i SOURCE [generated parameters] [parameter2] TARGET
+ * parameter1 are therefore input options, parameter2 output options.
  *
- * Voraussetzungen:
- *   - Konfiguration paths.ffmpeg  (Pfad zur ffmpeg-Binary)
- *   - Konfiguration paths.ffprobe (optional, sonst wird sie neben ffmpeg gesucht)
- *   - Konfiguration paths.tmp_dir (beschreibbares Verzeichnis für die Fortschrittsdateien)
- *   - MediaProcessor stellt $this->bgproc (Camindo\Core\BackgroundProcess) bereit.
+ * Requirements:
+ *   - configuration paths.ffmpeg  (path to the ffmpeg binary)
+ *   - configuration paths.ffprobe (optional, otherwise it is searched for next to ffmpeg)
+ *   - configuration paths.tmp_dir (writable directory for the progress files)
+ *   - MediaProcessor provides $this->bgproc (Camindo\Core\BackgroundProcess).
  */
 namespace Camindo\Core\Processors\FFmpegAudio;
 
@@ -33,29 +33,29 @@ use Camindo\Core\BackgroundProcess;
 
 class FFmpegAudio extends MediaProcessor {
 
-    /** Zeitlimits in Sekunden */
+    /** Time limits in seconds */
     protected const TIMEOUT_PROBE   = 30;
     protected const TIMEOUT_VERSION = 10;
 
-    /** Vorgabe für details.max_time_out, falls das Feld leer ist */
+    /** Default for details.max_time_out if the field is empty */
     protected const DEFAULT_TIMEOUT = 600;
 
     /**
-     * Typkennung in der Tabelle `bgproc`, danach sucht trigger_ff.php.
-     * Bewusst dieselbe wie bei FFmpegVideo: derselbe Cronjob überwacht beide
-     * Prozessoren, die Fortschrittsdateien haben dasselbe Format.
+     * Type identifier in the table `bgproc`, which trigger_ff.php searches for.
+     * Deliberately the same as in FFmpegVideo: the same cron job monitors both
+     * processors, the progress files have the same format.
      */
     public const BGPROC_TYPE = 'ffmpeg';
 
-    /** Präfix und Endung der temporären Fortschrittsdatei */
+    /** Prefix and extension of the temporary progress file */
     public const PROGRESS_PREFIX    = 'ffmpeg-';
     public const PROGRESS_EXTENSION = '.progress';
 
     /**
-     * Zielcontainer: Auswahlwert => [ffmpeg-Formatname, MIME-Type]
-     * Der Formatname wird per "-f" explizit gesetzt, damit die Dateiendung
-     * nicht fehlinterpretiert wird. "ipod" ist der Muxer, der ein sauberes
-     * .m4a schreibt (mp4-Container ohne Videospur).
+     * Target container: option value => [ffmpeg format name, MIME type]
+     * The format name is set explicitly via "-f" so that the file extension
+     * is not misinterpreted. "ipod" is the muxer that writes a clean
+     * .m4a (mp4 container without video track).
      */
     public const CONTAINERS = [
         'mp3'  => ['mp3',  'audio/mpeg'],
@@ -67,9 +67,9 @@ class FFmpegAudio extends MediaProcessor {
     ];
 
     /**
-     * Audio-Codec: Auswahlwert => ffmpeg-Encoder
-     * 'auto'  wählt den Standard-Codec des gewählten Containers,
-     * 'copy'  übernimmt den Tonstrom unverändert (sehr schnell, kein Filter).
+     * Audio codec: option value => ffmpeg encoder
+     * 'auto'  selects the default codec of the chosen container,
+     * 'copy'  takes over the audio stream unchanged (very fast, no filter).
      */
     public const AUDIO_CODECS = [
         'auto'    => '',
@@ -83,12 +83,12 @@ class FFmpegAudio extends MediaProcessor {
     ];
 
     /**
-     * Welcher Codec passt in welchen Container?
-     * Der erste Eintrag ist zugleich die Vorgabe für 'auto'. Wählt der
-     * Administrator eine unmögliche Kombination (z. B. AAC in einer .ogg),
-     * fällt der Prozessor auf diesen ersten Eintrag zurück.
-     * 'copy' ist überall erlaubt, weil nur der Muxer entscheiden kann,
-     * ob der vorhandene Strom hineinpasst.
+     * Which codec fits which container?
+     * The first entry is at the same time the default for 'auto'. If the
+     * administrator chooses an impossible combination (e.g. AAC in an .ogg),
+     * the processor falls back to this first entry.
+     * 'copy' is allowed everywhere, because only the muxer can decide
+     * whether the existing stream fits into it.
      */
     public const CONTAINER_CODECS = [
         'mp3'  => ['mp3'],
@@ -99,16 +99,16 @@ class FFmpegAudio extends MediaProcessor {
         'wav'  => ['pcm_s16'],
     ];
 
-    /** Container, die ein eingebettetes Titelbild tragen können */
+    /** Containers that can carry an embedded cover image */
     protected const COVER_CONTAINERS = ['mp3', 'm4a', 'flac'];
 
-    /** Verlustfreie Encoder: Datenrate und Qualitätsstufe sind hier ohne Wirkung */
+    /** Lossless encoders: bit rate and quality level have no effect here */
     protected const LOSSLESS = ['flac', 'pcm_s16le'];
 
     /**
-     * Abtastrate: Auswahlwert => Argument für "-ar", '' = beibehalten.
-     * Die Schlüssel sind bewusst keine reinen Zahlen, damit PHP sie nicht in
-     * Integer verwandelt und der Vergleich in pick() strikt bleiben kann.
+     * Sample rate: option value => argument for "-ar", '' = keep.
+     * The keys deliberately are not pure numbers, so that PHP does not turn them into
+     * integers and the comparison in pick() can remain strict.
      */
     public const SAMPLE_RATES = [
         'keep' => '',
@@ -119,7 +119,7 @@ class FFmpegAudio extends MediaProcessor {
         'r16'  => '16000',
     ];
 
-    /** Kanalzahl: Auswahlwert => Argument für "-ac", '' = beibehalten */
+    /** Channel count: option value => argument for "-ac", '' = keep */
     public const AUDIO_CHANNELS = [
         'keep'   => '',
         'mono'   => '1',
@@ -127,10 +127,10 @@ class FFmpegAudio extends MediaProcessor {
     ];
 
     /**
-     * Lautheitsangleichung: Auswahlwert => Filter.
-     * Einmaliger Durchlauf (single pass): ffmpeg misst und korrigiert
-     * gleichzeitig. Das ist etwas ungenauer als der Zwei-Pass-Betrieb,
-     * kostet aber keinen zweiten Lauf.
+     * Loudness normalization: option value => filter.
+     * Single pass: ffmpeg measures and corrects
+     * at the same time. This is slightly less accurate than two-pass operation,
+     * but does not cost a second run.
      */
     public const NORMALISATION = [
         'no'        => '',
@@ -138,12 +138,12 @@ class FFmpegAudio extends MediaProcessor {
         'web'       => 'loudnorm=I=-16:LRA=11:TP=-1',
     ];
 
-    /** Qualitätssteuerung */
+    /** Quality control */
     public const QUALITY_MODES = ['vbr', 'bitrate'];
 
     /**
-     * Umrechnung der Qualitätsstufe (0 = beste) in eine Ziel-Datenrate.
-     * Gebraucht für Encoder ohne eigene Qualitätsskala (AAC, Opus).
+     * Conversion of the quality level (0 = best) into a target bit rate.
+     * Needed for encoders without their own quality scale (AAC, Opus).
      */
     protected const QUALITY_BITRATE = [
         0 => 320, 1 => 256, 2 => 224, 3 => 192, 4 => 160,
@@ -151,43 +151,42 @@ class FFmpegAudio extends MediaProcessor {
     ];
 
     /**
-     * Options-Gruppen für den "intelligenten Merge" (Expertenmodus).
+     * Option groups for the "intelligent merge" (expert mode).
      *
-     * Belegt der Administrator in parameter1 / parameter2 eine Option aus einer
-     * Gruppe, dann erzeugt der Konverter die zugehörigen eigenen Parameter NICHT mehr.
-     * Der handgeschriebene Parameter gewinnt also immer, aber nur für "seinen" Bereich.
-     * Alle übrigen Formularwerte bleiben wirksam.
+     * If the administrator sets an option from a group in parameter1 / parameter2, the converter
+     * no longer generates the corresponding own parameters. The hand-written parameter therefore
+     * always wins, but only for "its" area. All other form values remain effective.
      *
-     * Ein angehängter Stream-Index wird vorher entfernt ("-c:a:0" -> "c:a"),
-     * die Einträge sind danach exakte Treffer. "-c" (gilt für alle Streams) steht
-     * deshalb bewusst sowohl bei audio_codec als auch bei cover.
+     * An appended stream index is removed beforehand ("-c:a:0" -> "c:a"),
+     * the entries are exact matches afterwards. "-c" (applies to all streams) is
+     * deliberately listed for both audio_codec and cover.
      */
     protected const OPTION_GROUPS = [
-        // Zielformat / Container   -> ersetzt "-f"
+        // Target format / container -> replaces "-f"
         'format'         => ['f'],
-        // Audio-Codec              -> ersetzt codec
+        // Audio codec              -> replaces codec
         'audio_codec'    => ['c', 'c:a', 'codec', 'codec:a', 'acodec', 'an'],
-        // Datenrate / Qualität     -> ersetzt quality_mode, quality, bitrate
+        // Bit rate / quality       -> replaces quality_mode, quality, bitrate
         'audio_quality'  => ['b:a', 'ab', 'q:a', 'qscale:a', 'qscale', 'aq',
                              'vbr', 'compression_level', 'minrate', 'maxrate', 'bufsize'],
-        // Abtastrate               -> ersetzt sample_rate
+        // Sample rate              -> replaces sample_rate
         'sample_rate'    => ['ar', 'sample_rate'],
-        // Kanalzahl                -> ersetzt audio_channels
+        // Channel count            -> replaces audio_channels
         'audio_channels' => ['ac', 'channel_layout', 'ach'],
-        // Audiofilterkette         -> ersetzt normalisation, gain, fade_in, fade_out
+        // Audio filter chain       -> replaces normalisation, gain, fade_in, fade_out
         'audio_filter'   => ['af', 'filter', 'filter:a', 'filter_complex', 'lavfi'],
-        // Zeitausschnitt           -> ersetzt start_time, duration
+        // Time section             -> replaces start_time, duration
         'trim'           => ['ss', 'sseof', 't', 'to'],
-        // Metadaten                -> ersetzt strip_meta
+        // Metadata                 -> replaces strip_meta
         'metadata'       => ['map_metadata', 'map_chapters', 'metadata',
                              'id3v2_version', 'write_id3v1'],
-        // Titelbild / Streamauswahl-> ersetzt keep_cover
+        // Cover image / stream selection -> replaces keep_cover
         'cover'          => ['c', 'c:v', 'codec:v', 'vcodec', 'vn', 'map', 'disposition:v'],
-        // Container-Feinheiten     -> ersetzt das automatische +faststart
+        // Container details        -> replaces the automatic +faststart
         'movflags'       => ['movflags'],
-        // Threads                  -> ersetzt threads
+        // Threads                  -> replaces threads
         'threads'        => ['threads', 'filter_threads', 'filter_complex_threads'],
-        // Überschreiben            -> ersetzt "-y"
+        // Overwrite                -> replaces "-y"
         'overwrite'      => ['y', 'n'],
     ];
 
@@ -195,31 +194,31 @@ class FFmpegAudio extends MediaProcessor {
     // ====================
 
     /**
-     * Tabellenstruktur für den Konverter
-     * Darauf basierend kann mit $this->backend->formField() ein Eingabefeld erzeugt werden
+     * Table structure for the converter.
+     * An input field can be created from it with $this->backend->formField()
      *
      * type:
      *     integer -> BIGINT
      *     chars -> VARCHAR(255)
      *     bit -> BIT(1)
      * display_type:
-     *     text:   einfaches Eingabefeld
-     *     select: Auswahl, Optionen werden am besten dynamisch erzeugt
-     *     label:  mehrsprachiges Snippet #proc.{processorname}.{snippetname}
+     *     text:   simple input field
+     *     select: selection, options are best generated dynamically
+     *     label:  multilingual snippet #proc.{processorname}.{snippetname}
      *     prefix,
-     *     suffix: erscheint vor / nach dem Eingabefeld
-     *     pattern: Javascript Pattern für Eingabevalidierung
-     *     min, max: Mindest- / Maximalwert, bei Text die Zeichenanzahl
+     *     suffix: appears before / after the input field
+     *     pattern: JavaScript pattern for input validation
+     *     min, max: minimum / maximum value, for text the number of characters
      */
     protected function hookDefinition(): void
     {
-        // Defaultwerte für Eingabefelder des Konverters.
-        // Welche Formate tatsächlich zur Verfügung stehen, hängt davon ab, mit
-        // welchen Bibliotheken ffmpeg übersetzt wurde ("ffmpeg -formats").
+        // Default values for input fields of the converter.
+        // Which formats are actually available depends on which
+        // libraries ffmpeg was built with ("ffmpeg -formats").
         //
-        // Sollen aus Videodateien Tonspuren gezogen werden (z. B. Predigt-Video
-        // -> Podcast-MP3), können hier zusätzlich video/* Typen eingetragen
-        // werden. Die Videospur wird ohnehin verworfen.
+        // If audio tracks are to be extracted from video files (e.g. sermon video
+        // -> podcast MP3), video/* types can additionally be entered here.
+        // The video track is discarded anyway.
         $this->defaults['media_types_incl'] = implode("\n", [
             "audio/mpeg",
             "audio/mp4",
@@ -239,9 +238,9 @@ class FFmpegAudio extends MediaProcessor {
 
         $this->defaults['extension'] = 'mp3';
 
-        // Zusätzliche Eingabefelder für den Konverter
+        // Additional input fields for the converter
         $this->schema = [
-            // Container und Codec
+            // Container and codec
             // --------------------
             'details.container' => [
                 'type'  => 'chars',
@@ -260,7 +259,7 @@ class FFmpegAudio extends MediaProcessor {
                 'default' => 'auto',
                 'max' => 10
             ],
-            // Qualität
+            // Quality
             // --------------------
             'details.quality_mode' => [
                 'type'  => 'chars',
@@ -289,7 +288,7 @@ class FFmpegAudio extends MediaProcessor {
                 'max' => 1024,
                 'suffix' => 'kbit/s'
             ],
-            // Tonsignal
+            // Audio signal
             // --------------------
             'details.sample_rate' => [
                 'type'  => 'chars',
@@ -307,7 +306,7 @@ class FFmpegAudio extends MediaProcessor {
                 'default' => 'keep',
                 'max' => 10
             ],
-            // Lautheit
+            // Loudness
             // --------------------
             'details.normalisation' => [
                 'type'  => 'chars',
@@ -328,7 +327,7 @@ class FFmpegAudio extends MediaProcessor {
                 'max' => 30,
                 'suffix' => 'dB'
             ],
-            // Zeit
+            // Time
             // --------------------
             'details.start_time' => [
                 'type'  => 'chars',
@@ -336,7 +335,7 @@ class FFmpegAudio extends MediaProcessor {
                 'note' => '#proc.ffmpegaudio.note_start_time',
                 'tooltip' => '#proc.ffmpegaudio.tooltip_field_start_time',
                 'default' => '',
-                // Sekunden (12.5) oder [HH:]MM:SS[.mmm]
+                // seconds (12.5) or [HH:]MM:SS[.mmm]
                 'pattern' => '(\d+(\.\d+)?|(\d+:)?[0-5]?\d:[0-5]?\d(\.\d+)?)',
                 'max' => 20
             ],
@@ -369,7 +368,7 @@ class FFmpegAudio extends MediaProcessor {
                 'max' => 6,
                 'suffix' => 's'
             ],
-            // Metadaten
+            // Metadata
             // --------------------
             'details.strip_meta' => [
                 'type'  => 'bit',
@@ -387,7 +386,7 @@ class FFmpegAudio extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 1
             ],
-            // Ausführung
+            // Execution
             // --------------------
             'details.threads' => [
                 'type'  => 'integer',
@@ -415,9 +414,9 @@ class FFmpegAudio extends MediaProcessor {
                 'min' => 0,
                 'suffix' => 's'
             ],
-            // Expertenmodus
+            // Expert mode
             // --------------------
-            // ffmpeg [parameter1] -i {Quelldatei} [parameter2] {Zieldatei}
+            // ffmpeg [parameter1] -i {source file} [parameter2] {target file}
             'details.parameter1' => [
                 'type'  => 'chars',
                 'label' => '#proc.ffmpegaudio.field_parameter1',
@@ -458,8 +457,8 @@ class FFmpegAudio extends MediaProcessor {
     {
         $details = (array)($data['details'] ?? []);
 
-        // Auswahlfelder auf gültige Werte zurechtbiegen, damit später in
-        // convert() keine unbekannten Schlüssel ankommen.
+        // Adjust selection fields to valid values, so that later in
+        // convert() no unknown keys arrive.
         $details['container']      = $this->pick($details['container']      ?? '', array_keys(self::CONTAINERS),     'mp3');
         $details['codec']          = $this->pick($details['codec']          ?? '', array_keys(self::AUDIO_CODECS),   'auto');
         $details['quality_mode']   = $this->pick($details['quality_mode']   ?? '', self::QUALITY_MODES,              'vbr');
@@ -467,27 +466,27 @@ class FFmpegAudio extends MediaProcessor {
         $details['audio_channels'] = $this->pick($details['audio_channels'] ?? '', array_keys(self::AUDIO_CHANNELS), 'keep');
         $details['normalisation']  = $this->pick($details['normalisation']  ?? '', array_keys(self::NORMALISATION),  'no');
 
-        // Codec und Container müssen zusammenpassen. Passt die Auswahl nicht,
-        // wird sie auf den Standard-Codec des Containers zurückgesetzt, damit
-        // im Formular sichtbar wird, was tatsächlich verwendet wird.
+        // Codec and container must match. If the selection does not fit,
+        // it is reset to the default codec of the container, so that
+        // the form shows what is actually used.
         $details['codec'] = $this->resolveCodecKey($details['codec'], $details['container']);
 
-        // Zeitangaben normalisieren, ungültige Eingaben werden verworfen
+        // Normalize time values, invalid input is discarded
         $details['start_time'] = $this->normalizeTime((string)($details['start_time'] ?? ''));
         $details['duration']   = $this->normalizeTime((string)($details['duration'] ?? ''));
         $details['fade_in']    = $this->normalizeSeconds((string)($details['fade_in'] ?? ''));
         $details['fade_out']   = $this->normalizeSeconds((string)($details['fade_out'] ?? ''));
 
-        // Qualitätsstufe und Pegelkorrektur begrenzen
+        // Limit quality level and level correction
         $details['quality'] = max(0, min(9, (int)($details['quality'] ?? 4)));
         $details['gain']    = max(-30, min(30, (int)($details['gain'] ?? 0)));
 
-        // Ohne Zeitlimit könnte ein hängender ffmpeg unbegrenzt Rechenzeit belegen
+        // Without a time limit, a hanging ffmpeg could use computing time indefinitely
         $timeout = (int)($details['max_time_out'] ?? 0);
         $details['max_time_out'] = $timeout > 0 ? $timeout : self::DEFAULT_TIMEOUT;
 
-        // Expertenmodus: Zeilenumbrüche und Mehrfach-Leerzeichen entfernen,
-        // damit die gespeicherte Kommandozeile immer einzeilig bleibt.
+        // Expert mode: remove line breaks and multiple spaces,
+        // so that the stored command line always stays on one line.
         foreach (['parameter1', 'parameter2'] as $key) {
             $value = trim((string)($details[$key] ?? ''));
             $details[$key] = (string)preg_replace('/\s+/', ' ', $value);
@@ -519,26 +518,26 @@ class FFmpegAudio extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt eine Dateiversion basierend auf den übergebenen Parametern
+     * Creates a file version based on the passed parameters
      *
-     * @param string $srcPath   Pfad zur Quelldatei, relativ zu media_dir
-     * @param array  $srcData   Daten der Quell-Datei
+     * @param string $srcPath   path to the source file, relative to media_dir
+     * @param array  $srcData   data of the source file
      *      'extension' => $fileExtension,
      *      'mime_type' => $fileMime,
-     *      'filename'  => $fileOriginName,  // ursprünglicher Dateiname, gegen Injections gesäubert
-     *      'field_id'  => $fieldId,         // für Datei-Pfad / `data_fil`-Eintrag beim checkIn
-     * @param string $destPath  Pfad zur Zieldatei, relativ zu media_dir
-     * @param array  $details   Konfigurations-Array
-     * @param bool $forceBgproc true: erzwingt Ausführung als Hintergrundprozess
-     * @return array            Daten der Zieldatei, bzw ['size'=>0, 'errors'=>'...']
+     *      'filename'  => $fileOriginName,  // original file name, sanitized against injections
+     *      'field_id'  => $fieldId,         // for file path / `data_fil` entry at check-in
+     * @param string $destPath  path to the target file, relative to media_dir
+     * @param array  $details   configuration array
+     * @param bool $forceBgproc true: forces execution as a background process
+     * @return array            data of the target file, or ['size'=>0, 'errors'=>'...']
      *
-     * width und height sind bei Tondateien immer 0.
+     * width and height are always 0 for audio files.
      *
-     * Im Hintergrundbetrieb ist die Zieldatei beim Rücksprung noch NICHT fertig.
-     * Die Rückgabe enthält dann 'size' => 0 und zusätzlich
+     * In background operation the target file is NOT finished yet on return.
+     * The return value then contains 'size' => 0 and additionally
      *     'pending' => true, 'bgproc_id' => int, 'pid' => int, 'token' => string
-     * Der Aufrufer sollte den Datensatz in diesem Fall als "in Arbeit" markieren
-     * und die endgültigen Werte nachtragen, sobald der Prozess beendet ist.
+     * In this case the caller should mark the record as "in progress"
+     * and add the final values once the process has ended.
      */
     public function convert(string $srcPath, array $srcData, string $destPath, array $details, bool $forceBgproc): array
     {
@@ -556,7 +555,7 @@ class FFmpegAudio extends MediaProcessor {
             'extension' => '',
         ];
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return $fileData + ['errors' => 'proc.ffmpegaudio.error_binary_missing'];
@@ -567,15 +566,15 @@ class FFmpegAudio extends MediaProcessor {
             return $fileData + ['errors' => 'proc.ffmpegaudio.error_probe_missing'];
         }
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return $fileData + ['errors' => 'error_file_not_found'];
         }
 
-        // Eigenschaften der Quelle ermitteln. Sie werden für die Abtastrate,
-        // die Ausblendung am Ende und die Laufzeit im Hintergrundbetrieb gebraucht.
+        // Determine properties of the source. They are needed for the sample rate,
+        // the fade-out at the end and the runtime in background operation.
         $srcInfo = $this->probe($ffprobe, $srcFile);
-        // (kein lesbares Format / keine Tonspur: writeThumbnails() probiert den nächsten Konverter)
+        // (no readable format / no audio track: writeThumbnails() tries the next converter)
         if ($srcInfo === null) {
             return $fileData + ['errors' => 'proc.ffmpegaudio.error_file_not_supported', 'unsupported' => true];
         }
@@ -583,32 +582,32 @@ class FFmpegAudio extends MediaProcessor {
             return $fileData + ['errors' => 'proc.ffmpegaudio.error_no_audio', 'unsupported' => true];
         }
 
-        // Expertenmodus: freie Parameter zerlegen und auswerten
+        // Expert mode: split and evaluate free parameters
         $params1 = $this->execute->tokenizeParameters((string)($details['parameter1'] ?? ''));
         $params2 = $this->execute->tokenizeParameters((string)($details['parameter2'] ?? ''));
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
-        // Nicht nur OB der Codec selbst gesetzt wurde, sondern auch WELCHER:
-        // davon hängen Qualitätsstufe und Filterkette ab.
+        // Not only WHETHER the codec itself was set, but also WHICH one:
+        // the quality level and filter chain depend on it.
         $claimedCodec = $this->claimedCodecValue(array_merge($params1, $params2), self::OPTION_GROUPS['audio_codec']);
 
         $container = $this->pick((string)($details['container'] ?? ''), array_keys(self::CONTAINERS), 'mp3');
         $timeout   = (int)($details['max_time_out'] ?? 0);
         if ($timeout <= 0) $timeout = self::DEFAULT_TIMEOUT;
 
-        // Aus den Formularwerten erzeugte Parameter
+        // Parameters generated from the form values
         $inputArgs  = $this->buildInputArguments($details, $claimed);
         $outputArgs = $this->buildOutputArguments($details, $srcInfo, $container, $claimed, $claimedCodec);
 
-        // Zielverzeichnis anlegen (ffmpeg z. B. tut das nicht von sich aus)
+        // Create target directory (ffmpeg, for example, does not do this by itself)
         $destDir = dirname($destFile);
         if (!is_dir($destDir)) @mkdir($destDir, 0775, true);
 
         $background = !empty($details['background_process']) || $forceBgproc;
 
-        // Fortschrittsdatei für den Hintergrundprozess.
+        // Progress file for the background process.
         $progressArgs = [];
         if ($background) {
-            // Token wird bis in den Hintergrundprozess weitergereicht!
+            // Token is passed on into the background process!
             $token = $this->crypt->randomKey(16);
             $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
             if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
@@ -621,8 +620,8 @@ class FFmpegAudio extends MediaProcessor {
             ];
         }
 
-        // ffmpeg [erzeugte Eingabe-Optionen] [parameter1] -i QUELLE
-        //        [erzeugte Ausgabe-Optionen] [parameter2] ZIEL
+        // ffmpeg [generated input options] [parameter1] -i SOURCE
+        //        [generated output options] [parameter2] TARGET
         $command = array_merge(
             [$ffmpeg, '-hide_banner', '-loglevel', 'error'],
             $progressArgs,
@@ -635,13 +634,13 @@ class FFmpegAudio extends MediaProcessor {
         );
 
         if ($background) {
-            // trigger_ff.php liest diese Werte aus `message` wieder aus.
-            // 'frames'  : bei Ton immer 0 - eine Tonspur hat keine Frames,
-            //             der Fortschritt läuft deshalb über die Laufzeit
-            // 'dur'     : Laufzeit der Zieldatei in Sekunden
-            // 'timeout' : Eintrag aus details.max_time_out
-            // 'dest'    : Pfad zur Datei ab media-Verzeichnis
-            // ('proc' ergänzt startBackgroundProcess() selbst)
+            // trigger_ff.php reads these values back from `message`.
+            // 'frames'  : always 0 for audio - an audio track has no frames,
+            //             so the progress runs via the runtime
+            // 'dur'     : runtime of the target file in seconds
+            // 'timeout' : entry from details.max_time_out
+            // 'dest'    : path to the file from the media directory
+            // ('proc' is added by startBackgroundProcess() itself)
             $message = [
                 'frames'  => '0',
                 'dur'     => (string)round($this->estimateDuration($details, $srcInfo), 2),
@@ -661,11 +660,11 @@ class FFmpegAudio extends MediaProcessor {
                 'filename'   => $srcData['filename'] ?? 'file',
                 'extension'  => $ext,
                 'data' => '{}',
-                // Infos zur Quell-Datei
+                // Info on the source file
                 'source_width'  => 0,
                 'source_height' => 0,
                 'source_data' => json_encode($srcData, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
-                // Infos zum Hintergrundprozess
+                // Info on the background process
                 'token'      => (string)$started['token'],
                 'bgproc_id'  => (int)$started['id'],
                 'pid'        => (int)$started['pid']
@@ -674,27 +673,27 @@ class FFmpegAudio extends MediaProcessor {
 
         $exitCode = $this->execute->execute($command, $stdout, $stderr, $timeout);
 
-        // Prüfen ob das Speichern erfolgreich war
+        // Check whether saving was successful
         if ($exitCode !== 0 || !is_file($destFile) || filesize($destFile) === 0) {
-            // Angefangene oder leere Zieldatei nicht liegen lassen
+            // Do not leave a started or empty target file behind
             if (is_file($destFile)) @unlink($destFile);
 
             return $fileData + [
                 'errors' => $exitCode === $this->execute::EXEC_TIMEOUT
                     ? 'proc.ffmpegaudio.error_timeout'
                     : 'error_file_conversion',
-                // Klartext-Meldung von ffmpeg, hilfreich für die Fehlersuche
+                // Plain-text message from ffmpeg, helpful for troubleshooting
                 'error_details' => trim((string)$stderr),
             ];
         }
 
-        // Fertige Zieldatei auslesen und Rückgabestruktur bauen
+        // Read the finished target file and build the return structure
         $destInfo = $this->probe($ffprobe, $destFile);
 
-        // gleicher Dateiname
+        // same file name
         $destFilename = $srcData['filename'] ?? 'file';
         return [
-            // Tondateien haben keine Abmessungen
+            // Audio files have no dimensions
             'width'         => 0,
             'height'        => 0,
             'size'          => filesize($destFile),
@@ -702,7 +701,7 @@ class FFmpegAudio extends MediaProcessor {
             'filename'      => $destFilename,
             'extension'     => $ext,
             'data'          => json_encode($destInfo, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
-            // Zusätzliche Infos zur Quell-Datei wurden ermittelt:
+            // Additional info on the source file was determined:
             'source_width'  => 0,
             'source_height' => 0,
             'source_data'   => json_encode($srcInfo, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?? '{}',
@@ -713,21 +712,21 @@ class FFmpegAudio extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt die Optionen, die VOR "-i" stehen müssen (Eingabe-Optionen).
+     * Creates the options that must come BEFORE "-i" (input options).
      *
-     * @param array $details Konfigurations-Array
-     * @param array $claimed Ergebnis von claimedGroups()
-     * @return array         Argumentliste
+     * @param array $details configuration array
+     * @param array $claimed result of claimedGroups()
+     * @return array         argument list
      */
     protected function buildInputArguments(array $details, array $claimed): array
     {
         $args = [];
 
-        // Vorhandene Zieldatei überschreiben, sonst wartet ffmpeg auf eine Eingabe
+        // Overwrite an existing target file, otherwise ffmpeg waits for input
         if (!$claimed['overwrite']) $args[] = '-y';
 
-        // Startzeit als Eingabe-Option: ffmpeg springt dann direkt an die Stelle,
-        // statt das Material bis dahin zu dekodieren.
+        // Start time as input option: ffmpeg then jumps directly to the position,
+        // instead of decoding the material up to that point.
         if (!$claimed['trim']) {
             $start = $this->normalizeTime((string)($details['start_time'] ?? ''));
             if ($start !== '') {
@@ -740,16 +739,16 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Erzeugt die Optionen, die NACH "-i" und vor der Zieldatei stehen (Ausgabe-Optionen).
-     * Bereits vom Administrator belegte Options-Gruppen werden übersprungen.
+     * Creates the options that come AFTER "-i" and before the target file (output options).
+     * Option groups already set by the administrator are skipped.
      *
-     * @param array  $details   Konfigurations-Array
-     * @param array  $srcInfo   Ergebnis von probe() für die Quelldatei
-     * @param string $container Zielcontainer
-     * @param array  $claimed   Ergebnis von claimedGroups()
-     * @param string $claimedCodec Ergebnis von claimedCodecValue(), '' wenn der
-     *                             Administrator den Codec nicht selbst gesetzt hat
-     * @return array            Argumentliste
+     * @param array  $details   configuration array
+     * @param array  $srcInfo   result of probe() for the source file
+     * @param string $container target container
+     * @param array  $claimed   result of claimedGroups()
+     * @param string $claimedCodec result of claimedCodecValue(), '' if the
+     *                             administrator did not set the codec themselves
+     * @return array            argument list
      */
     protected function buildOutputArguments(array $details, array $srcInfo, string $container, array $claimed, string $claimedCodec = ''): array
     {
@@ -758,14 +757,14 @@ class FFmpegAudio extends MediaProcessor {
         $codecKey = $this->resolveCodecKey((string)($details['codec'] ?? ''), $container);
         $encoder  = self::AUDIO_CODECS[$codecKey] ?? 'libmp3lame';
 
-        // Hat der Administrator den Codec im Expertenmodus selbst gesetzt, dann
-        // gilt seiner. Sonst landet z. B. bei "-c:a copy" trotzdem ein
-        // "-af loudnorm" in der Kommandozeile, und daran bricht ffmpeg ab:
-        // filtern lässt sich nur, was auch neu kodiert wird.
+        // If the administrator set the codec themselves in expert mode, theirs
+        // applies. Otherwise, for example with "-c:a copy", a "-af loudnorm" still
+        // ends up in the command line, and ffmpeg aborts on it:
+        // only what is also re-encoded can be filtered.
         if ($claimedCodec !== '') $encoder = $claimedCodec;
 
-        // 'copy' schließt jede Bearbeitung des Tons aus: ohne Neukodierung gibt
-        // es weder Filter noch Datenraten noch eine andere Kanalzahl.
+        // 'copy' rules out any processing of the audio: without re-encoding there are
+        // neither filters nor bit rates nor another channel count.
         $reencode = !in_array($encoder, ['', 'copy', 'none'], true);
 
         // ---- Audio-Codec ----
@@ -774,12 +773,12 @@ class FFmpegAudio extends MediaProcessor {
             $args[] = $codecKey === 'copy' ? 'copy' : (self::AUDIO_CODECS[$codecKey] ?? 'libmp3lame');
         }
 
-        // ---- Datenrate / Qualitätsstufe ----
+        // ---- Bit rate / quality level ----
         if ($reencode && !$claimed['audio_quality']) {
             $args = array_merge($args, $this->qualityArguments($details, $encoder));
         }
 
-        // ---- Abtastrate ----
+        // ---- Sample rate ----
         if ($reencode && !$claimed['sample_rate']) {
             $rate = $this->sampleRateValue($details);
             if ($rate !== '') {
@@ -788,7 +787,7 @@ class FFmpegAudio extends MediaProcessor {
             }
         }
 
-        // ---- Kanalzahl ----
+        // ---- Channel count ----
         if ($reencode && !$claimed['audio_channels']) {
             $channels = $this->pick((string)($details['audio_channels'] ?? ''), array_keys(self::AUDIO_CHANNELS), 'keep');
             if (self::AUDIO_CHANNELS[$channels] !== '') {
@@ -797,7 +796,7 @@ class FFmpegAudio extends MediaProcessor {
             }
         }
 
-        // ---- Filterkette (Lautheit, Pegel, Ein- und Ausblenden) ----
+        // ---- Filter chain (loudness, level, fade in and out) ----
         if ($reencode && !$claimed['audio_filter']) {
             $filters = $this->buildFilterChain($details, $srcInfo, $claimed);
             if ($filters !== []) {
@@ -806,7 +805,7 @@ class FFmpegAudio extends MediaProcessor {
             }
         }
 
-        // ---- Laufzeit begrenzen (z. B. für Hörproben) ----
+        // ---- Limit runtime (e.g. for audio samples) ----
         if (!$claimed['trim']) {
             $duration = $this->normalizeTime((string)($details['duration'] ?? ''));
             if ($duration !== '') {
@@ -815,11 +814,11 @@ class FFmpegAudio extends MediaProcessor {
             }
         }
 
-        // ---- Titelbild ----
+        // ---- Cover image ----
         $args = array_merge($args, $this->coverArguments($details, $srcInfo, $container, $claimed));
 
-        // ---- Metadaten entfernen. Bei Ton sind das die Tags (Titel, Interpret,
-        //      Album), die man meistens behalten will - deshalb standardmäßig aus. ----
+        // ---- Remove metadata. For audio these are the tags (title, artist,
+        //      album), which one usually wants to keep - therefore off by default. ----
         if (!$claimed['metadata'] && !empty($details['strip_meta'])) {
             $args[] = '-map_metadata';
             $args[] = '-1';
@@ -836,16 +835,16 @@ class FFmpegAudio extends MediaProcessor {
             }
         }
 
-        // ---- Index an den Anfang der Datei: die Datei kann dann abgespielt
-        //      werden, bevor sie vollständig geladen ist. Nur der mp4-Container
-        //      (m4a) kennt diese Umsortierung, mp3 und ogg brauchen sie nicht. ----
+        // ---- Index at the start of the file: the file can then be played
+        //      before it is fully loaded. Only the mp4 container
+        //      (m4a) knows this rearrangement; mp3 and ogg do not need it. ----
         if (!$claimed['movflags'] && $container === 'm4a') {
             $args[] = '-movflags';
             $args[] = '+faststart';
         }
 
-        // ---- Zielformat explizit vorgeben, damit die Endung nicht
-        //      fehlinterpretiert wird ----
+        // ---- Set the target format explicitly so that the extension is not
+        //      misinterpreted ----
         if (!$claimed['format']) {
             $args[] = '-f';
             $args[] = self::CONTAINERS[$container][0];
@@ -855,51 +854,51 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Baut die Audiofilterkette auf.
+     * Builds the audio filter chain.
      *
-     * Die Reihenfolge ist bewusst gewählt:
-     *   1. loudnorm  - misst und korrigiert die Lautheit des Originals
-     *   2. volume    - bewusster Versatz gegenüber dem Ziel der Normalisierung
-     *   3. afade in  - am Anfang
-     *   4. afade out - am Ende, deshalb erst nach dem Beschnitt berechenbar
+     * The order is deliberately chosen:
+     *   1. loudnorm  - measures and corrects the loudness of the original
+     *   2. volume    - deliberate offset from the target of the normalization
+     *   3. afade in  - at the start
+     *   4. afade out - at the end, therefore only calculable after trimming
      *
-     * @return array Liste einzelner Filter, z. B. ['loudnorm=I=-16:LRA=11:TP=-1', 'afade=t=in:st=0:d=2']
+     * @return array list of individual filters, e.g. ['loudnorm=I=-16:LRA=11:TP=-1', 'afade=t=in:st=0:d=2']
      */
     protected function buildFilterChain(array $details, array $srcInfo, array $claimed): array
     {
         $filters = [];
 
-        // ---- Lautheit angleichen ----
+        // ---- Normalize loudness ----
         $mode = $this->pick((string)($details['normalisation'] ?? ''), array_keys(self::NORMALISATION), 'no');
         if (self::NORMALISATION[$mode] !== '') {
             $filters[] = self::NORMALISATION[$mode];
 
-            // loudnorm rechnet intern mit 192 kHz und gibt das auch so aus.
-            // Ist keine Abtastrate vorgegeben, würde die Zieldatei ohne diesen
-            // Schritt also unnötig groß und für manche Encoder unbrauchbar.
+            // loudnorm calculates internally at 192 kHz and also outputs it that way.
+            // If no sample rate is specified, the target file would, without this
+            // step, be unnecessarily large and unusable for some encoders.
             if ($this->sampleRateValue($details) === '') {
                 $rate = (int)($srcInfo['sample_rate'] ?? 0);
                 $filters[] = 'aresample=' . ($rate > 0 ? $rate : 48000);
             }
         }
 
-        // ---- Pegel anheben oder absenken ----
+        // ---- Raise or lower level ----
         $gain = (int)($details['gain'] ?? 0);
         if ($gain !== 0) {
             $filters[] = 'volume=' . $gain . 'dB';
         }
 
-        // ---- Einblenden ----
+        // ---- Fade in ----
         $fadeIn = (float)$this->normalizeSeconds((string)($details['fade_in'] ?? ''));
         if ($fadeIn > 0) {
             $filters[] = 'afade=t=in:st=0:d=' . $this->trimFloat($fadeIn);
         }
 
-        // ---- Ausblenden ----
-        // Der Einsatzpunkt liegt am Ende der ZIELdatei, also nach Startzeit und
-        // Längenbegrenzung. Ist die Laufzeit unbekannt (Streams ohne Angabe),
-        // wird nicht ausgeblendet: ein falsch gesetzter Einsatzpunkt wäre
-        // schlimmer als gar keine Ausblendung.
+        // ---- Fade out ----
+        // The starting point is at the end of the TARGET file, i.e. after start time and
+        // length limit. If the runtime is unknown (streams without specification),
+        // no fade-out is applied: an incorrectly set starting point would be
+        // worse than no fade-out at all.
         $fadeOut = (float)$this->normalizeSeconds((string)($details['fade_out'] ?? ''));
         if ($fadeOut > 0) {
             $duration = $this->estimateDuration($details, $srcInfo);
@@ -912,36 +911,36 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Qualitäts-Parameter je nach Modus und Encoder.
+     * Quality parameters depending on mode and encoder.
      *
-     * VBR ist ein Qualitätsziel, die Dateigröße ergibt sich daraus.
-     * Datenrate ist ein Größenziel, die Qualität ergibt sich daraus.
+     * VBR is a quality target, the file size results from it.
+     * Bit rate is a size target, the quality results from it.
      *
-     * Jeder Encoder hat seine eigene Skala, deshalb wird die Stufe 0-9 aus dem
-     * Formular hier übersetzt:
-     *   libmp3lame  -q:a 0-9 (0 = beste), also unverändert
-     *   libvorbis   -q:a 0-10 (10 = beste), also umgekehrt
-     *   libopus     kennt keine Stufen, arbeitet aber von Haus aus mit VBR:
-     *               die Stufe wird in eine Zieldatenrate übersetzt
-     *   aac         der eingebaute Encoder hat keine brauchbare VBR-Stufe,
-     *               deshalb ebenfalls über die Zieldatenrate
-     *   flac        verlustfrei, die Stufe steuert die Rechenzeit beim Packen
-     *   pcm         unkomprimiert, hier gibt es nichts einzustellen
+     * Each encoder has its own scale, so the level 0-9 from the
+     * form is translated here:
+     *   libmp3lame  -q:a 0-9 (0 = best), so unchanged
+     *   libvorbis   -q:a 0-10 (10 = best), so reversed
+     *   libopus     has no levels, but by default works with VBR:
+     *               the level is translated into a target bit rate
+     *   aac         the built-in encoder has no usable VBR level,
+     *               therefore also via the target bit rate
+     *   flac        lossless, the level controls the computing time when packing
+     *   pcm         uncompressed, there is nothing to set here
      *
      */
     protected function qualityArguments(array $details, string $encoder): array
     {
-        // Verlustfreie Formate: Datenrate und Qualität sind bedeutungslos
+        // Lossless formats: bit rate and quality are meaningless
         if ($encoder === 'pcm_s16le') return [];
 
         $mode    = $this->pick((string)($details['quality_mode'] ?? ''), self::QUALITY_MODES, 'vbr');
         $quality = max(0, min(9, (int)($details['quality'] ?? 4)));
 
-        // Einen Encoder, den der Prozessor nicht kennt (z. B. libfdk_aac aus dem
-        // Expertenmodus), steuert man nicht zwingend über "-q:a" oder
-        // "-compression_level": beide sind encoder-spezifisch und würden ffmpeg
-        // zum Abbruch bringen. Die Qualität wird dann über die allgemein
-        // gültige Ziel-Datenrate ausgedrückt, die jeder Encoder versteht.
+        // An encoder that the processor does not know (e.g. libfdk_aac from the
+        // expert mode) is not necessarily controlled via "-q:a" or
+        // "-compression_level": both are encoder-specific and would make ffmpeg
+        // abort. The quality is then expressed via the generally
+        // valid target bit rate that every encoder understands.
         if (!in_array($encoder, ['libmp3lame', 'libvorbis', 'libopus', 'aac', 'flac'], true)) {
             $bitrate = $mode === 'bitrate'
                 ? (int)($details['bitrate'] ?? 0)
@@ -951,7 +950,7 @@ class FFmpegAudio extends MediaProcessor {
         }
 
         if ($encoder === 'flac') {
-            // 0 (beste Stufe im Formular) = stärkste Packung, dafür langsamer
+            // 0 (best level in the form) = strongest packing, but slower
             $level = max(0, min(12, 12 - $quality));
 
             return ['-compression_level', (string)$level];
@@ -961,7 +960,7 @@ class FFmpegAudio extends MediaProcessor {
             $bitrate = (int)($details['bitrate'] ?? 0);
             if ($bitrate <= 0) return [];
 
-            // Opus arbeitet ohne diesen Schalter auch im Datenraten-Modus variabel
+            // Without this switch, Opus also works variably in bit-rate mode
             if ($encoder === 'libopus') {
                 return ['-b:a', $bitrate . 'k', '-vbr', 'off'];
             }
@@ -971,7 +970,7 @@ class FFmpegAudio extends MediaProcessor {
 
         return match ($encoder) {
             'libmp3lame' => ['-q:a', (string)$quality],
-            // 0-9 (0 = beste) auf 10-0 (10 = beste) umrechnen
+            // convert 0-9 (0 = best) to 10-0 (10 = best)
             'libvorbis'  => ['-q:a', (string)(int)round((9 - $quality) * 10 / 9)],
             'libopus'    => ['-b:a', (self::QUALITY_BITRATE[$quality] ?? 128) . 'k', '-vbr', 'on'],
             'aac'        => ['-b:a', (self::QUALITY_BITRATE[$quality] ?? 128) . 'k'],
@@ -980,15 +979,15 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Parameter für ein eingebettetes Titelbild.
+     * Parameters for an embedded cover image.
      *
-     * Ohne Zutun würde ffmpeg ein vorhandenes Titelbild als Videostrom
-     * behandeln und je nach Container abbrechen. Deshalb wird die Bildspur
-     * grundsätzlich verworfen und nur dann durchgereicht, wenn
-     *   - der Administrator es wünscht,
-     *   - der Zielcontainer Titelbilder kennt und
-     *   - die Quelle tatsächlich ein Titelbild trägt (und nicht etwa ein
-     *     komplettes Video, aus dem hier nur der Ton gezogen wird).
+     * Without intervention, ffmpeg would treat an existing cover image as a video stream
+     * and abort depending on the container. Therefore the image track is
+     * always discarded and only passed through if
+     *   - the administrator wants it,
+     *   - the target container knows cover images and
+     *   - the source actually carries a cover image (and not, say, a
+     *     complete video from which only the audio is extracted here).
      */
     protected function coverArguments(array $details, array $srcInfo, string $container, array $claimed): array
     {
@@ -998,13 +997,13 @@ class FFmpegAudio extends MediaProcessor {
             && !empty($srcInfo['has_cover'])
             && in_array($container, self::COVER_CONTAINERS, true);
 
-        // Keine Bildspur in die Zieldatei
+        // No image track in the target file
         if (!$keep) return ['-vn'];
 
         $args = ['-c:v', 'copy', '-disposition:v', 'attached_pic'];
 
-        // Titelbilder in MP3 stehen in einem ID3v2-Rahmen. Version 3 ist die,
-        // die von Windows, iTunes und den meisten Playern gelesen wird.
+        // Cover images in MP3 are stored in an ID3v2 frame. Version 3 is the one
+        // read by Windows, iTunes and most players.
         if ($container === 'mp3') {
             $args[] = '-id3v2_version';
             $args[] = '3';
@@ -1014,9 +1013,9 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Ermittelt, welche Options-Gruppen der Administrator selbst belegt hat.
+     * Determines which option groups the administrator has set themselves.
      *
-     * @param array $tokens Argumente aus parameter1 und parameter2
+     * @param array $tokens arguments from parameter1 and parameter2
      * @return array        ['audio_filter' => bool, 'audio_quality' => bool, ...]
      */
     protected function claimedGroups(array $tokens): array
@@ -1024,10 +1023,10 @@ class FFmpegAudio extends MediaProcessor {
         $claimed = array_fill_keys(array_keys(self::OPTION_GROUPS), false);
 
         foreach ($tokens as $token) {
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:a:0" und "-b:a:1" auf die Grundform zurückführen
+            // reduce "-c:a:0" and "-b:a:1" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
@@ -1040,17 +1039,17 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Liest den Encoder aus, den der Administrator im Expertenmodus selbst
-     * gesetzt hat, z. B. 'libopus' aus "-c:a libopus" oder 'copy' aus "-c copy".
+     * Reads the encoder that the administrator set themselves in expert mode,
+     * e.g. 'libopus' from "-c:a libopus" or 'copy' from "-c copy".
      *
-     * claimedGroups() beantwortet nur die Frage OB eine Gruppe belegt ist. Für
-     * die Qualitätsstufe reicht das nicht: sie ist in ihrer Schreibweise vom
-     * Encoder abhängig. Ohne diesen Wert würde der Prozessor seine Parameter
-     * weiterhin für den im Formular gewählten Encoder bauen.
+     * claimedGroups() only answers the question WHETHER a group is set. For
+     * the quality level that is not enough: its notation depends on the
+     * encoder. Without this value the processor would still build its parameters
+     * for the encoder chosen in the form.
      *
-     * @param array $tokens  Argumente aus parameter1 und parameter2
-     * @param array $options Optionsnamen der Codec-Gruppe, siehe OPTION_GROUPS
-     * @return string        Encoder, 'none' bei "-an"/"-vn", '' wenn nichts gesetzt wurde
+     * @param array $tokens  arguments from parameter1 and parameter2
+     * @param array $options option names of the codec group, see OPTION_GROUPS
+     * @return string        encoder, 'none' for "-an"/"-vn", '' if nothing was set
      */
     protected function claimedCodecValue(array $tokens, array $options): string
     {
@@ -1059,20 +1058,20 @@ class FFmpegAudio extends MediaProcessor {
         for ($i = 0; $i < $count; $i++) {
             $token = $tokens[$i];
 
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:a:0" auf die Grundform zurückführen
+            // reduce "-c:a:0" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
             if (!in_array($option, $options, true)) continue;
 
-            // "-an" und "-vn" stehen für sich, sie haben keinen Wert
+            // "-an" and "-vn" stand alone, they have no value
             if ($option === 'an' || $option === 'vn') return 'none';
 
-            // Der nächste Token ist der Encodername, sofern dort nicht schon
-            // die nächste Option beginnt
+            // The next token is the encoder name, unless
+            // the next option already starts there
             $value = $tokens[$i + 1] ?? '';
             if ($value !== '' && $value[0] !== '-') return strtolower($value);
         }
@@ -1081,26 +1080,26 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Öffentliche Methode, um die Parameter einer per Hintergrundprozess erzeugten
-     * Datei in Tabelle `data_fil` nachzutragen
+     * Public method to add the parameters of a file created by a background process
+     * to table `data_fil`
      *
-     * @param string $srcPath   Relativer Pfad zur Datei ab Medienverzeichnis
-     * @return array            mittels ffprobe ermittelte Daten + Dateigröße
+     * @param string $srcPath   relative path to the file from the media directory
+     * @return array            data determined via ffprobe + file size
      *                          width, height, mime_type, extension, size
      */
     public function rectifyParams(string $srcPath): array
     {
-        // Absoluter Pfad zur Datei
+        // Absolute path to the file
         $srcFile = $this->config->get('paths.media_dir') . '/' . $srcPath;
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return [
                 'error' => '#error_file_not_found'
             ];
         }
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return [
@@ -1115,7 +1114,7 @@ class FFmpegAudio extends MediaProcessor {
             ];
         }
 
-        // Eigenschaften der Datei ermitteln
+        // Determine properties of the file
         $srcInfo = $this->probe($ffprobe, $srcFile);
         if ($srcInfo === null || !$srcInfo['has_audio']) {
             return [
@@ -1128,18 +1127,18 @@ class FFmpegAudio extends MediaProcessor {
         return $srcInfo;
     }
 
-    // Hilfsfunktionen
+    // Helper functions
     // ====================
 
     /**
-     * Liest die Eigenschaften einer Datei mit ffprobe.
+     * Reads the properties of a file with ffprobe.
      *
-     * width und height bleiben 0: sie stehen in der Rückgabe nur, weil der
-     * Aufrufer sie erwartet. Eine Tondatei hat keine Abmessungen.
+     * width and height stay 0: they are in the return value only because the
+     * caller expects them. An audio file has no dimensions.
      *
      * @return array|null ['duration'=>float, 'sample_rate'=>int, 'channels'=>int,
      *                     'bitrate'=>int, 'codec'=>string, 'has_audio'=>bool,
-     *                     'has_cover'=>bool, 'has_video'=>bool] oder null bei Fehler
+     *                     'has_cover'=>bool, 'has_video'=>bool] or null on error
      */
     protected function probe(string $ffprobe, string $file): ?array
     {
@@ -1172,8 +1171,8 @@ class FFmpegAudio extends MediaProcessor {
             $type = $stream['codec_type'] ?? '';
 
             if ($type === 'video') {
-                // Ein Bild mit der Kennzeichnung "attached_pic" ist ein
-                // Titelbild, alles andere ist eine echte Videospur.
+                // An image with the flag "attached_pic" is a
+                // cover image, everything else is a real video track.
                 if (!empty($stream['disposition']['attached_pic'])) {
                     $info['has_cover'] = true;
                 } else {
@@ -1181,7 +1180,7 @@ class FFmpegAudio extends MediaProcessor {
                 }
                 continue;
             }
-            // Nur den ersten Tonstrom auswerten
+            // Only evaluate the first audio stream
             if ($type !== 'audio' || $info['has_audio']) continue;
 
             $info['has_audio']   = true;
@@ -1205,11 +1204,11 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Codec-Auswahl mit dem Container abgleichen.
+     * Match the codec selection with the container.
      *
-     * 'auto' wird zum Standard-Codec des Containers, eine unmögliche
-     * Kombination ebenfalls. 'copy' bleibt immer stehen: ob der vorhandene
-     * Tonstrom in den Container passt, kann erst der Muxer entscheiden.
+     * 'auto' becomes the default codec of the container, an impossible
+     * combination too. 'copy' always remains: whether the existing
+     * audio stream fits into the container can only be decided by the muxer.
      */
     protected function resolveCodecKey(string $codecKey, string $container): string
     {
@@ -1224,7 +1223,7 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Abtastrate aus dem Formular als Argument für "-ar", '' = beibehalten
+     * Sample rate from the form as argument for "-ar", '' = keep
      */
     protected function sampleRateValue(array $details): string
     {
@@ -1234,8 +1233,8 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Schätzt die Laufzeit der ZIELdatei in Sekunden ab:
-     * Laufzeit der Quelle, gekürzt um start_time und begrenzt durch duration.
+     * Estimates the runtime of the TARGET file in seconds:
+     * runtime of the source, shortened by start_time and limited by duration.
      */
     protected function estimateDuration(array $details, array $srcInfo): float
     {
@@ -1251,10 +1250,10 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe prüfen und normalisieren.
-     * Erlaubt sind Sekunden ("12.5") und [HH:]MM:SS[.mmm] ("00:01:30.5").
+     * Check and normalize a time value.
+     * Allowed are seconds ("12.5") and [HH:]MM:SS[.mmm] ("00:01:30.5").
      *
-     * @return string normalisierte Angabe oder '' bei ungültiger Eingabe
+     * @return string normalized value or '' for invalid input
      */
     protected function normalizeTime(string $value): string
     {
@@ -1268,9 +1267,9 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Sekundenangabe für die Blenden prüfen ("2" oder "1.5").
+     * Check the seconds value for the fades ("2" or "1.5").
      *
-     * @return string normalisierte Angabe oder '' bei ungültiger Eingabe
+     * @return string normalized value or '' for invalid input
      */
     protected function normalizeSeconds(string $value): string
     {
@@ -1284,7 +1283,7 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe in Sekunden umrechnen
+     * Convert a time value to seconds
      */
     protected function timeToSeconds(string $value): float
     {
@@ -1304,8 +1303,8 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Fließkommazahl für die Kommandozeile: höchstens drei Nachkommastellen,
-     * immer mit Punkt, ohne überflüssige Nullen.
+     * Floating-point number for the command line: at most three decimal places,
+     * always with a point, without superfluous zeros.
      */
     protected function trimFloat(float $value): string
     {
@@ -1313,7 +1312,7 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Wert gegen eine Liste erlaubter Werte prüfen
+     * Check a value against a list of allowed values
      */
     protected function pick(string $value, array $allowed, string $fallback): string
     {
@@ -1323,10 +1322,10 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Pfad zu ffprobe ermitteln: entweder ausdrücklich konfiguriert oder
-     * neben ffmpeg im selben Verzeichnis.
+     * Determine the path to ffprobe: either explicitly configured or
+     * next to ffmpeg in the same directory.
      *
-     * @return string Pfad oder '' wenn nicht auffindbar
+     * @return string path or '' if not found
      */
     protected function ffprobePath(string $ffmpeg): string
     {
@@ -1340,9 +1339,9 @@ class FFmpegAudio extends MediaProcessor {
     }
 
     /**
-     * Version des konfigurierten ffmpeg auslesen
+     * Read the version of the configured ffmpeg
      *
-     * @return string|null z. B. "6.1.1" oder null, wenn ffmpeg nicht läuft
+     * @return string|null e.g. "6.1.1" or null if ffmpeg is not running
      */
     public function getVersion(): ?string
     {

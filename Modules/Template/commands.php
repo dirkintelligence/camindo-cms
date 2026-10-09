@@ -1,140 +1,140 @@
 <?php
 /**
- * Befehlsdefinitionen der CMS-Template-Sprache.
+ * Command definitions of the CMS template language.
  *
- * Diese Datei ist reine Beschreibung - sie enthält keinen ausführbaren Code, sondern
- * gibt ein Array zurück, in dem für jeden Befehl steht, wie er heißt, welche Parameter
- * er kennt und welcher PHP-Aufruf daraus wird. Der Parser (TemplateParserTrait) kennt
- * keinen einzigen Befehl; ein neuer Befehl bedeutet einen Eintrag hier und eine
- * passende Methode in Cms, Pagination bzw. RecordUser.
+ * This file is pure description - it contains no executable code, but
+ * returns an array in which for each command it is stated what it is called, which parameters
+ * it knows and which PHP call results from it. The parser (TemplateParserTrait) knows
+ * not a single command; a new command means an entry here and a
+ * matching method in Cms, Pagination resp. RecordUser.
  *
- * WAS AUS EINEM BEFEHL WIRD
+ * WHAT A COMMAND BECOMES
  * --------------------
- * Aus  (CMS:TEXT field=titel prefix="<h1>")  erzeugt der Parser sinngemäß
+ * From  (CMS:TEXT field=titel prefix="<h1>")  the parser creates, in essence,
  *
  *     <?php $_a = []; $_a["field"]="titel"; $_a["prefix"]="<h1>";
  *           $_r = $this->cms->cmsText($_a); ?>
  *
- * Alle Parameter landen also im Array $_a und gehen als einziges Argument an die in
- * 'method' genannte Methode.
+ * All parameters thus end up in the array $_a and pass as the only argument to the
+ * method named in 'method'.
  *
- * SCHLÜSSEL EINER BEFEHLSDEFINITION
+ * KEYS OF A COMMAND DEFINITION
  * --------------------
- *     method       Zielmethode als 'klasse.methode'; 'cms.' meint $this->cms.
- *                  Fehlt der Punkt, wird 'cms' angenommen. Zur Verfügung stehen
- *                  cms, db (immer da) sowie pagination, recordUser und email -
- *                  die drei werden erst beim ersten Zugriff nachgeladen, ein
- *                  Template ohne den passenden Befehl fasst sie also nie an.
- *                  Siehe $lazyServices in Camindo\Core\Page.
- *     do           Name des Parameters, unter dem ein Wert OHNE Schlüssel abgelegt
- *                  wird. Damit lässt sich (CMS:TEXT titel) statt
- *                  (CMS:TEXT field=titel) schreiben. Höchstens einer je Befehl.
- *     oneof        Kommaliste: mindestens einer dieser Parameter muss angegeben sein.
- *                  Für Befehle, die mehrere gleichwertige Quellen kennen - CMS:TEXT
- *                  etwa braucht 'field', 'useval' oder 'id'.
- *     params       die erlaubten Parameter (siehe unten)
- *     no_action    true: es wird KEIN Methodenaufruf erzeugt. Nur für Befehle, deren
- *                  Wirkung ausschließlich in den PHP-Schnipseln steckt -
- *                  CMS:RESULT_START und CMS:RESULT_END sind Schleifenklammern.
- *     php_prefix   Name(n) von Dateien aus Modules/Template/php/, deren Inhalt VOR dem
- *     php_suffix   bzw. NACH dem Methodenaufruf eingesetzt wird. Vorhanden sind
+ *     method       target method as 'class.method'; 'cms.' means $this->cms.
+ *                  If the dot is missing, 'cms' is assumed. Available are
+ *                  cms, db (always there) as well as pagination, recordUser and email -
+ *                  the three are only loaded on first access, so a
+ *                  template without the matching command never touches them.
+ *                  See $lazyServices in Camindo\Core\Page.
+ *     do           name of the parameter under which a value WITHOUT key is stored.
+ *                  This allows writing (CMS:TEXT titel) instead of
+ *                  (CMS:TEXT field=titel). At most one per command.
+ *     oneof        comma list: at least one of these parameters must be given.
+ *                  For commands that know several equivalent sources - CMS:TEXT
+ *                  for example needs 'field', 'useval' or 'id'.
+ *     params       the allowed parameters (see below)
+ *     no_action    true: NO method call is generated. Only for commands whose
+ *                  effect lies solely in the PHP snippets -
+ *                  CMS:RESULT_START and CMS:RESULT_END are loop brackets.
+ *     php_prefix   name(s) of files from Modules/Template/php/, whose content is inserted BEFORE
+ *     php_suffix   resp. AFTER the method call. Available are
  *                  push_result, pop_result, loop_start, loop_end, include,
- *                  include_cached (nur CMS:INCLUDE - schließt den Ausgabe-Cache mit
- *                  Cms::includeEnd() ab), include_and_stop, select_count (nur
- *                  CMS:SELECT - übernimmt mit hits=false die Gesamtzahl,
+ *                  include_cached (only CMS:INCLUDE - closes the output cache with
+ *                  Cms::includeEnd()), include_and_stop, select_count (only
+ *                  CMS:SELECT - takes over the total count with hits=false,
  *                  Cms::selectCountEnd()).
- *     buffer_set   true: der Parameter 'set' fängt die GESAMTE Ausgabe des Befehls
- *                  samt php_suffix (eingebundenes Template, Ergebnisschleife) ab und
- *                  legt sie in $set[...] - Cms::setBufferStart()/setBufferEnd()
+ *     buffer_set   true: the parameter 'set' captures the ENTIRE output of the command
+ *                  including php_suffix (included template, result loop) and
+ *                  stores it in $set[...] - Cms::setBufferStart()/setBufferEnd()
  *                  (CMS:SELECT, CMS:SELECT_LANGVERSION, CMS:INCLUDE).
- *     note         Kurzbeschreibung für die Befehlsreferenz (vom Parser nicht gelesen)
+ *     note         short description for the command reference (not read by the parser)
  *
- * SCHLÜSSEL EINES PARAMETERS
+ * KEYS OF A PARAMETER
  * --------------------
- *     mandatory    Zwingend erforderlich? Der Parser meldet das Fehlen als Fehler.
- *     subparam     erlaubte Tiefe von Unterschlüsseln: 0 = keine (nur key=wert),
- *                  1 = key['a']=wert, 2 = key['a']['b']=wert. Leere Klammern (key[]=…)
- *                  zählen nicht als Ebene, sie erzwingen nur das Anhängen an ein Array.
- *                  Gebraucht wird das vor allem von CMS:SELECT (filter, sort, …).
- *     default      Standardwert - zur Dokumentation; eingesetzt wird er nicht hier,
- *                  sondern in der aufgerufenen Methode.
- *     operator     true: zwischen Schlüssel und Wert darf statt '=' ein Vergleichsoperator
- *                  stehen (filter[preis] >= 100); der Parser stellt ihn dem Wert voran
- *                  (TemplateParserTrait::operatorPrefix()). Bei allen anderen
- *                  Parametern meldet er einen Operator als Fehler. Gesetzt bei 'filter'
+ *     mandatory    required? The parser reports a missing one as an error.
+ *     subparam     allowed depth of sub-keys: 0 = none (only key=value),
+ *                  1 = key['a']=value, 2 = key['a']['b']=value. Empty brackets (key[]=…)
+ *                  do not count as a level, they only force appending to an array.
+ *                  This is needed mainly by CMS:SELECT (filter, sort, …).
+ *     default      default value - for documentation; it is not applied here,
+ *                  but in the called method.
+ *     operator     true: between key and value a comparison operator may stand instead of '='
+ *                  (filter[preis] >= 100); the parser puts it in front of the value
+ *                  (TemplateParserTrait::operatorPrefix()). For all other
+ *                  parameters it reports an operator as an error. Set for 'filter'
  *                  (CMS:SELECT, CMS:ZIP, CMS:USER_AUTH, CMS:USER_PROTECT).
- *     php_value    true: ein ungequoteter Wert, der nur aus einer Variablen besteht
- *                  ($params, $cms['id'], {$set['x']}), wird unverändert als PHP-Ausdruck
- *                  übergeben statt in einen String interpoliert - Arrays und Zahlen
- *                  kommen so typtreu an (CMS:INCLUDE cacheparams).
- *     ref          Der Wert verweist auf einen anderen Datensatz - Grundlage für
- *                  TemplateParserTrait::mapReferences() (Export/Import von
- *                  Template-Sätzen): 'template' (Name oder Id), 'area' (Name oder
- *                  Id), 'record' (Datensatz-Id; ein Nicht-Zahlenwert ist ein Slug
- *                  und bleibt). Bei Parametern mit Unterschlüsseln ein Array
- *                  erster Unterschlüssel => Typ, z. B. filter: ['area' => 'area',
+ *     php_value    true: an unquoted value that consists only of a variable
+ *                  ($params, $cms['id'], {$set['x']}), is passed unchanged as a PHP expression
+ *                  instead of being interpolated into a string - arrays and numbers
+ *                  arrive type-correct this way (CMS:INCLUDE cacheparams).
+ *     ref          the value refers to another record - basis for
+ *                  TemplateParserTrait::mapReferences() (export/import of
+ *                  template sets): 'template' (name or id), 'area' (name or
+ *                  id), 'record' (record id; a non-numeric value is a slug
+ *                  and remains). For parameters with sub-keys an array
+ *                  first sub-key => type, e.g. filter: ['area' => 'area',
  *                  'area_id' => 'area', 'record_id' => 'record', 'id' => 'record'].
- *     value        Art des erwarteten Wertes, für die Befehlsreferenz
- *     description  Beschreibung, für die Befehlsreferenz
- *     extra_*      Steuerungsangaben für die Befehlsreferenz
+ *     value        kind of expected value, for the command reference
+ *     description  description, for the command reference
+ *     extra_*      control entries for the command reference
  *
- * Vom Parser tatsächlich ausgewertet werden nur method, do, oneof, params,
+ * The parser actually evaluates only method, do, oneof, params,
  * params[*].mandatory, params[*].subparam, params[*].operator, params[*].php_value,
- * no_action, php_prefix, php_suffix und buffer_set.
- * Alles andere - note, value, description, default, extra_*, include - ist
- * Dokumentation für die (noch zu bauende) Befehlsreferenz im Backend; 'include' ist in
- * allen Einträgen ein leeres Array.
+ * no_action, php_prefix, php_suffix and buffer_set.
+ * Everything else - note, value, description, default, extra_*, include - is
+ * documentation for the (still to be built) command reference in the backend; 'include' is
+ * an empty array in all entries.
  *
  * WIEDERKEHRENDE PARAMETER
  * --------------------
- * Viele Ausgabebefehle teilen sich dieselben Zusatzparameter:
+ * Many output commands share the same additional parameters:
  *
- *     ifempty   Ersatztext, wenn die Quelle leer ist
- *     instead   Text ANSTELLE der Quelle, wenn diese nicht leer ist
- *     prefix    wird vorangestellt, aber nur bei nicht leerem Wert
- *     suffix    dito, angehängt
- *     set       Ergebnis nicht ausgeben, sondern in $set[...] ablegen
- *     replace   Teiltexte ersetzen ("suchen?ersetzen" oder replace[suchen]=ersetzen);
- *               TEXT, DATE, DATETIME, TIME, NUMBER - bei den Format-Befehlen auf dem
- *               fertig formatierten Wert
- *     id        Datensatz, auf den sich der Befehl bezieht - ohne Angabe der gerade
- *               laufende. Der Wert ist dasselbe, was auch in der URL stehen kann:
- *               eine reine Ziffernfolge ist eine record_id, alles andere ein Slug
- *               (der Nachfolger des C8-'idname'). Ausgewertet in Cms::_record().
- *               Bei CMS:SELECT läuft das stattdessen über 'filter'.
+ *     ifempty   replacement text if the source is empty
+ *     instead   text INSTEAD of the source if the source is not empty
+ *     prefix    prepended, but only for a non-empty value
+ *     suffix    likewise, appended
+ *     set       do not output the result, but store it in $set[...]
+ *     replace   replace partial texts ("search?replace" or replace[search]=replace);
+ *               TEXT, DATE, DATETIME, TIME, NUMBER - for the format commands on the
+ *               finished formatted value
+ *     id        record the command refers to - if not given, the current one. The value is the same
+ *               as can also appear in the URL:
+ *               a pure sequence of digits is a record_id, anything else a slug
+ *               (the successor of the C8 'idname'). Evaluated in Cms::_record().
+ *               For CMS:SELECT this runs via 'filter' instead.
  *
- * Das Muster "prefix/suffix nur bei nicht leerem Wert" erspart im Template die
- * Fallunterscheidung: ein <h1> wird nicht ausgegeben, wenn es leer bliebe.
+ * The pattern "prefix/suffix only for a non-empty value" saves a case distinction
+ * in the template: an <h1> is not output if it would remain empty.
  *
- * DIE BEFEHLE (alphabetisch, so wie sie hier stehen)
+ * THE COMMANDS (alphabetical, in the order listed here)
  * --------------------
- *     Ausgabe        text, raw, number, date, datetime, time, media, url, email, xml,
+ *     Output         text, raw, number, date, datetime, time, media, url, email, xml,
  *                    message
- *     Verknüpfungen  relation
- *     Abfragen       select, select_langversion, result_start, result_end
+ *     Links          relation
+ *     Queries        select, select_langversion, result_start, result_end
  *     Navigation     jump_list, jump_next, jump_prev
- *     Steuerung      include, continue, header, savedata
+ *     Control        include, continue, header, savedata
  *     Frontend-Edit  fed, fed_code
  *     Community      user_auth, user_basket, user_delete, user_input, user_login,
  *                    user_logout, user_protect, user_pw, user_register,
  *                    user_register_confirm
  *
- * Die CMS:USER_*-Befehle laufen in Camindo\Core\Modules\Record\RecordUser
- * (Sessions: Camindo\Core\UserSession) - Semantik, Berechtigungen und Meldungen
- * in docs/developers/11-community.md.
+ * The CMS:USER_* commands run in Camindo\Core\Modules\Record\RecordUser
+ * (sessions: Camindo\Core\UserSession) - semantics, permissions and messages
+ * in developer docs, chapter 12 (Community).
  *
- * @see Camindo\Core\Modules\Template\TemplateParserTrait  wertet diese Datei aus
- * @see Camindo\Core\Cms                                     die cms*-Methoden
- * @see Camindo\Core\Pagination                              die CMS:JUMP_*-Methoden
- * @see Camindo\Core\Modules\Record\RecordUser              die CMS:USER_*-Methoden
- * @see docs/developers/06-templates.md                     Syntax und Compiler
- * @see docs/templateprogrammers/README.md                            Befehlsreferenz (eine Seite je Befehl)
+ * @see Camindo\Core\Modules\Template\TemplateParserTrait  evaluates this file
+ * @see Camindo\Core\Cms                                     the cms* methods
+ * @see Camindo\Core\Pagination                              the CMS:JUMP_* methods
+ * @see Camindo\Core\Modules\Record\RecordUser              the CMS:USER_* methods
+ * @see developer docs, chapter 06 (Template compiler)       syntax and compiler
+ * @see manual for template programmers                     command reference (one page per command)
  */
 
 return [
 
-    // Setzt die Abarbeitung fort, nachdem ein Befehl mit eigenem Erfolgs-Template
-    // (z. B. aus der user_*-Gruppe) gegriffen hat - ohne CONTINUE endet das Template
+    // Continues processing after a command with its own success template
+    // (e.g. from the user_* group) has taken effect - without CONTINUE the template ends
     // an dieser Stelle.
     'continue' => [
         'method' => 'cms.cmsContinue',
@@ -145,9 +145,9 @@ return [
         'include' => []
     ],
 
-    // DATE, DATETIME und TIME sind derselbe Befehl mit unterschiedlichem Ausschnitt:
-    // DATE zeigt nur den Datumsteil, TIME nur die Uhrzeit, DATETIME beides. Die Quelle
-    // ist in allen drei Fällen ein Datums-/Zeitwert aus der Datenbank (ISO-Format).
+    // DATE, DATETIME and TIME are the same command with a different excerpt:
+    // DATE shows only the date part, TIME only the time, DATETIME both. The source
+    // is in all three cases a date/time value from the database (ISO format).
     'date' => [
         'method' => 'cms.cmsDate',
         'note' => 'Gibt den Datumsteil eines Datumswertes formatiert aus.',
@@ -487,12 +487,12 @@ return [
         'include' => []
     ],
 
-    // FED, FED_SCRIPT und FED_CODE gehören zum Frontend-Editing: sie geben nur dann
-    // etwas aus, wenn der Betrachter es in seinen persönlichen Einstellungen
-    // eingeschaltet hat (Cookie 'fed', siehe Cms::fedActive()). FED erzeugt den
-    // Bearbeiten-Knopf, FED_SCRIPT die zugehörige Javascript-Funktion cFED()
-    // (einmal je Seite, üblicherweise im Footer), FED_CODE beliebiges HTML (etwa
-    // eine Werkzeugleiste).
+    // FED, FED_SCRIPT and FED_CODE belong to frontend editing: they output something only when
+    // the viewer has enabled it in their personal settings
+    // (cookie 'fed', see Cms::fedActive()). FED creates the
+    // edit button, FED_SCRIPT the associated JavaScript function cFED()
+    // (once per page, usually in the footer), FED_CODE any HTML (for example
+    // a toolbar).
     'fed' => [
         'method' => 'cms.cmsFed',
         'note' => 'Erzeugt einen Knopf zum Bearbeiten eines Datensatzes, wenn das Frontend-Editing aktiviert ist. Braucht CMS:FED_SCRIPT auf derselben Seite.',
@@ -1251,9 +1251,9 @@ return [
         'include' => []
     ],
 
-    // RAW gibt den Feldinhalt ohne jede Aufbereitung aus - kein Maskieren, keine
-    // Umbruch-Umwandlung. Gedacht für Felder, die bereits HTML enthalten; entsprechend
-    // muss man dem Inhalt vertrauen.
+    // RAW outputs the field content without any processing - no escaping, no
+    // line break conversion. Intended for fields that already contain HTML; accordingly
+    // the content must be trusted.
     'raw' => [
         'method' => 'cms.cmsRaw',
         'note' => 'Gibt einen Inhalt unformatiert aus.',
@@ -1418,15 +1418,15 @@ return [
                 'value' => 'Array-Index von $set',
                 'description' => 'Die Ausgabe der Quelle wird umgeleitet und in $set eingetragen.'
             ]
-            // Hier fehlt noch 'id' => 
+            // 'id' is still missing here => 
         ],
         'include' => []
     ],
     
-    // RESULT_START / RESULT_END sind Klammern, keine Befehle im eigentlichen Sinn:
-    // no_action verhindert den Methodenaufruf, die Wirkung steckt allein in den
-    // Schnipseln php/loop_start.php und php/loop_end.php, die die foreach-Schleife
-    // über die Treffer öffnen und schließen.
+    // RESULT_START / RESULT_END are brackets, not commands in the strict sense:
+    // no_action prevents the method call, the effect lies solely in the
+    // snippets php/loop_start.php and php/loop_end.php, which open and close the foreach loop
+    // over the hits.
     'result_start' => [
         'method' => 'cms.cmsResultStart',
         'no_action' => true,
@@ -1487,22 +1487,20 @@ return [
         'include' => []
     ],
 
-    // SELECT ist der aufwendigste Befehl: eine Abfrage, deren Treffer an ein zweites
-    // Template ('resulttemplate') übergeben werden.
+    // SELECT is the most complex command: a query whose hits are passed to a second
+    // template ('resulttemplate').
     //
-    // Die drei Schnipsel drumherum erklären den Ablauf:
-    //     push_result   das laufende Abfrageergebnis beiseitelegen - ein SELECT kann
-    //                   innerhalb einer Ergebnisschleife stehen und würde es sonst
-    //                   überschreiben
-    //     include       das resulttemplate einbinden, das die Treffer ausgibt
-    //     pop_result    das äußere Ergebnis zurückholen, die äußere Schleife läuft
-    //                   weiter
-    //     select_count  nur mit hits=false: die gezählte Gesamtzahl ins aufrufende
-    //                   Template übernehmen (es gibt kein resulttemplate, in dem sie
-    //                   sonst stünde)
+    // The three snippets around it explain the flow:
+    //     push_result   set the running query result aside - a SELECT can
+    //                   stand inside a result loop and would otherwise overwrite it
+    //     include       include the resulttemplate that outputs the hits
+    //     pop_result    fetch the outer result back, the outer loop runs
+    //                   on
+    //     select_count  only with hits=false: take over the counted total into the calling
+    //                   template (there is no resulttemplate in which it would otherwise stand)
     //
-    // Die Filterangaben brauchen Unterschlüssel (filter['area_id'], sort['name']),
-    // deshalb steht bei ihnen subparam auf 1 bzw. 2.
+    // The filter specifications need sub-keys (filter['area_id'], sort['name']),
+    // which is why their subparam is 1 or 2.
     'select' => [
         'method' => 'cms.cmsSelect',
         'buffer_set' => true,
@@ -2176,12 +2174,12 @@ return [
     // ==========================================================================
     // CMS:USER_* - Frontend-Community
     //
-    // Anmeldung, Registrierung, Beiträge, Warenkorb und Zugriffsschutz für
+    // Login, registration, contributions, shopping basket and access protection for
     // Website-Besucher. Laufzeit: Camindo\Core\Modules\Record\RecordUser; Profile
-    // liegen in Bereichen vom Typ 'profile', Beiträge in Bereichen vom Typ 'ugc'.
+    // lie in areas of type 'profile', contributions in areas of type 'ugc'.
     // Ergebnisse stehen in $set (user_id, user, user_session_id, hash, record_id,
-    // basket ...), Meldungen lassen sich je Befehl über 'message[index]' ersetzen.
-    // Siehe docs/developers/11-community.md.
+    // basket ...), messages can be replaced per command via 'message[index]'.
+    // See developer docs, chapter 12 (Community).
     // ==========================================================================
 
     'zip' => [

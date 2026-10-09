@@ -1,9 +1,9 @@
 <?php
-// Core-Modul Audit: das Audit-Log (Tabelle `audit_log`, Camindo\Core\AuditLog)
-// durchsuchen - wer hat wann was geändert, mit Vorher/Nachher.
-// 'superuser' => true hält alle anderen Gruppen fern (Camindo\Core\Access::module());
-// den Verlauf eines einzelnen Datensatzes sieht jeder Leser im Reiter "Änderungen"
-// der Datensatz-Info.
+// Core module Audit: the audit log (table `audit_log`, Camindo\Core\AuditLog)
+// search - who changed what and when, with before/after.
+// 'superuser' => true keeps all other groups out (Camindo\Core\Access::module());
+// every reader sees the history of a single record in the "Changes" tab
+// of the record info.
 return [
 
 'version' => '9.0.0',
@@ -13,9 +13,9 @@ return [
 'icon' => 'manage_history',
 'listed' => true,
 'superuser' => true,
-// audit.search / audit.history - ohne Superuser nur Datensätze lesbarer Bereiche (AuditApi)
+// audit.search / audit.history - without superuser only records of readable areas (AuditApi)
 'api' => ['AuditApi'],
-// Zusätzliche Modulrechte: keine - das Modul ist ohnehin dem Superuser vorbehalten
+// Additional module permissions: none - the module is reserved for superusers anyway
 'access' => [
 ]
 

@@ -1,18 +1,18 @@
 <?php
 /**
- * Versionsabfrage der externen Werkzeuge.
+ * Version query of the external tools.
  *
- * Liefert die installierten Versionen von ImageMagick, FFmpeg und MySQL für die
- * Serverübersicht (ToolServer::list()). Die beiden externen Programme werden dafür
- * tatsächlich aufgerufen - die Angabe sagt also nicht nur, was in .camindo.php
- * konfiguriert ist, sondern ob es an diesem Pfad auch wirklich läuft.
+ * Returns the installed versions of ImageMagick, FFmpeg and MySQL for the
+ * server overview (ToolServer::list()). The two external programs are actually
+ * called for this - so the entry says not only what is configured in .camindo.php,
+ * but whether it really runs at this path.
  *
- * Alle drei Methoden sind gutmütig: fehlender Pfad, Fehlerabbruch oder unerwartete
- * Ausgabe führen zu null bzw. '?' und nicht zu einer Exception - die Übersicht soll
- * auch dann noch anzeigbar sein, wenn ein Werkzeug fehlt.
+ * All three methods are lenient: missing path, error abort or unexpected
+ * output lead to null resp. '?' and not to an exception - the overview should
+ * still be displayable even when a tool is missing.
  *
- * Die Aufrufe laufen über Execute mit Zeitbegrenzung und als Argument-Array, nicht
- * über die Shell.
+ * The calls run via Execute with a time limit and as argument array, not
+ * via the shell.
  *
  * @see Camindo\Core\Execute
  * @see Camindo\Core\Modules\Tools\ToolServer
@@ -39,9 +39,9 @@ public function __construct(
     {}
     
     /**
-     * Ermittelt die installierte ImageMagick-Version
+     * Determine the installed ImageMagick version
      * 
-     * @return string|null z. B. "7.1.1-39", null wenn nicht ermittelbar
+     * @return string|null  e.g. "7.1.1-39", null if not determinable
      */
     public function getMagickVersion(): ?string
     {
@@ -56,9 +56,9 @@ public function __construct(
     }
 
     /**
-     * Ermittelt die installierte FFmpeg-Version
+     * Determine the installed FFmpeg version
      *
-     * @return string|null z. B. "6.1.1" oder null, wenn ffmpeg nicht läuft
+     * @return string|null  e.g. "6.1.1" or null, if ffmpeg does not run
      */
     public function getFFmpegVersion(): ?string
     {
@@ -74,9 +74,9 @@ public function __construct(
     }
 
     /**
-     * Ermittelt die MySQL-Version über die bestehende Verbindung.
+     * Determine the MySQL version via the existing connection.
      *
-     * @return string  Versionsnummer oder '?', wenn die Abfrage nichts liefert
+     * @return string  version number or '?', if the query returns nothing
      */
     public function getMySQLVersion(): string
     {

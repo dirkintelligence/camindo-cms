@@ -1,8 +1,8 @@
 <?php
 /**
- * API-Methoden der Medienkonverter: Prozessoren, auflisten, lesen, anlegen, ändern.
- * Listen sind knapp (converter.list, converter.processors); die Einstellungen unter
- * details hängen vom Prozessor ab - converter.processor_info nennt sie.
+ * API methods of the media converters: processors, list, read, create, change.
+ * Lists are brief (converter.list, converter.processors); the settings under
+ * details depend on the processor - converter.processor_info lists them.
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -35,15 +35,15 @@ class ConverterApi extends DatasetApi
         parent::__construct($converter, $writer);
     }
 
-    /** Thumbnail-Felder, die den Konverter nutzen */
+    /** Thumbnail fields that use the converter */
     protected function extra(int $id, array $data): array
     {
         return ['field_ids' => $this->field->getFieldIdsByConverter($id)];
     }
 
     /**
-     * Die installierten Prozessoren - knapp: Name, Bezeichnung, Medienart,
-     * Beschreibung. Die Einstellungen eines Prozessors nennt converter.processor_info.
+     * The installed processors - brief: name, label, media kind,
+     * description. The settings of a processor are listed by converter.processor_info.
      */
     #[ApiMethod('converter.processors', '#converter.api_processors')]
     public function processors(): array
@@ -62,8 +62,8 @@ class ConverterApi extends DatasetApi
     }
 
     /**
-     * Ein Prozessor mit seinen Einstellungen (Felder unter details) und den
-     * vorbelegten Medientypen - für converter.create.
+     * A processor with its settings (fields under details) and the
+     * preset media types - for converter.create.
      *
      * @param string $processor  Prozessor (converter.processors)
      */
@@ -84,9 +84,9 @@ class ConverterApi extends DatasetApi
     }
 
     /**
-     * Alle Konverter - knapp wie die Liste im Backend: Bezeichnung, Prozessor,
-     * Medienart, Dateiendung und Zielgröße (Breite, Höhe, soweit der Prozessor sie
-     * kennt). Alle Einstellungen nennt converter.info.
+     * All converters - brief, like the list in the backend: label, processor,
+     * media kind, file extension and target size (width, height, as far as the processor
+     * knows them). All settings are listed by converter.info.
      */
     #[ApiMethod('converter.list', '#converter.api_list')]
     public function list(): array
@@ -109,10 +109,10 @@ class ConverterApi extends DatasetApi
     }
 
     /**
-     * Ein Konverter mit allen Einstellungen und den Feldern, die ihn nutzen.
+     * A converter with all settings and the fields that use it.
      *
      * @param int  $id          converter_id
-     * @param bool $withSchema  dazu die Beschreibung der Felder (samt denen des Prozessors)
+     * @param bool $withSchema  plus the description of the fields (including those of the processor)
      */
     #[ApiMethod('converter.info', '#converter.api_info')]
     public function info(int $id, bool $withSchema = false): array
@@ -121,11 +121,11 @@ class ConverterApi extends DatasetApi
     }
 
     /**
-     * Einen Konverter anlegen.
+     * Create a converter.
      *
      * @param string $processor  Prozessor (converter.processors)
-     * @param array  $data       Feld => Wert, Einstellungen des Prozessors unter details
-     * @param bool   $simulate   nur prüfen, nichts anlegen
+     * @param array  $data       Field => value, settings of the processor under details
+     * @param bool   $simulate   only check, create nothing
      */
     #[ApiMethod('converter.create', '#converter.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(string $processor, array $data, bool $simulate = false): array
@@ -133,17 +133,17 @@ class ConverterApi extends DatasetApi
         if (!isset($this->converter->processors[$processor])) {
             throw new ApiException(ApiException::INVALID_PARAM, "unknown processor \"{$processor}\" (see converter.processors)");
         }
-        // type wie hookOnSave() - so darf ein passender Wert in data stehen (Werte aus converter.info)
+        // type as in hookOnSave() - so a matching value may be in data (values from converter.info)
         $type = (string)($this->converter->processors[$processor]['type'] ?? 'other');
         return $this->apiCreate($data, $simulate, ['defaults' => ['processor' => $processor, 'type' => $type]]);
     }
 
     /**
-     * Einen Konverter ändern.
+     * Change a converter.
      *
      * @param int   $id        converter_id
-     * @param array $data      Feld => Wert, nur die zu ändernden
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param array $data      Field => value, only the fields to change
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('converter.update', '#converter.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array

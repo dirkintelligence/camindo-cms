@@ -1,25 +1,25 @@
 <?php
 /**
- * Snippets suchen bzw. eine Snippet-Id auflösen - JSON für snippets.ext.js (13 §3.6):
- * backendExtensions/Snippets/search.php; Session ist durch Backend::backendPath()
- * geprüft, Datensätze werden nicht geliefert.
+ * Search snippets or resolve a snippet id - JSON for snippets.ext.js (developer docs, chapter 08 (Components and extensions)):
+ * backendExtensions/Snippets/search.php; the session is checked by Backend::backendPath(),
+ * no records are returned.
  *
- *     ?q=such begriffe      Treffer aus dem Snippet-Cache der Backend-Sprache des
- *                           Admins: alle Präfixe, Frontend- UND Backend-Dateien.
- *                           Jeder Begriff muss in Id oder Text vorkommen (ohne
- *                           Groß/Klein). Antwort: {hits: [{id, text, backend,
+ *     ?q=such begriffe      hits from the snippet cache of the backend language of the
+ *                           administrator: all prefixes, frontend AND backend files.
+ *                           Each term must occur in id or text (case
+ *                           insensitive). Response: {hits: [{id, text, backend,
  *                           icu}], total}
- *     ?resolve=record.x     Text zur Id, wie Cms::snippet() ihn liefert:
+ *     ?resolve=record.x     text for the id, as Cms::snippet() returns it:
  *                           {id, text, found}
- *     ?texts=1              nur die Texte der Oberfläche: {texts}
+ *     ?texts=1              only the UI texts: {texts}
  *
- * Die Id ist das, was hinter dem '#' steht: {prefix}.{key}, für Core-Snippets nur
- * {key} (Cms::snippet() ohne Punkt = Core). ICU-Snippets (Closures im Cache) werden
- * mit leeren Argumenten ausgewertet und als solche markiert.
+ * The id is what follows the '#': {prefix}.{key}, for core snippets only
+ * {key} (Cms::snippet() without a dot = core). ICU snippets (closures in the cache) are
+ * evaluated with empty arguments and marked as such.
  *
- * Instanz-Snippets (custom.{instance_id}.*, Modul Snippets) erscheinen nur für
- * Instanzen, auf die die Gruppe des Admins Zugriff hat (Snippets::allowedPrefixes());
- * resolve liefert für andere "nicht gefunden".
+ * Instance snippets (custom.{instance_id}.*, module Snippets) only appear for
+ * instances the administrator's group has access to (Snippets::allowedPrefixes());
+ * resolve returns "not found" for others.
  */
 // @var Camindo\Core\ContainerInterface $app
 use Camindo\Core\Cms;
@@ -30,7 +30,7 @@ use Camindo\Core\SnippetCache;
 $cms = $app->get(Cms::class);
 $config = $app->get(Config::class);
 
-// Präfix custom.{id} erlaubt? (Modul Snippets nicht aktiv: keine Instanz-Snippets)
+// Prefix custom.{id} allowed? (module Snippets not active: no instance snippets)
 $customPrefixes = $cms->componentPath('modules', 'Snippets') !== null ? $app->get(Snippets::class)->allowedPrefixes() : [];
 $customAllowed = function (string $prefix) use ($customPrefixes): bool {
     if ($prefix !== SnippetCache::CUSTOM_PREFIX && !str_starts_with($prefix, SnippetCache::CUSTOM_PREFIX . '.')) return true;
@@ -63,9 +63,9 @@ $q = mb_strtolower(trim((string)($_REQUEST['q'] ?? '')));
 $terms = $q === '' ? [] : preg_split('/\s+/', $q);
 $limit = 50;
 
-// Cache der aktuellen Sprache einlesen: {prefix}.php und {prefix}.backend.php.
-// Ein Schlüssel, der in beiden steht, zählt einmal (Frontend gewinnt, wie zur
-// Laufzeit).
+// Read the cache of the current language: {prefix}.php and {prefix}.backend.php.
+// A key that appears in both counts once (frontend wins, as at
+// runtime).
 $lang = $cms->getLang();
 $dir = $config->get('paths.var_dir') . '/cache/lang/' . $lang;
 $index = [];

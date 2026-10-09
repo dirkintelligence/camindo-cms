@@ -1,41 +1,41 @@
 <?php
 /**
- * Abläufe rund um einen einzelnen Datensatz, die mehrere Oberflächen brauchen:
- * die Eingabemaske (RecordBackendEdit), das Verschieben (RecordBackendMove), die
- * Stapelverarbeitung (RecordBatch), der Import und die API (RecordApi).
+ * Operations around a single record that several interfaces need:
+ * the input mask (RecordBackendEdit), moving (RecordBackendMove), the
+ * batch processing (RecordBatch), the import and the API (RecordApi).
  *
- * Record (Dataset + Traits) kennt Speichern, Arbeitskopien und Sperren als einzelne
- * Werkzeuge. Welche davon in welcher Reihenfolge gehören - Rechte vor dem Check-out,
- * Sperre prüfen, eingebettete Inhalte mit auschecken, Check-in samt dieser Inhalte in
- * EINER Transaktion, große Löschvorgänge in den Hintergrund -, stand bisher in den
- * Backend-Klassen, verwoben mit Request und HTML. Hier steht es einmal.
+ * Record (Dataset + traits) knows saving, working copies and locks as individual
+ * tools. Which of them belong in which order - rights before the check-out,
+ * check the lock, check out embedded contents along, check-in together with these
+ * contents in ONE transaction, large deletions into the background - used to be in the
+ * backend classes, intertwined with request and HTML. It is set down here once.
  *
- * Stil wie Record: Rückgabe null bzw. false bei Fehlern, die Meldungen in
- * Cms::errors. Kein Request, keine Ausgabe - die Aufrufer entscheiden, was sie
- * anzeigen (Maske, Bericht der Stapelverarbeitung, Fehlerliste der API).
+ * Style as in Record: return null or false on errors, the messages in
+ * Cms::errors. No request, no output - the callers decide what to show
+ * (mask, batch processing report, error list of the API).
  *
- * AKTIONEN UND RECHTE (loadForAction())
+ * ACTIONS AND RIGHTS (loadForAction())
  * --------------------
- *     read    Leserecht auf den Bereich
- *     edit    Schreibrecht (nach der Gruppe des Owners)
- *     delete  Löschrecht (nach der Gruppe des Owners)
- *     copy    Anlegen im Bereich - und alle Verknüpfungsfelder mit lesbaren
- *             Zielbereichen (die Kopie nähme sonst Verknüpfungen mit, die die
- *             Gruppe nicht sieht)
- *     move    Schreiben + Löschen im Herkunftsbereich, Verknüpfungsfelder wie bei
- *             copy; den Zielbereich prüft MoveTrait::movePrepare()
+ *     read    read right on the area
+ *     edit    write right (according to the group of the owner)
+ *     delete  delete right (according to the group of the owner)
+ *     copy    create in the area - and all link fields with readable
+ *             target areas (the copy would otherwise take along links the
+ *             group does not see)
+ *     move    write + delete in the source area, link fields as with
+ *             copy; the target area is checked by MoveTrait::movePrepare()
  *
- * DIE EIGENE OFFENE MASKE (ownOpenCopy())
+ * THE OWN OPEN MASK (ownOpenCopy())
  * --------------------
- * Eine Arbeitskopie des Session-Admins sperrt ihn selbst nicht (getLock()) - aber
- * checkOut() verwirft sie. Ändert derselbe Admin einen Datensatz auf einem zweiten
- * Weg (Stapelverarbeitung, API, ein LLM in seiner Session), während er ihn in der
- * Maske offen hat, verlöre die Maske ihre Arbeitskopie, und sein Speichern
- * scheiterte. loadForChange() bricht deshalb ab und sagt, dass der Datensatz noch
- * geöffnet ist. Die Maske selbst prüft das nicht: dort ersetzt ein zweites Öffnen
- * bewusst das erste.
+ * A working copy of the session admin does not lock him out himself (getLock()) - but
+ * checkOut() discards it. If the same admin changes a record by a second
+ * route (batch processing, API, an LLM in his session) while he has it open in the
+ * mask, the mask would lose its working copy and his save would
+ * fail. loadForChange() therefore aborts and says that the record is still
+ * open. The mask itself does not check this: there, opening a second time deliberately
+ * replaces the first.
  *
- * @see Camindo\Core\Modules\Record\Record                das Dataset
+ * @see Camindo\Core\Modules\Record\Record                the dataset
  * @see Camindo\Core\TemporaryTrait                       checkOut / checkIn / getLock
  * @see Camindo\Core\LinkTrait                            eingebettete Inhalte
  */
@@ -75,15 +75,15 @@ class RecordService
     }
 
     // ====================
-    // Laden und prüfen
+    // Load and check
 
     /**
-     * Produktiven Datensatz für eine Aktion laden und die Rechte der Gruppe prüfen
-     * (siehe Klassenkommentar).
+     * Load the productive record for an action and check the rights of the group
+     * (see class comment).
      *
      * @param int    $id      record_id
      * @param string $action  read | edit | delete | copy | move
-     * @return array|null     Datensatz (Record::load()), null bei Fehlern (Cms::errors)
+     * @return array|null     record (Record::load()), null on errors (Cms::errors)
      */
     public function loadForAction(int $id, string $action): ?array
     {
@@ -105,14 +105,14 @@ class RecordService
         $ownerId = isset($data['owner_id']) ? (int)$data['owner_id'] : null;
         $allowed = match ($action) {
             'read'   => $access->areaRead($areaId),
-            // Ändern: auch der aktuelle Status muss für die Gruppe setzbar sein
+            // change: the current status must also be settable for the group
             'edit'   => $access->recordWrite($areaId, $ownerId, (int)($data['status_id'] ?? 0)),
             'delete' => $access->areaDelete($areaId, $ownerId),
             'copy'   => $access->areaCreate($areaId),
             'move'   => $access->areaWrite($areaId, $ownerId) && $access->areaDelete($areaId, $ownerId),
         };
         if (!$allowed) {
-            // Schreibrecht ja, aber Status nicht setzbar: den Grund nennen
+            // write right yes, but status not settable: name the reason
             $statusDenied = $action === 'edit' && $access->areaWrite($areaId, $ownerId);
             $this->cms->error($this->cms->snippet($statusDenied ? 'error_status_denied' : 'error_access_denied'));
             return null;
@@ -125,16 +125,16 @@ class RecordService
     }
 
     /**
-     * Wie loadForAction(), dazu alles, was einer Änderung ohne Eingabemaske im Weg
-     * steht: der Datensatz gehört zum erwarteten Bereich, kein anderer Admin hat
-     * ihn in Arbeit (außer mit $unlock), und der Session-Admin hat ihn nicht selbst
-     * in einer Maske offen (siehe Klassenkommentar).
+     * As loadForAction(), plus everything that stands in the way of a change without an
+     * input mask: the record belongs to the expected area, no other admin has
+     * it in work (except with $unlock), and the session admin does not have it
+     * open in a mask himself (see class comment).
      *
      * @param int    $id              record_id
      * @param string $action          edit | delete | move
-     * @param int    $expectedAreaId  > 0: der Datensatz muss in diesem Bereich stehen
-     * @param bool   $unlock          fremde Bearbeitungssperre übergehen
-     * @return array|null             Datensatz, null bei Fehlern (Cms::errors)
+     * @param int    $expectedAreaId  > 0: the record must be in this area
+     * @param bool   $unlock          bypass a foreign edit lock
+     * @return array|null             record, null on errors (Cms::errors)
      */
     public function loadForChange(int $id, string $action, int $expectedAreaId = 0, bool $unlock = false): ?array
     {
@@ -155,10 +155,10 @@ class RecordService
     }
 
     /**
-     * Bearbeitungssperre eines ANDEREN Admins (TemporaryTrait::getLock()).
+     * Edit lock of ANOTHER admin (TemporaryTrait::getLock()).
      *
-     * @param array $data  produktiver Datensatz
-     * @return array|null  ['admin_id' => int, 'changed_at' => UTC] oder null
+     * @param array $data  productive record
+     * @return array|null  ['admin_id' => int, 'changed_at' => UTC] or null
      */
     public function lockInfo(array $data): ?array
     {
@@ -168,7 +168,7 @@ class RecordService
     }
 
     /**
-     * Meldung zu einer Sperre als Klartext ("Gesperrt: wird seit … von … bearbeitet.")
+     * Message about a lock as plain text ("Locked: being edited since … by ….")
      *
      * @param array $lock  lockInfo()
      */
@@ -181,12 +181,12 @@ class RecordService
     }
 
     /**
-     * Eine Arbeitskopie des Session-Admins zu diesem Datensatz, die noch nicht
-     * veraltet ist (dieselbe Frist wie getLock(): admin.edit_lock_sec) - also
-     * eine Eingabemaske, die er vermutlich noch offen hat.
+     * A working copy of the session admin for this record that is not yet
+     * outdated (same period as getLock(): admin.edit_lock_sec) - i.e.
+     * an input mask that he probably still has open.
      *
-     * @param int $recordId  produktiver Datensatz
-     * @return array|null    ['tmp_id' => int, 'changed_at' => UTC] oder null
+     * @param int $recordId  productive record
+     * @return array|null    ['tmp_id' => int, 'changed_at' => UTC] or null
      */
     public function ownOpenCopy(int $recordId): ?array
     {
@@ -210,7 +210,7 @@ class RecordService
     }
 
     /**
-     * Meldung zu ownOpenCopy() als Klartext.
+     * Message on ownOpenCopy() as plain text.
      */
     public function openCopyMessage(array $open): string
     {
@@ -220,15 +220,14 @@ class RecordService
     }
 
     /**
-     * Mit wie vielen anderen produktiven, nicht gelöschten Datensätzen ist ein
-     * Datensatz verknüpft - über irgendein Verweisfeld (relation=any + dest_id).
-     * Beidseitige Relationen stehen in `data_rel` in beiden Richtungen und zählen
-     * damit mit, auch über Gegenfelder, die in der Maske ausgeblendet sind (etwa
-     * die Artikel einer Rubrik). Gebraucht von der Löschbestätigung
+     * How many other productive, not deleted records a record is linked with - via any
+     * link field (relation=any + dest_id). Two-way relations are stored in `data_rel`
+     * in both directions and are therefore counted, also via opposite fields that are hidden in the
+     * mask (e.g. the articles of a category). Needed by the delete confirmation
      * (RecordBackendEdit::_editDeleteForm()).
      *
-     * @param int $recordId  produktiver Datensatz
-     * @return int           Anzahl verknüpfter Datensätze
+     * @param int $recordId  productive record
+     * @return int           number of linked records
      */
     public function linkedRecordCount(int $recordId): int
     {
@@ -249,21 +248,21 @@ class RecordService
     }
 
     /**
-     * Volltext ganzer Bereiche neu aufbauen - alle Volltextfelder und das
-     * Volltext-Standardfeld, für jeden produktiven Datensatz (auch die im
-     * Papierkorb: sie sollen nach dem Wiederherstellen gefunden werden). Schreibt
-     * nur `data_ftx`: keine Arbeitskopie, keine Sperre, kein Audit-Eintrag (der
-     * Volltext ist aus den Quellfeldern abgeleitet). Aufgerufen von der
-     * Zeitplaner-Aufgabe `fulltext` (SchedulerRunner::runFulltext()) und vom
-     * CLI-Befehl `fulltext` (Button "Jetzt aktualisieren").
+     * Rebuild the full text of whole areas - all full-text fields and the
+     * standard full-text field, for every productive record (also those in the
+     * trash: they should be found after restoring). Writes only
+     * `data_ftx`: no working copy, no lock, no audit entry (the full text
+     * is derived from the source fields). Called by the scheduler task
+     * `fulltext` (SchedulerRunner::runFulltext()) and by the CLI command
+     * `fulltext` (button "Update now").
      *
-     * Je Bereich unter der Sperre von FulltextState: baut ein anderer Prozess ihn
-     * gerade neu auf, wird er übersprungen ('skipped'). Nach einem vollständigen Lauf
-     * fällt die Markierung "veraltet" (FulltextState::clear()).
+     * Per area under the lock of FulltextState: if another process is currently rebuilding
+     * it, it is skipped ('skipped'). After a complete run the mark "outdated"
+     * is cleared (FulltextState::clear()).
      *
-     * @param int[]         $areaIds   Bereiche; leer = alle Bereiche außer Ordnern
-     * @param int           $deadline  Unix-Zeit, ab der abgebrochen wird (0 = ohne Grenze)
-     * @param callable|null $progress  fn(int $done, int $total) - Fortschritt je Datensatz
+     * @param int[]         $areaIds   areas; empty = all areas except folders
+     * @param int           $deadline  Unix time from which to abort (0 = no limit)
+     * @param callable|null $progress  fn(int $done, int $total) - progress per record
      * @return array        ['areas' => int, 'records' => int, 'complete' => bool, 'skipped' => int[]]
      */
     public function rebuildFulltext(array $areaIds, int $deadline = 0, ?callable $progress = null): array
@@ -275,7 +274,7 @@ class RecordService
         }
         $state = $this->fulltextState;
         $result = ['areas' => 0, 'records' => 0, 'complete' => true, 'skipped' => []];
-        // Gesamtzahl für den Fortschritt
+        // total count for the progress
         $total = 0;
         if ($progress !== null) {
             $this->db->query("SELECT COUNT(*) FROM `record` WHERE `tmp` = 0 AND `area_id` IN (" . implode(',', array_map('intval', $areaIds) ?: [0]) . ")");
@@ -320,25 +319,25 @@ class RecordService
     }
 
     // ====================
-    // Arbeitskopie
+    // Working copy
 
     /**
-     * Arbeitskopie anlegen: checkOut(), der Session zuordnen (Abmelden gibt sie
-     * frei, Record::cancelSession()) und - mit $dependents - die fest verknüpften
-     * Inhalte eingebetteter 'link'-Felder mit auschecken. Scheitert das (fremde
-     * Sperre an einem Inhalt), wird die Arbeitskopie gleich wieder verworfen.
+     * Create a working copy: checkOut(), assign it to the session (logging out releases it,
+     * Record::cancelSession()) and - with $dependents - also check out the firmly linked
+     * contents of embedded 'link' fields. If this fails (a foreign lock on
+     * a content), the working copy is discarded straight away again.
      *
-     * Beim Kopieren ($copy) bekommt $data['previous_id'] die Id des Vorbilds: die
-     * Kopie soll unmittelbar hinter ihm stehen, beim selben Vaterdatensatz
+     * When copying ($copy), $data['previous_id'] receives the id of the template: the
+     * copy should stand directly behind it, at the same parent record
      * (TreeManagerTrait::calculatePosition()).
      *
-     * Die Sperre prüft der Aufrufer vorher (lockInfo() bzw. loadForChange()).
+     * The caller checks the lock beforehand (lockInfo() or loadForChange()).
      *
-     * @param array &$data       produktiver Datensatz (loadForAction()); zeigt danach
-     *                           auf die Arbeitskopie (record_id, tmp, origin_id)
-     * @param bool  $copy        Kopie statt Bearbeitung
-     * @param bool  $dependents  eingebettete Inhalte mit auschecken (Eingabemaske)
-     * @return int|null          Id der Arbeitskopie, null bei Fehlern (Cms::errors)
+     * @param array &$data       productive record (loadForAction()); afterwards points
+     *                           to the working copy (record_id, tmp, origin_id)
+     * @param bool  $copy        copy instead of edit
+     * @param bool  $dependents  also check out embedded contents (input mask)
+     * @return int|null          id of the working copy, null on errors (Cms::errors)
      */
     public function checkOut(array &$data, bool $copy = false, bool $dependents = true): ?int
     {
@@ -363,12 +362,12 @@ class RecordService
     }
 
     /**
-     * Die Felder, die das Speichern einer Arbeitskopie schreibt: alle Felder des
-     * Bereichs, area_id, und owner_id nur mit dem Zusatzrecht (areaSetOwner) und
-     * wenn einer angegeben ist.
+     * The fields that saving a working copy writes: all fields of the
+     * area, area_id, and owner_id only with the additional right (areaSetOwner) and
+     * if one is given.
      *
      * @param int   $areaId
-     * @param array $data  zu speichernde Werte
+     * @param array $data  values to save
      * @return string[]
      */
     public function saveFields(int $areaId, array $data): array
@@ -382,27 +381,27 @@ class RecordService
     }
 
     /**
-     * Arbeitskopie einchecken: in EINER Transaktion zuerst die fest verknüpften
-     * Inhalte (LinkTrait::checkInDependents(): auch Kopien und Verwaiste), dann der
-     * Datensatz selbst (Record::save() - Validierung, checkIn, Dateien, Baum).
-     * Scheitert eines, kommt alles zurück; die Arbeitskopien bleiben stehen.
-     * Danach die Liste "Zuletzt geändert" (History).
+     * Check in a working copy: in ONE transaction first the firmly linked
+     * contents (LinkTrait::checkInDependents(): also copies and orphans), then the
+     * record itself (Record::save() - validation, checkIn, files, tree).
+     * If one fails, everything is rolled back; the working copies remain.
+     * Afterwards the list "Last changed" (History).
      *
-     * Die eingebetteten Inhalte müssen vorher zwischengespeichert sein
+     * The embedded contents must have been cached beforehand
      * (RecordBackendEdit::_embedSave()).
      *
-     * @param int      $tmpId      Arbeitskopie des Session-Admins
-     * @param string[] $fields     zu schreibende Felder (saveFields())
-     * @param array    $data       Werte im Eingabeformat der Maske, record_id = $tmpId
-     * @param string[] $stored     Felder, deren Werte im Datenbankformat vorliegen
-     *                             (Record::importSave() - API, Kopie ohne Maske)
-     * @param string[] $prehashed  Passwort-Felder, deren Wert der Hash ist
-     * @return int|null            record_id des produktiven Datensatzes, null bei Fehlern
+     * @param int      $tmpId      working copy of the session admin
+     * @param string[] $fields     fields to write (saveFields())
+     * @param array    $data       values in the input format of the mask, record_id = $tmpId
+     * @param string[] $stored     fields whose values are in database format
+     *                             (Record::importSave() - API, copy without mask)
+     * @param string[] $prehashed  password fields whose value is the hash
+     * @return int|null            record_id of the productive record, null on errors
      */
     public function checkIn(int $tmpId, array $fields, array $data, array $stored = [], array $prehashed = []): ?int
     {
-        // Gehört die Kopie nicht (mehr) dem Session-Admin - jemand hat die Sperre
-        // aufgehoben -, meldet save() das mit dem passenden Text
+        // If the copy no longer belongs to the session admin - someone has lifted the lock -
+        // save() reports this with the matching text
         $prodData = $this->record->getProdData($tmpId);
         $originId = (int)($prodData[0] ?? 0);
         $areaId = (int)($prodData[1] ?? $data['area_id'] ?? 0);
@@ -435,38 +434,38 @@ class RecordService
     }
 
     // ====================
-    // Ändern ohne Maske
+    // Change without a mask
 
     /**
-     * Einen Datensatz in EINEM Schritt ändern: laden und prüfen (loadForChange()),
-     * auschecken, Verknüpfungen und Dateien an die Arbeitskopie, speichern
-     * (Record::importSave(): Validierung nach den Felddefinitionen, checkIn, Cache,
-     * Volltext, Baumpflege - alles wie in der Eingabemaske). Scheitert die Prüfung
-     * oder ist es eine Simulation, wird die Arbeitskopie verworfen - die
-     * Fehlermeldungen bleiben dabei erhalten.
+     * Change a record in ONE step: load and check (loadForChange()),
+     * check out, links and files to the working copy, save
+     * (Record::importSave(): validation according to the field definitions, checkIn, cache,
+     * full text, tree maintenance - all as in the input mask). If the check fails
+     * or it is a simulation, the working copy is discarded - the
+     * error messages are kept in the process.
      *
-     * Eingebettete Inhalte ('link') werden nicht mit ausgecheckt: sie werden hier
-     * nicht bearbeitet, ihre Verknüpfungen gehen mit dem Datensatz hin und zurück.
+     * Embedded contents ('link') are not checked out: they are not edited here,
+     * their links travel with the record there and back.
      *
-     * @param int      $id         produktiver Datensatz
-     * @param string[] $fields     Felder aus $data (Schema-Namen des Bereichs); dazu
-     *                             'owner_id' (nur mit dem Recht "Owner anpassen") und
-     *                             'position' (Wert: $data['previous_id'])
-     * @param array    $data       Werte wie in der Maske (data[...]), mehrsprachig je
+     * @param int      $id         productive record
+     * @param string[] $fields     fields from $data (schema names of the area); plus
+     *                             'owner_id' (only with the right "adjust owner") and
+     *                             'position' (value: $data['previous_id'])
+     * @param array    $data       values as in the mask (data[...]), multilingual per
      *                             language_id
-     * @param array    $relations  Verknüpfungsfeld => [dest_id, ...] (ersetzt die
-     *                             bisherigen) oder ['set' | 'add' | 'remove' |
-     *                             'order' => [dest_id, ...]] - siehe applyRelations()
-     * @param array    $files      Upload-Feld => [langKey ('' oder language_id) =>
-     *                             ['importfile' => Pfad unter paths.tmp_dir, 'filename' => Name]
-     *                             | ['serverfile' => Pfad in paths.upload_dir]
-     *                             | null (Datei entfernen)]
-     * @param array    $options    area_id (erwarteter Bereich), unlock, simulate,
-     *                             stored (Felder im Datenbankformat), prehashed
-     *                             (Passwort-Felder, deren Wert der Hash ist),
-     *                             history (false: nicht in "Zuletzt geändert" -
-     *                             Stapelverarbeitung)
-     * @return int|null            record_id, null bei Fehlern (Cms::errors)
+     * @param array    $relations  link field => [dest_id, ...] (replaces the
+     *                             previous ones) or ['set' | 'add' | 'remove' |
+     *                             'order' => [dest_id, ...]] - see applyRelations()
+     * @param array    $files      upload field => [langKey ('' or language_id) =>
+     *                             ['importfile' => path under paths.tmp_dir, 'filename' => name]
+     *                             | ['serverfile' => path in paths.upload_dir]
+     *                             | null (remove file)]
+     * @param array    $options    area_id (expected area), unlock, simulate,
+     *                             stored (fields in database format), prehashed
+     *                             (password fields whose value is the hash),
+     *                             history (false: not in "Last changed" -
+     *                             batch processing)
+     * @return int|null            record_id, null on errors (Cms::errors)
      */
     public function updateOne(int $id, array $fields, array $data, array $relations = [], array $files = [], array $options = []): ?int
     {
@@ -490,7 +489,7 @@ class RecordService
             );
         }
         if ($simulate || !$ok) {
-            // Simulation: kein checkIn - Fehler: Arbeitskopie nicht stehen lassen
+            // simulation: no checkIn - on error: do not leave the working copy behind
             $this->cancelKeepErrors($tmpId);
             return $ok ? $id : null;
         }
@@ -499,14 +498,14 @@ class RecordService
     }
 
     /**
-     * Einen Datensatz in EINEM Schritt anlegen - wie updateOne(), nur mit einer
-     * neuen Arbeitskopie (tmpInit(), prüft das Recht zum Anlegen). Nicht in
-     * abhängigen Bereichen (area.dependent): deren Datensätze entstehen nur über ein
-     * Feld vom Typ 'link'.
+     * Create a record in ONE step - like updateOne(), only with a
+     * new working copy (tmpInit(), checks the right to create). Not in
+     * dependent areas (area.dependent): their records are only created via a
+     * field of type 'link'.
      *
-     * @param int   $areaId   Bereich
-     * @param array $options  simulate, stored, prehashed (siehe updateOne())
-     * @return int|null       record_id des neuen Datensatzes (Simulation: 0)
+     * @param int   $areaId   area
+     * @param array $options  simulate, stored, prehashed (see updateOne())
+     * @return int|null       record_id of the new record (simulation: 0)
      */
     public function createOne(int $areaId, array $fields, array $data, array $relations = [], array $files = [], array $options = []): ?int
     {
@@ -548,14 +547,14 @@ class RecordService
     }
 
     /**
-     * Einen Datensatz in EINEM Schritt kopieren und dabei ändern - wie "Kopieren" in
-     * der Maske: die Kopie samt Dateien und fest verknüpften Inhalten (als Kopien)
-     * steht unmittelbar hinter dem Vorbild; Kinder im Baum werden nicht mitkopiert.
-     * Geändert wird, was in $fields steht; alles andere übernimmt die Kopie.
+     * Copy a record in ONE step and change it in the process - like "Copy" in
+     * the mask: the copy including files and firmly linked contents (as copies)
+     * stands directly behind the template; children in the tree are not copied along.
+     * What is in $fields is changed; the copy takes over everything else.
      *
-     * @param int   $id       Vorbild (produktiv)
-     * @param array $options  simulate, stored, prehashed (siehe updateOne())
-     * @return int|null       record_id der Kopie (Simulation: 0)
+     * @param int   $id       template (productive)
+     * @param array $options  simulate, stored, prehashed (see updateOne())
+     * @return int|null       record_id of the copy (simulation: 0)
      */
     public function copyOne(int $id, array $fields, array $data, array $relations = [], array $files = [], array $options = []): ?int
     {
@@ -568,7 +567,7 @@ class RecordService
         $saveData = ['record_id' => $tmpId, 'area_id' => $areaId];
         $ok = $this->applyChanges($tmpId, $areaId, $fields, $data, $relations, $files, $saveData);
         $fields[] = 'area_id';
-        // hinter dem Vorbild einordnen (checkOut() hat previous_id gesetzt)
+        // place it behind the template (checkOut() has set previous_id)
         $schemaVirtual = $this->record->virtualSchema($areaId, addMetaFields: false);
         if (isset($schemaVirtual['position']) && !in_array('position', $fields, true)) {
             $fields[] = 'position';
@@ -588,12 +587,12 @@ class RecordService
     }
 
     /**
-     * Die Felder einer Änderung prüfen: Felder des Bereichs mit Eingabefeld (keine
-     * Volltext- und Thumbnail-Felder, keine eingebetteten Inhalte), dazu 'owner_id'
-     * mit dem Recht "Owner anpassen".
+     * Check the fields of a change: fields of the area with an input field (no
+     * full-text and thumbnail fields, no embedded contents), plus 'owner_id'
+     * with the right "adjust owner".
      *
-     * @return string[]|null  Felder (aus $fields, $relations und $files); null bei
-     *                        Fehlern (Cms::errors) bzw. ohne Felder (außer $allowEmpty)
+     * @return string[]|null  fields (from $fields, $relations and $files); null on
+     *                        errors (Cms::errors) or without fields (except $allowEmpty)
      */
     private function changeFields(int $areaId, array $fields, array $relations, array $files, bool $allowEmpty = false): ?array
     {
@@ -625,12 +624,12 @@ class RecordService
     }
 
     /**
-     * Die Änderungen an eine Arbeitskopie bringen und $saveData füllen:
-     * Verknüpfungen (applyRelations()), Dateien (Löschmarkierung bzw. Quelle für
-     * secureUploads()), die übrigen Werte aus $data; 'position' nimmt
+     * Apply the changes to a working copy and fill $saveData:
+     * links (applyRelations()), files (deletion marker or source for
+     * secureUploads()), the other values from $data; 'position' takes
      * $data['previous_id'].
      *
-     * @return bool  false bei Fehlern (Cms::errors)
+     * @return bool  false on errors (Cms::errors)
      */
     private function applyChanges(int $tmpId, int $areaId, array $fields, array $data, array $relations, array $files, array &$saveData): bool
     {
@@ -650,7 +649,7 @@ class RecordService
                     $ok = false;
                     continue;
                 }
-                // save() prüft die Anzahl, checkIn() überträgt sie
+                // save() checks the count, checkIn() transfers it
                 $saveData[$name] = $destIds;
                 continue;
             }
@@ -684,19 +683,19 @@ class RecordService
     }
 
     /**
-     * Verknüpfungen eines Feldes an einer Arbeitskopie ändern.
+     * Change the links of a field on a working copy.
      *
-     *     [id, id, …]            wie 'set'
-     *     ['set' => [...]]       ersetzt alle vorhandenen
-     *     ['add' => [...]]       hängt an (vorhandene bleiben)
-     *     ['remove' => [...]]    entfernt diese
-     *     ['order' => [...]]     Reihenfolge (nur Felder mit manueller Sortierung);
-     *                            nicht genannte folgen dahinter
+     *     [id, id, …]            like 'set'
+     *     ['set' => [...]]       replaces all existing ones
+     *     ['add' => [...]]       appends (existing ones remain)
+     *     ['remove' => [...]]    removes these
+     *     ['order' => [...]]     order (only fields with manual sorting);
+     *                            ids not named follow after them
      *
-     * 'add', 'remove' und 'order' lassen sich kombinieren (in dieser Reihenfolge).
+     * 'add', 'remove' and 'order' can be combined (in this order).
      *
-     * @return int[]|null  die Verknüpfungen danach in ihrer Reihenfolge; null bei
-     *                     Fehlern (Cms::errors)
+     * @return int[]|null  the links afterwards in their order; null on
+     *                     errors (Cms::errors)
      */
     public function applyRelations(int $tmpId, array $colDef, array $ops): ?array
     {
@@ -725,7 +724,7 @@ class RecordService
         return $current;
     }
 
-    /** dest_ids eines Feldes einer Arbeitskopie in ihrer Reihenfolge */
+    /** dest_ids of a field of a working copy in their order */
     private function relationIds(int $srcId, int $fieldId): array
     {
         $this->db->pushResult();
@@ -740,8 +739,8 @@ class RecordService
     }
 
     /**
-     * Arbeitskopie verwerfen, ohne die bis dahin gesammelten Fehlermeldungen zu
-     * verlieren (cancel() setzt selbst Abfragen und ggf. Meldungen ab).
+     * Discard a working copy without losing the error messages collected so far
+     * (cancel() itself runs queries and possibly emits messages).
      */
     public function cancelKeepErrors(int $tmpId): void
     {
@@ -754,27 +753,26 @@ class RecordService
     }
 
     // ====================
-    // Löschen
+    // Delete
 
     /**
-     * Datensatz löschen - nach der Lösch-Policy seines Bereichs (Modul Privacy,
-     * PrivacyJobs::delete(), Auslöser 'record'). Was "löschen" heißt, sagt die
-     * Policy: in den Papierkorb, Felder überschreiben, endgültig löschen … - auch für
-     * die mitgelöschten Kinder ($withChilds) und fest verknüpften Inhalte.
+     * Delete a record - according to the deletion policy of its area (module Privacy,
+     * PrivacyJobs::delete(), trigger 'record'). What "delete" means is determined by the
+     * policy: to the trash, overwrite fields, delete permanently … - also for
+     * the children deleted along ($withChilds) and firmly linked contents.
      *
-     * Rechte und Sperre prüft der Aufrufer (loadForAction() / loadForChange()).
+     * The caller checks rights and lock (loadForAction() / loadForChange()).
      *
-     * Wird die Arbeitskopie des Session-Admins übergeben (Löschdialog der Maske),
-     * ist das Original gemeint; die Arbeitskopie wird vorher verworfen - sie stünde
-     * sonst bis zum Leeren des Papierkorbs bzw. käme beim Überschreiben der Felder
-     * in die Quere.
+     * If the working copy of the session admin is passed (delete dialog of the mask),
+     * the original is meant; the working copy is discarded beforehand - otherwise it would
+     * remain until the trash is emptied, or get in the way when the fields are overwritten.
      *
-     * @param int  $id          produktiver Datensatz oder dessen Arbeitskopie
-     * @param bool $withChilds  Nachkommen mit löschen (eigene Policy-Aufträge; in den
-     *                          Papierkorb mit der Aktion soft_delete des Datensatzes),
-     *                          sonst rücken sie eine Ebene hoch
+     * @param int  $id          productive record or its working copy
+     * @param bool $withChilds  also delete descendants (own policy jobs; to the
+     *                          trash with the action soft_delete of the record),
+     *                          otherwise they move up one level
      * @return string|null      'deleted' | 'background' | 'changed' | 'scheduled',
-     *                          null bei Fehlern (Cms::errors)
+     *                          null on errors (Cms::errors)
      */
     public function delete(int $id, bool $withChilds = false): ?string
     {
@@ -786,17 +784,17 @@ class RecordService
     }
 
     /**
-     * In den Papierkorb (Soft-Delete, Record::delete()) - die Aktion soft_delete
-     * einer Lösch-Policy, ausgelöst im Backend. Ein großer Teilbaum ($withChilds, ab
-     * admin.mass_delete_threshold) geht in den Hintergrund (MassDeletion); scheitert
-     * dessen Start, wird im Request gelöscht.
+     * To the trash (soft delete, Record::delete()) - the action soft_delete
+     * of a deletion policy, triggered in the backend. A large subtree ($withChilds, from
+     * admin.mass_delete_threshold) goes to the background (MassDeletion); if
+     * its start fails, the deletion is done in the request.
      *
-     * @return string|null  'deleted' | 'background', null bei Fehlern (Cms::errors)
+     * @return string|null  'deleted' | 'background', null on errors (Cms::errors)
      */
     private function softDelete(int $prodId, bool $withChilds): ?string
     {
-        // Gezählt und im Hintergrund gestartet wird über die produktive Id - die
-        // Arbeitskopie hat lft = rgt = 0, der Teilbaum hängt am Original
+        // counted and started in the background via the productive id - the
+        // working copy has lft = rgt = 0, the subtree hangs on the original
         $result = null;
         $count = $this->massDeletion->affectedCount('record', $prodId, $withChilds, 'delete');
         if ($this->massDeletion->needsBackground($count)) {
@@ -805,7 +803,7 @@ class RecordService
                 $result = 'background';
             }
             else {
-                // Start fehlgeschlagen -> im Request weitermachen statt gar nicht zu löschen
+                // start failed -> continue in the request instead of not deleting at all
                 $this->system->log('massdelete-errors', "record {$prodId}: {$error}");
             }
         }
@@ -814,15 +812,15 @@ class RecordService
     }
 
     // ====================
-    // Export und Import
+    // Export and import
 
     /**
-     * Welche Formate darf die Gruppe exportieren bzw. importieren? XML (Sicherung,
-     * Strukturübertragung, auch global) nur der Superuser, CSV und DOCX über die
-     * Zusatzrechte export_csv/import_csv bzw. export_docx/import_docx.
+     * Which formats may the group export or import? XML (backup, structure transfer,
+     * also global) only the superuser, CSV and DOCX via the additional rights
+     * export_csv/import_csv or export_docx/import_docx.
      *
      * @param string $direction  'export' | 'import'
-     * @return string[]  Teilmenge von RecordExport::TYPES in deren Reihenfolge
+     * @return string[]  subset of RecordExport::TYPES in their order
      */
     public function transferTypes(string $direction): array
     {
@@ -835,25 +833,25 @@ class RecordService
     }
 
     // ====================
-    // Suche
+    // Search
 
     /**
-     * Suchfeld '_url' auflösen (Suchmaske, RecordBackendList, API): eingefügt werden
-     * darf eine record_id ("4902"), ein Slug mit oder ohne Slug-Präfix ("gt",
-     * "modelle/gt") oder eine URL ("http://automobile.localhost/de_DE/modelle/gt").
+     * Resolve the search field '_url' (search mask, RecordBackendList, API): what may be
+     * entered is a record_id ("4902"), a slug with or without slug prefix ("gt",
+     * "modelle/gt") or a URL ("http://automobile.localhost/de_DE/modelle/gt").
      *
-     *     Ziffern                    -> record_id
-     *     URL                        -> Pfad; die Domain grenzt auf ihre Instanz ein
-     *     Sprachsegment am Anfang    -> ignoriert (nur mit weiterem Pfad dahinter)
-     *     ",template" am Ende        -> ignoriert
-     *     erster Pfadteil = Präfix   -> slug = Rest, area_id = die Bereiche mit diesem
-     *                                   Präfix (in irgendeiner Sprache, InstanceCache)
-     *     sonst                      -> slug = ganzer Pfad
+     *     digits                     -> record_id
+     *     URL                        -> path; the domain narrows to its instance
+     *     language segment at start  -> ignored (only with a further path behind it)
+     *     ",template" at the end     -> ignored
+     *     first path part = prefix   -> slug = rest, area_id = the areas with this
+     *                                   prefix (in any language, InstanceCache)
+     *     otherwise                  -> slug = whole path
      *
-     * Der Slug wird exakt verglichen ('==').
+     * The slug is compared exactly ('==').
      *
-     * @return array  Filterwerte: record_id | slug [, area_id (int[]), instance_id]
-     *                - [] bei leerer Eingabe
+     * @return array  filter values: record_id | slug [, area_id (int[]), instance_id]
+     *                - [] for empty input
      */
     public function urlFilter(string $input): array
     {
@@ -873,7 +871,7 @@ class RecordService
         $segments = array_values(array_filter(explode('/', rawurldecode($path)), fn($p) => trim($p) !== ''));
         if ($segments && strtolower($segments[0]) === 'index.php') array_shift($segments);
 
-        // Sprachsegment (Kürzel einer Sprache der Instanz bzw. aller Instanzen)
+        // language segment (code of a language of the instance or of all instances)
         if (count($segments) > 1) {
             $languages = $this->instanceCache->languagesOf($instanceIds
                 ?: array_map('intval', (array)($this->instanceCache->all()['instance_ids'] ?? [])));

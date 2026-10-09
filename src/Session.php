@@ -1,59 +1,59 @@
 <?php
 /**
- * Admin-Session Verwaltung
+ * Admin session management
  *
- * DETAILS: ADMIN- UND GRUPPENDATEN IN DER SESSION
+ * DETAILS: ADMIN AND GROUP DATA IN THE SESSION
  * --------------------
- * create() legt zu jeder Session einmalig die Angaben ab, die jeder Backend-Request
- * braucht, ohne `admin` und `group` erneut zu lesen: den Namen, die Gruppe und die
- * persönlichen Einstellungen (`admin`.`settings`: Backend-Sprache, Zeitzone,
- * bevorzugte Sprachversion, Frontend-Editing). Ändern sich die Einstellungen,
- * schreibt refreshDetails() alle Sessions des Admins nach (Admin::hookOnSaved()).
+ * create() stores once per session the data every backend request needs,
+ * without reading `admin` and `group` again: the name, the group and the
+ * personal settings (`admin`.`settings`: backend language, time zone,
+ * preferred language version, frontend editing). If the settings change,
+ * refreshDetails() rewrites all sessions of the admin (Admin::hookOnSaved()).
  *
- * Sobald eine Session geladen oder erzeugt ist, gehen die Einstellungen an
- * Cms::applyAdminSettings() - ab da laufen Snippets und Zeitangaben des Requests in
- * der Sprache und Zeitzone des Admins (siehe Cms, "Sprache und Zeitzone").
+ * As soon as a session is loaded or created, the settings go to
+ * Cms::applyAdminSettings() - from then on snippets and time specifications of the request run in
+ * the language and time zone of the admin (see Cms, "Language and time zone").
  *
- * RECHTE DER GRUPPE
+ * RIGHTS OF THE GROUP
  * --------------------
- * Ebenfalls je Request lädt applyAccess() die Gruppendatei der angemeldeten Gruppe
- * in Camindo\Core\Access (var/cache/group-{group_id}.php, siehe InstanceCache) und
- * beschränkt für Nicht-Superuser die Datenbankabfragen von Cms::select() auf die
- * zugewiesenen Instanzen (Cms::setInstanceAccess()) und die lesbaren Bereiche
- * (Cms::setAreaAccess()). Alles Weitere - Module, Rechte je Bereich, Sprachen -
- * fragen die Module bei Access nach.
+ * Also per request, applyAccess() loads the group file of the logged-in group
+ * into Camindo\Core\Access (var/cache/group-{group_id}.php, see InstanceCache) and
+ * restricts, for non-superusers, the database queries of Cms::select() to the
+ * assigned instances (Cms::setInstanceAccess()) and the readable areas
+ * (Cms::setAreaAccess()). Everything else - modules, rights per area, languages -
+ * the modules ask Access.
  *
- * WAS JE REQUEST GEPRÜFT WIRD (Integrity)
+ * WHAT IS CHECKED PER REQUEST (Integrity)
  * --------------------
- * load() verlässt sich nicht auf die Session-Zeile allein. Sie trägt eine Signatur
- * über session_id + admin_id, und die Admin-Zeile wird jedes Mal frisch gelesen und
- * gegen ihre Signatur geprüft; group_id und status_id kommen von dort, nicht aus den
- * gecachten details. Wer in der Datenbank eine Session einfügt, in den details eine
- * andere Gruppe einträgt oder am Admin dreht, bekommt keine Session (siehe Integrity).
+ * load() does not rely on the session row alone. It carries a signature
+ * over session_id + admin_id, and the admin row is read fresh every time and
+ * checked against its signature; group_id and status_id come from there, not from the
+ * cached details. Whoever inserts a session into the database, enters
+ * another group in the details or tampers with the admin gets no session (see Integrity).
  *
- * OBERFLÄCHEN
+ * INTERFACES
  * --------------------
- * Eine Session gehört zu genau einer Oberfläche (`interface`: backend, cli, php -
- * Access::INTERFACES). Die Backend-Einstiege laden nur Backend-Sessions (load() ohne
- * weitere Angabe), die API nur ihre eigenen (ApiSession::resume()). Sessions der
- * Kommandozeile und der PHP-API haben eine eigene Frist für Untätigkeit
- * (api.max_inactive_sec) und eine feste Höchstlaufzeit (`expires_at`,
- * api.max_lifetime). Bei jedem Laden wird geprüft, ob die Gruppe die Oberfläche
- * (noch) benutzen darf.
+ * A session belongs to exactly one interface (`interface`: backend, cli, php -
+ * Access::INTERFACES). The backend entry points only load backend sessions (load() without
+ * further specification), the API only its own (ApiSession::resume()). Sessions of the
+ * command line and of the PHP API have their own inactivity limit
+ * (api.max_inactive_sec) and a fixed maximum lifetime (`expires_at`,
+ * api.max_lifetime). Every time a session is loaded, it is checked whether the group
+ * may still use the interface.
  *
- * JEDE ANMELDUNG IST EINE NEUE SESSION
+ * EVERY LOGIN IS A NEW SESSION
  * --------------------
- * create() erzeugt immer eine neue Session-Id (kein Session-Fixation). Steht im
- * Cookie noch eine Session DESSELBEN Admins - etwa nach admin.max_inactive_sec -,
- * werden nur ihre Oberflächen-Zustände (aufgeklappte Instanzen und Ordner,
- * details.ui - siehe uiState()) übernommen und die alte Zeile gelöscht.
- * Arbeitskopien hängen am Admin, nicht an der Session, und überstehen die
- * Neuanmeldung ohnehin.
+ * create() always creates a new session id (no session fixation). If the
+ * cookie still holds a session of the SAME admin - e.g. after admin.max_inactive_sec -,
+ * only its interface states (expanded instances and folders,
+ * details.ui - see uiState()) are taken over and the old row is deleted.
+ * Working copies hang on the admin, not on the session, and survive
+ * the new login anyway.
  */
 namespace Camindo\Core;
 
 class Session {
-    /* 
+    /*
     data[
         'sessionid'
         'admin_id'
@@ -85,7 +85,7 @@ class Session {
 
     /**
      * Setter
-     * @param string $field   name of the database field in admin_sesssion
+     * @param string $field   name of the database field in admin_session
      * @param string $value   value to store
      * @return                void
      */
@@ -100,11 +100,11 @@ class Session {
     }
 
     /**
-     * Oberflächen-Zustand der Session lesen (`details`.`ui`), z. B. die im Modul
-     * Snippets angezeigten Sprachen.
+     * Read the interface state of the session (`details`.`ui`), e.g. the languages
+     * shown in the Snippets module.
      *
-     * @param string $name     Schlüssel, z. B. 'snippets_languages'
-     * @param mixed  $default  Rückgabe, wenn nichts gespeichert ist
+     * @param string $name     key, e.g. 'snippets_languages'
+     * @param mixed  $default  return value if nothing is stored
      */
     public function uiState(string $name, mixed $default = null): mixed
     {
@@ -112,13 +112,13 @@ class Session {
     }
 
     /**
-     * Oberflächen-Zustand in der Session speichern (`details`.`ui`). Geschrieben wird
-     * nur dieser eine Wert (JSON_SET) - der Rest von details bleibt, wie er ist.
-     * refreshDetails() erhält die ui-Werte, create() übernimmt sie aus der vorigen
-     * Session desselben Admins.
+     * Store the interface state in the session (`details`.`ui`). Only this one value is
+     * written (JSON_SET) - the rest of details stays as it is.
+     * refreshDetails() keeps the ui values, create() takes them over from the previous
+     * session of the same admin.
      *
-     * @param string $name   Schlüssel (a-z, 0-9, _)
-     * @param mixed  $value  JSON-fähiger Wert
+     * @param string $name   key (a-z, 0-9, _)
+     * @param mixed  $value  JSON-compatible value
      */
     public function setUiState(string $name, mixed $value): void
     {
@@ -135,28 +135,28 @@ class Session {
     }
 
     /**
-     * Administrator-Id ohne Session setzen - ausschließlich für CLI-Prozesse.
+     * Set the administrator id without a session - exclusively for CLI processes.
      *
-     * Hintergrundprozesse (Core/cron/*.php) haben keine Session, schreiben aber über
-     * Dataset::markDeleted() das Feld `changed_by`. Damit dort nicht 0 landet, reicht
-     * der auslösende Web-Request die Administrator-Id als Kommandozeilen-Argument durch
-     * und der CLI-Prozess hinterlegt sie hier.
+     * Background processes (Core/cron/*.php) have no session, but write the field
+     * `changed_by` via Dataset::markDeleted(). So that 0 does not end up there, the
+     * triggering web request passes the administrator id on as a command-line argument
+     * and the CLI process stores it here.
      *
-     * Bewusst eng gehalten: setzt admin_id und die Details (Name, Einstellungen,
-     * Gruppe - damit Backend::isSuperuser() und die Backend-Sprache auch im CLI
-     * stimmen), legt keine Session an und schreibt nichts in die Datenbank. Ein
-     * Aufruf außerhalb von CLI wird ignoriert - sonst ließe sich damit eine
-     * Anmeldung umgehen.
+     * Deliberately kept narrow: sets admin_id and the details (name, settings,
+     * group - so that Backend::isSuperuser() and the backend language also match in the CLI),
+     * creates no session and writes nothing to the database. A call outside
+     * CLI is ignored - otherwise this could be used to bypass a
+     * login.
      *
-     * Die Gruppenrechte werden nur mit $withAccess geladen: Hintergrundjobs, die
-     * ein Admin aus dem Backend anstößt (Stapelverarbeitung, Import, Export,
-     * Massenlöschung), laufen damit unter denselben Rechten wie im Request - sonst
-     * ließe sich über "Hintergrundprozess" jede Prüfung umgehen. Systemjobs
-     * (Scheduler, Papierkorb, Template-Sync) und Tests laden keine Rechte
+     * The group rights are only loaded with $withAccess: background jobs that
+     * an admin starts from the backend (batch processing, import, export,
+     * mass deletion) thus run under the same rights as in the request - otherwise
+     * "background process" could be used to bypass every check. System jobs
+     * (scheduler, trash, template sync) and tests load no rights
      * (12-group-rights.md, A7).
      *
-     * @param int  $adminId     admin.admin_id, 0 = unbekannt
-     * @param bool $withAccess  Gruppenrechte des Admins laden (Access)
+     * @param int  $adminId     admin.admin_id, 0 = unknown
+     * @param bool $withAccess  load the group rights of the admin (Access)
      */
     public function setCliAdmin(int $adminId, bool $withAccess = false): void
     {
@@ -172,21 +172,21 @@ class Session {
     }
 
     /**
-     * Neue Session erzeugen - immer mit neuer Session-Id (siehe Klassenkommentar).
+     * Create a new session - always with a new session id (see class comment).
      *
-     * @param int      $adminId      admin.admin_id (Anmeldung ist geprüft)
+     * @param int      $adminId      admin.admin_id (login is checked)
      * @param string   $interface    backend | cli | php (Access::INTERFACES)
-     * @param int|null $maxLifetime  cli/php: Höchstlaufzeit in Sekunden, begrenzt auf
+     * @param int|null $maxLifetime  cli/php: maximum lifetime in seconds, limited to
      *                               api.max_lifetime (null = api.max_lifetime)
-     * @return string                Session-Id
+     * @return string                session id
      */
     public function create(int $adminId, string $interface = 'backend', ?int $maxLifetime = null): string
     {
         if (!in_array($interface, Access::INTERFACES, true)) {
             throw new \InvalidArgumentException("invalid interface \"{$interface}\"");
         }
-        // Datenbank bereinigen: Sessions älter als 24 Std und abgelaufene löschen,
-        // dazu die Zuordnung ihrer Arbeitskopien (registerWorkingCopy())
+        // Clean up the database: delete sessions older than 24 h and expired ones,
+        // plus the assignment of their working copies (registerWorkingCopy())
         $seconds = 24 * 3600;
         $this->db->query('DELETE FROM `admin_session`'
             .' WHERE `access_date` < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND)'
@@ -197,22 +197,22 @@ class Session {
         $this->db->query('DELETE FROM `admin_session_record`'
             . ' WHERE `session_id` NOT IN (SELECT `session_id` FROM `admin_session`)');
 
-        // Admin- und Gruppen- Daten zusammenstellen
+        // Assemble admin and group data
         $details = $this->adminDetails($adminId);
         if ($details === null) {
-            // Kein Admin gefunden dann Total-Abbruch
+            // No admin found: abort completely
             throw new \RuntimeException("Admin with admin_id=$adminId does not exist.");
         }
 
-        // Oberflächen-Zustände einer abgelaufenen Session desselben Admins übernehmen
-        // (nur im Backend - dort steht die Session im Cookie)
+        // Take over the interface states of an expired session of the same admin
+        // (only in the backend - there the session is in the cookie)
         $isBackend = ($interface === 'backend');
         $previous = $isBackend
             ? $this->previousSessionState($adminId)
             : ['expanded_instance_ids' => '', 'expanded_folder_ids' => '', 'ui' => [], 'session_id' => ''];
         if ($previous['ui']) $details['ui'] = $previous['ui'];
 
-        // Höchstlaufzeit (cli/php)
+        // Maximum lifetime (cli/php)
         $expiresAt = null;
         if (!$isBackend) {
             $limit = max(60, (int)$this->config->get('api.max_lifetime'));
@@ -235,8 +235,8 @@ class Session {
             ]
         );
 
-        // Arbeitskopien der abgelösten Session gehören jetzt dieser (die Maske steht
-        // nach dem Re-Login noch, StartBackend)
+        // Working copies of the replaced session now belong to this one (the mask is still
+        // there after the re-login, StartBackend)
         if ($previous['session_id'] !== '') {
             $this->db->query('UPDATE `admin_session_record` SET `session_id` = ? WHERE `session_id` = ?',
                 'ss', [$sessionId, $previous['session_id']]);
@@ -255,8 +255,8 @@ class Session {
         $this->applySettings();
         $this->applyAccess();
         if (!$this->container->get(Access::class)->interface($interface)) {
-            // Die Anmeldung prüft das vorher (Admin::loginByName(), ApiSession) -
-            // hier nur, damit create() nie eine unzulässige Session hinterlässt
+            // The login checks this beforehand (Admin::loginByName(), ApiSession) -
+            // here only so that create() never leaves an invalid session behind
             $this->close($sessionId);
             throw new \RuntimeException("group of admin {$adminId} may not use interface {$interface}");
         }
@@ -264,13 +264,13 @@ class Session {
     }
 
     /**
-     * Steht im Cookie eine Session dieses Admins (abgelaufen oder nicht), ihre
-     * Oberflächen-Zustände holen und die Zeile löschen - sie wird durch die neue
-     * ersetzt. Eine Session eines ANDEREN Admins bleibt unangetastet und
-     * unbeachtet: sie gehört nicht zu dieser Anmeldung.
+     * If the cookie holds a session of this admin (expired or not), fetch its
+     * interface states and delete the row - it is replaced by the new one. A session of
+     * ANOTHER admin stays untouched and
+     * ignored: it does not belong to this login.
      *
-     * @return array  expanded_instance_ids, expanded_folder_ids ('' wenn nichts da),
-     *                ui (details.ui, [] wenn nichts da)
+     * @return array  expanded_instance_ids, expanded_folder_ids ('' if nothing there),
+     *                ui (details.ui, [] if nothing there)
      */
     private function previousSessionState(int $adminId): array
     {
@@ -296,11 +296,11 @@ class Session {
     }
 
     /**
-     * Details eines Admins für die Session zusammenstellen: Name, persönliche
-     * Einstellungen (`admin`.`settings` als Array) und die Spalten seiner Gruppe.
+     * Assemble the details of an admin for the session: name, personal
+     * settings (`admin`.`settings` as an array) and the columns of its group.
      *
      * @param int $adminId
-     * @return array|null  null, wenn es den Admin nicht gibt
+     * @return array|null  null if the admin does not exist
      */
     private function adminDetails(int $adminId): ?array
     {
@@ -324,9 +324,9 @@ class Session {
     }
 
     /**
-     * Session-Details ALLER Sessions eines Admins neu schreiben - nach einer Änderung
-     * seiner persönlichen Einstellungen (Admin::hookOnSaved()). Betrifft es die
-     * laufende Session, gelten die neuen Einstellungen sofort.
+     * Rewrite the session details of ALL sessions of an admin - after a change to
+     * its personal settings (Admin::hookOnSaved()). If it concerns the running
+     * session, the new settings apply immediately.
      *
      * @param int $adminId
      */
@@ -335,7 +335,7 @@ class Session {
         if ($adminId < 1) return;
         $details = $this->adminDetails($adminId);
         if ($details === null) return;
-        // Oberflächen-Zustände (ui) jeder Session bleiben erhalten
+        // The interface states (ui) of every session are kept
         $this->db->query("UPDATE `admin_session`"
             . " SET `details` = JSON_SET(?, '$.ui', COALESCE(JSON_EXTRACT(`details`, '$.ui'), JSON_OBJECT()))"
             . " WHERE `admin_id` = ?",
@@ -351,8 +351,8 @@ class Session {
     }
 
     /**
-     * Persönliche Einstellungen des Session-Admins an Cms weiterreichen
-     * (Backend-Sprache, Zeitzone) - siehe Klassenkommentar.
+     * Pass the personal settings of the session admin on to Cms
+     * (backend language, time zone) - see class comment.
      */
     private function applySettings(): void
     {
@@ -362,9 +362,9 @@ class Session {
     }
 
     /**
-     * Rechte der Gruppe des Session-Admins laden (siehe Klassenkommentar "Rechte
-     * der Gruppe"). Für Nicht-Superuser werden die Abfragen von Cms::select() auf
-     * die zugewiesenen Instanzen beschränkt - ohne zugewiesene Instanz auf keine.
+     * Load the rights of the group of the session admin (see class comment "Rights
+     * of the group"). For non-superusers the queries of Cms::select() are restricted to
+     * the assigned instances - with no assigned instance to none.
      */
     private function applyAccess(): void
     {
@@ -384,23 +384,23 @@ class Session {
         else {
             $cms->setInstanceAccess($instanceIds);
         }
-        // Bereichsebene: Datensätze und Templates nur aus lesbaren Bereichen
+        // Area level: records and templates only from readable areas
         $cms->setAreaAccess($access->readableAreaIds());
-        // Inhaltssprache der Listen: nur lesbare Sprachen
+        // Content language of the lists: only readable languages
         $cms->restrictLanguageMap($access->readableLanguageIds());
     }
 
     /**
-     * Session laden (jeder Backend-Request, ApiSession::resume()).
+     * Load a session (every backend request, ApiSession::resume()).
      *
-     * Geprüft werden Frist, Höchstlaufzeit, Oberfläche, die Signatur der Zeile, die
-     * Admin-Zeile (Signatur, Status) und - nach dem Laden der Rechte - ob die Gruppe
-     * die Oberfläche benutzen darf.
+     * Checked are the time limit, maximum lifetime, interface, the signature of the row, the
+     * admin row (signature, status) and - after loading the rights - whether the group
+     * may use the interface.
      *
-     * @param string   $sessionId   Session-Id; leer = aus dem Cookie 'sessid'
-     * @param string[] $interfaces  zulässige Oberflächen der Session (Backend-Einstiege:
-     *                              nur 'backend')
-     * @return bool                 false: keine gültige Session
+     * @param string   $sessionId   session id; empty = from the cookie 'sessid'
+     * @param string[] $interfaces  permitted interfaces of the session (backend entry points:
+     *                              only 'backend')
+     * @return bool                 false: no valid session
      */
     public function load(string $sessionId = '', array $interfaces = ['backend']): bool
     {
@@ -408,10 +408,10 @@ class Session {
             $sessionId = (string) ($_COOKIE['sessid'] ?? '');
         }
         
-        // ungültige Länge? (latin)
+        // invalid length? (latin)
         if (strlen($sessionId) != 43) return false;
 
-        // Session laden
+        // Load session
         $this->db->query('SELECT * FROM `admin_session`'
             .' WHERE `session_id` = ? AND (`expires_at` IS NULL OR `expires_at` > UTC_TIMESTAMP())',
             's',
@@ -423,16 +423,16 @@ class Session {
         $interface = (string)$data['interface'];
         if (!in_array($interface, $interfaces, true)) return false;
 
-        // Frist für Untätigkeit - im Backend admin.max_inactive_sec, sonst api.*
+        // Inactivity limit - in the backend admin.max_inactive_sec, otherwise api.*
         $seconds = (int)$this->config->get($interface === 'backend' ? 'admin.max_inactive_sec' : 'api.max_inactive_sec');
         if (strtotime((string)$data['access_date'] . ' UTC') < time() - $seconds) return false;
 
-        // Signatur der Session-Zeile
+        // Signature of the session row
         if (!$this->integrity->verifySession($sessionId, $adminId, (string)$data['sig'], $interface)) {
             return false;
         }
-        // Admin-Zeile: Signatur, Status, gelöscht? Gruppe und Status gelten von hier,
-        // nicht aus den gecachten details.
+        // Admin row: signature, status, deleted? Group and status apply from here,
+        // not from the cached details.
         $admin = $this->integrity->verifyAdmin($adminId);
         if ($admin === null || $admin['status_id'] !== 0 || $admin['deleted'] !== 0) {
             return false;
@@ -445,19 +445,19 @@ class Session {
         $this->applySettings();
         $this->applyAccess();
 
-        // Darf die Gruppe die Oberfläche (noch) benutzen? (Access, "Oberflächen")
+        // May the group (still) use the interface? (Access, "interfaces")
         if (!$this->container->get(Access::class)->interface($interface)) {
             $this->container->get(Access::class)->unload();
             $this->data = [];
             return false;
         }
 
-        // Bei jedem Zugriff access_date aktualisieren
-        // ("change" bezieht sich auf Aktivität des Administrators im Backend).
-        // Nicht bei Abfragen im Hintergrund (Polling: Nachrichten-Abzeichen,
-        // Hintergrundprozesse - Header X-Camindo-Background, cLoadContent-Option
-        // 'background'): sie kommen auch von einem unbeaufsichtigten Fenster und
-        // würden die Abmeldung nach admin.max_inactive_sec sonst endlos aufschieben.
+        // Update access_date on every access
+        // (refers to the activity of the administrator in the backend).
+        // Not for queries in the background (polling: message badges,
+        // background processes - header X-Camindo-Background, cLoadContent option
+        // 'background'): they also come from an unattended window and
+        // would otherwise postpone the logout after admin.max_inactive_sec endlessly.
         if (($_SERVER['HTTP_X_CAMINDO_BACKGROUND'] ?? '') === '1') return true;
         $this->db->query('UPDATE `admin_session`'
             .' SET `access_date`=UTC_TIMESTAMP()'
@@ -469,23 +469,23 @@ class Session {
     }
 
     /**
-     * Session beenden
-     * @param string $sessionId  Session-Id; wenn leer dann in COOKIE['sessid'] 
+     * End a session
+     * @param string $sessionId  session id; if empty then from COOKIE['sessid']
      */
     public function close(string $sessionId = '')
     {
         if (empty($sessionId)) {
             $sessionId = (string) ($_COOKIE['sessid'] ?? '');
         }
-        // Session aus der Datenbank löschen (sicherster Weg)
+        // Delete the session from the database (safest way)
         $this->db->query('DELETE FROM `admin_session`'
             .' WHERE `session_id`=? ',
             's',
             [$sessionId]
         );
         $this->db->query('DELETE FROM `admin_session_record` WHERE `session_id` = ?', 's', [$sessionId]);
-        // Rechte und Cookie nur, wenn es die laufende bzw. die des Browsers ist - eine
-        // API-Session, die in einem Backend-Request endet, lässt beide stehen
+        // Rights and cookie only if it is the running session or the browser's one - an
+        // API session that ends in a backend request leaves both in place
         if ($sessionId === (string)($this->data['session_id'] ?? '') || empty($this->data['session_id'])) {
             $this->container->get(Access::class)->unload();
         }
@@ -495,9 +495,9 @@ class Session {
     }
 
     /**
-     * Arbeitskopie dieser Session zuordnen (Eingabemaske, RecordBackendEdit) - beim
-     * Abmelden verwirft Record::cancelSession() genau diese, nicht die offenen Masken
-     * auf anderen Geräten desselben Admins.
+     * Assign a working copy to this session (input mask, RecordBackendEdit) - on
+     * logout Record::cancelSession() discards exactly these, not the open masks
+     * on other devices of the same admin.
      */
     public function registerWorkingCopy(int $recordId): void
     {
@@ -508,8 +508,8 @@ class Session {
     }
 
     /**
-     * Session an ein Anmeldegerät hängen (LoginDevices, `login_device`). Wird das
-     * Gerät entfernt, endet die Session mit (Fremdschlüssel ON DELETE CASCADE).
+     * Attach a session to a login device (LoginDevices, `login_device`). If the
+     * device is removed, the session ends with it (foreign key ON DELETE CASCADE).
      */
     public function attachDevice(string $sessionId, int $deviceId): void
     {
@@ -520,11 +520,11 @@ class Session {
     }
 
     /**
-     * Alle Sessions eines Admins beenden - nach einem neuen Passwort, beim Entfernen
-     * aller Geräte oder auf Wunsch ("andere Sitzungen beenden", AdminBackend::devices()).
+     * End all sessions of an admin - after a new password, when removing
+     * all devices, or on request ("end other sessions", AdminBackend::devices()).
      *
-     * @param bool $keepCurrent  die laufende Session bleibt, wenn sie diesem Admin gehört
-     * @return int               Anzahl beendeter Sessions
+     * @param bool $keepCurrent  the running session stays if it belongs to this admin
+     * @return int               number of ended sessions
      */
     public function closeAllOf(int $adminId, bool $keepCurrent = false): int
     {
@@ -538,17 +538,17 @@ class Session {
             $this->db->query('DELETE FROM `admin_session` WHERE `admin_id` = ?', 'i', [$adminId]);
         }
         $count = (int)$this->db->affected_rows;
-        // Zuordnung der Arbeitskopien beendeter Sessions (die Kopien selbst bleiben -
-        // ihre Sperre verfällt, oder Record::cancelAll() verwirft sie)
+        // Assignment of the working copies of ended sessions (the copies themselves remain -
+        // their lock expires, or Record::cancelAll() discards them)
         $this->db->query('DELETE FROM `admin_session_record`'
             . ' WHERE `session_id` NOT IN (SELECT `session_id` FROM `admin_session`)');
         return $count;
     }
 
     /**
-     * Laufende (nicht abgelaufene) Sessions eines Admins, neueste zuerst.
+     * Running (not expired) sessions of an admin, newest first.
      *
-     * @return array  Liste aus session_id, interface, device_id (0 = ohne Gerät),
+     * @return array  list of session_id, interface, device_id (0 = without device),
      *                access_date (UTC)
      */
     public function activeSessionsOf(int $adminId): array
@@ -579,11 +579,11 @@ class Session {
     }
 
     /**
-     * CSRF-Token dieser Session - leer ohne Session (17-csrf.md §2.4).
+     * CSRF token of this session - empty without session (developer docs, chapter 14 (Security: web)).
      *
-     * Wird in Core/public_master/backend/index.php als cConfig.csrf_token ausgespielt
-     * und nach einer Anmeldung von StartBackend::_loginComplete() nachgereicht (die
-     * Seite wird dabei nicht neu geladen, das Token der alten Session gilt nicht mehr).
+     * Output in Core/public_master/backend/index.php as cConfig.csrf_token and
+     * added after a login by StartBackend::_loginComplete() (the page is not reloaded
+     * in the process; the token of the old session no longer applies).
      */
     public function csrfToken(): string
     {
@@ -592,20 +592,20 @@ class Session {
     }
 
     /**
-     * Das Token des laufenden Requests prüfen (17-csrf.md §2.4).
+     * Check the token of the running request (developer docs, chapter 14 (Security: web)).
      *
-     * Nur bei verändernden Methoden: GET und HEAD dürfen keinen Seiteneffekt haben,
-     * und die Stylesheet- und Download-Endpunkte des Backends können gar keinen
-     * Header tragen (backendExtensions/{Ext}/css.php als <link>,
-     * Record/record_download.php als Fenster). Was schreibt, geht über POST.
+     * Only for state-changing methods: GET and HEAD must have no side effect,
+     * and the stylesheet and download endpoints of the backend cannot carry any
+     * header at all (backendExtensions/{Ext}/css.php as <link>,
+     * Record/record_download.php as window). What writes goes via POST.
      *
-     * Das Token kommt als Header 'X-Camindo-Token' (cLoadContent() setzt ihn bei
-     * jedem Request) oder als Feld '_token' im POST-Body - letzteres für Formulare,
-     * die nicht über das Javascript laufen. Der Query-String ist bewusst KEINE
-     * Quelle: dort landete das Token in Logs und Referern.
+     * The token comes as header 'X-Camindo-Token' (cLoadContent() sets it on
+     * every request) or as field '_token' in the POST body - the latter for forms
+     * that do not run via the JavaScript. The query string is deliberately NOT a
+     * source: there the token ended up in logs and referers.
      *
-     * Ohne Session gibt es nichts zu schützen - die Anmeldung selbst (Start/login.php,
-     * step1/step2) läuft per POST, bevor eine Session existiert.
+     * Without a session there is nothing to protect - the login itself (Start/login.php,
+     * step1/step2) runs via POST before a session exists.
      */
     public function verifyCsrfRequest(): bool
     {
@@ -630,11 +630,11 @@ class Session {
     }
 
     /**
-     * Verlangt die Konfiguration ein Secure-Cookie, obwohl der Request über http://
-     * kommt? Dann verwirft der Browser das Cookie (außer Chrome/Firefox auf
-     * localhost) und die Anmeldung scheitert ohne erkennbaren Grund - der
-     * Anmeldedialog zeigt deshalb einen Hinweis (StartBackend::login()).
-     * X-Forwarded-Proto zählt hier mit: es geht nur um den Hinweis, nicht um Rechte.
+     * Does the configuration require a Secure cookie although the request comes via http://?
+     * Then the browser discards the cookie (except Chrome/Firefox on
+     * localhost) and the login fails without an apparent reason - the
+     * login dialog therefore shows a notice (StartBackend::login()).
+     * X-Forwarded-Proto counts here: it is only about the notice, not about rights.
      */
     public function secureCookieOverHttp(): bool
     {
@@ -645,15 +645,15 @@ class Session {
     }
 
     /**
-     * Session-Cookie 'sessid' setzen bzw. löschen (wie UserSession::setCookie()).
+     * Set or delete the session cookie 'sessid' (like UserSession::setCookie()).
      *
-     * HttpOnly immer: Javascript - auch eingeschleustes - kommt nicht an die
-     * Session-Id. 'secure' und SameSite aus admin.cookie_secure / admin.cookie_samesite.
-     * Kein Ablaufdatum: das Cookie lebt bis zum Schließen des Browsers, serverseitig
-     * gilt admin.max_inactive_sec.
+     * Always HttpOnly: JavaScript - also injected - cannot reach the
+     * session id. 'secure' and SameSite from admin.cookie_secure / admin.cookie_samesite.
+     * No expiry date: the cookie lives until the browser is closed; server-side
+     * admin.max_inactive_sec applies.
      *
-     * @param string $sessionId  Session-Id aus create()
-     * @param bool   $delete     Cookie löschen (Abmeldung)
+     * @param string $sessionId  session id from create()
+     * @param bool   $delete     delete the cookie (logout)
      */
     public function setCookie(string $sessionId, bool $delete = false): void
     {

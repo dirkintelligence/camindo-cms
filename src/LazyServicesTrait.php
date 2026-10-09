@@ -1,23 +1,23 @@
 <?php
 /**
- * Optionale Abhängigkeiten beim ersten Zugriff aus dem Container holen.
- * 
- * (Sonderfall für selten gebrauchte Klassen. Pflicht-Abhängigkeiten gehören weiterhin
- * in den Konstruktor.)
- * Gewinn: Die Instanz wird nicht gebaut UND die Klassendatei wird gar nicht erst eingelesen.
- * Der Composer-Autoloader wird erst aktiv wenn der Container die Klasse anfasst.
- * Auch die "lazy loaded" Instanzen kommen aus dem Container und sind damit Shared Services
- * 
- * BEISPIELE
- * --------------------
- *     Admin      braucht als einzige Dataset-Kindklasse Email (Zwei-Faktor-Anmeldung)
- *     Cms        soll die Community-Klassen nur laden, wenn ein CMS:VISITOR_-Befehl
- *                im Template tatsächlich vorkommt
+ * Fetch optional dependencies from the container on first access.
  *
- * VERWENDUNG
+ * (A special case for rarely used classes. Mandatory dependencies still belong
+ * in the constructor.)
+ * Benefit: the instance is not built AND the class file is not even loaded.
+ * The Composer autoloader only becomes active once the container touches the class.
+ * "Lazy loaded" instances also come from the container and are therefore shared services.
+ *
+ * EXAMPLES
  * --------------------
- * Die nutzende Klasse braucht eine Container-Instanz in $this->container
- * (bei Dataset ist sie Konstruktor-Parameter). Dann:
+ *     Admin      as the only Dataset subclass needs Email (two-factor sign-in)
+ *     Cms        should load the community classes only when a CMS:VISITOR_ command
+ *                actually occurs in the template
+ *
+ * USAGE
+ * --------------------
+ * The using class needs a container instance in $this->container
+ * (for Dataset it is a constructor parameter). Then:
  *
  *     class Admin extends Dataset {
  *         protected array $lazyServices = [
@@ -25,14 +25,14 @@
  *         ];
  *
  *         private function foo() {
- *             $this->email->send($mail); // hier wird Email gebaut, vorher nicht
+ *             $this->email->send($mail); // Email is built here, not before
  *         }
  *     }
  *
- * $lazyServices ist bewusst eine deklarierte Liste und kein freier Container-Zugriff.
- * Die Abhängigkeiten einer Klasse bleiben oben in der Klasse ablesbar und auffindbar,
- * auch wenn sie nicht im Konstruktor stehen.
- * Ein @property-read-Eintrag im Klassen-Docblock macht sie zusätzlich für die IDE sichtbar.
+ * $lazyServices is deliberately a declared list, not free container access.
+ * A class's dependencies stay readable and easy to find at the top of the class,
+ * even if they are not in the constructor.
+ * A @property-read entry in the class docblock also makes them visible to the IDE.
  *
  * @see Camindo\Core\Container
  */
@@ -41,24 +41,24 @@ namespace Camindo\Core;
 trait LazyServicesTrait
 {
     /**
-     * Nachladbare Dienste: Property-Name => Klassen-/Interface-Name.
-     * In der nutzenden Klasse überschreiben (gleiche Sichtbarkeit und Typ beibehalten).
+     * Lazily loadable services: property name => class/interface name.
+     * Override in the using class (keep the same visibility and type).
      */
     protected array $lazyServices = [];
 
-    /** Bereits geholte Dienste: Property-Name => Instanz */
+    /** Services already fetched: property name => instance */
     private array $lazyInstances = [];
 
     /**
-     * Zugriff auf ein nicht deklariertes Property - hier greift das Nachladen.
+     * Access to an undeclared property - lazy loading takes effect here.
      *
-     * Wird nur aufgerufen, wenn es kein sichtbares Property dieses Namens gibt. Deklariert
-     * eine Klasse später ein echtes Property 'email', hat dieses Vorrang und der Trait
-     * bleibt für diesen Namen wirkungslos.
+     * Only called if there is no visible property of this name. If a class later
+     * declares a real property 'email', that one takes precedence and the trait
+     * has no effect for this name.
      *
-     * @param string $name  Schlüssel aus $lazyServices
-     * @return mixed        Die Instanz aus dem Container
-     * @throws \Exception   wenn der Name nicht in $lazyServices steht oder kein Container da ist
+     * @param string $name  Key from $lazyServices
+     * @return mixed        The instance from the container
+     * @throws \Exception   if the name is not in $lazyServices or there is no container
      */
     public function __get(string $name)
     {
@@ -79,10 +79,10 @@ trait LazyServicesTrait
     }
 
     /**
-     * isset()/empty() auf einem nachladbaren Dienst.
+     * isset()/empty() on a lazily loadable service.
      *
-     * Antwortet aus $lazyServices heraus, OHNE den Dienst zu erzeugen - sonst würde ein
-     * beiläufiges isset() genau das Laden auslösen, das der Trait vermeiden soll.
+     * Answers from $lazyServices, WITHOUT creating the service - otherwise an incidental
+     * isset() would trigger exactly the loading that the trait is meant to avoid.
      */
     public function __isset(string $name): bool
     {

@@ -9,8 +9,8 @@ class ImageGd extends MediaProcessor {
     // ====================
 
     /**
-     * Tabellenstruktur für den Konverter
-     * Darauf basierend kann mit $this->backend->formField() ein Eingabefeld erzeugt werden
+     * Table structure for the converter
+     * An input field can be created from it with $this->backend->formField()
      * 
      * type:
      *     integer -> BIGINT
@@ -18,16 +18,16 @@ class ImageGd extends MediaProcessor {
      *     bit -> BIT(1)
      * display_type:
      *     text:   einfaches Eingabefeld
-     *     select: Auswahl, Optionen werden am besten dynamisch erzeugt
+     *     select: selection, options are best generated dynamically
      *     label:  mehrsprachiges Snippet #proc.{processorname}.{snippetname} 
      *     prefix,
-     *     suffix: erscheint vor / nach dem Eingabefeld
-     *     pattern: Javascript Pattern für Eingabevalidierung
-     *     min, max: Mindest- / Maximalwert, bei Text die Zeichenanzahl
+     *     suffix: appears before / after the input field
+     *     pattern: JavaScript pattern for input validation
+     *     min, max: minimum / maximum value, for text the number of characters
      */
     protected function hookDefinition(): void
     {
-        // Defaultwerte für Eingabefelder des Konverters
+        // Default values for input fields of the converter
         $this->defaults['media_types_incl'] = implode("\n", [
             "image/jpeg",
             "image/png",
@@ -36,7 +36,7 @@ class ImageGd extends MediaProcessor {
             "image/bmp"
         ]);
 
-        // Zusätzliche Eingabefelder für den Konverter
+        // Additional input fields for the converter
         $this->schema = [
             'details.width' => [
                 'type'  => 'integer',
@@ -59,8 +59,8 @@ class ImageGd extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 0
             ],
-            // Größe: Bedingung, Einheit, Höchstzahl Pixel - wie bei Magick
-            // (dort die Kennzeichen > < % @ der Geometrie), hier in targetGeometry()
+            // Size: condition, unit, maximum pixels - as with Magick
+            // (there the flags > < % @ of the geometry), here in targetGeometry()
             'details.resize_when' => [
                 'type'  => 'chars',
                 'label' => '#proc.imagegd.field_resize_when',
@@ -149,7 +149,7 @@ class ImageGd extends MediaProcessor {
      */
     public function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
-        // Auswahlfelder: nur die Werte aus dem Schema (auch über die API)
+        // Selection fields: only the values from the schema (also via the API)
         foreach (['resize_when', 'unit'] as $key) {
             if (!isset($data['details'][$key]) || $data['details'][$key] === '') continue;
             $allowed = array_map('strval', array_keys($this->schema['details.' . $key]['options']));
@@ -185,9 +185,9 @@ class ImageGd extends MediaProcessor {
     // ====================
 
     /**
-     * Bildformate, die GD lesen/schreiben kann - abhängig vom GD-Build (imagetypes()).
-     * Schlüssel: Extension, Wert: [IMG_*-Bit, Mime-Typ]. WebP und AVIF fehlen in
-     * manchen Builds komplett (dann existieren auch imagecreatefromwebp() & Co. nicht).
+     * Image formats that GD can read/write - depending on the GD build (imagetypes()).
+     * Key: extension, value: [IMG_*-bit, MIME type]. WebP and AVIF are missing in
+     * some builds entirely (then imagecreatefromwebp() & co. do not exist either).
      */
     protected const FORMATS = [
         'jpg'  => [IMG_JPG,  'image/jpeg'],
@@ -202,8 +202,8 @@ class ImageGd extends MediaProcessor {
     ];
 
     /**
-     * Ist das Format in diesem GD-Build enthalten?
-     * @param string $extension  Extension ohne Punkt (Kleinschreibung egal)
+     * Is the format included in this GD build?
+     * @param string $extension  extension without dot (case does not matter)
      */
     protected function formatAvailable(string $extension): bool
     {
@@ -212,10 +212,10 @@ class ImageGd extends MediaProcessor {
     }
 
     /**
-     * Quell- UND Zielformat müssen zu den Formaten dieses GD-Builds gehören,
-     * sonst soll writeThumbnails() den nächsten Konverter nehmen.
-     * Die Quelle wird über den Mime-Typ geprüft (serverseitig ermittelt, verlässlicher
-     * als die Extension), ersatzweise über die Extension.
+     * Source AND target format must belong to the formats of this GD build,
+     * otherwise writeThumbnails() should take the next converter.
+     * The source is checked via the MIME type (determined server-side, more reliable
+     * than the extension), alternatively via the extension.
      */
     public function supports(string $mime, string $srcExtension, string $destExtension): bool
     {
@@ -228,21 +228,21 @@ class ImageGd extends MediaProcessor {
     }
 
     /**
-     * Erzeugt eine Dateiversion basierend auf den übergebenen Parametern
+     * Creates a file version based on the passed parameters
      *
-     * @param string $srcPath   Pfad zur Quelldatei, relativ zu media_dir
-     * @param array  $srcData   Daten der Quell-Datei
-     * @param string $destPath  Pfad zur Zieldatei, relativ zu media_dir
+     * @param string $srcPath   path to the source file, relative to media_dir
+     * @param array  $srcData   data of the source file
+     * @param string $destPath  path to the target file, relative to media_dir
      * @param array  $details   Konfigurations-Array
-     * @return array            Daten der Zieldatei, bzw ['size'=>0, 'errors'=>'...']
+     * @return array            data of the target file, or ['size'=>0, 'errors'=>'...']
      */
     public function convert(string $srcPath, array $srcData, string $destPath, array $details, bool $forceBgproc): array
     {
         $mediaDir = $this->config->get('paths.media_dir');
         $srcFile = $mediaDir . DIRECTORY_SEPARATOR . ltrim($srcPath, '/\\');
         $destFile =  $mediaDir . DIRECTORY_SEPARATOR . ltrim($destPath, '/\\');
-        // Zielformat: Extension aus dem Konverter (writeThumbnails() legt sie in
-        // $details), ersatzweise die der Zieldatei
+        // Target format: extension from the converter (writeThumbnails() puts it into
+        // $details), alternatively that of the target file
         $ext = strtolower((string)($details['extension'] ?: pathinfo($destPath, PATHINFO_EXTENSION)));
         
         $fileData = [
@@ -254,18 +254,18 @@ class ImageGd extends MediaProcessor {
             'extension' => '',
         ];
         
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return $fileData + ['errors' => 'error_file_not_found'];
         }
 
-        // Zielformat muss GD schreiben können - sonst nächsten Konverter versuchen
+        // Target format must be writable by GD - otherwise try the next converter
         if (!$this->formatAvailable($ext)) {
             return $fileData + ['errors' => 'proc.imagegd.error_file_not_supported', 'unsupported' => true];
         }
 
-        // Bildinformationen auslesen
-        // (kein Bild, das GD kennt - z. B. PDF, SVG: nächsten Konverter versuchen)
+        // Read image information
+        // (not an image GD knows - e.g. PDF, SVG: try the next converter)
         $info = @getimagesize($srcFile);
         if ($info === false) {
             return $fileData + ['errors' => 'proc.imagegd.error_file_dimensions', 'unsupported' => true];
@@ -274,8 +274,8 @@ class ImageGd extends MediaProcessor {
         [$srcW, $srcH, $type] = $info;
 
         // Originalbild laden
-        // (Format nicht in diesem GD-Build? Die imagecreatefrom*()-Funktion fehlt dann
-        //  ebenfalls - vorher prüfen, sonst Fatal Error)
+        // (format not in this GD build? Then the imagecreatefrom*() function is missing
+        //  too - check beforehand, otherwise a fatal error)
         $readers = [
             IMAGETYPE_JPEG => ['jpg',  'imagecreatefromjpeg'],
             IMAGETYPE_PNG  => ['png',  'imagecreatefrompng'],
@@ -293,22 +293,22 @@ class ImageGd extends MediaProcessor {
             return $fileData + ['errors' => 'proc.imagegd.error_file_not_supported'];
         }
 
-        // Ziel-Dimensionen und Quellausschnitt berechnen
+        // Calculate target dimensions and source section
         [$srcX, $srcY, $copyW, $copyH, $dstW, $dstH] = $this->targetGeometry($details, $srcW, $srcH);
 
-        // Ziel-Canvas erstellen (TrueColor RGB)
+        // Create target canvas (TrueColor RGB)
         $dstImg = imagecreatetruecolor($dstW, $dstH);
 
-        // Hintergrundfarbe evaluieren (bgcolor)
+        // Evaluate background color (bgcolor)
         $bgColorHex = isset($details['bgcolor']) ? trim($details['bgcolor']) : '';
-        $bgColorHex = ltrim($bgColorHex, '#'); // Führende Raute entfernen, falls vorhanden
+        $bgColorHex = ltrim($bgColorHex, '#'); // Remove leading hash, if present
 
-        // Prüfung mit regulärem Ausdruck auf 3 oder 6 gültige Hex-Zeichen
+        // Check with a regular expression for 3 or 6 valid hex characters
         if (!preg_match('/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $bgColorHex)) {
-            $bgColorHex = 'FFF'; // Fallback bei ungültiger oder leerer Eingabe
+            $bgColorHex = 'FFF'; // Fallback for invalid or empty input
         }
 
-        // Hex-Wert in RGB-Werte (0-255) umwandeln
+        // Convert hex value to RGB values (0-255)
         if (strlen($bgColorHex) === 3) {
             $r = hexdec(str_repeat($bgColorHex[0], 2));
             $g = hexdec(str_repeat($bgColorHex[1], 2));
@@ -319,7 +319,7 @@ class ImageGd extends MediaProcessor {
             $b = hexdec(substr($bgColorHex, 4, 2));
         }
 
-        // Alpha-Channel (Transparenz) oder Hintergrundfarbe anwenden
+        // Apply alpha channel (transparency) or background color
         $keepAlpha = !empty($details['alpha']);
         if ($keepAlpha) {
             // Transparenz erhalten
@@ -328,15 +328,15 @@ class ImageGd extends MediaProcessor {
             $transparent = imagecolorallocatealpha($dstImg, 255, 255, 255, 127);
             imagefilledrectangle($dstImg, 0, 0, $dstW, $dstH, $transparent);
         } else {
-            // Hintergrund mit berechneter RGB-Farbe füllen
+            // Fill the background with the calculated RGB color
             $bgAllocated = imagecolorallocate($dstImg, $r, $g, $b);
             imagefilledrectangle($dstImg, 0, 0, $dstW, $dstH, $bgAllocated);
         }
 
-        // Bild neu berechnen und kopieren
+        // Recalculate and copy the image
         imagecopyresampled($dstImg, $srcImg, 0, 0, $srcX, $srcY, $dstW, $dstH, $copyW, $copyH);
 
-        // Farbtiefe anpassen (falls ein Wert kleiner als 24 gefordert ist)
+        // Adjust color depth (if a value below 24 is requested)
         $bit = isset($details['indexed_colors']) ? (int)$details['indexed_colors'] : 24;
 
         if ($bit < 24) {
@@ -350,12 +350,12 @@ class ImageGd extends MediaProcessor {
 
             if ($colors > 0) {
                 // Parameter 2 (true) aktiviert Dithering. 
-                // Das mildert harte Farbübergänge bei der Reduzierung deutlich ab.
+                // This noticeably softens hard color transitions during the reduction.
                 imagetruecolortopalette($dstImg, true, $colors);
             }
         }
 
-        // Zielbild speichern
+        // Save target image
         // --------------------
 
         // Komprimierung
@@ -372,7 +372,7 @@ class ImageGd extends MediaProcessor {
                 $mimeType = 'image/jpeg';
                 break;
             case 'png':
-                // PNG-Kompression (0-9) ehrlich aus Qualität (0-100) errechnen
+                // Calculate PNG compression (0-9) honestly from quality (0-100)
                 $pngCompression = (int)round(9 - ($quality * 9 / 100));
                 $pngCompression = max(0, min(9, $pngCompression));
                 $success = imagepng($dstImg, $destFile, $pngCompression);
@@ -396,17 +396,17 @@ class ImageGd extends MediaProcessor {
                 $mimeType = 'image/avif';
                 break;
             default:
-                // (formatAvailable() oben hat unbekannte Extensions bereits abgefangen)
+                // (formatAvailable() above has already caught unknown extensions)
                 return $fileData + ['errors' => 'proc.imagegd.error_file_not_supported', 'unsupported' => true];
         }
         
-        // Prüfen ob das Speichern erfolgreich war
+        // Check whether saving was successful
         if (!$success) {
             return $fileData + ['errors' => 'error_file_conversion'];
         }
 
         /**
-         * Die folgende Rückgabestruktur ist bei allen Medien-Konvertern gleich.
+         * The following return structure is the same for all media converters.
          */
         $fileData = [
             'width'     => $dstW,
@@ -415,28 +415,28 @@ class ImageGd extends MediaProcessor {
             'size'      => filesize($destFile),
             'filename'  => (string)($srcData['filename'] ?? ''),
             'extension' => $ext,
-            // Zusätzliche Infos zur Quell-Datei wurden ermittelt:
+            // Additional info on the source file was determined:
             'source_width' => $srcW,
             'source_height' => $srcH,
-            // keine source_data
+            // no source_data
         ];
         return $fileData;
     }
 
     /**
-     * Zielgröße und Quellausschnitt aus Zielbreite/-höhe und den Größen-Optionen,
-     * gleichbedeutend mit den Geometrie-Kennzeichen von Magick::geometryArguments():
+     * Target size and source section from target width/height and the size options,
+     * equivalent to the geometry flags of Magick::geometryArguments():
      *
-     *     crop         0 einpassen, 1 ausfüllen und mittig beschneiden
-     *     resize_when  shrink  nur verkleinern (>), enlarge nur vergrößern (<)
-     *     unit         percent Breite/Höhe in Prozent der Quelle (%) - nur Einpassen;
-     *                          ein Wert gilt für beide Seiten, zwei Werte je Seite
-     *     max_pixels   Höchstzahl Pixel (@), danach, mit derselben Bedingung
+     *     crop         0 fit, 1 fill and crop centered
+     *     resize_when  shrink  only downscale (>), enlarge only upscale (<)
+     *     unit         percent width/height as a percentage of the source (%) - fit only;
+     *                          one value applies to both sides, two values per side
+     *     max_pixels   maximum pixels (@), afterwards, with the same condition
      *
-     * Ist die Änderung durch die Bedingung ausgeschlossen, behält das Bild beim
-     * Einpassen seine Größe; beim Beschneiden wird nur mittig auf das Zielformat
-     * zugeschnitten, soweit das Bild reicht (ohne Rand in der Hintergrundfarbe).
-     * Beschneiden braucht beide Maße; fehlt eines, wird eingepasst.
+     * If the change is excluded by the condition, the image keeps its size when
+     * fitting; when cropping, it is only cropped centered to the target format
+     * as far as the image reaches (without a border in the background color).
+     * Cropping needs both dimensions; if one is missing, fitting is used.
      *
      * @return int[]  [srcX, srcY, copyW, copyH, dstW, dstH]
      */
@@ -448,24 +448,24 @@ class ImageGd extends MediaProcessor {
         $when = (string)($details['resize_when'] ?? 'always');
         $isCrop = !empty($details['crop']) && $reqW > 0 && $reqH > 0 && !$percent;
 
-        // Ändert ein Faktor die Größe in der erlaubten Richtung?
+        // Does a factor change the size in the allowed direction?
         $allowed = fn(float $scale): bool => match ($when) {
             'shrink'  => $scale < 1,
             'enlarge' => $scale > 1,
             default   => true,
         };
 
-        // Ohne Zielmaße: Originalgröße (nur Format, Qualität ... ändern sich)
+        // Without target dimensions: original size (only format, quality ... change)
         $srcX = $srcY = 0;
         $copyW = $dstW = $srcW;
         $copyH = $dstH = $srcH;
 
         if ($percent && ($reqW > 0 || $reqH > 0)) {
-            // 50 (beide Seiten) bzw. 50 x 30 (je Seite)
+            // 50 (both sides) or 50 x 30 (per side)
             $scaleW = ($reqW ?: $reqH) / 100;
             $scaleH = ($reqH ?: $reqW) / 100;
-            // wie ImageMagick: verkleinern, wenn eine Seite kleiner wird, vergrößern,
-            // wenn eine Seite größer wird
+            // as in ImageMagick: downscale if one side is larger, upscale if one side is smaller,
+            // upscale if one side becomes larger
             $change = match ($when) {
                 'shrink'  => $scaleW < 1 || $scaleH < 1,
                 'enlarge' => $scaleW > 1 || $scaleH > 1,
@@ -477,7 +477,7 @@ class ImageGd extends MediaProcessor {
             }
         }
         elseif ($isCrop) {
-            // Ausfüllen und mittig beschneiden
+            // Fill and crop centered
             $scale = max($reqW / $srcW, $reqH / $srcH);
             if ($allowed($scale)) {
                 $copyW = (int)round($reqW / $scale);
@@ -486,7 +486,7 @@ class ImageGd extends MediaProcessor {
                 $dstH = $reqH;
             }
             else {
-                // keine Größenänderung erlaubt: nur zuschneiden, soweit das Bild reicht
+                // no size change allowed: only crop, as far as the image reaches
                 $copyW = $dstW = min($reqW, $srcW);
                 $copyH = $dstH = min($reqH, $srcH);
             }
@@ -494,7 +494,7 @@ class ImageGd extends MediaProcessor {
             $srcY = (int)round(($srcH - $copyH) / 2);
         }
         elseif ($reqW > 0 || $reqH > 0) {
-            // Einpassen: das ganze Bild passt in die Box
+            // Fit: the whole image fits into the box
             $scale = min($reqW > 0 ? $reqW / $srcW : INF, $reqH > 0 ? $reqH / $srcH : INF);
             if ($allowed($scale)) {
                 $dstW = (int)round($srcW * $scale);
@@ -502,7 +502,7 @@ class ImageGd extends MediaProcessor {
             }
         }
 
-        // Höchstzahl Pixel: proportional auf die Fläche, mit derselben Bedingung
+        // Maximum pixels: proportional to the area, with the same condition
         $maxPixels = (int)($details['max_pixels'] ?? 0);
         if ($maxPixels > 0 && $dstW > 0 && $dstH > 0) {
             $scale = sqrt($maxPixels / ($dstW * $dstH));

@@ -1,7 +1,7 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Zip-Datei eines Exports aus var/export ausliefern (Link auf der Ergebnisseite
-// von record_export.php, öffnet in einem neuen Fenster)
+// Deliver the zip file of an export from var/export (link on the result page
+// of record_export.php, opens in a new window)
 use Camindo\Core\Modules\Record\RecordBackendExport;
 
 $recordBackendExport = $app->get(RecordBackendExport::class);

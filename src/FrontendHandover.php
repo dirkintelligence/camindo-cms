@@ -1,53 +1,53 @@
 <?php
 /**
- * Übergabe vom Backend an die Domain einer Website - für Vorschau und
- * Frontend-Editing, wenn das Backend unter einer anderen Domain läuft (feste
- * Backend-Domain oder Domain einer anderen Instanz; BackendDomain,
- * developer_docs/21-backend-domain.md).
+ * Handover from the backend to the domain of a website - for preview and
+ * frontend editing, when the backend runs under another domain (fixed
+ * backend domain or domain of another instance; BackendDomain,
+ * developer docs, chapter 13 (Security: authentication).
  *
- * Das Session-Cookie des Backends gilt nur unter der Backend-Domain. Damit die
- * Website einen unveröffentlichten Datensatz zeigt bzw. die Stifte des
- * Frontend-Editings, trägt der Aufruf ein signiertes Token.
+ * The backend's session cookie only applies under the backend domain. So that the
+ * website shows an unpublished record or the pens of
+ * frontend editing, the call carries a signed token.
  *
- * VORSCHAU
+ * PREVIEW
  * --------------------
- * backend/preview.php (mit Admin-Session) leitet weiter auf
+ * backend/preview.php (with admin session) redirects to
  *
  *     {protocol}://{primary_domain}/index.php?c9preview={token}
  *
- * Das Token (previewToken()) enthält Instanz, Pfad, Sprache, Admin, ein Kennzeichen
- * seiner Session und den Ablauf, dazu einen HMAC mit .camindo.key. Page::
- * resolveRequest() prüft es (readPreview()) und rendert im Vorschau-Modus. Gültig:
+ * The token (previewToken()) contains instance, path, language, admin, a marker of
+ * its session and the expiry, plus an HMAC with .camindo.key. Page::
+ * resolveRequest() checks it (readPreview()) and renders in preview mode. Valid:
  *
- *     - höchstens PREVIEW_SECONDS nach dem Klick auf "Vorschau" (Reload im Tab geht)
- *     - nur solange die Backend-Session lebt (admin.max_inactive_sec, Abmelden,
- *       "auf allen Geräten abmelden" - danach ist jeder Vorschau-Link wertlos)
- *     - nur für diesen Pfad und diese Instanz, nur unter deren Domain
+ *     - at most PREVIEW_SECONDS after clicking "Preview" (reload in the tab works)
+ *     - only as long as the backend session lives (admin.max_inactive_sec, logout,
+ *       "log out on all devices" - after that every preview link is worthless)
+ *     - only for this path and this instance, only under its domain
  *
- * Die Session-Id selbst steht nicht im Token, nur ein HMAC davon.
+ * The session id itself is not in the token, only an HMAC of it.
  *
- * FRONTEND-EDITING
+ * FRONTEND EDITING
  * --------------------
- * Das Cookie `fed` trägt statt 1/2 einen signierten Wert (fedCookieValue()):
- * "{Modus}.{admin_id}.{Ablauf}.{HMAC}". Cms::fedActive() prüft ihn (fedMode()).
- * Ein von Hand gesetztes "fed=1" zeigt keine Stifte mehr - sonst verriete cFED()
- * jedem die Backend-Domain. Unter der Website-Domain setzt es die Vorschau
- * (Modus aus den Einstellungen des Admins, "f" im Token); unter der Backend-Domain
- * wie bisher Backend::setFedCookie().
+ * The cookie `fed` carries a signed value instead of 1/2 (fedCookieValue()):
+ * "{mode}.{admin_id}.{expiry}.{HMAC}". Cms::fedActive() checks it (fedMode()).
+ * A manually set "fed=1" no longer shows pens - otherwise cFED() would reveal
+ * the backend domain to everyone. Under the website domain the preview sets it
+ * (mode from the admin's settings, "f" in the token); under the backend domain
+ * as before via Backend::setFedCookie().
  *
- * ABGLEICH MIT ALLEN WEBSITES
+ * SYNCHRONIZATION WITH ALL WEBSITES
  * --------------------
- * Ein Cookie gilt nur für seine Domain; das Backend kann es für eine andere Domain
- * weder per Ajax noch per iframe zuverlässig setzen (Drittanbieter-Cookies sperren
- * bzw. partitionieren die Browser). Nach dem Speichern der Einstellung läuft der
- * Browser deshalb als normale Navigation durch alle Websites und zurück ins Backend:
+ * A cookie only applies to its own domain; the backend cannot set it reliably for
+ * another domain either via Ajax or via iframe (third-party cookies are blocked or
+ * partitioned by the browsers). After saving the setting, the browser therefore
+ * runs through all websites and back into the backend as a normal navigation:
  *
  *     backend -> site1/index.php?c9fed={token}&c9hops=0-2 -> site3/... -> backend
  *
- * Das Token (fedSyncData()) enthält die Liste der Domains, den Modus (auch 0 =
- * ausschalten) und die Rücksprung-Adresse, signiert - c9hops wählt nur daraus.
- * Vorher prüft cApp.ui.fedSync() je Domain per Bild (c9probe=1), ob sie
- * erreichbar ist und zu dieser Installation gehört; nur diese kommen in die Kette.
+ * The token (fedSyncData()) contains the list of domains, the mode (also 0 =
+ * switch off) and the return address, signed - c9hops only selects from it.
+ * Before that, cApp.ui.fedSync() checks each domain per image (c9probe=1) to see
+ * whether it is reachable and belongs to this installation; only those enter the chain.
  *
  * @see Camindo\Core\BackendDomain
  * @see Camindo\Core\Page::resolveRequest()
@@ -56,21 +56,21 @@ namespace Camindo\Core;
 
 class FrontendHandover
 {
-    /** Parameter der Vorschau im Frontend */
+    /** Parameter of the preview in the frontend */
     public const PARAM = 'c9preview';
-    /** Parameter "Frontend-Editing auf dieser Website einschalten" */
+    /** Parameter "enable frontend editing on this website" */
     public const FED_PARAM = 'c9fed';
-    /** Gültigkeit eines FED-Links in Sekunden (die Einstellungsseite erzeugt ihn neu) */
+    /** Validity of a FED link in seconds (the settings page creates it anew) */
     public const FED_LINK_SECONDS = 3600;
-    /** Reihenfolge der Websites beim Abgleich (fedSyncData()): Indizes, mit "-" getrennt */
+    /** Order of the websites during synchronization (fedSyncData()): indices, separated by "-" */
     public const HOPS_PARAM = 'c9hops';
-    /** Probe vor dem Abgleich: antwortet mit einem 1x1-GIF, wenn Domain und Token passen */
+    /** Probe before synchronization: answers with a 1x1 GIF if domain and token match */
     public const PROBE_PARAM = 'c9probe';
-    /** Höchstalter eines Vorschau-Links in Sekunden */
+    /** Maximum age of a preview link in seconds */
     public const PREVIEW_SECONDS = 8 * 3600;
-    /** Laufzeit des Cookies `fed` im Modus 1 ("für diese Sitzung") */
+    /** Lifetime of the cookie `fed` in mode 1 ("for this session") */
     private const FED_SESSION_SECONDS = 12 * 3600;
-    /** ... im Modus 2 ("dauerhaft") */
+    /** ... in mode 2 ("permanent") */
     private const FED_PERMANENT_SECONDS = 365 * 86400;
 
     public function __construct(
@@ -83,12 +83,12 @@ class FrontendHandover
     ) {}
 
     /**
-     * Vorschau-Adresse unter der Domain der Website - '' wenn das Backend schon unter
-     * einer Domain der Instanz läuft oder die Instanz keine primary_domain hat (dann
-     * rendert preview.php selbst). Unter einer fremden Domain - feste Backend-Domain
-     * oder die Domain einer anderen Instanz - fehlten sonst die Bilder: die .htaccess
-     * im Medienverzeichnis lässt nur die Domains der Instanz zu (MediaAccess).
-     * Setzt eine geladene Admin-Session voraus.
+     * Preview address under the domain of the website - '' if the backend already runs under
+     * a domain of the instance or the instance has no primary_domain (then
+     * preview.php renders itself). Under a foreign domain - fixed backend domain
+     * or the domain of another instance - the images would otherwise be missing: the .htaccess
+     * in the media directory only allows the domains of the instance (MediaAccess).
+     * Requires a loaded admin session.
      */
     public function previewUrl(int $instanceId, string $request, string $lang): string
     {
@@ -105,7 +105,7 @@ class FrontendHandover
         return $protocol . '://' . $domain . '/index.php?' . self::PARAM . '=' . $token;
     }
 
-    /** Token für previewUrl() - '' ohne Session */
+    /** Token for previewUrl() - '' without session */
     public function previewToken(int $instanceId, string $request, string $lang): string
     {
         $adminId = (int)$this->session->get('admin_id');
@@ -125,11 +125,11 @@ class FrontendHandover
     }
 
     /**
-     * Adresse, die unter der Domain der Website das Cookie des Frontend-Editings
-     * setzt und auf die Startseite weiterleitet - '' ohne primary_domain oder bei
-     * Modus 0. Setzt eine geladene Admin-Session voraus.
+     * Address that sets the frontend editing cookie under the domain of the website
+     * and redirects to the start page - '' without primary_domain or with
+     * mode 0. Requires a loaded admin session.
      *
-     * @param int $mode  1 | 2 (gespeicherte Einstellung des Admins)
+     * @param int $mode  1 | 2 (saved setting of the admin)
      */
     public function fedUrl(int $instanceId, int $mode): string
     {
@@ -153,13 +153,13 @@ class FrontendHandover
     }
 
     /**
-     * Daten für den Abgleich des Cookies mit allen Websites (cApp.ui.fedSync()) -
-     * null ohne Session oder ohne Website.
+     * Data for synchronizing the cookie with all websites (cApp.ui.fedSync()) -
+     * null without session or without website.
      *
-     * @param array<string,int> $sites      Domain => instance_id (Zugriff geprüft,
-     *                                      ohne die Domain des Backends)
+     * @param array<string,int> $sites      domain => instance_id (access checked,
+     *                                      without the domain of the backend)
      * @param int               $mode       0 | 1 | 2
-     * @param string            $returnUrl  Rücksprung ins Backend (absolut)
+     * @param string            $returnUrl  return to the backend (absolute)
      * @return array{token:string, sites:list<array{i:int, origin:string}>}|null
      */
     public function fedSyncData(array $sites, int $mode, string $returnUrl): ?array
@@ -192,7 +192,7 @@ class FrontendHandover
     }
 
     /**
-     * Abgleich-Token prüfen (Ablauf, lebende Session).
+     * Check the synchronization token (expiry, live session).
      *
      * @return array|null  sites (list of [domain, instance_id, protocol]), admin_id, fed, return
      */
@@ -212,8 +212,8 @@ class FrontendHandover
     }
 
     /**
-     * Absolute Adresse von backend/index.php für den Rücksprung nach dem Abgleich:
-     * feste Backend-Domain, sonst die Domain dieses Requests.
+     * Absolute address of backend/index.php for the return after synchronization:
+     * fixed backend domain, otherwise the domain of this request.
      */
     public function backendReturnUrl(): string
     {
@@ -227,7 +227,7 @@ class FrontendHandover
     }
 
     /**
-     * FED-Token prüfen (wie readPreview(): Ablauf, lebende Session).
+     * Check the FED token (like readPreview(): expiry, live session).
      *
      * @return array|null  instance, admin_id, fed
      */
@@ -242,10 +242,10 @@ class FrontendHandover
     }
 
     /**
-     * Vorschau-Token aus dem Request prüfen.
+     * Check the preview token from the request.
      *
-     * @return array|null  instance, request, lang, admin_id, fed - null: kein,
-     *                     ungültiges oder abgelaufenes Token, Session vorbei
+     * @return array|null  instance, request, lang, admin_id, fed - null: none,
+     *                     invalid or expired token, session over
      */
     public function readPreview(string $token): ?array
     {
@@ -264,10 +264,10 @@ class FrontendHandover
     }
 
     /**
-     * Wert des Cookies `fed` für $mode (1 = diese Sitzung, 2 = dauerhaft);
-     * '' für 0.
+     * Value of the cookie `fed` for $mode (1 = this session, 2 = permanent);
+     * '' for 0.
      *
-     * @return array{0:string,1:int}  [Wert, Ablauf als Unix-Zeit; 0 = Browser-Sitzung]
+     * @return array{0:string,1:int}  [value, expiry as Unix time; 0 = browser session]
      */
     public function fedCookieValue(int $adminId, int $mode): array
     {
@@ -277,15 +277,15 @@ class FrontendHandover
         return [$payload . '.' . $this->crypt->hash('fed|' . $payload), $mode === 2 ? $expires : 0];
     }
 
-    /** Modus aus dem Cookie `fed` (0 = aus oder ungültig) */
+    /** Mode from the cookie `fed` (0 = off or invalid) */
     public function fedMode(string $value): int
     {
         return self::fedModeOf($this->crypt, $value);
     }
 
     /**
-     * Wie fedMode(), ohne Instanz - für Cms::fedActive() (Cms kennt die Session
-     * nicht und soll sie für jede Frontend-Seite auch nicht laden).
+     * Like fedMode(), without instance - for Cms::fedActive() (Cms does not know the session
+     * and should not load it for every frontend page either).
      */
     public static function fedModeOf(Crypt $crypt, string $value): int
     {
@@ -298,7 +298,7 @@ class FrontendHandover
         return hash_equals($crypt->hash('fed|' . $payload), $mac) ? (int)$mode : 0;
     }
 
-    /** Cookie `fed` unter der aktuellen Domain setzen bzw. löschen */
+    /** Set or delete the cookie `fed` under the current domain */
     public function setFedCookie(int $adminId, int $mode): void
     {
         if (headers_sent()) return;
@@ -327,13 +327,13 @@ class FrontendHandover
         return is_array($data) ? $data : null;
     }
 
-    /** Kennzeichen einer Session im Token - die Id selbst verlässt das Backend nicht */
+    /** Marker of a session in the token - the id itself does not leave the backend */
     private function sessionTag(string $sessionId): string
     {
         return substr($this->crypt->hash('preview-session|' . $sessionId), 0, 22);
     }
 
-    /** Lebt eine Session des Admins mit diesem Kennzeichen, und gilt das Konto noch? */
+    /** Does an admin session with this marker still live, and is the account still valid? */
     private function sessionAlive(int $adminId, string $tag): bool
     {
         if ($adminId < 1 || $tag === '') return false;

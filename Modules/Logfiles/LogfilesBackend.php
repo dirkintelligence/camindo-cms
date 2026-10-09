@@ -1,35 +1,35 @@
 <?php
 /**
- * Backend-Oberfläche des Moduls Logfiles: die Protokolle unter var/log im Backend
- * durchsehen, statt sie über die Shell zu holen.
+ * Backend UI of the module Logfiles: browse the logs under var/log in the backend
+ * instead of fetching them via the shell.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     index.php   -> list()    Filter und Trefferliste
+ *     index.php   -> list()    filters and hit list
  *
- * Dazu das Startseiten-Widget widget() (settings.php 'widget'): eine kurze
- * Zusammenfassung der letzten Tage, die wichtigste Meldung zuerst.
+ * Also the start page widget widget() (settings.php 'widget'): a short
+ * summary of the last few days, the most important message first.
  *
- * NUR FÜR SUPERUSER
+ * SUPERUSERS ONLY
  * --------------------
- * Logs enthalten Anmeldenamen, Dateipfade, SQL und Stacktraces - das geht keinen
- * Redakteur etwas an. Das Modul trägt deshalb 'superuser' => true in seiner
- * settings.php; damit lässt Access::module() niemanden sonst durch, und weder
- * Kachel noch Widget erscheinen. Jeder Einstiegspunkt prüft zusätzlich selbst mit
- * Backend::isSuperuser() - eine Rechteregel, die nur an einer Stelle steht, hält
- * nicht lange.
+ * Logs contain login names, file paths, SQL and stack traces - none of this is
+ * any editor's business. The module therefore sets 'superuser' => true in its
+ * settings.php; this way Access::module() lets nobody else through, and neither
+ * tile nor widget appears. Every entry point additionally checks for itself with
+ * Backend::isSuperuser() - a permission rule that exists in only one place does not
+ * last long.
  *
- * ALLES IST FREMDER TEXT
+ * EVERYTHING IS FOREIGN TEXT
  * --------------------
- * In einem Logeintrag steht, was jemand ins Anmeldeformular getippt hat, was eine
- * Ausnahme meldet, wie eine hochgeladene Datei heißt. Nichts davon ist vertrauens-
- * würdig. JEDE Ausgabe dieses Moduls geht deshalb durch htmlspecialchars(), auch
- * Datei- und Kategorienamen - die kommen zwar aus dem Verzeichnis bzw. aus einer
- * Konstanten, aber die Regel gilt hier ohne Ausnahme, damit man beim Lesen nicht
- * jedes Mal neu prüfen muss.
+ * A log entry contains what someone typed into the login form, what an
+ * exception reports, what an uploaded file is called. None of this is trustworthy.
+ * EVERY output of this module therefore goes through htmlspecialchars(), including
+ * file and category names - they do come from the directory or from a
+ * constant, but the rule applies here without exception, so that one does not have to
+ * check again each time when reading.
  *
- * @see Camindo\Core\Modules\Logfiles\Logfiles  Dateien lesen, zerlegen, einordnen
- * @see Camindo\Core\Widgets                    Startseiten-Widgets der Module
+ * @see Camindo\Core\Modules\Logfiles\Logfiles  read, split and classify files
+ * @see Camindo\Core\Widgets                    start page widgets of the modules
  */
 namespace Camindo\Core\Modules\Logfiles;
 
@@ -46,11 +46,11 @@ class LogfilesBackend {
     {}
 
     /**
-     * Recherche (backend/index.php).
+     * Search (backend/index.php).
      *
-     * Request: name, date, category, search - alle optional. Geprüft wird gegen die
-     * tatsächlich vorhandenen Dateien bzw. gegen Logfiles::CATEGORIES; was nicht
-     * passt, gilt als "alle".
+     * Request: name, date, category, search - all optional. Checked against the
+     * files actually present or against Logfiles::CATEGORIES; anything that does not
+     * match counts as "all".
      */
     public function list(): void
     {
@@ -69,7 +69,7 @@ class LogfilesBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Eingaben gegen das Vorhandene prüfen
+        // Check input against what exists
         $names = $this->logfiles->names();
         $dates = $this->logfiles->dates();
         $name = (string)($_REQUEST['name'] ?? '');
@@ -88,7 +88,7 @@ class LogfilesBackend {
             return;
         }
 
-        // Blättern: je Seite PAGE_SIZE Einträge, einer mehr zeigt an, ob es weitere gibt
+        // Paging: PAGE_SIZE entries per page, one more shows whether there are more
         $skip = max(0, (int)($_REQUEST['skip'] ?? 0));
         $entries = $this->logfiles->entries($name, $date, $search, $category, Logfiles::PAGE_SIZE + 1, $skip);
         $more = count($entries) > Logfiles::PAGE_SIZE;
@@ -105,16 +105,16 @@ class LogfilesBackend {
     }
 
     /**
-     * Widget für die Startseite (settings.php 'widget').
+     * Widget for the start page (settings.php 'widget').
      *
-     * Je Kategorie eine Zeile mit der Anzahl der Einträge der letzten Tage und dem
-     * jüngsten Beispiel; ein Klick öffnet die Recherche mit genau dieser Kategorie.
-     * Die Reihenfolge kommt aus Logfiles::CATEGORIES - Dringlichkeit, nicht Menge.
+     * One line per category with the number of entries of the last days and the
+     * newest example; a click opens the search with exactly this category.
+     * The order comes from Logfiles::CATEGORIES - urgency, not volume.
      */
     public function widget(): string
     {
-        // Das Widget wird über Widgets::render() geholt, das Access::module() prüft;
-        // für den Fall, dass es jemand direkt aufruft, hier noch einmal
+        // The widget is fetched via Widgets::render(), which checks Access::module();
+        // in case someone calls it directly, check again here
         if (!$this->backend->isSuperuser()) return $this->backend->access()->deniedHtml();
 
         $summary = $this->logfiles->summary();
@@ -141,22 +141,22 @@ class LogfilesBackend {
     // ====================
 
     /**
-     * Hinweis auf den Zeitraum plus Verweis in die volle Recherche.
+     * Note on the period plus a link to the full search.
      */
     private function _widgetFooter(): string
     {
-        // Das Snippet ist ein reiner Plural (ICU) - der Zeitraum wird deshalb hier
-        // aufgelöst und nicht in der Vorlage (dort käme die Ersetzung zu früh)
+        // The snippet is a pure plural (ICU) - the period is therefore resolved here
+        // and not in the template (the substitution would come too early there)
         return $this->backend->template('logfiles.widget_footer', [
             '{period}' => htmlspecialchars($this->cms->snippet('logfiles.widget_period', ['days' => Logfiles::SUMMARY_DAYS])),
         ]);
     }
 
     /**
-     * Das Filterformular.
+     * The filter form.
      *
-     * @param array $names  Logbezeichnung => Anzahl Dateien
-     * @param array $dates  vorhandene Tage
+     * @param array $names  log name => number of files
+     * @param array $dates  existing days
      */
     private function _searchForm(array $names, array $dates, string $name, string $date, string $category, string $search): string
     {
@@ -189,10 +189,10 @@ class LogfilesBackend {
     }
 
     /**
-     * Die Trefferliste.
+     * The hit list.
      *
-     * @param array $entries  Einträge aus Logfiles::entries()
-     * @param int   $skip     übersprungene Einträge (Seite)
+     * @param array $entries  entries from Logfiles::entries()
+     * @param int   $skip     skipped entries (page)
      */
     private function _entryTable(array $entries, int $skip = 0): string
     {
@@ -225,7 +225,7 @@ class LogfilesBackend {
             '{table_rows}' => $rows,
         ]);
 
-        // Trefferzahl auf der ersten Seite ohne weitere, sonst der Ausschnitt
+        // Hit count on the first page without more, otherwise the excerpt
         $count = count($entries);
         $note = $skip === 0 && $count < Logfiles::PAGE_SIZE
             ? $this->cms->snippet('logfiles.note_count', ['count' => $count])
@@ -235,8 +235,8 @@ class LogfilesBackend {
     }
 
     /**
-     * Blättern unter der Trefferliste: "Neuere Einträge" ab der zweiten Seite,
-     * "Ältere Einträge", solange es weitere gibt. Die Filter reisen mit.
+     * Paging below the hit list: "Newer entries" from the second page on,
+     * "Older entries" as long as there are more. The filters are carried along.
      */
     private function _pager(array $filter, int $skip, bool $more): string
     {
@@ -253,7 +253,7 @@ class LogfilesBackend {
     }
 
     /**
-     * Beschriftung einer Kategorie - Snippet logfiles.category_{key}.
+     * Label of a category - snippet logfiles.category_{key}.
      */
     private function _categoryLabel(string $category): string
     {
@@ -261,9 +261,9 @@ class LogfilesBackend {
     }
 
     /**
-     * Ein Datum in der Locale des Admins (die Logdateien heißen immer Y-m-d).
-     * Cms::_formatDate() lässt die Uhrzeit weg, wenn sie 00:00:00 ist - genau das
-     * ist hier gewollt.
+     * A date in the locale of the administrator (the log files are always named Y-m-d).
+     * Cms::_formatDate() omits the time if it is 00:00:00 - exactly what
+     * is wanted here.
      */
     private function _localDate(string $date): string
     {
@@ -271,11 +271,11 @@ class LogfilesBackend {
     }
 
     /**
-     * Auswahlliste bauen. Die Werte sind bereits geprüft, maskiert wird trotzdem.
+     * Build the select list. The values are already checked, but are escaped anyway.
      *
-     * @param array  $options   Wert => Beschriftung
-     * @param string $selected  aktueller Wert
-     * @param string $allLabel  Beschriftung des leeren Eintrags ("alle")
+     * @param array  $options   value => label
+     * @param string $selected  current value
+     * @param string $allLabel  label of the empty entry ("all")
      */
     private function _options(array $options, string $selected, string $allLabel): string
     {
@@ -289,8 +289,8 @@ class LogfilesBackend {
     }
 
     /**
-     * Langen Text für die Vorschau kürzen - vor dem Maskieren aufgerufen, damit die
-     * Länge die des Textes ist und nicht die der Entities.
+     * Shorten long text for the preview - called before escaping, so that the
+     * length is that of the text and not that of the entities.
      */
     private function _shorten(string $text, int $max): string
     {

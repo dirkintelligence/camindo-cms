@@ -1,48 +1,48 @@
 <?php
 /**
- * Quelltexte der Frontend-Templates als Dateien: var/templates/ - die Ausgangsbasis.
+ * Source code of the frontend templates as files: var/templates/ - the starting point.
  *
  *     var/templates/{instance_id}/{bereichsname}/{templatename}.cms.php
  *
- * Verzeichnis je Mandant (instance_id), darunter je Template-Bereich - mit dem NAMEN
- * des Bereichs, nicht seiner Id, damit sich das Verzeichnis im Editor lesen lässt.
- * Der Dateiinhalt ist der ungeparste Quelltext in CMS-Syntax.
+ * Directory per tenant (instance_id), below it per template area - with the NAME
+ * of the area, not its id, so that the directory can be read in the editor.
+ * The file content is the unparsed source code in CMS syntax.
  *
- * DIE DATEIEN FÜHREN
+ * THE FILES LEAD
  * --------------------
- * Die Datei ist die einzige Quelle des Quelltexts. Die Spalte `template`.`code` ist
- * nur eine Kopie für die Suche im Backend, `styled_code` die eingefärbte Fassung für
- * TemplateBackend::info(). Aus der Datenbank gelangt NIE Code ins Dateisystem -
- * weder in var/templates noch als kompiliertes PHP nach var/php (Sicherheitsaspekt:
- * wer in die Datenbank schreiben kann, darf damit keinen PHP-Code ausführen können).
+ * The file is the only source of the source code. The column `template`.`code` is
+ * only a copy for searching in the backend, `styled_code` the colored version for
+ * TemplateBackend::info(). Code NEVER gets from the database into the file system -
+ * neither into var/templates nor as compiled PHP into var/php (security aspect:
+ * whoever can write to the database must not be able to run PHP code with it).
  *
- * Dateien -> Datenbank (sync(), minütlich über Core/cron und beim Refresh-Knopf
- * der Template-Listen):
+ * Files -> database (sync(), every minute via Core/cron and with the refresh button
+ * of the template lists):
  *
- *     neues Verzeichnis {bereich}    -> neuer Bereich vom Typ 'template' im Mandanten
- *     neue Datei {name}.cms.php      -> neuer Eintrag in `template`
- *     geänderte Datei                -> `code`/`styled_code`/`error_text` neu, PHP
- *                                       neu kompiliert (Template::save())
- *     Datei gelöscht                 -> Template gelöscht (samt Zuweisungen)
- *     Verzeichnis gelöscht           -> Bereich in den Papierkorb
+ *     new directory {bereich}        -> new area of type 'template' in the tenant
+ *     new file {name}.cms.php        -> new entry in `template`
+ *     changed file                   -> `code`/`styled_code`/`error_text` anew, PHP
+ *                                       newly compiled (Template::save())
+ *     file deleted                   -> template deleted (including assignments)
+ *     directory deleted              -> area to the trash
  *
- * Backend -> Dateien: das Formular lädt den Quelltext aus der Datei
- * (Template::hookOnLoaded()) und schreibt ihn beim Speichern dorthin zurück
- * (Template::hookOnSaved()); Umbenennen, Verschieben und Löschen wirken ebenso auf
- * die Datei bzw. das Verzeichnis (Area-Hooks). Der Papierkorb eines Bereichs liegt
- * unter var/templates/.trash/{area_id} - beim Wiederherstellen wandert das
- * Verzeichnis von dort zurück, nichts wird aus der Datenbank neu geschrieben.
+ * Backend -> files: the form loads the source code from the file
+ * (Template::hookOnLoaded()) and writes it back there on saving
+ * (Template::hookOnSaved()); renaming, moving and deleting likewise act on
+ * the file resp. the directory (area hooks). The trash of an area lies
+ * under var/templates/.trash/{area_id} - when restoring, the
+ * directory moves back from there, nothing is rewritten from the database.
  *
- * Sicherung: fehlt das ganze Mandanten-Verzeichnis var/templates/{instance_id}
- * (z. B. Volume nicht eingebunden), löscht sync() für diesen Mandanten nichts.
+ * Safeguard: if the whole tenant directory var/templates/{instance_id} is missing
+ * (e.g. volume not mounted), sync() deletes nothing for this tenant.
  *
- * Namen: Verzeichnis- und Dateinamen müssen dem Flag 'name' genügen
- * (/^[a-z][a-z0-9_]+$/); alles andere wird übergangen. Mandanten-Verzeichnisse, zu
- * denen es keine Instanz gibt, ebenfalls.
+ * Names: directory and file names must match the flag 'name'
+ * (/^[a-z][a-z0-9_]+$/); everything else is skipped. Tenant directories for
+ * which there is no instance likewise.
  *
- * @see Camindo\Core\Modules\Template\Template   liest/schreibt die Datei je Template
- * @see Camindo\Core\Modules\Area\Area           legt das Verzeichnis je Bereich an/um
- * @see Camindo\Core\cron\TriggerCron            minütlicher Aufruf von sync()
+ * @see Camindo\Core\Modules\Template\Template   reads/writes the file per template
+ * @see Camindo\Core\Modules\Area\Area           creates/renames the directory per area
+ * @see Camindo\Core\cron\TriggerCron            per-minute call of sync()
  */
 namespace Camindo\Core\Modules\Template;
 
@@ -59,8 +59,8 @@ class TemplateFiles {
     private const NAME_PATTERN = '/^[a-z][a-z0-9_]+$/';
     private const LOCK_FILE = 'template_sync.lock';
     private const LOG = 'template-sync';
-    // Papierkorb für Bereichsverzeichnisse (Soft-Delete); Punkt-Verzeichnisse
-    // übergeht glob() in sync()
+    // Trash for area directories (soft delete); dot directories
+    // are skipped by glob() in sync()
     private const TRASH_DIR = '.trash';
 
     public function __construct(
@@ -83,44 +83,44 @@ class TemplateFiles {
         return $this->config->get('paths.var_dir') . '/templates';
     }
 
-    /** Verzeichnis eines Bereichs, relativ zu baseDir(): "{instance_id}/{name}" */
+    /** Directory of an area, relative to baseDir(): "{instance_id}/{name}" */
     public function areaPath(int $instanceId, string $areaName): string
     {
         return $instanceId . '/' . $areaName;
     }
 
-    /** Datei eines Templates, relativ zu baseDir() */
+    /** File of a template, relative to baseDir() */
     public function filePath(int $instanceId, string $areaName, string $name): string
     {
         return $this->areaPath($instanceId, $areaName) . '/' . $name . self::EXTENSION;
     }
 
-    /** Papierkorb-Verzeichnis eines Bereichs, relativ zu baseDir() */
+    /** Trash directory of an area, relative to baseDir() */
     private function trashPath(int $areaId): string
     {
         return self::TRASH_DIR . '/' . $areaId;
     }
 
     /**
-     * instance_id und name eines Bereichs - für die Hooks, die nur die area_id kennen.
+     * instance_id and name of an area - for the hooks that only know the area_id.
      *
      * @return array|null  ['instance_id' => int, 'name' => string]
      */
     public function areaInfo(int $areaId): ?array
     {
-        // aus dem Instanz-Dateicache (Area::hookOnSaved() schreibt ihn vor diesem Aufruf)
+        // from the instance file cache (Area::hookOnSaved() writes it before this call)
         $info = $this->instanceCache->areaInfo($areaId);
         if ($info === null) return null;
         return ['instance_id' => $info['instance_id'], 'name' => $info['name']];
     }
 
     // ====================
-    // Einzelne Datei / einzelnes Verzeichnis (Aufruf aus den Hooks)
+    // Single file / single directory (called from the hooks)
 
     /**
-     * Quelltext eines Templates aus der Datei lesen.
+     * Read the source code of a template from the file.
      *
-     * @return string|null  null, wenn es die Datei (oder den Bereich) nicht gibt
+     * @return string|null  null if the file (or the area) does not exist
      */
     public function readTemplate(int $areaId, string $name): ?string
     {
@@ -132,9 +132,9 @@ class TemplateFiles {
     }
 
     /**
-     * Quelltext eines Templates schreiben (überschreibt eine vorhandene Datei).
-     * Eine Datei mit identischem Inhalt bleibt unangetastet - der Abgleich schriebe
-     * sonst bei jedem Lauf den Zeitstempel neu.
+     * Write the source code of a template (overwrites an existing file).
+     * A file with identical content stays untouched - otherwise the reconciliation
+     * would rewrite the timestamp on every run.
      */
     public function writeTemplate(int $areaId, string $name, string $code): void
     {
@@ -146,7 +146,7 @@ class TemplateFiles {
     }
 
     /**
-     * Datei eines Templates entfernen (Umbenennen, Verschieben, Löschen).
+     * Remove the file of a template (renaming, moving, deleting).
      */
     public function removeTemplate(int $areaId, string $name): void
     {
@@ -156,7 +156,7 @@ class TemplateFiles {
     }
 
     /**
-     * Verzeichnis eines Bereichs anlegen.
+     * Create the directory of an area.
      */
     public function createAreaDir(int $instanceId, string $areaName): void
     {
@@ -164,8 +164,8 @@ class TemplateFiles {
     }
 
     /**
-     * Verzeichnis eines Bereichs umbenennen bzw. in einen anderen Mandanten
-     * verschieben. Fehlt das alte Verzeichnis, wird das neue angelegt.
+     * Rename the directory of an area resp. move it to another tenant.
+     * If the old directory is missing, the new one is created.
      */
     public function moveAreaDir(int $oldInstanceId, string $oldName, int $instanceId, string $areaName): void
     {
@@ -182,8 +182,8 @@ class TemplateFiles {
     }
 
     /**
-     * Verzeichnis eines Bereichs samt Dateien entfernen (Bereich endgültig
-     * gelöscht) - auch aus dem Papierkorb.
+     * Remove the directory of an area including its files (area finally
+     * deleted) - also from the trash.
      */
     public function removeAreaDir(int $instanceId, string $areaName, int $areaId = 0): void
     {
@@ -194,9 +194,9 @@ class TemplateFiles {
     }
 
     /**
-     * Verzeichnis eines Bereichs in den Papierkorb verschieben (Soft-Delete).
-     * Aus var/templates verschwindet es damit; sync() legt zu dem Bereich also
-     * weder etwas neu an noch löscht es etwas.
+     * Move the directory of an area to the trash (soft delete).
+     * It thus disappears from var/templates; sync() therefore neither creates
+     * anything new for the area nor deletes anything.
      */
     public function trashAreaDir(int $areaId, int $instanceId, string $areaName): void
     {
@@ -210,9 +210,9 @@ class TemplateFiles {
     }
 
     /**
-     * Verzeichnis eines Bereichs aus dem Papierkorb zurückholen (Restore).
-     * Ohne Papierkorb-Eintrag entsteht ein leeres Verzeichnis - die Templates des
-     * Bereichs haben dann keine Datei mehr und sync() räumt sie ab.
+     * Fetch the directory of an area back from the trash (restore).
+     * Without a trash entry an empty directory is created - the templates of the
+     * area then have no file any more and sync() removes them.
      */
     public function restoreAreaDir(int $areaId, int $instanceId, string $areaName): void
     {
@@ -227,7 +227,7 @@ class TemplateFiles {
         $this->createAreaDir($instanceId, $areaName);
     }
 
-    /** Verzeichnis mit seinen Dateien (eine Ebene) entfernen */
+    /** Remove a directory with its files (one level) */
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) return;
@@ -238,22 +238,22 @@ class TemplateFiles {
     }
 
     // ====================
-    // Abgleich
+    // Reconciliation
 
     /**
-     * Dateisystem -> Datenbank abgleichen (siehe Klassenkommentar).
+     * Reconcile file system -> database (see class comment).
      *
-     *  1. Unbekannte Verzeichnisse werden Bereiche vom Typ 'template', unbekannte
-     *     Dateien werden Templates (Label = Name), Dateien mit anderem Inhalt als
-     *     `code` werden neu gespeichert (kompiliert).
-     *  2. Templates ohne Datei werden gelöscht, Bereiche ohne Verzeichnis kommen in
-     *     den Papierkorb - beides nur, wenn das Mandanten-Verzeichnis vorhanden ist.
+     *  1. Unknown directories become areas of type 'template', unknown
+     *     files become templates (label = name), files with content other than
+     *     `code` are saved anew (compiled).
+     *  2. Templates without a file are deleted, areas without a directory go to
+     *     the trash - both only if the tenant directory exists.
      *
-     * Läuft nicht, wenn ein anderer Abgleich noch läuft (Sperrdatei in var/tmp).
+     * Does not run if another reconciliation is still running (lock file in var/tmp).
      *
      * @return array  areas_created, templates_created, templates_updated,
-     *                templates_deleted, areas_deleted, errors (Meldungen),
-     *                locked (true = übersprungen)
+     *                templates_deleted, areas_deleted, errors (messages),
+     *                locked (true = skipped)
      */
     public function sync(): array
     {
@@ -275,7 +275,7 @@ class TemplateFiles {
             $this->system->createDir(dirname($base), basename($base));
             $instanceIds = array_map('intval', (array)($this->instanceCache->all()['instance_ids'] ?? []));
 
-            // Bereiche und Templates aus der Datenbank
+            // Areas and templates from the database
             // --------------------
             $this->db->pushResult();
             $this->db->query("SELECT `area_id`, `instance_id`, `name` FROM `area` WHERE `type` = 'template' AND `deleted` = 0");
@@ -297,7 +297,7 @@ class TemplateFiles {
             }
             $this->db->popResult();
 
-            // 1. Dateien -> Datenbank
+            // 1. Files -> database
             // --------------------
             foreach ((array)glob($base . '/*', GLOB_ONLYDIR) as $instanceDir) {
                 $instanceId = (int)basename($instanceDir);
@@ -324,7 +324,7 @@ class TemplateFiles {
                         if ($code === false) continue;
 
                         if (!isset($templates[$areaId][$name])) {
-                            // neue Datei -> neues Template
+                            // new file -> new template
                             $templateId = $this->createTemplate($areaId, $name, $code, $result['errors']);
                             if ($templateId > 0) {
                                 $templates[$areaId][$name] = ['template_id' => $templateId, 'code' => $code];
@@ -332,7 +332,7 @@ class TemplateFiles {
                             }
                         }
                         elseif ($templates[$areaId][$name]['code'] !== $code) {
-                            // geänderte Datei -> Template neu speichern (kompilieren)
+                            // changed file -> save template anew (compile)
                             $templateId = $templates[$areaId][$name]['template_id'];
                             if ($this->updateTemplate($templateId, $areaId, $name, $code, $result['errors'])) {
                                 $templates[$areaId][$name]['code'] = $code;
@@ -343,15 +343,15 @@ class TemplateFiles {
                 }
             }
 
-            // 2. Datenbank aufräumen: was keine Datei mehr hat, verschwindet
+            // 2. Clean up the database: whatever no longer has a file disappears
             // --------------------
             foreach ($areas as $path => $areaId) {
                 $instanceId = (int)strtok($path, '/');
-                // Sicherung: ohne Mandanten-Verzeichnis nichts löschen
+                // Safeguard: without tenant directory delete nothing
                 if (!is_dir($base . '/' . $instanceId)) continue;
 
                 if (!is_dir($base . '/' . $path)) {
-                    // Verzeichnis gelöscht -> Bereich in den Papierkorb
+                    // Directory deleted -> area to the trash
                     if ($this->area->delete($areaId)) {
                         $result['areas_deleted']++;
                     }
@@ -363,7 +363,7 @@ class TemplateFiles {
                 }
                 foreach ($templates[$areaId] ?? [] as $name => $row) {
                     if (is_file($base . '/' . $path . '/' . $name . self::EXTENSION)) continue;
-                    // Datei gelöscht -> Template löschen
+                    // File deleted -> delete template
                     if ($this->template->delete($row['template_id'])) {
                         $result['templates_deleted']++;
                     }
@@ -386,9 +386,9 @@ class TemplateFiles {
     }
 
     /**
-     * Bereich vom Typ 'template' zu einem manuell angelegten Verzeichnis.
+     * Area of type 'template' for a manually created directory.
      *
-     * @return int  area_id, 0 bei Fehler (Meldung in $errors)
+     * @return int  area_id, 0 on error (message in $errors)
      */
     private function createArea(int $instanceId, string $name, array &$errors): int
     {
@@ -412,9 +412,9 @@ class TemplateFiles {
     }
 
     /**
-     * Template zu einer manuell angelegten Datei.
+     * Template for a manually created file.
      *
-     * @return int  template_id, 0 bei Fehler (Meldung in $errors)
+     * @return int  template_id, 0 on error (message in $errors)
      */
     private function createTemplate(int $areaId, string $name, string $code, array &$errors): int
     {
@@ -435,9 +435,9 @@ class TemplateFiles {
     }
 
     /**
-     * Template zu einer geänderten Datei neu speichern: Template::hookOnSave()
-     * kompiliert und befüllt `code`/`styled_code`/`error_text`, hookOnSaved()
-     * schreibt das PHP nach var/php.
+     * Save the template for a changed file anew: Template::hookOnSave()
+     * compiles and fills `code`/`styled_code`/`error_text`, hookOnSaved()
+     * writes the PHP to var/php.
      */
     private function updateTemplate(int $templateId, int $areaId, string $name, string $code, array &$errors): bool
     {

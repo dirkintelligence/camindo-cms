@@ -1,83 +1,83 @@
 <?php
 /**
- * Gemeinsame Basis der Backend-Klassen des Moduls Record.
+ * Common base of the backend classes of the module Record.
  *
- * Record ist das größte Modul im Bestand, seine Oberfläche wäre in einer Klasse nicht
- * mehr lesbar. Sie ist deshalb auf neun Klassen aufgeteilt, die alle hier erben:
+ * Record is the largest module in the codebase; its user interface would not be
+ * readable in one class. It is therefore split into nine classes, all of which inherit from here:
  *
- *     RecordBackendFolderList    Baum der Inhaltsbereiche - der Einstieg
- *     RecordBackendList          Datensatzliste eines Bereichs
- *     RecordBackendInfo          Detailansicht
- *     RecordBackendMove          Verschieben in einen anderen Bereich
- *     RecordBackendEdit          Eingabemaske, Speichern, Löschen
- *     RecordBackendSearch        Suchmaske und Suchausführung
- *     RecordBackendUpload        Datei-Upload (Ajax)
- *     RecordBackendServerFile    Dateiauswahl aus dem Serververzeichnis
- *     RecordBackendBatch         Stapelverarbeitung
- *     RecordBackendExport        Export (XML, CSV, DOCX)
- *     RecordBackendImport        Import (XML, CSV, DOCX)
+ *     RecordBackendFolderList    tree of the content areas - the entry point
+ *     RecordBackendList          record list of an area
+ *     RecordBackendInfo          detail view
+ *     RecordBackendMove          move to another area
+ *     RecordBackendEdit          input mask, save, delete
+ *     RecordBackendSearch        search mask and search execution
+ *     RecordBackendUpload        file upload (Ajax)
+ *     RecordBackendServerFile    file selection from the server directory
+ *     RecordBackendBatch         batch processing
+ *     RecordBackendExport        export (XML, CSV, DOCX)
+ *     RecordBackendImport        import (XML, CSV, DOCX)
  *
- * Die Klasse ist abstract: sie hat keinen eigenen Einstiegspunkt, sondern nur
- * gemeinsamen Zustand und Hilfsmethoden. Vor allem den Konstruktor - jede der
- * Unterklassen bräuchte sonst dieselbe zehnstellige Abhängigkeitsliste.
+ * The class is abstract: it has no entry point of its own, only
+ * shared state and helper methods. Above all the constructor - otherwise each of the
+ * subclasses would need the same ten-part dependency list.
  *
- * DIE SEITENPARAMETER SIND HIER AUFWENDIGER ALS ANDERSWO
+ * THE PAGE PARAMETERS ARE MORE INVOLVED HERE THAN ELSEWHERE
  * --------------------
- * _resolveParams() ist der wichtigste Teil dieser Klasse. Ein Aufruf im Modul Record
- * kann sich auf sehr Verschiedenes beziehen:
+ * _resolveParams() is the most important part of this class. A call in the module Record
+ * can refer to very different things:
  *
- *     genau einen Bereich       area_id gesetzt
- *     alle Bereiche             nichts gesetzt (globale Suche)
- *     eine Auswahl an Bereichen filter[area_id][] gesetzt
- *     die Zielbereiche eines    src_field gesetzt - dann kommen die Bereiche aus der
- *     Verknüpfungsfeldes        Felddefinition, nicht aus dem Request
+ *     exactly one area          area_id set
+ *     all areas                 nothing set (global search)
+ *     a selection of areas      filter[area_id][] set
+ *     the target areas of a     src_field set - then the areas come from the field
+ *     link field                definition, not from the request
  *
- * Die Methode bringt all das auf einen Nenner und füllt $areaId, $areaIds,
- * $areaFilter, $areaData und $params. Jede Unterklasse ruft sie als Erstes auf.
+ * The method reduces all of this to one common form and fills $areaId, $areaIds,
+ * $areaFilter, $areaData and $params. Each subclass calls it first.
  *
- * LOOKUP-BETRIEB
+ * LOOKUP OPERATION
  * --------------------
- * Wie im Modul Template dient die Liste doppelt: als normale Trefferliste und als
- * Auswahlfenster für ein Verknüpfungsfeld in einem anderen Formular.
+ * As in the module Template, the list serves a double purpose: as a normal result list and as
+ * a selection window for a link field in another form.
  *
- *     src_field   field_id des Verknüpfungsfeldes (hier eine Zahl, anders als in
- *                 TemplateBackend, wo es ein Feldname ist)
- *     src_id      record_id des Datensatzes, der verknüpft werden soll; 0 = Aufruf
- *                 aus einer Suchmaske
+ *     src_field   field_id of the link field (here a number, unlike
+ *                 TemplateBackend, where it is a field name)
+ *     src_id      record_id of the record to be linked; 0 = call
+ *                 from a search mask
  *
- * Aus src_field ergibt sich, welche Datensätze überhaupt in Frage kommen: ein
- * 'relation'-Feld hat genau einen Zielbereich, ein 'pointer'-Feld mehrere.
+ * From src_field follows which records come into question at all: a 'relation'
+ * field has exactly one target area, a 'pointer' field several.
  *
- * Ein Sonderfall ist das Meta-Feld `parent_id` als Lookup-Feld: gewählt wird kein
- * verknüpfter, sondern der ÜBERGEORDNETE Datensatz. Zielbereich ist dann der eigene
- * Bereich, und angeklickt wird nichts geschrieben - die Auswahl reist als
- * data[parent_id] mit dem Formular. _resolveParams() merkt sich das in $srcIsParent.
+ * A special case is the meta field `parent_id` as lookup field: what is chosen is not a
+ * linked record but the PARENT record. The target area is then the own
+ * area, and nothing is written when clicked - the selection travels as
+ * data[parent_id] with the form. _resolveParams() notes this in $srcIsParent.
  *
- * LISTENSPALTEN UND LISTEN-TEMPLATE
+ * LIST COLUMNS AND LIST TEMPLATE
  * --------------------
- * Welche Felder eines Bereichs in der Datensatzliste stehen, sagt field.visibility_list
- * (RecordPresenter::listFields()); wie ein Wert dort aussieht, RecordPresenter::
- * listValue() - Status als Symbol, template_id/parent_id/position als Klartext, alles
- * andere über Backend::backendValue(). Beides nutzt neben RecordBackendList (und der
- * API, RecordApi::search()) auch detailedText(),
- * das dieselben Felder untereinander zeigt - in der ausführlichen Lookup-Vorschau
- * (RecordBackendEdit) und in der Liste der zuletzt geänderten Datensätze
+ * Which fields of an area appear in the record list is determined by field.visibility_list
+ * (RecordPresenter::listFields()); how a value looks there, RecordPresenter::
+ * listValue() - status as a symbol, template_id/parent_id/position as plain text, everything
+ * else via Backend::backendValue(). Besides RecordBackendList (and the
+ * API, RecordApi::search()) this is also used by detailedText(),
+ * which shows the same fields one below the other - in the detailed lookup preview
+ * (RecordBackendEdit) and in the list of the last changed records
  * (RecordBackendFolderList).
  *
- * Dazu kann je Bereich ein Frontend-Template gewählt sein (`area`.`list_template_id`),
- * das RecordPresenter::listTemplateHtml() für jeden Datensatz ausführt (Page::renderRecord()) - als
- * letzte Spalte der Liste bzw. als Abschluss der Lookup-Vorschau.
+ * In addition, a frontend template can be chosen per area (`area`.`list_template_id`),
+ * which RecordPresenter::listTemplateHtml() runs for each record (Page::renderRecord()) - as
+ * the last column of the list or as the conclusion of the lookup preview.
  *
- * DIE AUSWAHLLISTEN SIND BEGRENZT
+ * THE SELECTION LISTS ARE LIMITED
  * --------------------
- * _parentOptions() und _previousOptions() bauen Auswahllisten über die Datensätze
- * eines Bereichs - das können sehr viele sein. Beide holen deshalb höchstens
- * admin.list_max_datasets Einträge (Standard 200) und hängen bei mehr einen
- * deaktivierten "…"-Eintrag an, statt die Liste stillschweigend abzuschneiden.
+ * _parentOptions() and _previousOptions() build selection lists over the records
+ * of an area - there can be very many. Both therefore fetch at most
+ * admin.list_max_datasets entries (default 200) and, if there are more, append a
+ * disabled "…" entry instead of silently truncating the list.
  *
- * @see Camindo\Core\Modules\Record\Record  Dataset/Model
- * @see Camindo\Core\Backend::areaData()     liefert die Angaben zu Default- und Sortierfeld
- * @see docs/developers/03-backend-entwicklung.md
+ * @see Camindo\Core\Modules\Record\Record  Dataset/model
+ * @see Camindo\Core\Backend::areaData()     supplies the details on default and sort field
+ * @see developer docs, chapter 05 (Backend development)
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -96,42 +96,42 @@ use Camindo\Core\Modules\Record\Record;
 abstract class RecordBackend {
     protected int $id = 0;
 
-    // Genau EIN Bereich - gesetzt, wenn der Aufruf sich eindeutig auf einen bezieht.
+    // Exactly ONE area - set if the call refers unambiguously to one.
     protected int $areaId = 0;
 
     protected int $srcId = 0;       // lookup call
     protected int $srcField = 0;    // lookup call
     protected int $straight = 0;    // lookup call
 
-    // Lookup-Aufruf aus einem FREMDEN Formular: src_field ist dann kein field_id,
-    // sondern der Name einer Spalte, die eine record_id aufnimmt - z. B.
-    // `instance`.`record_id` (die Startseite einer Website). Es gibt dazu keine
-    // Felddefinition, aus der sich Zielbereiche ableiten ließen; welche Datensätze
-    // in Frage kommen, grenzt der Aufrufer über die normalen Filter ein
+    // Lookup call from a FOREIGN form: src_field is then not a field_id,
+    // but the name of a column that takes a record_id - e.g.
+    // `instance`.`record_id` (the start page of a website). There is no
+    // field definition from which target areas could be derived; which records
+    // come into question is narrowed by the caller via the normal filters
     // (InstanceBackend: filter[instance_id]).
     protected string $srcFieldName = '';
 
-    // Lookup-Aufruf für das Meta-Feld parent_id: gewählt wird der Vaterdatensatz,
-    // nicht eine Verknüpfung. Zielbereich ist dann der eigene Bereich, und es wird
-    // beim Anklicken nichts geschrieben (siehe RecordBackendEdit).
+    // Lookup call for the meta field parent_id: the parent record is chosen,
+    // not a link. The target area is then the own area, and nothing is
+    // written when clicked (see RecordBackendEdit).
     protected bool $srcIsParent = false;
 
-    // Zielbereiche eines 'pointer'-Feldes (mehrere möglich)
+    // target areas of a 'pointer' field (several possible)
     protected array $areaIds = [];  // relAreaIds of a pointer field
 
-    // Bereichs-Einschränkung der Suche; bei einem Pointer-Aufruf die Schnittmenge
-    // aus Sucheingabe und den Zielbereichen des Feldes.
+    // area restriction of the search; with a pointer call the intersection
+    // of the search input and the target areas of the field.
     protected array $areaFilter = [];
 
-    // Die Parameter, die an jeden weiterführenden Link angehängt werden müssen, damit
-    // der nächste Layer den Zusammenhang kennt (Bereich, Lookup-Aufruf).
+    // The parameters that must be appended to every onward link so that
+    // the next layer knows the context (area, lookup call).
     protected string $params = '';
 
     protected ?array $data = [];
     protected ?array $areaData = [];
     protected string $function = '';
 
-    // wenn es um EINEN Bereich MIT parent_id-Eingabefeld geht, z.B. Datensatz-Liste / -Info
+    // if it is about ONE area WITH an input field parent_id, e.g. record list / info
     protected bool $hasParentId = false;
 
     public function __construct(
@@ -153,16 +153,16 @@ abstract class RecordBackend {
 
 
     /**
-     * Überschrift erzeugen - abhängig von $this->function.
+     * Create the headline - depending on $this->function.
      *
-     * In der Detailansicht und beim Löschen steht der Datensatz selbst darüber. Einen
-     * "Titel" hat ein Datensatz aber nicht von Haus aus: welches Feld dafür gilt, legt
-     * der Bereich mit default_field_id fest. Deshalb erst das Default-Feld holen und
-     * dann dessen Inhalt einsetzen; ist keins bestimmt, bleibt die record_id.
+     * In the detail view and when deleting, the record itself appears above it. A record
+     * does not have a "title" by default: which field applies is set by
+     * the area with default_field_id. Therefore first fetch the default field and
+     * then insert its content; if none is set, the record_id remains.
      *
-     * Der Inhalt kommt aus einem Eingabefeld und wird maskiert.
+     * The content comes from an input field and is escaped.
      *
-     * @param bool $displayIcon  true: Status-Icon voranstellen
+     * @param bool $displayIcon  true: prepend status icon
      */
     protected function headline(bool $displayIcon = false) {
         $icon = '';
@@ -185,13 +185,13 @@ abstract class RecordBackend {
     }
 
     // ====================
-    // Zusatzrechte des Moduls (install/settings.php 'access', 12-group-rights.md)
+    // Additional rights of the module (install/settings.php 'access', developer docs, chapter 11 (Permissions))
 
     /**
-     * Export-/Importformate, die die Gruppe nutzen darf (RecordService::transferTypes()).
+     * Export/import formats the group may use (RecordService::transferTypes()).
      *
      * @param string $direction  'export' | 'import'
-     * @return string[]  Teilmenge von RecordExport::TYPES in deren Reihenfolge
+     * @return string[]  subset of RecordExport::TYPES in their order
      */
     protected function allowedTypes(string $direction): array
     {
@@ -199,10 +199,9 @@ abstract class RecordBackend {
     }
 
     /**
-     * Medien-Import in den Bereich dieser Seite (RecordBackendMediaImport)? Zusatzrecht
-     * import_media, Recht zum Anlegen, ein Upload-Feld (ohne Thumbnails) - und kein
-     * abhängiger Bereich (area.dependent: dessen Datensätze entstehen nur über ein
-     * Feld vom Typ link).
+     * Media import into the area of this page (RecordBackendMediaImport)? Additional right
+     * import_media, right to create, an upload field (without thumbnails) - and not a
+     * dependent area (area.dependent: its records are only created via a field of type link).
      */
     protected function mediaImportAllowed(): bool
     {
@@ -216,7 +215,7 @@ abstract class RecordBackend {
     }
 
     /**
-     * Darf die Gruppe die Stapelverarbeitung nutzen (Zusatzrecht batch)?
+     * May the group use batch processing (additional right batch)?
      */
     protected function batchAllowed(): bool
     {
@@ -224,7 +223,7 @@ abstract class RecordBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     protected function errors(): void
     {
@@ -234,32 +233,32 @@ abstract class RecordBackend {
     }
 
     /**
-     * Die Seitenparameter einlesen und auf einen Nenner bringen.
+     * Read the page parameters and reduce them to a common form.
      *
-     * Wird von jeder Unterklasse als Erstes aufgerufen und füllt $id, $areaId,
-     * $areaIds, $areaFilter, $srcField, $srcId, $areaData und $params.
+     * Called first by each subclass and fills $id, $areaId,
+     * $areaIds, $areaFilter, $srcField, $srcId, $areaData and $params.
      *
-     * Der Reihe nach:
+     * In order:
      *
-     *  1. Id und Bereich aus dem Request. Die area_id darf sowohl direkt als auch als
-     *     data[area_id] kommen - das Eingabeformular schickt sie im data-Block mit.
-     *     Ist eine Datensatz-Id angegeben, gilt der Bereich des Datensatzes.
-     *  2. Bei einem Lookup-Aufruf (src_field) gewinnt die FELDDEFINITION über den
-     *     Request: ein 'relation'-Feld hat genau einen Zielbereich, ein 'pointer'-Feld
-     *     mehrere. Der Redakteur soll aus einem Verknüpfungsfeld heraus nichts
-     *     auswählen können, was das Feld gar nicht aufnehmen kann.
-     *  3. Bereichsangaben laden - über Backend::areaData(), nicht über Area::load():
-     *     die Methode liefert zusätzlich Name und Typ des Default-Feldes sowie das
-     *     Sortierfeld, die weiter unten für die Auswahllisten gebraucht werden.
-     *  4. Ohne eindeutigen Bereich wird eine Ersatz-Beschriftung gesetzt ("Alle
-     *     Inhaltsbereiche" bzw. "{n} Bereiche").
-     *  5. $params zusammenstellen - siehe Property-Kommentar.
+     *  1. Id and area from the request. The area_id may come both directly and as
+     *     data[area_id] - the input form sends it along in the data block.
+     *     If a record id is given, the area of the record applies.
+     *  2. With a lookup call (src_field) the FIELD DEFINITION wins over the
+     *     request: a 'relation' field has exactly one target area, a 'pointer' field
+     *     several. The editor should not be able to select anything from a link field
+     *     that the field cannot accept at all.
+     *  3. Load area data - via Backend::areaData(), not via Area::load():
+     *     the method additionally supplies name and type of the default field as well as the
+     *     sort field, which are needed further below for the selection lists.
+     *  4. Without a unique area a substitute label is set ("All
+     *     content areas" or "{n} areas").
+     *  5. Assemble $params - see the property comment.
      *
-     * Bei einem Pointer-Feld MIT Sucheinschränkung wird die Schnittmenge gebildet: es
-     * gilt beides, die Zielbereiche des Feldes und die Auswahl des Redakteurs.
+     * With a pointer field WITH search restriction the intersection is formed: both
+     * apply, the target areas of the field and the selection of the editor.
      *
-     * Schlägt etwas fehl, wird $this->function auf 'errors' gesetzt - die aufrufende
-     * Methode muss das prüfen.
+     * If something fails, $this->function is set to 'errors' - the calling
+     * method must check this.
      */
     protected function _resolveParams(): void
     {
@@ -267,8 +266,8 @@ abstract class RecordBackend {
         $this->areaId = (int)($_REQUEST['data']['area_id'] ?? $_REQUEST['area_id'] ?? 0);
 
         // lookup calls:
-        // src_field ist entweder eine field_id (Verknüpfungsfeld eines Bereichs) oder
-        // ein Spaltenname aus einem fremden Formular - siehe $srcFieldName.
+        // src_field is either a field_id (link field of an area) or
+        // a column name from a foreign form - see $srcFieldName.
         $srcFieldRaw = trim((string)($_REQUEST['src_field'] ?? ''));
         if ($srcFieldRaw !== '' && !ctype_digit($srcFieldRaw)) {
             $this->srcFieldName = preg_replace('/[^a-z0-9_]/', '', strtolower($srcFieldRaw));
@@ -280,7 +279,7 @@ abstract class RecordBackend {
         }
         $this->srcId    = (int)($_REQUEST['src_id'] ?? 0);
 
-        // Indikator ob "Create"-Funktion direkt aus Lookup heraus aufgerufen wurde
+        // indicator whether the "Create" function was called directly from a lookup
         $this->straight = (int)($_REQUEST['straight'] ?? 0);
 
         // $filter[area_ids][]
@@ -289,7 +288,7 @@ abstract class RecordBackend {
         );
         $_REQUEST['filter']['area_id'] = $this->areaFilter;
 
-        // Relation- / Pointer-feld angegeben -> Zielbereich(e) ermitteln
+        // relation / pointer field given -> determine target area(s)
         // --------------------
         $this->areaIds = [];
         $this->srcIsParent = false;
@@ -297,19 +296,19 @@ abstract class RecordBackend {
             $srcFieldData = $this->record->fieldData($this->srcField);
             $type = $srcFieldData['type'];
             if (($srcFieldData['name'] ?? '') === 'parent_id' && $type === 'id') {
-                // Auswahl des Vaterdatensatzes: die Kandidaten stehen im selben
-                // Bereich wie der Datensatz, der bearbeitet wird
+                // selection of the parent record: the candidates are in the same
+                // area as the record being edited
                 $this->srcIsParent = true;
                 $this->areaId = (int)$srcFieldData['area_id'];
             }
             elseif (str_starts_with($type, 'relation')) {
-                // Ein Zielbereich
+                // one target area
                 $this->areaId = (int)$srcFieldData['rel_area_id'];
             }
             elseif (in_array($type, $this->cms->multiAreaTypes, true)) {
-                // Zielbereiche (pointer, link)
+                // target areas (pointer, link)
                 $this->areaIds = $this->record->getRelAreaIds($this->srcField);
-                // Genau einer?
+                // exactly one?
                 if (count($this->areaIds) === 1) $this->areaId = (int)$this->areaIds[0];
             }
             else {
@@ -319,9 +318,9 @@ abstract class RecordBackend {
             }
         }
 
-        // Datensatz angegeben: sein Bereich gilt, nicht der Request-Parameter area_id -
-        // Verweise auf die Detailansicht (Backend::teaser(), "Verwendet von" …) kennen
-        // oft nur die Id; ohne Bereichsdaten fehlten z. B. die Sprach-Reiter
+        // record given: its area applies, not the request parameter area_id -
+        // references to the detail view (Backend::teaser(), "Used by" …) often know
+        // only the id; without area data the language tabs, for example, would be missing
         if ($this->id > 0) {
             $this->db->pushResult();
             $this->db->query("SELECT `area_id` FROM `record` WHERE `record_id` = ?", 'i', [$this->id]);
@@ -330,44 +329,44 @@ abstract class RecordBackend {
             if ($recordAreaId > 0) $this->areaId = $recordAreaId;
         }
 
-        // Bereichslabel ermitteln
+        // determine area label
         // --------------------
         $this->areaData = [];
         if ($this->areaId > 0) {
-            // Ein Bereich -> Daten laden
-            // Backend::areaData() liefert zusätzliche Infos zum Default-Feld und Sortierfeld
+            // one area -> load data
+            // Backend::areaData() supplies additional info on the default field and sort field
             if (!$this->areaData = $this->backend->areaData($this->areaId)) {
-                // (Fehlermeldungen in $this->cms->errors)
+                // (error messages in $this->cms->errors)
                 $this->function = 'errors';
                 return;
             }
         }
         else {
             if (!empty($this->areaIds)) {
-                // Mehrere Ziel-Bereiche aus Pointer-Feld
-                // -> Schnittmenge mit areaFilter bilden
+                // several target areas from a pointer field
+                // -> form the intersection with areaFilter
                 if (empty($this->areaFilter)) {
-                    // (kein areaFilter angegeben -> nur areaIds)
+                    // (no areaFilter given -> only areaIds)
                     $this->areaFilter = $this->areaIds;
                 }
                 else {
-                    // Schnittmenge
+                    // intersection
                     $this->areaFilter = array_intersect($this->areaFilter, $this->areaIds);
                 }
             }
             if (empty($this->areaFilter)) {
-                // "alle Bereiche"
+                // "all areas"
                 $this->areaData = ['label' => '#area.all_content_areas'];
             }
             else {
-                // "{count} Bereiche"
+                // "{count} areas"
                 $this->areaData = [
                     'label' => $this->cms->snippet('area.x_areas', ['count' => count($this->areaFilter) ])
                 ];
             }
         }
 
-        // Weiterzureichende Seitenparameter
+        // page parameters to pass on
         // --------------------
         if ($this->areaId > 0) {
             $this->params = 'area_id=' . $this->areaId;
@@ -379,16 +378,16 @@ abstract class RecordBackend {
     }
 
     /**
-     * Ajax: Vorschau eines FREMDEN Datensatz-Lookups aktualisieren
+     * Ajax: update the preview of a FOREIGN record lookup
      * (backend/ajax_ext_lookup.php).
      *
-     * Gegenstück zu TemplateBackend::lookupPreview(), nur für Datensätze: aufgerufen
-     * von cApp.ui.slookupUpdate(), nachdem in der Datensatzliste ein Häkchen gesetzt
-     * oder entfernt wurde. Geschrieben wird nichts - die Antwort enthält das
-     * versteckte Feld, das mit dem aufrufenden Formular abgeht.
+     * Counterpart to TemplateBackend::lookupPreview(), only for records: called
+     * by cApp.ui.slookupUpdate() after a checkmark was set or removed in the record list.
+     * Nothing is written - the response contains the hidden field that
+     * goes with the calling form.
      *
-     * Request: src_field (Spaltenname, Pflicht), ids (Kommaliste), max, function,
-     *          prefix ('filter' für die Suchmaske, sonst 'data')
+     * Request: src_field (column name, required), ids (comma list), max, function,
+     *          prefix ('filter' for the search mask, otherwise 'data')
      */
     public function extLookupPreview(): void
     {
@@ -402,7 +401,7 @@ abstract class RecordBackend {
         $idString = preg_replace('/[^0-9,]/', '', (string)($_REQUEST['ids'] ?? ''));
         $ids = explode(',', $idString);
 
-        // prefix=filter: Suchfeld der Suchmaske (filter[...]), sonst Formularfeld
+        // prefix=filter: search field of the search mask (filter[...]), otherwise form field
         $prefix = ((string)($_REQUEST['prefix'] ?? '') === 'filter') ? 'filter' : 'data';
         echo $this->extLookupPreviewCreate($srcField, $ids, $prefix, $max);
 
@@ -412,20 +411,20 @@ abstract class RecordBackend {
     }
 
     /**
-     * Lookup auf Profil-Datensätze (Website-User) aus einem fremden Formular: die
-     * Ersetzungen für die Vorlage edit_form_lookup_foreign_table. Gesucht wird in der
-     * Datensatzliste mit src_field = $srcField und einem Filter auf die Profil-Bereiche;
-     * die Liste reicht src_field als Spaltennamen weiter (auch durch ihre Suchmaske),
-     * "Übernehmen" schreibt über ajax_ext_lookup.php den Vorschaublock zurück.
-     * Genutzt von der Suchmaske (Metafeld user_id) und vom Modul Datenschutz
+     * Lookup of profile records (website users) from a foreign form: the
+     * replacements for the template edit_form_lookup_foreign_table. Searched in the
+     * record list with src_field = $srcField and a filter on the profile areas;
+     * the list passes src_field on as a column name (also through its search mask),
+     * "Apply" writes the preview block back via ajax_ext_lookup.php.
+     * Used by the search mask (meta field user_id) and by the module Privacy
      * (PrivacyBackend::profilePickerHtml()).
      *
-     * @param string $srcField  Spaltenname im aufrufenden Formular ([a-z0-9_])
-     * @param string $prefix    'data' (Eingabeformular) oder 'filter' (Suchmaske)
-     * @param int[]  $ids       gewählte Profile
-     * @param int    $max       1 = Einfachauswahl, 0 = beliebig viele
-     * @param int[]  $areaIds   Profil-Bereiche, in denen gesucht wird
-     * @return array            Platzhalter => Wert ({src_id}, {src_field},
+     * @param string $srcField  column name in the calling form ([a-z0-9_])
+     * @param string $prefix    'data' (input form) or 'filter' (search mask)
+     * @param int[]  $ids       selected profiles
+     * @param int    $max       1 = single selection, 0 = any number
+     * @param int[]  $areaIds   profile areas in which is searched
+     * @return array            placeholder => value ({src_id}, {src_field},
      *                          {search_url}, {update_url}, {data_ids}, {max}, {preview})
      */
     public function profileLookupReplace(string $srcField, string $prefix, array $ids, int $max, array $areaIds): array
@@ -448,14 +447,14 @@ abstract class RecordBackend {
         ];
     }
 
-    /** Profil-Bereiche, die die Gruppe lesen darf (ohne gelöschte), in Baumreihenfolge */
+    /** Profile areas the group may read (excluding deleted ones), in tree order */
     public function readableProfileAreaIds(): array
     {
         $this->db->pushResult();
         try {
             $this->db->query("SELECT `area_id` FROM `area` WHERE `type` = 'profile' AND `deleted` = 0"
                 . $this->backend->areaAccessSql() . " ORDER BY `lft`");
-            // eine Spalte: fetchColumn() liefert die Werte als Liste
+            // one column: fetchColumn() returns the values as a list
             return array_map('intval', $this->db->fetchColumn());
         }
         finally {
@@ -464,20 +463,20 @@ abstract class RecordBackend {
     }
 
     /**
-     * Den Vorschaublock eines fremden Datensatz-Lookups rendern.
+     * Render the preview block of a foreign record lookup.
      *
-     * Gemeinsamer Kern von extLookupPreview() und dem aufrufenden Formular. Je
-     * gewähltem Datensatz entsteht eine Zeile mit Beschriftung, Entfernen-Verweis und
-     * einem versteckten Feld, das die Id trägt - der Vorschaublock IST das
-     * Eingabefeld.
+     * Common core of extLookupPreview() and the calling form. For each
+     * selected record a row is created with label, remove link and
+     * a hidden field that carries the id - the preview block IS the
+     * input field.
      *
-     * Beschriftet wird mit dem Default-Feld des Bereichs, in dem der Datensatz liegt
-     * (Backend::getDefaultField()); ohne Inhalt bleibt die Id als Notnagel.
+     * It is labeled with the default field of the area in which the record lies
+     * (Backend::getDefaultField()); without content the id remains as a last resort.
      *
-     * @param string $srcField  Name der Spalte im aufrufenden Formular (z. B. 'record_id')
-     * @param array  $ids       gewählte record_ids
-     * @param string $prefix    Name des Formularfeldes ('data'/'filter')
-     * @param int    $max       1 = Einfachauswahl (kein [] im Feldnamen)
+     * @param string $srcField  name of the column in the calling form (e.g. 'record_id')
+     * @param array  $ids       selected record_ids
+     * @param string $prefix    name of the form field ('data'/'filter')
+     * @param int    $max       1 = single selection (no [] in the field name)
      */
     public function extLookupPreviewCreate(string $srcField, array $ids, string $prefix, int $max): string
     {
@@ -498,11 +497,11 @@ abstract class RecordBackend {
         $this->db->popResult();
         if (empty($records)) return '';
 
-        // Reihenfolge der übergebenen Ids erhalten - der Redakteur hat sie so gewählt
+        // keep the order of the passed ids - the editor selected them in this order
         $rank = array_flip($ids);
         uksort($records, fn($a, $b) => ((int)($rank[$a] ?? 0)) <=> ((int)($rank[$b] ?? 0)));
 
-        // Feldname im Formular: bei Mehrfachauswahl als Array
+        // field name in the form: as an array for multiple selection
         $varName = "{$prefix}[{$srcField}]" . ($max === 1 ? '' : '[]');
 
         $rows = [];
@@ -531,7 +530,7 @@ abstract class RecordBackend {
     }
 
     /**
-     * Ist der Aufruf ein Lookup - egal ob über field_id oder über einen Spaltennamen?
+     * Is the call a lookup - regardless of whether via field_id or via a column name?
      */
     protected function hasLookup(): bool
     {
@@ -539,8 +538,8 @@ abstract class RecordBackend {
     }
 
     /**
-     * src_field als JavaScript-Argument für die cApp.ui.*lookup*-Aufrufe.
-     * Eine field_id geht als Zahl durch, ein Spaltenname muss in Anführungszeichen.
+     * src_field as a JavaScript argument for the cApp.ui.*lookup* calls.
+     * A field_id passes through as a number, a column name must be in quotes.
      */
     protected function srcFieldJs(): string
     {
@@ -551,15 +550,15 @@ abstract class RecordBackend {
 
 
     /**
-     * Auswahlliste der Status (id => Beschriftung).
+     * Selection list of the statuses (id => label).
      *
-     * Verwendet in Eingabemaske UND Suchmaske. Database::fetchPairs() liefert die
-     * zweispaltige Abfrage direkt als Schlüssel-Wert-Array, das array_map() löst darin
-     * noch #-Snippets auf.
+     * Used in the input mask AND the search mask. Database::fetchPairs() returns the
+     * two-column query directly as a key-value array, in which array_map() still resolves
+     * #-snippets.
      *
-     * @param bool $settableOnly  nur die Status, die die Gruppe setzen darf
-     *                            (Access::statusWrite()) - Eingabemaske und
-     *                            Stapelverarbeitung; die Suche bietet alle
+     * @param bool $settableOnly  only the statuses the group may set
+     *                            (Access::statusWrite()) - input mask and
+     *                            batch processing; the search offers all
      */
     protected function _statusOptions(bool $settableOnly = false): array
     {
@@ -574,18 +573,18 @@ abstract class RecordBackend {
     }
 
     /**
-     * Auswahlliste der Templates, die im Bereich benutzt werden dürfen.
+     * Selection list of the templates that may be used in the area.
      *
-     * Nicht alle Templates, sondern nur die in `rel_area_template` als 'selectable'
-     * eingetragenen (gepflegt über TemplateBackend::infoAccess()). Das
-     * Default-Template des Bereichs ist immer dabei - Area::hookOnSaved() setzt bei ihm
-     * selectable stets mit.
+     * Not all templates, only those entered in `rel_area_template` as 'selectable'
+     * (maintained via TemplateBackend::infoAccess()). The
+     * default template of the area is always included - Area::hookOnSaved() always
+     * sets selectable for it.
      *
-     * Die erste Option ist leer und bedeutet "Vorgabe des Bereichs benutzen".
+     * The first option is empty and means "use the default of the area".
      */
     protected function _templateOptions(): array
     {
-        // erste Option: "default"
+        // first option: "default"
         $options = ['' => $this->cms->snippet('record.default_template_label')];
         $sql = "SELECT `template`.`template_id`, `template`.`label` FROM `rel_area_template` `r`"
         ." INNER JOIN `template` ON `r`.`template_id` = `template`.`template_id`"
@@ -593,50 +592,49 @@ abstract class RecordBackend {
         ." ORDER BY `template`.`label` ASC";
         $this->db->query($sql, 'i', [$this->areaId]);
         $assigendOptions = $this->db->fetchPairs();
-        // Das Default-Template nicht nochtmal listen
+        // do not list the default template again
         $defaultTemplateId = (int)($this->areaData['default_template_id'] ?? 0);
         unset($assigendOptions[$defaultTemplateId]);
         return $options + $assigendOptions;
     }
 
     /**
-     * Auswahlliste "übergeordneter Datensatz".
+     * Selection list "parent record".
      *
-     * Alle Datensätze des Bereichs außer dem eigenen. Führt der Bereich einen Baum
-     * (Eingabefeld `parent_id`, Record::isTreeArea()), steht die Liste in
-     * Baumreihenfolge (`lft`) und jeder Titel ist nach `depth` eingerückt - mit
-     * geschützten Leerzeichen und dem Ast-Zeichen, wie die Datensatzliste
-     * (RecordBackendList::list(), table_column_tree_x): gewöhnliche Leerzeichen
-     * fielen in einer <option> zusammen.
+     * All records of the area except the own one. If the area has a tree
+     * (input field `parent_id`, Record::isTreeArea()), the list is in tree order
+     * (`lft`) and each title is indented by `depth` - with
+     * non-breaking spaces and the branch character, as in the record list
+     * (RecordBackendList::list(), table_column_tree_x): ordinary spaces
+     * would collapse in an <option>.
      *
-     * '!!' vor der record_id ist die Filter-Syntax für "ungleich" (siehe
-     * docs/developers/05-select-und-filter.md). Ausgeschlossen wird dabei origin_id, falls
-     * vorhanden - beim Bearbeiten arbeitet man auf einer Arbeitskopie, gemeint ist aber
-     * das Original.
+     * '!!' before the record_id is the filter syntax for "not equal" (see
+     * developer docs, chapter 04 (Select and filter)). origin_id is excluded here, if
+     * present - when editing one works on a working copy, but what is meant is
+     * the original.
      *
-     * Sortiert wird sonst nach dem Sortierfeld des Bereichs, angezeigt der Inhalt
-     * seines Default-Feldes - beides steht dank Backend::areaData() bereits in
-     * $areaData.
+     * Otherwise sorted by the sort field of the area, displaying the content of
+     * its default field - both are already in $areaData thanks to Backend::areaData().
      *
-     * Bei mehr als admin.list_max_datasets Treffern (Standard 200) wird die Liste
-     * abgeschnitten und bekommt einen deaktivierten "…"-Eintrag angehängt: eine
-     * Auswahlliste mit tausenden Einträgen wäre ohnehin unbenutzbar. Deshalb wird
-     * limit+1 abgefragt - nur so lässt sich erkennen, ob es mehr gibt.
+     * With more than admin.list_max_datasets hits (default 200) the list
+     * is truncated and receives a disabled "…" entry appended: a
+     * selection list with thousands of entries would be unusable anyway. That is why
+     * limit+1 is queried - only this way can it be recognized whether there are more.
      */
     protected function _parentOptions(): array
     {
-        // gibts nur wenn areaId defniert ist
+        // only available if areaId is defined
         if (empty($this->areaId)) return [];
 
         $limit = $this->config->get('admin.list_max_datasets') ?? 200;
 
-        // $this->areaData wurde mit Backend::areaData() geladen und enthält
-        // daher schon name und typ des Default-Feldes, sowie den Namen des Sortierfeldes
+        // $this->areaData was loaded with Backend::areaData() and therefore
+        // already contains the name and type of the default field, as well as the name of the sort field
         $defaultFieldName = (string)$this->areaData['default_field_name'];
         $defaultFieldType = (string)$this->areaData['default_field_type'];
         $sortFieldName = (string)$this->areaData['sort_field_name'];
         $sortOrder = $this->areaData['sort_order'] ?? 'DESC';
-        // Baum: in Baumreihenfolge, eingerückt (siehe Methodenkommentar)
+        // tree: in tree order, indented (see method comment)
         $isTree = $this->record->isTreeArea($this->areaId);
         if ($isTree) {
             $sortFieldName = 'lft';
@@ -670,47 +668,47 @@ abstract class RecordBackend {
     }
 
     /**
-     * Auswahlliste "vorangehender Datensatz" - die Eingabehilfe für `position`.
+     * Selection list "preceding record" - the input aid for `position`.
      *
-     * Der Redakteur wählt den Vorgänger, gespeichert wird daraus die Position
-     * (TreeManagerTrait::calculatePosition()). Der erste Eintrag bedeutet
-     * "an den Anfang".
+     * The editor chooses the predecessor; the position is stored from it
+     * (TreeManagerTrait::calculatePosition()). The first entry means
+     * "to the start".
      *
-     * Gelistet werden ausschließlich die GESCHWISTER unter $parentId - also die
-     * direkten Kinder, nicht der ganze Zweig: 'depth' => 1 ist der Modifikator zum
-     * parent_id-Filter (docs/developers/05-select-und-filter.md). $parentId = 0 meint
-     * die Wurzelebene des Bereichs; der Filterwert dafür ist 'null', das
-     * Cms::buildParentCondition() als "parent_id IS NULL" liest.
+     * Only the SIBLINGS under $parentId are listed - i.e. the direct children,
+     * not the whole branch: 'depth' => 1 is the modifier for the
+     * parent_id filter (developer docs, chapter 04 (Select and filter)). $parentId = 0 means
+     * the root level of the area; the filter value for this is 'null', which
+     * Cms::buildParentCondition() reads as "parent_id IS NULL".
      *
-     * Sortiert wird nach `position ASC` und nicht nach dem Sortierfeld des Bereichs:
-     * die Liste bildet die Reihenfolge ab, in die sich der Datensatz einreiht - jede
-     * andere Sortierung wäre hier sinnlos.
+     * Sorted by `position ASC` and not by the sort field of the area:
+     * the list shows the order in which the record is inserted - any
+     * other sorting would be pointless here.
      *
-     * Ansonsten wie _parentOptions(): eigener Datensatz ausgeschlossen ('!!'),
-     * Beschriftung aus dem Default-Feld des Bereichs, Begrenzung auf
-     * admin.list_max_datasets mit "…"-Eintrag.
+     * Otherwise as _parentOptions(): own record excluded ('!!'),
+     * label from the default field of the area, limited to
+     * admin.list_max_datasets with a "…" entry.
      *
-     * @param int $parentId  Übergeordneter Datensatz oder 0 (Wurzelebene)
+     * @param int $parentId  parent record or 0 (root level)
      */
     protected function _previousOptions(int $parentId = 0): array
     {
-        // gibts nur wenn areaId defniert ist
+        // only available if areaId is defined
         if (empty($this->areaId)) return [];
 
         $limit = $this->config->get('admin.list_max_datasets') ?? 200;
 
-        // $this->areaData wurde mit Backend::areaData() geladen und enthält
-        // daher schon name und typ des Default-Feldes
+        // $this->areaData was loaded with Backend::areaData() and therefore
+        // already contains the name and type of the default field
         $defaultFieldName = (string)$this->areaData['default_field_name'];
         $defaultFieldType = (string)$this->areaData['default_field_type'];
         $filter = [
             'area_id' => $this->areaId,
-            // Beim Bearbeiten ist $this->id die Arbeitskopie - gemeint ist das Original
+            // when editing, $this->id is the working copy - what is meant is the original
             'record_id' => '!!' . (($this->data['origin_id'] ?? 0) ?: $this->id),
-            // 'null' = Wurzelebene (parent_id IS NULL); ein leerer String taugt
-            // dafür nicht, den wirft Cms::normalizeValues() weg
+            // 'null' = root level (parent_id IS NULL); an empty string is not suitable
+            // for this, Cms::normalizeValues() discards it
             'parent_id' => $parentId > 0 ? $parentId : 'null',
-            // nur direkte Kinder, nicht der ganze Zweig
+            // only direct children, not the whole branch
             'depth' => 1
         ];
         $this->cms->select([
@@ -736,22 +734,21 @@ abstract class RecordBackend {
     }
 
     /**
-     * Status als Einträge für ein Auswahlmenü, wahlweise mit Symbol.
+     * Statuses as entries for a selection menu, optionally with symbol.
      *
-     * Anders als _statusOptions() liefert diese Methode fertiges HTML (Symbol in der
-     * Statusfarbe plus Beschriftung) - gebraucht für das Schnellfilter-Menü im
-     * Spaltenkopf der Liste.
+     * Unlike _statusOptions(), this method returns finished HTML (symbol in the
+     * status color plus label) - needed for the quick filter menu in the
+     * column header of the list.
      *
-     * pushResult()/popResult() klammern die Abfrage: die Methode wird mitten in einer
-     * laufenden Ergebnisschleife aufgerufen und würde deren Ergebnis sonst
-     * überschreiben.
+     * pushResult()/popResult() bracket the query: the method is called in the middle of a
+     * running result loop and would otherwise overwrite its result.
      */
     protected function _statusDropdownItems(bool $icon = false): array {
         $this->db->pushResult();
         $this->db->query("SELECT * FROM `status` ORDER BY `position` ASC");
         $items = [];
         while ($status = $this->db->fetch()) {
-            // status Icon + Label
+            // status icon + label
             if ($icon) {
                 $iconHtml = $this->backend->template('status.icon_status', [
                     '{icon}' => $status['icon'],
@@ -770,21 +767,21 @@ abstract class RecordBackend {
     }
 
     /**
-     * Ausführliche Darstellung eines Datensatzes - in der Lookup-Vorschau
-     * (details.lookup_detailed, RecordBackendEdit) und in der Liste der zuletzt
-     * geänderten Datensätze (RecordBackendFolderList): die Listenfelder seines Bereichs untereinander (RecordPresenter::listFields() /
-     * listValue(), dieselben wie in der Datensatzliste, gekürzt), das Default-Feld
-     * fett; danach die Ausgabe des Listen-Templates des Bereichs, falls eines
-     * gewählt ist (listTemplateHtml()). Ab dem zweiten Eintrag mit Abstand
+     * Detailed display of a record - in the lookup preview
+     * (details.lookup_detailed, RecordBackendEdit) and in the list of the last
+     * changed records (RecordBackendFolderList): the list fields of its area one below the other (RecordPresenter::listFields() /
+     * listValue(), the same as in the record list, shortened), the default field
+     * in bold; then the output of the list template of the area, if one is
+     * selected (listTemplateHtml()). From the second entry on with spacing
      * (record.lookup_table_row_div).
      *
-     * Bei Pointer-Feldern und in der Liste der zuletzt geänderten kann jeder
-     * Datensatz aus einem anderen Bereich stammen - das Schema wird deshalb je
-     * Bereich einmal geholt und für den Aufruf gemerkt.
+     * With pointer fields and in the list of the last changed, each
+     * record may come from a different area - the schema is therefore fetched
+     * once per area and kept for the call.
      *
-     * Der Aufrufer klammert mit pushResult()/popResult() (siehe listValue()).
+     * The caller brackets with pushResult()/popResult() (see listValue()).
      *
-     * @param array $data  Datensatz (Record::fetch())
+     * @param array $data  record (Record::fetch())
      */
     protected function detailedText(array $data): string
     {
@@ -816,7 +813,7 @@ abstract class RecordBackend {
     }
 
     /**
-     * Zeigt der Bereich mehrsprachige Felder auf Reitern? (area.details.tabs)
+     * Does the area show multilingual fields on tabs? (area.details.tabs)
      */
     protected function _languageTabs(): bool
     {
@@ -826,9 +823,9 @@ abstract class RecordBackend {
     }
 
     /**
-     * Sprachen der Instanz, zu der der Bereich gehört (Hauptsprache zuerst).
+     * Languages of the instance to which the area belongs (primary language first).
      *
-     * @return array  language_id => Sprachzeile (InstanceCache::languages())
+     * @return array  language_id => language row (InstanceCache::languages())
      */
     protected function _recordLanguages(): array
     {

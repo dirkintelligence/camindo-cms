@@ -1,26 +1,25 @@
 <?php
 /**
- * Backend-Oberfläche des Moduls User.
+ * Backend UI of the module User.
  *
- * Das Modul User ist für die Frontend-Community gedacht (Besucher-Anmeldung,
- * Registrierung, Warenkorb)
- * Auf der Startseite werden bewusst alle Inhalte, gruppiert nach Content-Bereichen
- * gelistet, die von Usern erstellt / verändert wurden. Dies wird anhand des
- * dafür explizit reservierten Bit-Feldes "needs_review" ermittelt.
- * Der reguläre Workflow wird über das Feld status_id abgebildet.
+ * The module User is intended for the frontend community (visitor login,
+ * registration, shopping cart).
+ * On the start page, all content grouped by content areas that were created / changed by users is deliberately
+ * listed. This is determined by means of the bit field "needs_review" explicitly reserved for it.
+ * The regular workflow is mapped via the field status_id.
  *
- * DAS MODUL IST EIN WIDGET, KEINE KACHEL
+ * THE MODULE IS A WIDGET, NOT A TILE
  * --------------------
- * Es gibt nichts zu verwalten, nur etwas zu sehen - deshalb trägt das Modul in
- * seiner settings.php 'button' => false und stattdessen ein 'widget'. Auf der
- * Startseite steht es dort, wo der Admin es in seinen Einstellungen hinlegt
- * (Camindo\Core\Widgets); widget() liefert genau den Inhalt, den list() zeigt.
- * list() selbst bleibt als ganze Seite bestehen (backend/index.php) - das Widget
- * ist ein Ausschnitt davon, keine zweite Darstellung.
+ * There is nothing to manage, only something to see - therefore the module has
+ * 'button' => false in its settings.php and a 'widget' instead. On the
+ * start page it is where the administrator places it in their settings
+ * (Camindo\Core\Widgets); widget() returns exactly the content that list() shows.
+ * list() itself remains as a full page (backend/index.php) - the widget
+ * is an excerpt of it, not a second presentation.
  *
- * @see Camindo\Core\Widgets                      Startseiten-Widgets der Module
- * @see Camindo\Core\Modules\Record\RecordUser   Frontend-Befehle CMS:USER_* (Anmeldung, Beiträge, Warenkorb)
- * @see docs/developers/11-community.md
+ * @see Camindo\Core\Widgets                      start page widgets of the modules
+ * @see Camindo\Core\Modules\Record\RecordUser   frontend commands CMS:USER_* (login, contributions, shopping cart)
+ * @see developer docs, chapter 12 (Community)
  */
 namespace Camindo\Core\Modules\User;
 
@@ -47,16 +46,16 @@ class UserBackend {
     {}
 
     /**
-     * Übersicht der gegenzulesenden Inhalte ausgeben.
+     * Output the overview of the content to be proofread.
      *
-     * Je Inhaltsbereich eine Schaltfläche mit Bereichsname, Icon und Anzahl offener
-     * Datensätze; gibt es nichts zu tun, erscheint stattdessen eine Erfolgsmeldung.
+     * One button per content area with area name, icon and number of open
+     * records; if there is nothing to do, a success message appears instead.
      *
-     * (Der bisherige Kommentar "Render Folder-Area-Tree" beschrieb etwas anderes.)
+     * (The previous comment "Render Folder-Area-Tree" described something else.)
      */
     public function list()
     {
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#headline_unreviewed');
 
         // Container header
@@ -79,10 +78,10 @@ class UserBackend {
     }
 
     /**
-     * Widget für die Startseite (settings.php 'widget').
+     * Widget for the start page (settings.php 'widget').
      *
-     * Derselbe Inhalt wie list(), ohne Seitenrahmen und Überschrift - die kommen
-     * von der Widget-Karte.
+     * The same content as list(), without page frame and headline - those come
+     * from the widget card.
      */
     public function widget(): string
     {
@@ -90,11 +89,11 @@ class UserBackend {
     }
 
     /**
-     * Die Liste der gegenzulesenden Inhalte: je Inhaltsbereich eine Schaltfläche,
-     * oder die Erfolgsmeldung, wenn nichts offen ist.
+     * The list of content to be proofread: one button per content area,
+     * or the success message if nothing is open.
      *
-     * Bereichsname und Icon kommen aus `area` und damit aus dem Backend - trotzdem
-     * maskiert: ein Bereichsname ist ein Eingabefeld, kein Bezeichner.
+     * Area name and icon come from `area` and thus from the backend - still
+     * escaped: an area name is an input field, not an identifier.
      */
     private function _unreviewedList(): string
     {
@@ -120,12 +119,12 @@ class UserBackend {
     }
 
     /**
-     * Offene Gegenlese-Aufgaben je Inhaltsbereich zählen.
+     * Count open proofreading tasks per content area.
      *
-     * LEFT JOIN auf `area`, damit Datensätze mit inzwischen gelöschtem Bereich nicht
-     * unter den Tisch fallen - dort bleiben label und icon dann leer.
+     * LEFT JOIN on `area`, so that records with an area that has meanwhile been deleted do not
+     * fall through the cracks - label and icon then stay empty there.
      *
-     * @return ?array  Zeilen mit area_id, label, icon, number - leer, wenn nichts offen ist
+     * @return ?array  rows with area_id, label, icon, number - empty if nothing is open
      */
     private function _unreviewedByArea(): ?array
     {

@@ -1,7 +1,7 @@
 <?php
-// Core-Modul Logfiles: die Protokolle unter var/log im Backend recherchieren.
-// 'superuser' => true hält alle anderen Gruppen fern (Camindo\Core\Access::module());
-// das Widget zeigt die wichtigsten Meldungen der letzten Tage auf der Startseite.
+// Core module Logfiles: search the logs under var/log in the backend.
+// 'superuser' => true keeps all other groups out (Camindo\Core\Access::module());
+// the widget shows the most important messages of the last few days on the start page.
 return [
 
 'version' => '9.0.0',
@@ -17,7 +17,7 @@ return [
     'label'  => '#logfiles.module_label',
     'icon'   => 'receipt_long',
 ],
-// Zusätzliche Modulrechte: keine - das Modul ist ohnehin dem Superuser vorbehalten
+// Additional module permissions: none - the module is reserved for superusers anyway
 'access' => [
 ]
 

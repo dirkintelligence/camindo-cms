@@ -1,45 +1,45 @@
 <?php
 /**
- * Blätterleisten (Pagination). Instanzname im Code: $pagination.
+ * Pagination bars (page navigation). Instance name in the code: $pagination.
  *
- * Zwei Aufgaben, dieselbe Rechnung:
+ * Two tasks, the same calculation:
  *
- *   1. BACKEND    Backend::paginationTop() / paginationBottom() rufen jumpPrev(),
- *                 jumpNext() und jumpList() direkt auf und übergeben die
- *                 HTML-Vorlagen aus Core/backend/html.
- *   2. FRONTEND   Die Template-Befehle (CMS:JUMP_LIST), (CMS:JUMP_PREV) und
- *                 (CMS:JUMP_NEXT). Die cms*-Methoden übersetzen nur die
- *                 Befehlsparameter in die tpl_*-Vorlagen der drei Kernmethoden
- *                 und geben das Ergebnis aus.
+ *   1. BACKEND    Backend::paginationTop() / paginationBottom() call jumpPrev(),
+ *                 jumpNext() and jumpList() directly and pass the
+ *                 HTML templates from Core/backend/html.
+ *   2. FRONTEND   The template commands (CMS:JUMP_LIST), (CMS:JUMP_PREV) and
+ *                 (CMS:JUMP_NEXT). The cms* methods only translate the
+ *                 command parameters into the tpl_* templates of the three core methods
+ *                 and output the result.
  *
- * WARUM EINE EIGENE KLASSE
+ * WHY A SEPARATE CLASS
  * --------------------
- * Die drei Methoden hingen bis C9 in Cms und wurden damit bei jedem Request
- * mitgeladen, obwohl die wenigsten Seiten blättern. Als eigene Klasse wird sie
- * über LazyServicesTrait erst beim ersten Zugriff aus dem Container geholt -
- * ein Template ohne (CMS:JUMP_...) liest die Datei gar nicht erst ein.
+ * Up to C9 the three methods were part of Cms and were therefore loaded on every request,
+ * although only few pages paginate. As a separate class it is fetched from the
+ * container via LazyServicesTrait only on first access -
+ * a template without (CMS:JUMP_...) does not even read the file.
  *
- *     Camindo\Core\Page      $lazyServices['pagination']   Frontend
- *     Camindo\Core\Backend   $lazyServices['pagination']   Backend
+ *     Camindo\Core\Page      $lazyServices['pagination']   frontend
+ *     Camindo\Core\Backend   $lazyServices['pagination']   backend
  *
- * WORAUF SIE RECHNET
+ * WHAT IT CALCULATES WITH
  * --------------------
- *     Cms::$list_rows                Datensätze je Seite (Backend)
- *     Database::$num_rows_limit      Frontend: limit des CMS:SELECT, dessen Ergebnis
- *                                    gerade steht - die cms*-Methoden reichen es als
- *                                    $pageSize durch; ohne limit keine Blätterleiste
- *     Database::$num_rows_unlimited  Treffer insgesamt (ohne LIMIT)
- *     $_REQUEST['skip']              aktueller Versatz, sofern nicht als Parameter
+ *     Cms::$list_rows                records per page (backend)
+ *     Database::$num_rows_limit      frontend: limit of the CMS:SELECT whose result
+ *                                    is currently shown - the cms* methods pass it on as
+ *                                    $pageSize; without limit no pagination bar
+ *     Database::$num_rows_unlimited  total hits (without LIMIT)
+ *     $_REQUEST['skip']              current offset, unless passed as a parameter
  *
- * Die Seiten-URLs entstehen aus der laufenden REQUEST_URI, aus der
- * Cms::sys_reduce_uri() den Parameter 'skip' entfernt; angehängt wird
- * 'skip={offset}'. {href} ist HTML-maskiert (htmlspecialchars, &amp; statt &) - die
- * Vorlagen setzen es in ein Attribut.
+ * The page URLs are built from the running REQUEST_URI, from which
+ * Cms::sys_reduce_uri() removes the parameter 'skip'; 'skip={offset}' is appended.
+ * {href} is HTML-escaped (htmlspecialchars, &amp; instead of &) - the
+ * templates put it into an attribute.
  *
  * @see Camindo\Core\Cms                              list_rows, sys_reduce_uri()
  * @see Camindo\Core\Backend                          paginationTop/Bottom
  * @see Camindo\Core\Modules\Template\commands.php    jump_list, jump_prev, jump_next
- * @see docs/developers/06-templates.md               Befehlsreferenz
+ * @see developer docs, chapter 06 (Template compiler)  command reference
  */
 namespace Camindo\Core;
 
@@ -53,13 +53,13 @@ class Pagination {
     }
 
     /**
-     * Seiten-URL ohne 'skip', bereit zum Anhängen von 'skip={offset}' - für {href}.
+     * Page URL without 'skip', ready to append 'skip={offset}' - for {href}.
      *
-     * REQUEST_URI kommt ungeprüft vom Client. {href} steht in den Vorlagen in einem
-     * HTML-Attribut (htmlspecialchars), im Backend zusätzlich in einem JS-String in
-     * einfachen Anführungszeichen (cApp.layers.replace('{href}') - der Browser
-     * dekodiert das Attribut vor dem Ausführen). Deshalb ' und \ vorher
-     * prozentkodieren; für $_GET ist das gleichwertig.
+     * REQUEST_URI comes unchecked from the client. {href} is in the templates inside an
+     * HTML attribute (htmlspecialchars), in the backend additionally inside a JS string in
+     * single quotes (cApp.layers.replace('{href}') - the browser decodes the
+     * attribute before running it). Therefore percent-encode ' and \ beforehand;
+     * for $_GET this is equivalent.
      */
     private function baseLink(): string
     {
@@ -74,41 +74,41 @@ class Pagination {
      * -------------------------
      * Create Pagination e.g.  1 ... 5 | 6 | 7 | 8 | 9 ... 15
      * uses:
-     *   (int)$pageSize / $this->cms->list_rows  Maximale Anzahl Ergebnisse pro Seite
-     *   (int)$this->db->num_rows           Anzahl Ergebnisse auf der aktuellen Seite
-     *   (int)$this->db->num_rows_unlimited Anzahl aller Ergebnisse ohne SQL-Limit-Statement
+     *   (int)$pageSize / $this->cms->list_rows  maximum number of results per page
+     *   (int)$this->db->num_rows           number of results on the current page
+     *   (int)$this->db->num_rows_unlimited number of all results without SQL limit statement
      * array @param
-     *   (int)skip                          Anzahl der Ergebnisse, die übersprungen werden, default: $_REQUEST['skip']
-     *   (int)maximum                       Maximale Anzahl (mitwandernder) Seiten-Links (zzgl. Boundary-Links), default: 7
-     *   (boolean) boundaries               true (default): Links auf erste und letzte Seite werden immer angezeigt (Boundary-Links) *
-     *   (string) separator                 HTML-Code, der zwischen Seitenl-Links eingefügt wird,
-     *                                        aber nicht vor- oder hinter Ellipsis (default: ' ')
-     *   (string) replace                    Einfache Text-Ersetzen-Funktion, Trenner "?", z. B. "aa?bb" *
-     *   (string) prefix                     HTML-Code, der hinter der Paginierung eingefügt wird *
-     *   (string) suffix                     HTML-Code, der vor der Paginierung eingefügt wird *
-     *   (string) ifempty                    HTML-Code, der angezeigt wird, wenn das Suchergebnis nicht auf
-     *                                         mehrere Seiten aufgeteilt ist (Anzahl Ergebnisse <= $cms->list_rows)
-     *   Hinweis: 'set' wertet nicht diese Methode aus, sondern cmsJumpList().
-     *   (string) tpl_link                   HTML-Vorlage (innen) *
-     *                                         {page} wird durch Seitennummer ersetzt
-     *                                         {href} wird durch Seiten-URL ersetzt
+     *   (int)skip                          number of results to skip, default: $_REQUEST['skip']
+     *   (int)maximum                       maximum number of (moving) page links (plus boundary links), default: 7
+     *   (boolean) boundaries               true (default): links to the first and last page are always shown (boundary links) *
+     *   (string) separator                 HTML code inserted between page links,
+     *                                        but not before or after ellipsis (default: ' ')
+     *   (string) replace                   simple text replace function, separator "?", e.g. "aa?bb" *
+     *   (string) prefix                    HTML code inserted after the pagination *
+     *   (string) suffix                    HTML code inserted before the pagination *
+     *   (string) ifempty                   HTML code shown if the search result is not split
+     *                                         into several pages (number of results <= $cms->list_rows)
+     *   Note: 'set' does not evaluate this method but cmsJumpList().
+     *   (string) tpl_link                  HTML template (inner) *
+     *                                         {page} is replaced by the page number
+     *                                         {href} is replaced by the page URL
      *                                         default: ' <a href="{href}">{page}</a> '
-     *   (string) tpl_active                 HTML-Vorlage (innen) *
-     *                                         {page} wird durch Nummer der aktuellen Seite ersetzt
-     *                                         {href} wird durch URL der aktuellen Seite ersetzt
+     *   (string) tpl_active                HTML template (inner) *
+     *                                         {page} is replaced by the number of the current page
+     *                                         {href} is replaced by the URL of the current page
      *                                         default: ' <strong>{page}</strong> '
-     *   (string) ellipsis                   HTML-Code, der als Platzhalter eingefügt wird, wenn Seiten
-     *                                         aufgrund von max_jumps ausgelassen werden *
+     *   (string) ellipsis                  HTML code inserted as a placeholder when pages
+     *                                         are left out due to max_jumps *
      *                                         default: ' … '
      *
-     *                                     *) nur wenn das Suchergebnis auf mehrere Teilen aufgeteilt ist
+     *                                     *) only if the search result is split into several parts
      */
     public function jumpList(array $param, int $pageSize = 0): string {
         $html = '';
         $count = $this->db->num_rows_unlimited;
         $limit = $pageSize > 0 ? $pageSize : $this->cms->list_rows;
 
-        // Wenn mehr Ergebnisse als auf eine Seite passen (ohne Seitengröße: nie)
+        // If there are more results than fit on one page (without page size: never)
         if ($limit > 0 && $count > $limit) {
 
             $tplLink = (string) ($param['tpl_link'] ?? ' <a href="{href}">{page}</a> ');
@@ -120,21 +120,21 @@ class Pagination {
             $skip = (int)($param['skip'] ?? $_REQUEST['skip'] ?? 0);
             $skip = abs((int)$skip);
 
-            // Korrigiere skip: skip zeit immer auf erstes Ergebnis einer Seite
+            // Correct skip: always snap skip to the first result of a page
             $skip = ((int)($skip / $limit)) * $limit;
 
             $link = $this->baseLink();
 
             $start = 0;
 
-            // Ellipsis erstellen wenn aktuelle Seite die Hälfte der angezeigten Seitennummern überschreitet
+            // Create ellipsis when the current page exceeds half of the displayed page numbers
             $currentPage = (int)($skip / $limit) +1;
             $totalPages = (int)ceil($count / $limit);
             $half = (int)ceil($maxLinks / 2);
 
             if ($currentPage > $half) {
                 $start = $currentPage - $half;
-                // Nicht über das Ende hinausgehen
+                // Do not go beyond the end
                 $start = min($start, $totalPages - $maxLinks);
                 $start = max($start, 0);
             }
@@ -144,7 +144,7 @@ class Pagination {
             $start *= $limit;
             $end *= $limit;
 
-            // Link zur ersten Seite
+            // Link to the first page
             if ($boundaries) {
                 if ($start > 0) {
                     $html .= strtr($tplLink, [
@@ -155,7 +155,7 @@ class Pagination {
                 }
             }
 
-            // Links zu Sibling-Seiten
+            // Links to sibling pages
             for ($i = $start; $i < $end; $i += $limit) {
                 $pageNo = (int)($i / $limit) +1;
                 if ($i > $start) $html .= $separator;
@@ -170,7 +170,7 @@ class Pagination {
                 ]);
             }
 
-            // Link zur letzten Seite
+            // Link to the last page
             if ($boundaries) {
                 $lastPage = (int)(($count-1) / $limit);
                 $lastSkip = $lastPage * $limit;
@@ -213,16 +213,16 @@ class Pagination {
 	 * array @param
 	 *   (int)skip                      Offset, overwrite $GLOBALS[skip]
 	 *   (string) tpl_link              default: ' <a href="{href}">❮❮</a> ' *
-     *                                       {href} wird durch URL der aktuellen Seite ersetzt
+     *                                       {href} is replaced by the URL of the current page
 	 *   (string) tpl_inactive          default: ' <span>❮❮</span> ' *
-     *                                       {href} wird durch URL der aktuellen Seite ersetzt
+     *                                       {href} is replaced by the URL of the current page
  	 *   (string) replace               simple string replace, separator: '?', eg. "aa?bb"  *
 	 *   (string) prefix                if pagination is displayed *
 	 *   (string) suffix                if pagination is displayed *
 	 *   (string) ifempty               if no pagination is displayed ($count <= $limit) ''
-	 *   Hinweis: 'set' wertet nicht diese Methode aus, sondern cmsJumpNext()/cmsJumpPrev().
+	 *   Note: 'set' does not evaluate this method but cmsJumpNext()/cmsJumpPrev().
      * 
-     *                                  *) nur wenn das Suchergebnis auf mehrere Teilen aufgeteilt ist
+     *                                  *) only if the search result is split into several parts
 	 */
 	public function jumpPrev(array $param, int $pageSize = 0): string {
         // Turn to next Page
@@ -281,16 +281,16 @@ class Pagination {
 	 * array @param
 	 *   (int)skip                      Offset, overwrite $GLOBALS[skip]
 	 *   (string) tpl_link              default: ' <a href="{href}">❯❯</a> ' *
-     *                                       {href} wird durch URL der aktuellen Seite ersetzt
+     *                                       {href} is replaced by the URL of the current page
 	 *   (string) tpl_inactive          default: ' <span>❯❯</span> ' *
-     *                                       {href} wird durch URL der aktuellen Seite ersetzt
+     *                                       {href} is replaced by the URL of the current page
  	 *   (string) replace               simple string replace, separator: '?', eg. "aa?bb"  *
 	 *   (string) prefix                if pagination is displayed *
 	 *   (string) suffix                if pagination is displayed *
 	 *   (string) ifempty               if no pagination is displayed ($count <= $limit) ''
-	 *   Hinweis: 'set' wertet nicht diese Methode aus, sondern cmsJumpNext()/cmsJumpPrev().
+	 *   Note: 'set' does not evaluate this method but cmsJumpNext()/cmsJumpPrev().
      * 
-     *                                  *) nur wenn das Suchergebnis auf mehrere Teilen aufgeteilt ist
+     *                                  *) only if the search result is split into several parts
 	 */
 	public function jumpNext(array $param, int $pageSize = 0): string {
 		// Turn to next Page
@@ -338,16 +338,16 @@ class Pagination {
 	}
 
     // ====================
-    // CMS-Commands
+    // CMS commands
 
     /**
-     * CMS:JUMP_LIST - Blätter-Navigation ausgeben.
+     * CMS:JUMP_LIST - output the page navigation.
      *
-     * Die Befehlsparameter entsprechen eins zu eins denen von jumpList();
-     * hier bleibt nur die Ausgabe bzw. die Umleitung nach $set. Seitengröße ist
-     * allein das limit des CMS:SELECT, in dessen Ergebnis der Befehl steht
-     * (Database::$num_rows_limit) - ohne limit gibt es keine Blätterleiste, nur
-     * 'ifempty'. admin.skiplist_default (Cms::$list_rows) gilt nur im Backend.
+     * The command parameters correspond one to one to those of jumpList();
+     * only the output or the redirect to $set remains here. The page size is
+     * solely the limit of the CMS:SELECT whose result the command is in
+     * (Database::$num_rows_limit) - without limit there is no pagination bar, only
+     * 'ifempty'. admin.skiplist_default (Cms::$list_rows) applies only in the backend.
      */
     public function cmsJumpList($p): void
     {
@@ -355,14 +355,14 @@ class Pagination {
         $this->output($limit > 0 ? $this->jumpList($p, $limit) : (string)($p['ifempty'] ?? ''), $p);
     }
 
-    /** CMS:JUMP_NEXT - Weiterblättern-Verweis ausgeben (Seitengröße wie cmsJumpList()). */
+    /** CMS:JUMP_NEXT - output the link to the next page (page size as cmsJumpList()). */
     public function cmsJumpNext($p): void
     {
         $limit = $this->db->num_rows_limit;
         $this->output($limit > 0 ? $this->jumpNext($p, $limit) : (string)($p['ifempty'] ?? ''), $p);
     }
 
-    /** CMS:JUMP_PREV - Zurückblättern-Verweis ausgeben (Seitengröße wie cmsJumpList()). */
+    /** CMS:JUMP_PREV - output the link to the previous page (page size as cmsJumpList()). */
     public function cmsJumpPrev($p): void
     {
         $limit = $this->db->num_rows_limit;
@@ -370,10 +370,10 @@ class Pagination {
     }
 
     /**
-     * Ergebnis eines Befehls ausgeben - oder mit 'set' in $set ablegen.
+     * Output the result of a command - or store it in $set with 'set'.
      *
-     * @param string $html  fertiges HTML
-     * @param array  $p     Befehlsparameter
+     * @param string $html  finished HTML
+     * @param array  $p     command parameters
      */
     private function output(string $html, array $p): void
     {

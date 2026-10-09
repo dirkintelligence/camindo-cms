@@ -1,31 +1,31 @@
 <?php
 /**
- * HTML-Vorlagen einsammeln und als PHP-Cache schreiben - var/cache/html.
+ * Collect HTML templates and write them as a PHP cache - var/cache/html.
  *
- * Das Gegenstück zu SnippetCache für die .html-Dateien. Backend::template() liest
- * ausschließlich aus dem Cache - nach JEDER Änderung an einer Vorlage muss er neu
- * gebaut werden (Tools > Developer > HTML templates, `camindo.php cache html`,
- * `upgrade`; install/update einer Komponente bauen ihren Präfix).
+ * The counterpart of SnippetCache for the .html files. Backend::template() reads
+ * exclusively from the cache - after EVERY change to a template it must be rebuilt
+ * (Tools > Developer > HTML templates, `camindo.php cache html`,
+ * `upgrade`; install/update of a component builds its prefix).
  *
- * WAS EINGESAMMELT WIRD
+ * WHAT IS COLLECTED
  * --------------------
- *     {core}/backend/html                        ohne Präfix     -> cache.php
- *     {dir}/Modules/{Name}/backend/html          Präfix {name}   -> cache.{name}.php
- *     {dir}/Processors/{Name}/backend/html       Präfix proc.{name}
- *     {dir}/Extensions/{Name}/backend/html       Präfix ext.{name}
- *     ... jeweils für {dir} = camindo_dir und core_dir
+ *     {core}/backend/html                        without prefix  -> cache.php
+ *     {dir}/Modules/{Name}/backend/html          prefix {name}   -> cache.{name}.php
+ *     {dir}/Processors/{Name}/backend/html       prefix proc.{name}
+ *     {dir}/Extensions/{Name}/backend/html       prefix ext.{name}
+ *     ... each for {dir} = camindo_dir and core_dir
  *
- * Je Präfix entsteht EINE Datei; {camindo_dir} wird zuerst gelesen, {core_dir}
- * danach - eine gleichnamige Zusatzkomponente kann eine Core-Vorlagendatei also
- * nicht ersetzen (gleiche Regel wie bei den Snippets).
+ * Each prefix yields ONE file; {camindo_dir} is read first, {core_dir}
+ * afterwards - an add-on component with the same name cannot replace a core
+ * template file (same rule as for the snippets).
  *
- * Die Cachedatei enthält Zuweisungen der Form
+ * The cache file contains assignments of the form
  *     $this->htmlTemplates['admin'] = ['admin_table_row' => '…', …];
- * und wird von Backend per include eingebunden - daher Zuweisungen statt return.
+ * and is included by Backend - hence assignments instead of return.
  *
  * @see Camindo\Core\Backend::template()
  * @see Camindo\Core\SnippetCache
- * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  Backend-Oberfläche dazu
+ * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  backend UI for this
  */
 namespace Camindo\Core;
 
@@ -39,14 +39,14 @@ class HtmlCache {
     }
 
     /**
-     * Cache bauen - alles oder nur eine Komponente.
+     * Build the cache - everything or only one component.
      *
-     * @param ?string $prefix  null: alles (alte Dateien werden vorher entfernt);
-     *                         sonst der Präfix EINER Komponente ('record',
-     *                         'proc.magick', '' für den Core)
-     * @return array  'dirs'  durchsuchte Verzeichnisse (Präfix => Pfad)
-     *                'files' Anzahl geschriebener Cachedateien
-     * @throws \Exception  wenn das Cacheverzeichnis nicht angelegt werden kann
+     * @param ?string $prefix  null: everything (old files are removed beforehand);
+     *                         otherwise the prefix of ONE component ('record',
+     *                         'proc.magick', '' for the core)
+     * @return array  'dirs'  searched directories (prefix => path)
+     *                'files' number of written cache files
+     * @throws \Exception  if the cache directory cannot be created
      */
     public function build(?string $prefix = null): array
     {
@@ -63,7 +63,7 @@ class HtmlCache {
             $this->remove($prefix);
         }
 
-        // Die zuletzt geschriebene Datei gilt - sourceDirs() liefert {core_dir} zuletzt
+        // The file written last wins - sourceDirs() returns {core_dir} last
         $dirs = [];
         $files = 0;
         foreach ($this->sourceDirs() as [$dir, $dirPrefix]) {
@@ -77,9 +77,9 @@ class HtmlCache {
     }
 
     /**
-     * Cachedatei EINER Komponente entfernen - beim Deinstallieren.
+     * Remove the cache file of ONE component - when uninstalling.
      *
-     * @return int  Anzahl gelöschter Dateien (0 oder 1)
+     * @return int  number of deleted files (0 or 1)
      */
     public function remove(string $prefix): int
     {
@@ -88,7 +88,7 @@ class HtmlCache {
     }
 
     /**
-     * Präfixe aller vorhandenen Komponenten (aus den Quellverzeichnissen), '' = Core.
+     * Prefixes of all existing components (from the source directories), '' = core.
      *
      * @return string[]
      */
@@ -107,8 +107,8 @@ class HtmlCache {
     }
 
     /**
-     * Alle .html-Dateien eines Verzeichnisses als eine Cachedatei ablegen.
-     * Vorlagenname = Dateiname ohne Endung, Inhalt unverändert als PHP-Literal.
+     * Store all .html files of a directory as one cache file.
+     * Template name = file name without extension, content unchanged as a PHP literal.
      */
     private function writeFile(string $dir, string $prefix): void
     {
@@ -123,10 +123,10 @@ class HtmlCache {
     }
 
     /**
-     * Quellverzeichnisse: Core zuerst, dann die Komponenten unter {camindo_dir},
-     * zuletzt die unter {core_dir}.
+     * Source directories: core first, then the components under {camindo_dir},
+     * last the ones under {core_dir}.
      *
-     * @return array  Liste von [Verzeichnis, Präfix]
+     * @return array  list of [directory, prefix]
      */
     private function sourceDirs(): array
     {

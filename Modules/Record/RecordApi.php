@@ -1,55 +1,55 @@
 <?php
 /**
- * API des Moduls Record: Datensätze suchen und lesen.
+ * API of the module Record: search and read records.
  *
- *     record.search       Trefferliste wie die Datensatzliste des Backends - dieselben
- *                         Spalten (RecordPresenter), als Text, zum Blättern
- *     record.info         Detailansicht: Reiter content, meta, history, fulltext
- *     record.field_value  der volle Inhalt EINES Feldes ("mehr" der Detailansicht):
- *                         ungekürzter Text, alle Verknüpfungen seitenweise, die
- *                         eingebetteten Inhalte eines 'link'-Feldes
+ *     record.search       result list like the record list of the backend - the same
+ *                         columns (RecordPresenter), as text, for paging
+ *     record.info         detail view: tabs content, meta, history, fulltext
+ *     record.field_value  the full content of ONE field (the "more" of the detail view):
+ *                         untruncated text, all links page by page, the
+ *                         embedded contents of a 'link' field
  *
- *     record.update       ändern  - Auschecken, Ändern, Einchecken in einem Schritt
- *     record.create       anlegen
- *     record.copy         kopieren (und dabei ändern)
- *     record.move         in einen anderen Bereich verschieben (Feldzuordnung)
- *     record.move_options die passenden Zielfelder je Quellfeld
- *     record.delete       in den Papierkorb
- *     record.restore      aus dem Papierkorb zurück
- *     record.message      interne Nachricht zum Datensatz
- *     record.preview_url  Vorschau-Adresse (nur in einer Backend-Session, attach)
- *     record.batch        Stapelverarbeitung: ändern, verschieben, löschen, Volltext
- *     record.export       Export CSV, DOCX, XML (Zip unter var/export)
- *     record.export_fields  die wählbaren Felder eines Exports
- *     record.exports      vorhandene Exportdateien
+ *     record.update       change - check out, change, check in in one step
+ *     record.create       create
+ *     record.copy         copy (and change in the process)
+ *     record.move         move to another area (field mapping)
+ *     record.move_options the matching target fields per source field
+ *     record.delete       to the trash
+ *     record.restore      back from the trash
+ *     record.message      internal message about the record
+ *     record.preview_url  preview address (only in a backend session, attach)
+ *     record.batch        batch processing: change, move, delete, full text
+ *     record.export       export CSV, DOCX, XML (zip under var/export)
+ *     record.export_fields  the selectable fields of an export
+ *     record.exports      existing export files
  *
- * Große Mengen laufen wie im Backend als Hintergrundprozess (Schwellen
- * admin.mass_delete_threshold bzw. admin.export_background_threshold, oder
- * background = yes); die Antwort nennt dann dessen token - Stand über
- * system.process, das Ergebnis kommt als interne Nachricht.
+ * Large volumes run as a background process, as in the backend (thresholds
+ * admin.mass_delete_threshold or admin.export_background_threshold, or
+ * background = yes); the response then names its token - status via
+ * system.process, the result comes as an internal message.
  *
- * SCHREIBEN
+ * WRITING
  * --------------------
- * Derselbe Weg wie die Eingabemaske (RecordService): Rechte der Gruppe, fremde
- * Sperre (locked, mit unlock übergehbar wie in der Maske), eigene noch offene Maske
- * (open_in_backend - die API verwirft sie nicht), Validierung nach den
- * Felddefinitionen, Check-in in einer Transaktion. Werte im neutralen Format
- * (ApiValues::input()), mehrsprachige als [Code => Wert] - nur in Sprachen mit
- * Schreibrecht; ein einzelner Wert gilt der Hauptsprache.
+ * The same path as the input mask (RecordService): rights of the group, foreign
+ * lock (locked, can be bypassed with unlock as in the mask), own still open mask
+ * (open_in_backend - the API does not discard it), validation according to the
+ * field definitions, check-in in a transaction. Values in the neutral format
+ * (ApiValues::input()), multilingual ones as [code => value] - only in languages with
+ * write right; a single value applies to the primary language.
  *
- *     data       Feld => Wert
- *     relations  Feld => [id, …] (ersetzt) | {set|add|remove|order: [id, …]}
- *     files      Feld => {serverfile: Pfad in var/upload} | {content: Base64, filename}
- *                | {tmpfile: Pfad unter var/tmp} | null (entfernen); mehrsprachig
- *                {Code: …}
+ *     data       field => value
+ *     relations  field => [id, …] (replaces) | {set|add|remove|order: [id, …]}
+ *     files      field => {serverfile: path in var/upload} | {content: Base64, filename}
+ *                | {tmpfile: path under var/tmp} | null (remove); multilingual
+ *                {code: …}
  *
- * Rechte wie im Backend: Cms::select() sieht nur die Instanzen und lesbaren Bereiche
- * der Gruppe, record.info verlangt Leserecht (RecordService::loadForAction()), nur
- * lesbare Sprachen, Verknüpfungsfelder nur mit lesbarem Zielbereich.
+ * Rights as in the backend: Cms::select() only sees the instances and readable areas
+ * of the group, record.info requires read right (RecordService::loadForAction()), only
+ * readable languages, link fields only with a readable target area.
  *
- * Werte im neutralen Format (ApiValues), Sprachen als Codes. Die Sprache der Inhalte
- * ist ohne Angabe die des Backends (bevorzugte Sprachversion des Admins, sonst die
- * Hauptsprache der Instanz).
+ * Values in the neutral format (ApiValues), languages as codes. The language of the contents
+ * without specification is that of the backend (preferred language version of the admin, otherwise the
+ * primary language of the instance).
  *
  * @see Camindo\Core\Api\Api
  * @see Camindo\Core\Modules\Record\RecordService
@@ -79,13 +79,13 @@ use Camindo\Core\Modules\Trash\Trash;
 
 class RecordApi
 {
-    /** Verknüpfungen je Feld in record.info (mehr: record.field_value) */
+    /** Links per field in record.info (more: record.field_value) */
     private const RELATED_MAX = 20;
 
-    /** Einträge im Reiter history */
+    /** Entries in the history tab */
     private const HISTORY_MAX = 20;
 
-    /** Feldtypen, deren Werte record.info kürzt */
+    /** Field types whose values record.info truncates */
     private const TEXT_TYPES = ['text', 'chars', 'encrypted', 'fulltext'];
 
     public function __construct(
@@ -113,23 +113,23 @@ class RecordApi
     // record.search
 
     /**
-     * Datensätze suchen. Die Parameter sind die von Cms::select().
+     * Search records. The parameters are those of Cms::select().
      *
-     * @param int|array    $areaId      Bereich oder Liste von Bereichen; 0 = alle lesbaren (globale Suche)
-     * @param array        $filter      Feldname => Wert bzw. [Wert, …] (Syntax wie CMS:SELECT: Platzhalter *, Vergleiche über filterop)
-     * @param array        $filterop    Vergleichsoperatoren je Feld, indexgleich zu filter ('=', '<', '>', '<=', '>=', '!=', 'like' …)
-     * @param array        $filtermode  Verknüpfung gleichnamiger Werte je Feld: OR (Vorgabe) oder AND
-     * @param string|array $sort        Feldname(n), optional mit Richtung ('title ASC'); ohne Angabe die Sortierung des Bereichs
-     * @param string|array $order       Richtungen, indexgleich zu sort
-     * @param int          $skip        Versatz (Blättern)
-     * @param int          $limit       Treffer je Seite (Vorgabe wie im Backend, höchstens api.max_limit)
-     * @param string       $url         Id, Slug (mit oder ohne Slug-Präfix) oder URL eines Datensatzes
-     * @param string       $language    Sprachcode der Inhalte; leer = Sprache des Backends
-     * @param int          $srcId       mit relation: die Datensätze, auf die das Feld relation von src_id zeigt
-     * @param int          $destId      mit relation: die Datensätze, die über relation auf dest_id zeigen
-     * @param string       $relation    Name eines Verknüpfungsfeldes, mehrere kommagetrennt, oder 'any'
-     * @return array  area (bei einem Bereich), language, columns (Name => label, type), rows
-     *                (record_id, area_id, values: Name => Text wie in der Backend-Liste),
+     * @param int|array    $areaId      area or list of areas; 0 = all readable (global search)
+     * @param array        $filter      field name => value or [value, …] (syntax as in CMS:SELECT: wildcard *, comparisons via filterop)
+     * @param array        $filterop    comparison operators per field, index-aligned to filter ('=', '<', '>', '<=', '>=', '!=', 'like' …)
+     * @param array        $filtermode  combination of same-named values per field: OR (default) or AND
+     * @param string|array $sort        field name(s), optionally with direction ('title ASC'); without specification the sorting of the area
+     * @param string|array $order       directions, index-aligned to sort
+     * @param int          $skip        offset (paging)
+     * @param int          $limit       hits per page (default as in the backend, at most api.max_limit)
+     * @param string       $url         id, slug (with or without slug prefix) or URL of a record
+     * @param string       $language    language code of the contents; empty = language of the backend
+     * @param int          $srcId       with relation: the records to which the field relation of src_id points
+     * @param int          $destId      with relation: the records that point to dest_id via relation
+     * @param string       $relation    name of a link field, several comma-separated, or 'any'
+     * @return array  area (for one area), language, columns (name => label, type), rows
+     *                (record_id, area_id, values: name => text as in the backend list),
      *                filter_text, sort, paging (total, skip, limit, next_skip)
      */
     #[ApiMethod('record.search', '#record.api_search')]
@@ -152,7 +152,7 @@ class RecordApi
         $this->context->require();
         $areaIds = $this->system->sanitizeIds((array)$areaId, true);
 
-        // Id, Slug oder URL (wie das Suchfeld _url der Suchmaske)
+        // id, slug or URL (like the search field _url of the search mask)
         if (trim($url) !== '') {
             $urlFilter = $this->service->urlFilter($url);
             if (isset($urlFilter['area_id'])) {
@@ -162,7 +162,7 @@ class RecordApi
             $filter = array_replace($filter, $urlFilter);
         }
 
-        // Bereiche: jeder muss lesbar sein
+        // areas: each must be readable
         foreach ($areaIds as $id) {
             if ($id > 0 && !$this->access->areaRead($id)) {
                 throw new ApiException(ApiException::ACCESS_DENIED, $this->cms->snippet('error_access_denied'));
@@ -174,7 +174,7 @@ class RecordApi
             throw new ApiException(ApiException::NOT_FOUND, $this->cms->snippet('area.error_area_not_found'));
         }
 
-        // Bereichsbedingung als SQL (nicht im Filtertext, wie RecordBackendList)
+        // area condition as SQL (not in the filter text, as in RecordBackendList)
         $sql = '';
         if ($areaIds) {
             $sql = '`record`.`area_id` IN (' . implode(',', array_map('intval', $areaIds)) . ')';
@@ -182,12 +182,12 @@ class RecordApi
         if ($single === 0) {
             $accessSql = $this->backend->areaAccessSql(false, '`record`.`area_id`');
             if ($accessSql !== '') {
-                $accessSql = substr($accessSql, 5); // führendes " AND "
+                $accessSql = substr($accessSql, 5); // leading " AND "
                 $sql = ($sql === '') ? $accessSql : $sql . ' AND ' . $accessSql;
             }
         }
 
-        // Schema: bei einem Bereich mit virtuellen Feldern
+        // schema: for an area with virtual fields
         if ($single > 0) {
             $schemaVirtual = $this->record->virtualSchema($single, false);
             $completedSchema = $this->record->virtualSchema($single, true);
@@ -198,7 +198,7 @@ class RecordApi
         }
         $isTree = isset($schemaVirtual['parent_id']);
 
-        // Sortierung: ohne Angabe die des Bereichs (sonst changed_at DESC); position im Baum = lft
+        // sorting: without specification that of the area (otherwise changed_at DESC); position in the tree = lft
         if ($sort === '' || $sort === []) {
             $sort = 'changed_at';
             $order = 'DESC';
@@ -241,7 +241,7 @@ class RecordApi
             if ($this->cms->hasErrors) throw $this->context->exceptionFromCms(ApiException::INVALID_PARAM);
             $total = (int)$this->db->num_rows_unlimited;
 
-            // Spalten
+            // columns
             $columns = [];
             if ($single > 0) {
                 $visible = array_values(array_filter(
@@ -259,7 +259,7 @@ class RecordApi
                 $columns['_default'] = ['label' => $this->cms->snippet('record.field_default'), 'type' => 'chars'];
             }
 
-            // Zeilen
+            // rows
             $rows = [];
             $count = (int)$this->db->num_rows;
             for ($i = 0; $i < $count; $i++) {
@@ -306,8 +306,8 @@ class RecordApi
     }
 
     /**
-     * Wert einer Listenspalte als Text (RecordPresenter::listValue() ohne HTML);
-     * der Status mit seiner Bezeichnung statt des Symbols.
+     * Value of a list column as text (RecordPresenter::listValue() without HTML);
+     * the status with its label instead of the symbol.
      */
     private function listText(string $name, array $row, array $schemaVirtual): string
     {
@@ -318,7 +318,7 @@ class RecordApi
         }
         if ($name === 'needs_review') return !empty($row['needs_review']) ? '1' : '0';
         if ((string)($schemaVirtual[$name]['type'] ?? '') === 'file') {
-            // die Liste zeigt ein Vorschaubild - als Text der Dateiname
+            // the list shows a preview image - the file name as text
             $file = $this->values->file($row[$name] ?? null);
             if ($file === null) return '';
             return isset($file['filename']) ? (string)$file['filename'] : implode(', ', array_column($file, 'filename'));
@@ -328,10 +328,10 @@ class RecordApi
     }
 
     /**
-     * Sprache der Suche: die Sprache mit diesem Code in jeder Instanz, die sie führt
-     * (Cms::$languageMap; der Aufrufer stellt die bisherige wieder her).
+     * Language of the search: the language with this code in every instance that maintains it
+     * (Cms::$languageMap; the caller restores the previous one).
      *
-     * @return string|null  Code der gesuchten Sprache, null = Sprache des Backends
+     * @return string|null  code of the searched language, null = language of the backend
      */
     private function applySearchLanguage(string $language): ?string
     {
@@ -354,14 +354,14 @@ class RecordApi
     // record.info
 
     /**
-     * Detailansicht eines Datensatzes.
+     * Detail view of a record.
      *
-     * @param int    $recordId  Datensatz
-     * @param string $tab       content (Felder), meta (Metafelder), history (die letzten 20 Änderungen aus dem Audit-Log, neueste zuerst; mehr: audit.history), fulltext (Volltextfelder)
-     * @param string $language  Sprachcode, 'all' (alle lesbaren Sprachen) oder leer (Sprache des Backends)
-     * @param array  $fields    nur diese Felder (Namen); leer = alle
-     * @param int    $truncate  Texte ab so vielen Zeichen kürzen (0 = nie); gekürzte Felder tragen truncated = true, den vollen Text liefert record.field_value
-     * @return array  record (Kopf: Bereich, Status, Zeiten, Sperre, offene Maske, Rechte, Sprachen) und je nach Reiter fields, meta oder history
+     * @param int    $recordId  record
+     * @param string $tab       content (fields), meta (meta fields), history (the last 20 changes from the audit log, newest first; more: audit.history), fulltext (full-text fields)
+     * @param string $language  language code, 'all' (all readable languages) or empty (language of the backend)
+     * @param array  $fields    only these fields (names); empty = all
+     * @param int    $truncate  truncate texts from this many characters (0 = never); truncated fields carry truncated = true, the full text is supplied by record.field_value
+     * @return array  record (head: area, status, times, lock, open mask, rights, languages) and depending on the tab fields, meta or history
      */
     #[ApiMethod('record.info', '#record.api_info')]
     public function info(int $recordId, string $tab = 'content', string $language = '', array $fields = [], int $truncate = 500): array
@@ -404,14 +404,14 @@ class RecordApi
     // record.field_value
 
     /**
-     * Der volle Inhalt eines Feldes - das "mehr" der Detailansicht.
+     * The full content of a field - the "more" of the detail view.
      *
-     * @param int    $recordId  Datensatz
-     * @param string $field     Feldname
-     * @param string $language  Sprachcode, 'all' oder leer (Sprache des Backends)
-     * @param int    $skip      Verknüpfungen: Versatz
-     * @param int    $limit     Verknüpfungen: je Seite (höchstens api.max_limit)
-     * @return array  field, label, type, value bzw. bei Verknüpfungen items (record_id, label; bei 'link' mit den Feldern der eingebetteten Inhalte) und paging
+     * @param int    $recordId  record
+     * @param string $field     field name
+     * @param string $language  language code, 'all' or empty (language of the backend)
+     * @param int    $skip      links: offset
+     * @param int    $limit     links: per page (at most api.max_limit)
+     * @return array  field, label, type, value or, for links, items (record_id, label; for 'link' with the fields of the embedded contents) and paging
      */
     #[ApiMethod('record.field_value', '#record.api_field_value')]
     public function fieldValue(int $recordId, string $field, string $language = '', int $skip = 0, int $limit = 50): array
@@ -465,19 +465,19 @@ class RecordApi
     // record.update / create / copy
 
     /**
-     * Einen Datensatz ändern - Auschecken, Ändern, Einchecken in einem Schritt.
+     * Change a record - check out, change, check in in one step.
      *
-     * @param int   $recordId    Datensatz
-     * @param array $data        Feld => Wert im neutralen Format; mehrsprachig {Code: Wert}
-     * @param array $fields      nur diese Felder aus data schreiben (leer = alle Schlüssel von data)
-     * @param array $relations   Feld => [id, …] ersetzt alle | {"set": [...]} | {"add": [...]} | {"remove": [...]} | {"order": [...]}
-     * @param array $files       Feld => {"serverfile": Pfad in var/upload} | {"content": Base64, "filename": Name} | {"tmpfile": Pfad unter var/tmp} | null (entfernen); mehrsprachig {Code: …}
-     * @param int   $parentId    Vaterdatensatz (Baum; 0 = oberste Ebene, -1 = unverändert)
-     * @param int   $previousId  vorangehender Datensatz (Position; 0 = an den Anfang, -1 = unverändert)
-     * @param int   $ownerId     Owner (nur mit dem Recht "Owner anpassen"; 0 = unverändert)
-     * @param bool  $unlock      die Bearbeitungssperre eines anderen Admins übergehen (wie in der Maske)
-     * @param bool  $simulate    nur prüfen, nichts ändern
-     * @return array  record_id, simulated, record (Kopfdaten wie record.info)
+     * @param int   $recordId    record
+     * @param array $data        field => value in the neutral format; multilingual {code: value}
+     * @param array $fields      write only these fields from data (empty = all keys of data)
+     * @param array $relations   field => [id, …] replaces all | {"set": [...]} | {"add": [...]} | {"remove": [...]} | {"order": [...]}
+     * @param array $files       field => {"serverfile": path in var/upload} | {"content": Base64, "filename": name} | {"tmpfile": path under var/tmp} | null (remove); multilingual {code: …}
+     * @param int   $parentId    parent record (tree; 0 = top level, -1 = unchanged)
+     * @param int   $previousId  preceding record (position; 0 = to the start, -1 = unchanged)
+     * @param int   $ownerId     owner (only with the right "adjust owner"; 0 = unchanged)
+     * @param bool  $unlock      bypass the edit lock of another admin (as in the mask)
+     * @param bool  $simulate    only check, change nothing
+     * @return array  record_id, simulated, record (head data as record.info)
      */
     #[ApiMethod('record.update', '#record.api_update', write: true, level: ApiMethod::LEVEL_CHANGE)]
     public function update(int $recordId, array $data = [], array $fields = [], array $relations = [], array $files = [],
@@ -498,17 +498,17 @@ class RecordApi
     }
 
     /**
-     * Einen Datensatz anlegen.
+     * Create a record.
      *
-     * @param int   $areaId      Bereich (nicht abhängig - deren Inhalte entstehen nur über ein Feld vom Typ link)
-     * @param array $data        Feld => Wert (wie record.update)
-     * @param array $relations   wie record.update
-     * @param array $files       wie record.update
-     * @param int   $parentId    Vaterdatensatz (Baum; 0 = oberste Ebene)
-     * @param int   $previousId  vorangehender Datensatz (Position; 0 = an den Anfang, -1 = Vorgabe)
-     * @param int   $ownerId     Owner (nur mit dem Recht "Owner anpassen"; 0 = der angemeldete Admin)
-     * @param bool  $simulate    nur prüfen, nichts anlegen
-     * @return array  record_id (bei Simulation 0), simulated, record
+     * @param int   $areaId      area (not dependent - their contents only arise via a field of type link)
+     * @param array $data        field => value (as record.update)
+     * @param array $relations   as record.update
+     * @param array $files       as record.update
+     * @param int   $parentId    parent record (tree; 0 = top level)
+     * @param int   $previousId  preceding record (position; 0 = to the start, -1 = default)
+     * @param int   $ownerId     owner (only with the right "adjust owner"; 0 = the signed-in admin)
+     * @param bool  $simulate    only check, create nothing
+     * @return array  record_id (for simulation 0), simulated, record
      */
     #[ApiMethod('record.create', '#record.api_create', write: true)]
     public function create(int $areaId, array $data = [], array $relations = [], array $files = [],
@@ -535,15 +535,15 @@ class RecordApi
     }
 
     /**
-     * Einen Datensatz kopieren und dabei ändern (wie "Kopieren" in der Maske: samt
-     * Dateien und eingebetteten Inhalten, direkt hinter dem Vorbild, ohne Kinder).
+     * Copy a record and change it in the process (like "Copy" in the mask: including
+     * files and embedded contents, directly behind the template, without children).
      *
-     * @param int   $recordId   Vorbild
-     * @param array $data       Änderungen an der Kopie (wie record.update)
-     * @param array $relations  wie record.update
-     * @param array $files      wie record.update
-     * @param bool  $simulate   nur prüfen, nichts anlegen
-     * @return array  record_id der Kopie (bei Simulation 0), simulated, record
+     * @param int   $recordId   template
+     * @param array $data       changes to the copy (as record.update)
+     * @param array $relations  as record.update
+     * @param array $files      as record.update
+     * @param bool  $simulate   only check, create nothing
+     * @return array  record_id of the copy (for simulation 0), simulated, record
      */
     #[ApiMethod('record.copy', '#record.api_copy', write: true)]
     public function copy(int $recordId, array $data = [], array $relations = [], array $files = [], bool $simulate = false): array
@@ -566,12 +566,12 @@ class RecordApi
     // record.move
 
     /**
-     * Die möglichen Zielfelder je Feld des Datensatzes für ein Verschieben - die
-     * Gegenüberstellung der Verschieben-Maske.
+     * The possible target fields per field of the record for a move - the
+     * field mapping of the move mask.
      *
-     * @param int $recordId      Datensatz
-     * @param int $targetAreaId  Zielbereich
-     * @return array  target_area, fields: Liste aus name, label, type, has_value, default (vorgewähltes Zielfeld oder null), targets [{name, label}]
+     * @param int $recordId      record
+     * @param int $targetAreaId  target area
+     * @return array  target_area, fields: list of name, label, type, has_value, default (preselected target field or null), targets [{name, label}]
      */
     #[ApiMethod('record.move_options', '#record.api_move_options')]
     public function moveOptions(int $recordId, int $targetAreaId): array
@@ -599,15 +599,15 @@ class RecordApi
     }
 
     /**
-     * Einen Datensatz in einen anderen Bereich verschieben.
+     * Move a record to another area.
      *
-     * @param int   $recordId      Datensatz
-     * @param int   $targetAreaId  Zielbereich
-     * @param array $mapping       Quellfeld => Zielfeld ('' = Inhalt verwerfen)
-     * @param bool  $autoMap       nicht genannte Quellfelder auf das gleichnamige passende Zielfeld abbilden (sonst verwerfen)
-     * @param bool  $unlock        die Bearbeitungssperre eines anderen Admins übergehen
-     * @param bool  $simulate      nur prüfen, nichts verschieben
-     * @return array  record_id, simulated, mapping (verwendet), dropped (Quellfelder mit Inhalt, der verworfen wird), record
+     * @param int   $recordId      record
+     * @param int   $targetAreaId  target area
+     * @param array $mapping       source field => target field ('' = discard the content)
+     * @param bool  $autoMap       map source fields not named to the matching target field of the same name (otherwise discard)
+     * @param bool  $unlock        bypass the edit lock of another admin
+     * @param bool  $simulate      only check, move nothing
+     * @return array  record_id, simulated, mapping (used), dropped (source fields with content that is discarded), record
      */
     #[ApiMethod('record.move', '#record.api_move', write: true, level: ApiMethod::LEVEL_MOVE)]
     public function move(int $recordId, int $targetAreaId, array $mapping = [], bool $autoMap = true, bool $unlock = false, bool $simulate = false): array
@@ -640,12 +640,12 @@ class RecordApi
     // record.delete / restore
 
     /**
-     * Einen Datensatz in den Papierkorb legen (Soft-Delete). Große Teilbäume laufen
-     * im Hintergrund.
+     * Put a record in the trash (soft delete). Large subtrees run
+     * in the background.
      *
-     * @param int  $recordId    Datensatz
-     * @param bool $withChilds  Nachkommen (Baum) mit löschen; sonst rücken sie eine Ebene hoch
-     * @param bool $unlock      die Bearbeitungssperre eines anderen Admins übergehen
+     * @param int  $recordId    record
+     * @param bool $withChilds  also delete descendants (tree); otherwise they move up one level
+     * @param bool $unlock      bypass the edit lock of another admin
      * @return array  record_id, status (deleted | background)
      */
     #[ApiMethod('record.delete', '#record.api_delete', write: true, level: ApiMethod::LEVEL_DELETE)]
@@ -660,10 +660,10 @@ class RecordApi
     }
 
     /**
-     * Einen Datensatz aus dem Papierkorb zurückholen - samt der mit ihm gelöschten
-     * Nachkommen. Wie im Modul Papierkorb: nur, was der Admin dort sieht.
+     * Restore a record from the trash - together with the descendants deleted with it.
+     * As in the module Trash: only what the admin sees there.
      *
-     * @param int $recordId  gelöschter Datensatz
+     * @param int $recordId  deleted record
      * @return array  record_id, status (restored | background)
      */
     #[ApiMethod('record.restore', '#record.api_restore', write: true, level: ApiMethod::LEVEL_CHANGE)]
@@ -681,13 +681,13 @@ class RecordApi
     // record.message / record.preview_url
 
     /**
-     * Eine interne Nachricht zu einem Datensatz an einen Administrator schicken
-     * (Modul Nachrichten; der Datensatz wird in der Nachricht verlinkt).
+     * Send an internal message about a record to an administrator
+     * (module Messages; the record is linked in the message).
      *
-     * @param int        $recordId  Datensatz
-     * @param int|string $to        Empfänger: admin_id oder Name
-     * @param string     $subject   Betreff
-     * @param string     $body      Text
+     * @param int        $recordId  record
+     * @param int|string $to        recipient: admin_id or name
+     * @param string     $subject   subject
+     * @param string     $body      text
      * @return array  message_id
      */
     #[ApiMethod('record.message', '#record.api_message', write: true, level: ApiMethod::LEVEL_CHANGE)]
@@ -707,13 +707,13 @@ class RecordApi
     }
 
     /**
-     * Adresse der Vorschau eines Datensatzes - auch unveröffentlicht. Nur wenn die
-     * API in der Backend-Session eines angemeldeten Admins mitarbeitet (attach, etwa
-     * im LLM-Chat): die Vorschau hängt an dieser Session und endet mit ihr.
+     * Address of the preview of a record - also unpublished. Only if the
+     * API works in the backend session of a signed-in admin (attach, e.g.
+     * in the LLM chat): the preview is tied to this session and ends with it.
      *
-     * @param int    $recordId  Datensatz
-     * @param string $language  Sprachcode (leer = Sprache des Backends)
-     * @return array  url, language, valid_until (ISO; null, wenn die Adresse die Backend-Anmeldung im Browser voraussetzt)
+     * @param int    $recordId  record
+     * @param string $language  language code (empty = language of the backend)
+     * @return array  url, language, valid_until (ISO; null if the address requires the backend sign-in in the browser)
      */
     #[ApiMethod('record.preview_url', '#record.api_preview_url')]
     public function previewUrl(int $recordId, string $language = ''): array
@@ -732,8 +732,8 @@ class RecordApi
             $validUntil = $this->context->isoTime(gmdate('Y-m-d H:i:s', time() + FrontendHandover::PREVIEW_SECONDS));
         }
         else {
-            // Backend unter einer Domain der Instanz: die Vorschau läuft mit dem
-            // Session-Cookie des Browsers (public/backend/preview.php)
+            // backend under a domain of the instance: the preview runs with the
+            // session cookie of the browser (public/backend/preview.php)
             $url = rtrim((string)$this->config->get('paths.backend'), '/') . '/preview.php?instance=' . $instanceId
                 . '&request=' . $recordId . ($code !== '' ? '&lang=' . rawurlencode($code) : '');
         }
@@ -745,27 +745,26 @@ class RecordApi
     // record.batch
 
     /**
-     * Stapelverarbeitung: viele Datensätze eines Bereichs auf einmal ändern,
-     * verschieben oder löschen (Papierkorb) - je Datensatz derselbe Weg wie einzeln
-     * (RecordBatch). Braucht das Zusatzrecht "Stapelverarbeitung". Den Volltext
-     * baut die Zeitplaner-Aufgabe fulltext neu auf (scheduler.create).
+     * Batch processing: change, move or delete (trash) many records of an area at once -
+     * per record the same path as individually (RecordBatch). Requires the additional right "batch processing". The full text
+     * is rebuilt by the scheduler task fulltext (scheduler.create).
      *
-     * @param int    $areaId        Bereich
+     * @param int    $areaId        area
      * @param string $mode          edit | move | delete
-     * @param array  $ids           diese Datensätze (Umfang, alternativ zu filter bzw. all)
-     * @param array  $filter        Filter wie record.search (Umfang)
-     * @param array  $filterop      Operatoren zu filter
-     * @param array  $filtermode    OR | AND je Feld
-     * @param bool   $all           alle Datensätze des Bereichs (Umfang)
-     * @param array  $data          edit: Feld => Wert (wie record.update; keine Passwörter, keine eindeutigen Felder)
-     * @param array  $relations     edit: wie record.update
-     * @param array  $files         edit: wie record.update
-     * @param int    $targetAreaId  move: Zielbereich
-     * @param array  $mapping       move: Quellfeld => Zielfeld ('' = verwerfen)
-     * @param bool   $autoMap       move: nicht genannte Felder auf gleichnamige passende Zielfelder abbilden
-     * @param bool   $simulate      nur prüfen, nichts ändern
-     * @param string $background    auto (ab der Schwelle) | yes | no
-     * @return array  total, done, failed, errors (Liste aus record_id, messages) - bzw. background (token, pid)
+     * @param array  $ids           these records (scope, alternative to filter or all)
+     * @param array  $filter        filter as record.search (scope)
+     * @param array  $filterop      operators for filter
+     * @param array  $filtermode    OR | AND per field
+     * @param bool   $all           all records of the area (scope)
+     * @param array  $data          edit: field => value (as record.update; no passwords, no unique fields)
+     * @param array  $relations     edit: as record.update
+     * @param array  $files         edit: as record.update
+     * @param int    $targetAreaId  move: target area
+     * @param array  $mapping       move: source field => target field ('' = discard)
+     * @param bool   $autoMap       move: map fields not named to matching target fields of the same name
+     * @param bool   $simulate      only check, change nothing
+     * @param string $background    auto (from the threshold) | yes | no
+     * @return array  total, done, failed, errors (list of record_id, messages) - or background (token, pid)
      */
     #[ApiMethod('record.batch', '#record.api_batch', write: true, level: ApiMethod::LEVEL_MASS)]
     public function batch(int $areaId, string $mode, array $ids = [], array $filter = [], array $filterop = [], array $filtermode = [],
@@ -781,7 +780,7 @@ class RecordApi
         }
         $areaData = $this->readableArea($areaId);
 
-        // Umfang: genau eins von ids, filter, all
+        // scope: exactly one of ids, filter, all
         $filterParams = $batch->filterParams(['filter' => $filter, 'filterop' => $filterop, 'filtermode' => $filtermode]);
         $scopes = (int)!empty($ids) + (int)$batch->hasFilter($filterParams) + (int)$all;
         if ($scopes !== 1) throw new ApiException(ApiException::INVALID_PARAM, 'give exactly one of ids, filter or all');
@@ -840,11 +839,11 @@ class RecordApi
     // record.export
 
     /**
-     * Die wählbaren Felder eines Exports (wie in der Export-Maske).
+     * The selectable fields of an export (as in the export mask).
      *
-     * @param int    $areaId  Bereich
+     * @param int    $areaId  area
      * @param string $type    csv | docx
-     * @return array  Liste aus key (für fields von record.export), label, type, multilingual, checked (Vorauswahl), sub (Unterfelder: key, label, checked)
+     * @return array  list of key (for fields of record.export), label, type, multilingual, checked (preselection), sub (subfields: key, label, checked)
      */
     #[ApiMethod('record.export_fields', '#record.api_export_fields')]
     public function exportFields(int $areaId, string $type = 'csv'): array
@@ -866,7 +865,7 @@ class RecordApi
                 'label'        => $this->context->plain($this->cms->textOrSnippet((string)($entry['label'] ?? $key))),
                 'type'         => (string)($entry['type'] ?? ''),
                 'multilingual' => !empty($entry['multilingual']),
-                // DOCX: in der Maske sind alle Felder vorgewählt
+                // DOCX: in the mask all fields are preselected
                 'checked'      => $type === 'docx' || !empty($entry['checked']),
                 'sub'          => $sub,
             ];
@@ -875,21 +874,21 @@ class RecordApi
     }
 
     /**
-     * Datensätze eines Bereichs exportieren - als Zip unter var/export (wie die
-     * Export-Maske). XML nur für Superuser, CSV und DOCX mit dem Zusatzrecht.
+     * Export records of an area - as a zip under var/export (as the export
+     * mask). XML only for superusers, CSV and DOCX with the additional right.
      *
-     * @param int    $areaId      Bereich
+     * @param int    $areaId      area
      * @param string $type        csv | docx | xml
-     * @param array  $ids         diese Datensätze (Umfang, alternativ zu filter)
-     * @param array  $filter      Filter wie record.search (Umfang); ohne ids und filter: alle
-     * @param array  $filterop    Operatoren zu filter
-     * @param array  $filtermode  OR | AND je Feld
-     * @param array  $fields      csv/docx: Feldschlüssel aus record.export_fields (leer = Vorauswahl)
-     * @param array  $languages   csv: Sprachcodes (leer = Sprache des Backends); docx: [von, nach]
+     * @param array  $ids         these records (scope, alternative to filter)
+     * @param array  $filter      filter as record.search (scope); without ids and filter: all
+     * @param array  $filterop    operators for filter
+     * @param array  $filtermode  OR | AND per field
+     * @param array  $fields      csv/docx: field keys from record.export_fields (empty = preselection)
+     * @param array  $languages   csv: language codes (empty = language of the backend); docx: [from, to]
      * @param array  $options     csv: header, bom (bool), separator, enclosure, eol ('\r\n' | '\n'); xml: files (bool);
-     *                            docx: split (bool, ein Datensatz je Datei)
-     * @param string $background  auto (ab admin.export_background_threshold) | yes | no
-     * @return array  zip, path, size, records, files, valid_until - bzw. background (token, pid)
+     *                            docx: split (bool, one record per file)
+     * @param string $background  auto (from admin.export_background_threshold) | yes | no
+     * @return array  zip, path, size, records, files, valid_until - or background (token, pid)
      */
     #[ApiMethod('record.export', '#record.api_export')]
     public function export(int $areaId, string $type = 'csv', array $ids = [], array $filter = [], array $filterop = [], array $filtermode = [],
@@ -923,7 +922,7 @@ class RecordApi
         if ($type === 'csv' && !$languageIds) $languageIds = [array_key_first($this->contentLanguages($instanceId, ''))];
         if ($type === 'docx' && count($languageIds) !== 2) throw new ApiException(ApiException::INVALID_PARAM, 'docx needs languages [from, to]');
 
-        // Felder: ohne Angabe die Vorauswahl der Maske
+        // fields: without specification the preselection of the mask
         if ($type !== 'xml' && !$fields) {
             foreach ($this->exportFields($areaId, $type) as $entry) {
                 if ($entry['checked']) $fields[] = $entry['key'];
@@ -966,9 +965,9 @@ class RecordApi
     }
 
     /**
-     * Die vorhandenen Exportdateien (var/export), neueste zuerst.
+     * The existing export files (var/export), newest first.
      *
-     * @return array  Liste aus zip, path, size, created_at, valid_until
+     * @return array  list of zip, path, size, created_at, valid_until
      */
     #[ApiMethod('record.exports', '#record.api_exports')]
     public function exports(): array
@@ -992,7 +991,7 @@ class RecordApi
         return $list;
     }
 
-    /** Lesbarer Inhaltsbereich - sonst not_found bzw. access_denied */
+    /** Readable content area - otherwise not_found or access_denied */
     private function readableArea(int $areaId): array
     {
         $areaData = $areaId > 0 ? $this->backend->areaData($areaId) : null;
@@ -1009,10 +1008,10 @@ class RecordApi
     // Eingaben
 
     /**
-     * Eingaben einer Schreib-Methode prüfen und in die Form von RecordService
+     * Check the inputs of a write method and bring them into the form of RecordService
      * bringen: Felder, Werte im Datenbankformat ($stored), Sprachen als language_id
-     * (nur mit Schreibrecht), Verknüpfungen, Dateien (Base64 als Datei unter var/tmp).
-     * Einzelfehler sammeln, dann VALIDATION.
+     * (only with write right), links, files (Base64 as a file under var/tmp).
+     * Collect individual errors, then VALIDATION.
      *
      * @return array  fields, data, stored, relations, files, tmp_dir
      */
@@ -1035,7 +1034,7 @@ class RecordApi
             $type = (string)($colDef['type'] ?? '');
             if ($colDef === null || in_array($name, ['parent_id', 'position', 'previous_id'], true)
                 || in_array($type, $this->cms->relationTypes, true) || $type === 'file') {
-                // Verknüpfungen, Dateien und Baum haben eigene Parameter
+                // links, files and tree have their own parameters
                 $this->cms->error(strtr($this->cms->snippet('error_field_unknown_type'), ['{name}' => $name]), $name);
                 continue;
             }
@@ -1060,7 +1059,7 @@ class RecordApi
             if ($stored) $out['stored'][] = $name;
         }
 
-        // Baum und Position
+        // tree and position
         if ($parentId >= 0) {
             if (!isset($schemaVirtual['parent_id'])) $this->cms->error(strtr($this->cms->snippet('error_field_unknown_type'), ['{name}' => 'parent_id']), 'parent_id');
             else { $out['fields'][] = 'parent_id'; $out['data']['parent_id'] = $parentId; }
@@ -1077,7 +1076,7 @@ class RecordApi
             $out['data']['owner_id'] = $ownerId;
         }
 
-        // Verknüpfungen
+        // links
         foreach ($relations as $name => $ops) {
             $colDef = $schemaVirtual[$name] ?? null;
             if ($colDef === null || !in_array((string)$colDef['type'], $this->cms->relationTypes, true) || !is_array($ops)
@@ -1088,7 +1087,7 @@ class RecordApi
             $out['relations'][(string)$name] = $ops;
         }
 
-        // Dateien
+        // files
         foreach ($files as $name => $spec) {
             $colDef = $schemaVirtual[$name] ?? null;
             if ($colDef === null || (string)$colDef['type'] !== 'file' || (int)($colDef['parent_field_id'] ?? 0) > 0) {
@@ -1116,10 +1115,10 @@ class RecordApi
     }
 
     /**
-     * Wert je Sprache: {Code: Wert} bei mehrsprachigen Feldern (ein einzelner Wert gilt
-     * der Hauptsprache), sonst der Wert selbst - nur Sprachen mit Schreibrecht.
+     * Value per language: {code: value} for multilingual fields (a single value applies to
+     * the primary language), otherwise the value itself - only languages with write right.
      *
-     * @return array|null  language_id => Wert (einsprachig: [0 => Wert]); null bei Fehlern
+     * @return array|null  language_id => value (single-language: [0 => value]); null on errors
      */
     private function byLanguage(mixed $value, bool $isMultilingual, int $instanceId, int $primaryId, string $name, string $label, bool $singleIsList = false): ?array
     {
@@ -1142,9 +1141,9 @@ class RecordApi
     }
 
     /**
-     * Eine Datei-Angabe für RecordService: serverfile bleibt, tmpfile wird zur
-     * importfile (nur unter paths.tmp_dir), content (Base64) landet als Datei in
-     * einem eigenen Verzeichnis unter paths.tmp_dir; null = entfernen.
+     * A file specification for RecordService: serverfile stays, tmpfile becomes
+     * importfile (only under paths.tmp_dir), content (Base64) ends up as a file in
+     * its own directory under paths.tmp_dir; null = remove.
      */
     private function fileInput(mixed $spec, string $name, string $label, string &$tmpDir): ?array
     {
@@ -1187,7 +1186,7 @@ class RecordApi
         return null;
     }
 
-    /** Ein Verzeichnis unter paths.tmp_dir samt Inhalt entfernen */
+    /** Remove a directory under paths.tmp_dir including its contents */
     private function removeDir(string $dir): void
     {
         $base = realpath((string)$this->config->get('paths.tmp_dir'));
@@ -1198,8 +1197,8 @@ class RecordApi
     }
 
     /**
-     * Vor einer Änderung: lesen dürfen, die Aktion dürfen, nicht von einem anderen
-     * gesperrt (außer $unlock), nicht in der eigenen Maske offen.
+     * Before a change: must be allowed to read, must be allowed the action, not locked by another
+     * admin (except $unlock), not open in one's own mask.
      */
     private function requireAction(int $recordId, string $action, bool $unlock = false, bool $checkLocks = true): array
     {
@@ -1219,7 +1218,7 @@ class RecordApi
         return $data;
     }
 
-    /** Antwort einer Schreib-Methode */
+    /** Response of a write method */
     private function writeResult(int $recordId, bool $simulate): array
     {
         $record = null;
@@ -1229,8 +1228,8 @@ class RecordApi
     }
 
     /**
-     * Felder für das Verschieben: [moveFields() Quelle, moveFields() Ziel] - der
-     * Zielbereich muss ein anderer, lesbarer Inhaltsbereich sein.
+     * Fields for the move: [moveFields() source, moveFields() target] - the
+     * target area must be a different, readable content area.
      */
     private function moveFieldSets(int $sourceAreaId, int $targetAreaId): array
     {
@@ -1250,7 +1249,7 @@ class RecordApi
         ];
     }
 
-    /** Hat der Datensatz in diesem Feld einen Inhalt? (Verknüpfungen: mindestens eine) */
+    /** Does the record have content in this field? (links: at least one) */
     private function hasValue(array $data, string $name, array $colDef): bool
     {
         $type = (string)($colDef['type'] ?? '');
@@ -1273,11 +1272,11 @@ class RecordApi
     // Felder
 
     /**
-     * Ein Feld für record.info / record.field_value.
+     * A field for record.info / record.field_value.
      *
-     * @param array $languages  language_id => Code (contentLanguages())
-     * @param array $caches     language_id => Inhalts-Cache
-     * @return array|null       null: Feld nicht zeigen (Zielbereich nicht lesbar)
+     * @param array $languages  language_id => code (contentLanguages())
+     * @param array $caches     language_id => content cache
+     * @return array|null       null: do not show the field (target area not readable)
      */
     private function fieldEntry(array $data, string $name, array $colDef, array $languages, array $caches, int $truncate): ?array
     {
@@ -1286,7 +1285,7 @@ class RecordApi
         $isMultilingual = $this->cms->isMultilingualField($colDef);
         $entry = ['label' => $this->label($colDef, $name), 'type' => $type, 'multilingual' => $isMultilingual];
 
-        // Verknüpfungen: die ersten RELATED_MAX, Gesamtzahl
+        // links: the first RELATED_MAX, total count
         if (in_array($type, $this->cms->relationTypes, true)) {
             if (!$this->record->relationTargetReadable($colDef)) return null;
             [$ids, $total] = $this->backend->relatedPage($recordId, $colDef, 0, self::RELATED_MAX);
@@ -1326,7 +1325,7 @@ class RecordApi
             $entry['value'] = $this->values->output($data[$name] ?? null, $colDef);
         }
 
-        // lange Texte kürzen
+        // truncate long texts
         if ($truncate > 0 && in_array($type, self::TEXT_TYPES, true)) {
             $cut = false;
             $shorten = function ($text) use ($truncate, &$cut) {
@@ -1341,7 +1340,7 @@ class RecordApi
     }
 
     /**
-     * Die Eingabefelder eines eingebetteten Inhalts ('link'), ungekürzt.
+     * The input fields of an embedded content ('link'), untruncated.
      */
     private function embeddedFields(array $data, array $languages): array
     {
@@ -1358,9 +1357,9 @@ class RecordApi
     }
 
     /**
-     * Sprachen der Inhalte: language_id => Code, nur lesbare.
+     * Languages of the contents: language_id => code, only readable ones.
      *
-     * @param string $language  Code, 'all' oder '' (Sprache des Backends)
+     * @param string $language  code, 'all' or '' (language of the backend)
      */
     private function contentLanguages(int $instanceId, string $language): array
     {
@@ -1381,8 +1380,8 @@ class RecordApi
     }
 
     /**
-     * Inhalts-Caches (`record_cache`) der Sprachen - nur bei mehrsprachigen Instanzen
-     * (sonst liefert Record::load() alles).
+     * Content caches (`record_cache`) of the languages - only for multilingual instances
+     * (otherwise Record::load() supplies everything).
      */
     private function caches(int $recordId, array $languages): array
     {
@@ -1395,10 +1394,10 @@ class RecordApi
     }
 
     // ====================
-    // Kopf, Metafelder, Verlauf
+    // Head, meta fields, history
 
     /**
-     * Kopfdaten eines Datensatzes (in jeder Antwort von record.info).
+     * Head data of a record (in every response of record.info).
      */
     private function head(array $data): array
     {
@@ -1407,7 +1406,7 @@ class RecordApi
         $ownerId = isset($data['owner_id']) ? (int)$data['owner_id'] : null;
         $lock = $this->service->lockInfo($data);
         $open = $this->service->ownOpenCopy($recordId);
-        // Ändern: auch der aktuelle Status muss setzbar sein (Access::recordWrite())
+        // change: the current status must also be settable (Access::recordWrite())
         $areaWrite = $this->access->areaWrite($areaId, $ownerId);
         $write = $this->access->recordWrite($areaId, $ownerId, (int)($data['status_id'] ?? 0));
         $delete = $this->access->areaDelete($areaId, $ownerId);
@@ -1444,7 +1443,7 @@ class RecordApi
     }
 
     /**
-     * Reiter meta: die festen Spalten von `record` (Baumfelder nur im Baum).
+     * Tab meta: the fixed columns of `record` (tree fields only in the tree).
      */
     private function meta(array $data): array
     {
@@ -1474,8 +1473,8 @@ class RecordApi
             $meta['depth'] = (int)($data['depth'] ?? 0);
         }
 
-        // "Verwendet von": Datensätze, die über irgendein Verknüpfungsfeld hierher zeigen
-        // (nur in lesbaren Bereichen - Cms::select() schränkt ohnehin ein)
+        // "Used by": records that point here via any link field
+        // (only in readable areas - Cms::select() restricts in any case)
         $this->db->pushResult();
         $this->cms->select(['relation' => 'any', 'dest_id' => $recordId, 'count' => 'true', 'result' => 'false',
             'sql' => substr($this->backend->areaAccessSql(false, '`record`.`area_id`'), 5) ?: '']);
@@ -1486,9 +1485,9 @@ class RecordApi
     }
 
     /**
-     * Reiter history: die letzten Einträge aus dem Audit-Log mit den Änderungen je
-     * Feld (AuditDiff::plainChanges()). Die IP-Adresse nur für Superuser. Ältere
-     * Einträge und den ganzen Verlauf (auch gelöschter Datensätze) liefert
+     * Tab history: the last entries from the audit log with the changes per
+     * field (AuditDiff::plainChanges()). The IP address only for superusers. Older
+     * entries and the whole history (also of deleted records) are supplied by
      * audit.history.
      */
     private function history(int $recordId, int $truncate): array
@@ -1516,7 +1515,7 @@ class RecordApi
     // Hilfen
 
     /**
-     * Datensatz mit Leserecht laden - sonst not_found bzw. access_denied.
+     * Load a record with read right - otherwise not_found or access_denied.
      */
     private function loadReadable(int $recordId): array
     {
@@ -1535,7 +1534,7 @@ class RecordApi
         return $this->context->plain($this->cms->textOrSnippet((string)($colDef['label'] ?? $name)));
     }
 
-    /** Teaser ohne Verweis und Symbol als Text (Status 0 ist ein gültiger Status) */
+    /** Teaser as text without link and symbol (status 0 is a valid status) */
     private function plainTeaser(string $type, int $id): string
     {
         if ($id < 1 && $type !== 'status') return '';

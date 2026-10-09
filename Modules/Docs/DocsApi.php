@@ -1,12 +1,12 @@
 <?php
 /**
- * API-Methoden der Handbücher: suchen und lesen - für Werkzeuge wie den Assistenten
- * des Moduls Ai, der damit Fragen zur Bedienung beantwortet.
+ * API methods of the manuals: search and read - for tools like the assistant
+ * of the module Ai, which uses them to answer questions about operation.
  *
- * Die Handbücher stehen jedem Admin offen (Modul Docs ohne Rechteverwaltung). Ohne
- * Sprache gilt die des Backends; findet die Suche dort nichts, sucht sie in den
- * übrigen Sprachen mit Index - so helfen die deutschen Handbücher, solange es andere
- * noch nicht gibt. Jeder Treffer nennt seine Sprache.
+ * The manuals are open to every admin (module Docs without rights management). Without
+ * a language the backend's language applies; if the search finds nothing there, it searches
+ * the other languages with an index - so the German manuals help as long as there are no
+ * others yet. Every hit names its language.
  *
  * @see Docs
  */
@@ -28,13 +28,13 @@ class DocsApi
     }
 
     /**
-     * Abschnitte der Handbücher nach Relevanz.
+     * Sections of the manuals by relevance.
      *
-     * @param string $query     Suchwörter
-     * @param string $book      editors | admins | templateprogrammers oder das Handbuch einer
-     *                          Komponente, z. B. module-ai ('' = alle)
-     * @param string $language  Sprachcode der Handbücher ('' = Sprache des Backends)
-     * @param int    $limit     Höchstzahl Treffer (1-30)
+     * @param string $query     search words
+     * @param string $book      editors | admins | templateprogrammers or the manual of a
+     *                          component, e.g. module-ai ('' = all)
+     * @param string $language  language code of the manuals ('' = language of the backend)
+     * @param int    $limit     maximum number of hits (1-30)
      * @return array  language, hits (page, anchor, title, heading, excerpt)
      */
     #[ApiMethod('docs.search', '#docs.api_search')]
@@ -64,18 +64,18 @@ class DocsApi
     }
 
     /**
-     * Eine Seite oder einen Abschnitt als Markdown lesen.
+     * Read a page or a section as Markdown.
      *
-     * @param string $page      Seite aus docs.search, z. B. admins/10-module.md
-     * @param string $anchor    Abschnitt (anchor aus docs.search; '' = ganze Seite)
-     * @param string $language  Sprachcode (language aus docs.search; '' = Sprache des Backends)
+     * @param string $page      page from docs.search, e.g. admins/10-module.md
+     * @param string $anchor    section (anchor from docs.search; '' = whole page)
+     * @param string $language  language code (language from docs.search; '' = language of the backend)
      * @return array  language, page, anchor, title, heading, markdown, truncated
      */
     #[ApiMethod('docs.read', '#docs.api_read')]
     public function read(string $page, string $anchor = '', string $language = ''): array
     {
         $this->context->require();
-        // wie search(): die gewünschte Sprache, sonst die übrigen
+        // as search(): the requested language, otherwise the others
         $first = $this->docs->language($language !== '' ? $language : $this->cms->getLang());
         $source = null;
         foreach (array_values(array_unique(array_merge([$first], $this->docs->languages()))) as $lang) {

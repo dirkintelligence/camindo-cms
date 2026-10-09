@@ -1,20 +1,20 @@
 /*
- * cApp.extensions – Feld-Extensions (docs/developers/13-component-management.md, 3.4)
+ * cApp.extensions – Field extensions (developer docs, chapter 08 (Components and extensions))
  *
- * Ein Eingabefeld mit Extension trägt class="c9-ext" data-c9-ext="calendar"
- * data-c9-ext-options='{…}' (Backend::formField()). Die Assets der aktiven
- * Extensions stehen als Manifest in cConfig.extensions (backend/index.php) und
- * werden erst geladen, wenn ein Feld sie braucht (ensure()). Jede Extension
- * registriert beim Laden ihres Scripts einen Handler:
+ * An input field with an extension carries class="c9-ext" data-c9-ext="calendar"
+ * data-c9-ext-options='{…}' (Backend::formField()). The assets of the active
+ * extensions are listed as a manifest in cConfig.extensions (backend/index.php) and
+ * are only loaded when a field needs them (ensure()). Each extension
+ * registers a handler when its script is loaded:
  *
  *     cApp.extensions.register('calendar', {
- *         init(el, options)  { … },          // Element aufrüsten; Änderungen: cApp.forms.markChanged(el)
- *         beforeSubmit(el)   { … },          // Wert nach el.value zurückschreiben (optional)
- *         destroy(el)        { … }           // Instanzen entfernen (optional)
+ *         init(el, options)  { … },          // upgrade the element; changes: cApp.forms.markChanged(el)
+ *         beforeSubmit(el)   { … },          // write the value back to el.value (optional)
+ *         destroy(el)        { … }           // remove instances (optional)
  *     });
  *
- * Drei Hooks im Rahmen: cLoadContent (destroyAll vor, refreshAll nach dem Einsetzen
- * der Antwort), cApp.forms._bindAjaxSubmit (beforeSubmit) und cApp.layers.close
+ * Three hooks in the frame: cLoadContent (destroyAll before, refreshAll after inserting
+ * the response), cApp.forms._bindAjaxSubmit (beforeSubmit) and cApp.layers.close
  * (destroyAll).
  */
 (function (cApp) {
@@ -30,7 +30,7 @@
         },
 
         /**
-         * Assets einer Extension einmalig laden (CSS parallel, JS in Reihenfolge).
+         * Load the assets of an extension once (CSS in parallel, JS in order).
          * @returns {Promise}
          */
         ensure(name) {
@@ -58,7 +58,7 @@
         },
 
         /**
-         * Alle Felder mit Extension in $root initialisieren (nach cLoadContent).
+         * Initialize all fields with an extension in $root (after cLoadContent).
          */
         refreshAll($root) {
             $root.find('.c9-ext').each((i, el) => {
@@ -76,7 +76,7 @@
         },
 
         /**
-         * Vor dem Absenden eines Formulars: Editorinhalte in die Felder zurück.
+         * Before a form is submitted: editor contents back into the fields.
          */
         beforeSubmit($form) {
             $form.find('.c9-ext').each((i, el) => {
@@ -86,7 +86,7 @@
         },
 
         /**
-         * Instanzen in $root entfernen (Layer wird ersetzt oder geschlossen).
+         * Remove instances in $root (layer is replaced or closed).
          */
         destroyAll($root) {
             $root.find('.c9-ext').each((i, el) => {
@@ -97,10 +97,10 @@
         },
 
         /**
-         * Feld-Eingabemaske (Modul Area): die Extension-Auswahl (select.c9-ext-select)
-         * folgt dem Display-Typ - nur passende Extensions bleiben wählbar
-         * (data-ext-types) -, und beim Wechsel der Extension werden ihre Optionen
-         * nachgeladen (data-ext-url in das Element data-ext-target).
+         * Field input mask (module Area): the extension selection (select.c9-ext-select)
+         * follows the display type - only matching extensions remain selectable
+         * (data-ext-types) -, and when the extension changes its options are
+         * reloaded (data-ext-url into the element data-ext-target).
          */
         fieldForm: {
             init() {

@@ -1,6 +1,6 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Infoseite einer Lösch-Policy (Modul Privacy)
+// Info page of a deletion policy (module Privacy)
 use Camindo\Core\Modules\Privacy\PrivacyBackend;
 
 $app->get(PrivacyBackend::class)->info();

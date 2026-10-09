@@ -1,20 +1,20 @@
 <?php
 /**
- * Werkzeug "Thumbnails neu erzeugen" (Tools -> Daten).
+ * Tool "Regenerate thumbnails" (Tools -> Data).
  *
- * Erzeugt für alle produktiven Datensätze eines Bereichs die Thumbnails neu - nach
- * geänderten Konverter-Einstellungen, einem neu angelegten Thumbnail-Feld oder
- * verlorenen Dateien. Je Datensatz läuft Record::regenerateThumbnails(): dieselbe
- * Erzeugung wie nach dem Speichern (VirtualFieldsTrait::writeDeferredThumbnails()),
- * Bilder sofort, Videos wie konfiguriert über den Trigger im Hintergrund.
+ * Regenerates the thumbnails for all live records of an area - after changed converter
+ * settings, a newly created thumbnail field, or lost files. For each record
+ * Record::regenerateThumbnails() runs: the same generation as after saving
+ * (VirtualFieldsTrait::writeDeferredThumbnails()):
+ * images immediately, videos in the background via the trigger as configured.
  *
- * Zur Wahl stehen nur Datensatzbereiche, die ein Thumbnail-Feld führen
- * (areaOptions()). Der Lauf kann im Request oder - Vorgabe - als Hintergrundprozess
- * laufen (start() -> Core/cron/thumbnails.php, Rückmeldung als interne Nachricht,
- * wie beim Export).
+ * Only record areas that have a thumbnail field can be selected
+ * (areaOptions()). The run can take place in the request or - by default - as a background process
+ * (start() -> Core/cron/thumbnails.php, feedback as an internal message,
+ * as with the export).
  *
- *     backend/index_data.php        -> ToolsBackend::dataTools()   das Formular
- *     backend/tool_thumbnails.php   -> ToolsBackend::thumbnails()  ausführen / starten
+ *     backend/index_data.php        -> ToolsBackend::dataTools()   the form
+ *     backend/tool_thumbnails.php   -> ToolsBackend::thumbnails()  run / start
  *
  * @see Camindo\Core\VirtualFieldsTrait::regenerateThumbnails()
  * @see Camindo\Core\Modules\Tools\ToolsBackend
@@ -34,7 +34,7 @@ use Camindo\Core\Modules\Record\Record;
 
 class ToolThumbnails {
 
-    /** Typkennung des bgproc-Eintrags */
+    /** Type identifier of the bgproc entry */
     public const BGPROC_TYPE = 'thumbnails';
 
     public function __construct(
@@ -52,8 +52,8 @@ class ToolThumbnails {
     {}
 
     /**
-     * Datensatzbereiche mit mindestens einem Thumbnail-Feld: area_id => Beschriftung
-     * (Label, bei mehreren Mandanten mit dem Namen der Instanz), in Baumreihenfolge.
+     * Record areas with at least one thumbnail field: area_id => label
+     * (label, with multiple tenants the name of the instance), in tree order.
      */
     public function areaOptions(): array
     {
@@ -78,7 +78,7 @@ class ToolThumbnails {
     }
 
     /**
-     * Anzahl der produktiven Datensätze eines Bereichs.
+     * Number of live records of an area.
      */
     public function count(int $areaId): int
     {
@@ -87,13 +87,13 @@ class ToolThumbnails {
     }
 
     /**
-     * Thumbnails aller produktiven Datensätze eines Bereichs neu erzeugen - im
-     * Request und im Hintergrund exakt dieselbe Methode.
+     * Regenerate the thumbnails of all live records of an area - in the
+     * request and in the background exactly the same method.
      *
      * @param int           $areaId
-     * @param callable|null $progress  fn(int $done, int $total) - Fortschritt
-     * @return array  ['records' => n, 'files' => n (Quelldateien), 'failed' => n,
-     *                 'error' => '' | Meldung (Bereich unbekannt)]
+     * @param callable|null $progress  fn(int $done, int $total) - progress
+     * @return array  ['records' => n, 'files' => n (source files), 'failed' => n,
+     *                 'error' => '' | message (area unknown)]
      */
     public function run(int $areaId, ?callable $progress = null): array
     {
@@ -126,10 +126,10 @@ class ToolThumbnails {
     }
 
     /**
-     * Den Lauf als Hintergrundprozess starten (Core/cron/thumbnails.php).
+     * Start the run as a background process (Core/cron/thumbnails.php).
      *
-     * @return array|null  Angaben des bgproc-Eintrags (BackgroundProcess::start()),
-     *                     null bei Fehler (Text in $error)
+     * @return array|null  details of the bgproc entry (BackgroundProcess::start()),
+     *                     null on error (text in $error)
      */
     public function start(int $areaId, ?string &$error = null): ?array
     {
@@ -145,7 +145,7 @@ class ToolThumbnails {
             $phpExec,
             dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cron' . DIRECTORY_SEPARATOR . 'thumbnails.php',
             '--area=' . $areaId,
-            // kein Session-Kontext im Hintergrund: Empfänger der Nachricht
+            // no session context in the background: recipient of the message
             '--admin=' . (int)$this->session->get('admin_id'),
             '--token=' . $token,
         ];
@@ -157,7 +157,7 @@ class ToolThumbnails {
     }
 
     /**
-     * Ergebnis als Text: "n Datensätze, m Dateien; k fehlgeschlagen".
+     * Result as text: "n records, m files; k failed".
      */
     public function summaryText(array $result): string
     {
@@ -172,9 +172,9 @@ class ToolThumbnails {
     }
 
     /**
-     * Hintergrund: Ergebnis als interne Nachricht an den auslösenden Admin.
+     * Background: result as internal message to the triggering admin.
      *
-     * @return string  Betreff
+     * @return string  subject
      */
     public function report(int $areaId, int $adminId, array $result): string
     {

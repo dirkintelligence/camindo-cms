@@ -1,44 +1,43 @@
 <?php
 /**
- * Auslieferung von Mediendateien im Frontend über Core/public_master/file.php.
+ * Delivery of media files in the frontend via Core/public_master/file.php.
  *
- * Normalerweise verlinkt CMS:MEDIA direkt ins Medienverzeichnis, und der Webserver
- * liefert die Datei aus. Zwei Fälle brauchen stattdessen ein Script:
+ * Normally CMS:MEDIA links directly into the media directory, and the web server
+ * delivers the file. Two cases need a script instead:
  *
- *     user_auth   Das Feld ist im Backend als "nur für angemeldete User" markiert
- *                 (field.details.user_auth). Sein Verzeichnis ist per .htaccess
- *                 gesperrt (Camindo\Core\MediaAccess); hier wird die Frontend-Session
- *                 geprüft und die Datei gelesen.
- *     download    CMS:MEDIA download="name" - die Datei soll unter einem eigenen
- *                 Namen zum Herunterladen angeboten werden (Content-Disposition).
- *                 Geht nur über ein Script, der Webserver kennt den Wunschnamen nicht.
+ *     user_auth   The field is marked in the backend as "only for logged-in users"
+ *                 (field.details.user_auth). Its directory is locked via .htaccess
+ *                 (Camindo\Core\MediaAccess); here the frontend session is
+ *                 checked and the file is read.
+ *     download    CMS:MEDIA download="name" - the file should be offered for download
+ *                 under its own name (Content-Disposition).
+ *                 Only possible via a script, the web server does not know the requested name.
  *
- * AUFRUF
+ * CALL
  * --------------------
  *     /file.php?file={field_id}/{record_id}[/{language_id}][&download={name}]
  *
- * Wie bei backend/file.php stehen im Parameter nur Ids - Endung, Mime-Type und
- * Ablageort kommen aus `data_fil` bzw. dem Inhalts-Cache, ein Verzeichniswechsel
- * über den Parameter ist ausgeschlossen. {language_id} nennt bei mehrsprachigen
- * Datei-Feldern die Sprache; sonst gilt die Hauptsprache der Instanz des
- * Datensatzes.
+ * As with backend/file.php, the parameter contains only ids - extension, MIME type and
+ * storage location come from `data_fil` or the content cache; changing directory
+ * via the parameter is impossible. {language_id} names the language for multilingual
+ * file fields; otherwise the main language of the record's instance applies.
  *
- * PRÜFUNGEN, IN DIESER REIHENFOLGE
+ * CHECKS, IN THIS ORDER
  * --------------------
- *  1. Instanz aus der Domain (wie Page::resolveInstance()) - der Datensatz muss
- *     zu ihr oder einer ihrer lesbaren Instanzen gehören
- *  2. Datensatz produktiv (tmp = 0, deleted = 0) - dieselbe Sichtbarkeit wie
- *     Cms::select() im Frontend; Status und Online-Zeitraum prüft das Template
- *  3. Feld vom Typ file, gehört zum Bereich des Datensatzes
- *  4. bei user_auth: Frontend-Session angemeldet, und der Profil-Bereich des Users
- *     steht in field.details.profile_area_ids
- * Jeder Fehlschlag endet mit 404 - auch der fehlende Zugriff, damit sich aus der
- * Antwort nicht ablesen lässt, ob es die Datei gibt.
+ *  1. Instance from the domain (as Page::resolveInstance()) - the record must
+ *     belong to it or to one of its readable instances
+ *  2. Record live (tmp = 0, deleted = 0) - the same visibility as
+ *     Cms::select() in the frontend; the template checks status and online period
+ *  3. Field of type file, belongs to the area of the record
+ *  4. for user_auth: frontend session logged in, and the profile area of the user
+ *     is listed in field.details.profile_area_ids
+ * Every failure ends with 404 - including missing access, so that the response
+ * does not reveal whether the file exists.
  *
- * @see Camindo\Core\Cms::cmsMedia()          erzeugt die Verweise auf file.php
- * @see Camindo\Core\MediaAccess              die .htaccess-Sperren
- * @see Camindo\Core\UserSession              Frontend-Session
- * @see Camindo\Core\Modules\Record\RecordBackendServerFile  das Gegenstück im Backend
+ * @see Camindo\Core\Cms::cmsMedia()          creates the links to file.php
+ * @see Camindo\Core\MediaAccess              the .htaccess locks
+ * @see Camindo\Core\UserSession              frontend session
+ * @see Camindo\Core\Modules\Record\RecordBackendServerFile  the counterpart in the backend
  */
 namespace Camindo\Core;
 
@@ -58,11 +57,11 @@ class MediaDelivery {
     }
 
     /**
-     * Datei zum Request ausliefern (public/file.php).
+     * Deliver the file for the request (public/file.php).
      *
      * Request: file = "{field_id}/{record_id}[/{language_id}]"
-     *          download = Dateiname ohne Endung (optional)
-     *          cookiename = Name des Session-Cookies (optional, siehe CMS:USER_LOGIN)
+     *          download = file name without extension (optional)
+     *          cookiename = name of the session cookie (optional, see CMS:USER_LOGIN)
      */
     public function deliver(): void
     {
@@ -75,7 +74,7 @@ class MediaDelivery {
             return;
         }
 
-        // 1. Instanz aus der Domain
+        // 1. Instance from the domain
         // --------------------
         $host = (string)($_SERVER['HTTP_HOST'] ?? '');
         if (($colon = strpos($host, ':')) !== false) $host = substr($host, 0, $colon);
@@ -88,7 +87,7 @@ class MediaDelivery {
         }
         $this->cms->setInstanceAccess($instanceIds);
 
-        // 2.-4. Datensatz, Feld, user_auth - und die Datei
+        // 2.-4. Record, field, user_auth - and the file
         // --------------------
         $cookieName = (string)($_REQUEST['cookiename'] ?? '');
         $languageId = ($langPart !== '' && ctype_digit($langPart)) ? (int)$langPart : null;
@@ -101,7 +100,7 @@ class MediaDelivery {
         $fileData = $resolved['file_data'];
         $extension = (string)$fileData['extension'];
 
-        // Ausliefern
+        // Deliver
         // --------------------
         $download = trim((string)($_REQUEST['download'] ?? ''));
         $this->sendFile(
@@ -114,25 +113,25 @@ class MediaDelivery {
     }
 
     /**
-     * Prüfungen 2.-4. (siehe Klassenkommentar) für eine Datei und ihr Ort - geteilt
-     * von deliver() (public/file.php) und CMS:ZIP (CmsZip), damit beide dieselben
-     * Regeln anwenden. Status und Online-Zeitraum prüft der Aufrufer (das Template
-     * bzw. CmsZip über Cms::select()).
+     * Checks 2.-4. (see class comment) for a file and its location - shared
+     * by deliver() (public/file.php) and CMS:ZIP (CmsZip), so that both apply the same
+     * rules. Status and online period are checked by the caller (the template
+     * or CmsZip via Cms::select()).
      *
-     * @param int      $fieldId      Upload-/Thumbnail-Feld
+     * @param int      $fieldId      upload/thumbnail field
      * @param int      $recordId
-     * @param int|null $languageId   Sprache der Datei bei mehrsprachigen Feldern; null =
-     *                               die Sprache, die der Request für die Instanz liest
-     * @param int[]    $instanceIds  Instanzen, zu denen der Datensatz gehören darf
-     * @param string   $cookieName   Session-Cookie (CMS:USER_LOGIN cookiename)
-     * @return array|null  ['file' => absoluter Pfad, 'file_data' => Metadaten aus
-     *                     data_fil/Cache, 'private' => bool (user_auth),
-     *                     'field' => Feldname, 'record' => Datensatz-Zeile]; null = nicht
-     *                     vorhanden oder kein Zugriff
+     * @param int|null $languageId   language of the file for multilingual fields; null =
+     *                               the language the request reads for the instance
+     * @param int[]    $instanceIds  instances the record may belong to
+     * @param string   $cookieName   session cookie (CMS:USER_LOGIN cookiename)
+     * @return array|null  ['file' => absolute path, 'file_data' => metadata from
+     *                     data_fil/cache, 'private' => bool (user_auth),
+     *                     'field' => field name, 'record' => record row]; null = not
+     *                     present or no access
      */
     public function resolveFile(int $fieldId, int $recordId, ?int $languageId, array $instanceIds, string $cookieName = ''): ?array
     {
-        // 2. Datensatz
+        // 2. Record
         $this->db->pushResult();
         try {
             $this->db->query(
@@ -145,7 +144,7 @@ class MediaDelivery {
             if (!in_array((int)($record['instance_id'] ?? 0), $instanceIds, true)) return null;
             $areaId = (int)($record['area_id'] ?? 0);
 
-            // 3. Feld
+            // 3. Field
             $this->db->query(
                 "SELECT `field_id`, `name`, `type`, `multilingual`, `details` FROM `field` WHERE `field_id` = ? AND `area_id` = ?",
                 'ii',
@@ -168,7 +167,7 @@ class MediaDelivery {
             if (!in_array($this->userSession->areaId(), $allowedAreas, true)) return null;
         }
 
-        // Datei-Eintrag der Sprache
+        // File entry of the language
         $name = (string)$field['name'];
         $recordInstanceId = (int)($record['instance_id'] ?? 0);
         $languageId ??= $this->cms->recordLanguageId($recordInstanceId);
@@ -188,19 +187,19 @@ class MediaDelivery {
     }
 
     /**
-     * Datei mit passenden Headern ausgeben.
+     * Output the file with matching headers.
      *
-     * Der Ausgabepuffer wird geleert - ein Leerzeichen aus einem Include würde die
-     * Binärdaten beschädigen. Geschützte Dateien (user_auth) dürfen nicht in
-     * gemeinsamen Caches landen (Cache-Control: private); öffentliche bekommen
-     * einen ETag aus Größe und Änderungszeit, damit der Browser sie nicht jedes
-     * Mal neu lädt.
+     * The output buffer is cleared - a space from an include would corrupt the
+     * binary data. Protected files (user_auth) must not end up in shared
+     * caches (Cache-Control: private); public ones get
+     * an ETag from size and modification time, so that the browser does not reload
+     * them every time.
      *
-     * @param string $file      absoluter Pfad
-     * @param string $mimeType  aus data_fil; leer = application/octet-stream
-     * @param string $filename  Name für Content-Disposition
-     * @param bool   $download  true: attachment, sonst inline
-     * @param bool   $private   true: keine gemeinsamen Caches
+     * @param string $file      absolute path
+     * @param string $mimeType  from data_fil; empty = application/octet-stream
+     * @param string $filename  name for Content-Disposition
+     * @param bool   $download  true: attachment, otherwise inline
+     * @param bool   $private   true: no shared caches
      */
     public function sendFile(string $file, string $mimeType, string $filename, bool $download, bool $private): void
     {
@@ -210,7 +209,7 @@ class MediaDelivery {
         $mtime = (int)filemtime($file);
         $etag  = '"' . md5($size . ':' . $mtime . ':' . $file) . '"';
         if ($mimeType === '') $mimeType = 'application/octet-stream';
-        // Dateiname ohne Steuerzeichen und Anführungszeichen
+        // File name without control characters and quotes
         $filename = preg_replace('/[\x00-\x1F\x7F"\\\\]/', '', $filename) ?: 'file';
 
         if (!$private && (string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
@@ -225,7 +224,7 @@ class MediaDelivery {
         header('ETag: ' . $etag);
         header('Cache-Control: ' . ($private ? 'private, no-store' : 'public, max-age=86400'));
         header('X-Content-Type-Options: nosniff');
-        // Aktiver Inhalt (SVG, HTML ...): ohne Skripte, als Download (MediaAccess)
+        // Active content (SVG, HTML ...): without scripts, as a download (MediaAccess)
         $active = MediaAccess::isActiveContent($mimeType, (string)pathinfo($file, PATHINFO_EXTENSION));
         if ($active) header('Content-Security-Policy: sandbox');
         header('Content-Disposition: ' . ($download || $active ? 'attachment' : 'inline')

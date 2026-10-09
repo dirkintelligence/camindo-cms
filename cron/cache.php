@@ -1,6 +1,6 @@
 <?php
 /**
- * cache.php - Kurzform für: php Core/cron/camindo.php cache …
+ * cache.php - short form for: php Core/cron/camindo.php cache …
  *
  *     php Core/cron/cache.php snippets [--prefix=record | --remove=record]
  *     php Core/cron/cache.php list

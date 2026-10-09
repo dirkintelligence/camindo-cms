@@ -1,13 +1,13 @@
 <?php
 /**
- * API-Methoden der Templates: Template-Bereiche und Templates auflisten, ein
- * Template samt Quelltext lesen, anlegen, ändern.
+ * API methods of the templates: list template areas and templates, read a
+ * template including its source code, create and change it.
  *
- * Gespeichert wird wie in der Maske: der Quelltext wird dabei kompiliert
- * (Template::hookOnSave()); Fehler des Compilers verhindern das Speichern nicht,
- * sie stehen danach in error_text. Der Probelauf kompiliert nur und nennt sie
- * (compile_errors). Rechte: Modul Templates und das Schreibrecht auf den
- * Template-Bereich (Dataset::save()).
+ * Saved as in the mask: the source code is compiled in the process
+ * (Template::hookOnSave()); compiler errors do not prevent saving,
+ * they are then stored in error_text. The trial run only compiles and names them
+ * (compile_errors). Rights: module Templates and the write right on the
+ * template area (Dataset::save()).
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -30,7 +30,7 @@ class TemplateApi extends DatasetApi
     protected const FIELDS = ['area_id', 'instance_id', 'type', 'name', 'label', 'standalone', 'error_text', 'changed_at', 'code'];
     protected const WRITABLE = ['area_id', 'name', 'label', 'code'];
     protected const HINTS = ['instance_id' => 'derived from area_id', 'error_text' => 'set by the compiler', 'changed_at' => 'set by the server'];
-    /** In der Liste ohne Quelltext */
+    /** In the list without source code */
     private const LIST_FIELDS = ['area_id', 'type', 'name', 'label', 'standalone', 'error_text', 'changed_at'];
 
     public function __construct(
@@ -47,7 +47,7 @@ class TemplateApi extends DatasetApi
     }
 
     /**
-     * Die Template-Bereiche, die der Admin lesen darf.
+     * The template areas that the admin may read.
      */
     #[ApiMethod('template.areas', '#template.api_areas')]
     public function areas(): array
@@ -72,9 +72,9 @@ class TemplateApi extends DatasetApi
     }
 
     /**
-     * Die Templates eines Template-Bereichs (ohne Quelltext).
+     * The templates of a template area (without source code).
      *
-     * @param int $areaId  Template-Bereich (template.areas)
+     * @param int $areaId  template area (template.areas)
      */
     #[ApiMethod('template.list', '#template.api_list')]
     public function list(int $areaId): array
@@ -85,10 +85,10 @@ class TemplateApi extends DatasetApi
     }
 
     /**
-     * Ein Template mit Quelltext und Compiler-Meldungen.
+     * A template with source code and compiler messages.
      *
      * @param int  $id          template_id
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param bool $withSchema  also the description of the fields
      */
     #[ApiMethod('template.info', '#template.api_info')]
     public function info(int $id, bool $withSchema = false): array
@@ -99,11 +99,11 @@ class TemplateApi extends DatasetApi
     }
 
     /**
-     * Ein Template anlegen.
+     * Create a template.
      *
-     * @param int   $areaId    Template-Bereich
-     * @param array $data      name (Pflicht), label, code
-     * @param bool  $simulate  nur prüfen und kompilieren, nichts anlegen
+     * @param int   $areaId    template area
+     * @param array $data      name (required), label, code
+     * @param bool  $simulate  only check and compile, create nothing
      */
     #[ApiMethod('template.create', '#template.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(int $areaId, array $data, bool $simulate = false): array
@@ -115,11 +115,11 @@ class TemplateApi extends DatasetApi
     }
 
     /**
-     * Ein Template ändern (Quelltext, Name, Bezeichnung, Bereich).
+     * Change a template (source code, name, label, area).
      *
      * @param int   $id        template_id
-     * @param array $data      Feld => Wert, nur die zu ändernden
-     * @param bool  $simulate  nur prüfen und kompilieren, nichts ändern
+     * @param array $data      field => value, only the ones to change
+     * @param bool  $simulate  only check and compile, change nothing
      */
     #[ApiMethod('template.update', '#template.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array
@@ -133,7 +133,7 @@ class TemplateApi extends DatasetApi
 
     // ====================
 
-    /** Probelauf: Compiler-Meldungen; gespeichert: "Zuletzt geändert" */
+    /** Trial run: compiler messages; saved: "Last changed" */
     private function finish(array $result, bool $simulate, string $code, int $areaId): array
     {
         if ($simulate) {
@@ -146,7 +146,7 @@ class TemplateApi extends DatasetApi
         return $result;
     }
 
-    /** Template-Bereich mit Leserecht - sonst not_found bzw. access_denied */
+    /** Template area with read right - otherwise not_found resp. access_denied */
     private function readableArea(int $areaId): void
     {
         $this->db->pushResult();

@@ -1,20 +1,20 @@
 <?php
 /**
- * record_import.php - Import von Datensätzen im Hintergrund
+ * record_import.php - import of records in the background
  *
- * Wird NICHT per Cronjob aufgerufen, sondern von RecordImport::start(), wenn ein
- * Import mehr Datensätze umfasst als admin.import_background_threshold - oder der
- * Redakteur den Hintergrund gewählt hat.
+ * NOT called by a cron job, but by RecordImport::start() when an
+ * import covers more records than admin.import_background_threshold - or the
+ * editor chose the background.
  *
- * Das Skript ruft exakt dieselbe Methode auf wie der Web-Request:
- * RecordImport::run(). Der Auftrag liegt als JSON-Datei in var/tmp
- * (RecordImport::start()), sie wird beim Lesen entfernt. Am Ende schickt
- * RecordImport::report() dem auslösenden Admin eine interne Nachricht mit dem
- * Protokoll (Modul Messaging); das Importverzeichnis wird danach entfernt.
+ * The script calls exactly the same method as the web request:
+ * RecordImport::run(). The job lies as a JSON file in var/tmp
+ * (RecordImport::start()); it is removed when read. At the end
+ * RecordImport::report() sends the triggering admin an internal message with the
+ * protocol (module Messaging); the import directory is removed afterwards.
  *
- * Argumente:
- *     --job=/pfad/var/tmp/import-job-{token}.json   Auftragsdatei (Pflicht)
- *     --token=...                               Token des bgproc-Eintrags
+ * Arguments:
+ *     --job=/path/var/tmp/import-job-{token}.json   job file (required)
+ *     --token=...                                   token of the bgproc entry
  */
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Session;
@@ -23,7 +23,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Modules\Admin\Admin;
 use Camindo\Core\Modules\Record\RecordImport;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -37,11 +37,11 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 // --------------------
-// Argumente einlesen (--name=wert)
+// Read arguments (--name=value)
 
 $args = [];
 foreach (array_slice($argv, 1) as $argument) {
@@ -54,7 +54,7 @@ if ($jobFile === '') {
     exit("usage: record_import.php --job=/path/to/import-job-{token}.json --token=...\n");
 }
 
-// Container bereitstellen
+// Provide the container
 $app = $GLOBALS['app'];
 $system = $app->get(System::class);
 $bgproc = $app->get(BackgroundProcess::class);
@@ -66,10 +66,10 @@ try {
     if ($job === null) {
         throw new \RuntimeException("job file not readable: {$jobFile}");
     }
-    // Auslösenden Administrator hinterlegen: changed_by der Datensätze, Empfänger
-    // der Nachricht - und seine Backend-Sprache/Zeitzone für die Texte des Protokolls
+    // Store the triggering administrator: changed_by of the records, recipient
+    // of the message - and their backend language/time zone for the texts of the protocol
     $adminId = (int)($job['admin_id'] ?? 0);
-    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // Rechte des auslösenden Admins
+    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // rights of the triggering admin
     if ($adminData = $app->get(Admin::class)->load($adminId)) {
         $app->get(Cms::class)->applyAdminSettings((array)($adminData['settings'] ?? []));
     }

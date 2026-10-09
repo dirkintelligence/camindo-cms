@@ -1,83 +1,83 @@
 <?php
 /**
- * Die Handbücher: Markdown-Dateien unter Core/docs/{Sprache}/, gerendert mit
- * Parsedown (erusev/parsedown), dazu Volltext- und Stichwortindex in der Datenbank.
- * Oberfläche: DocsBackend (Hauptmenü → Handbücher).
+ * The manuals: Markdown files under Core/docs/{language}/, rendered with
+ * Parsedown (erusev/parsedown), plus a full-text and keyword index in the database.
+ * UI: DocsBackend (main menu → manuals).
  *
- * ABLAGE
+ * LOCATION
  * --------------------
- * Die Handbücher gehören zum Core: wer den Core ändert, ändert im selben Commit die
- * Doku (zu den Handbüchern der Komponenten siehe unten). Quelle ist Core/docs/{Sprache}/:
+ * The manuals belong to the core: whoever changes the core changes the docs in the same commit
+ * (for the manuals of the components see below). The source is Core/docs/{language}/:
  *
- *     README.md                               Übersicht
- *     {Handbuch}/README.md, *.md              Kapitel (auch in Unterverzeichnissen,
- *                                             z. B. admins/extensions/)
- *     _/*.svg                                 benutzte Icons (Material Symbols) - für
- *                                             die Ansicht auf GitHub; im Backend wird
- *                                             daraus die Icon-Schrift
- * Handbücher: editors, admins, templateprogrammers (BOOKS). Die
- * Entwicklerdokumentation gehört nicht dazu. Gezeigt wird die Sprache des Backends,
- * wenn es sie gibt, sonst en_US (language()).
+ *     README.md                               overview
+ *     {manual}/README.md, *.md                chapters (also in subdirectories,
+ *                                             e.g. admins/extensions/)
+ *     _/*.svg                                 icons used (Material Symbols) - for
+ *                                             viewing on GitHub; in the backend this
+ *                                             becomes the icon font
+ * Manuals: editors, admins, templateprogrammers (BOOKS). The
+ * developer documentation is not part of this. The language of the backend is shown
+ * if available, otherwise en_US (language()).
  *
- * HANDBÜCHER DER KOMPONENTEN
+ * MANUALS OF THE COMPONENTS
  * --------------------
- * Jede aktive Komponente (Modul, Extension, Prozessor - Laufzeitlisten des
- * ComponentManager) darf ein eigenes Handbuch mitbringen:
+ * Each active component (module, extension, processor - runtime lists of the
+ * ComponentManager) may bring its own manual:
  *
- *     {Komponente}/docs/{Sprache}/01-{art}-{name}.md     Startseite, z. B.
+ *     {component}/docs/{language}/01-{kind}-{name}.md     start page, e.g.
  *                                                         Modules/Ai/docs/de_DE/01-module-ai.md
- *     {Komponente}/docs/{Sprache}/*.md                    weitere Kapitel (auch in
- *                                                         Unterverzeichnissen)
+ *     {component}/docs/{language}/*.md                    further chapters (also in
+ *                                                         subdirectories)
  *
- * {art} ist module, extension oder processor, {name} der Komponentenname in
- * Kleinbuchstaben. Ohne Startseite in der Sprache gibt es das Handbuch in dieser Sprache
- * nicht. Seitenpfade lauten wie bei den Core-Handbüchern "{Handbuch}/{datei}.md" mit
- * dem Handbuch "{art}-{name}" (books()); file() findet die Datei dazu. Den Titel des
- * Handbuchs liefert die erste Überschrift der Startseite. ComponentManager baut den
- * Index nach jeder Änderung der Laufzeitlisten neu auf - mit der Komponente kommt und
- * geht ihr Handbuch.
+ * {kind} is module, extension or processor, {name} the component name in
+ * lowercase. Without a start page in the language there is no manual in that language.
+ * Page paths are like the ones of the core manuals, "{manual}/{file}.md", with
+ * the manual "{kind}-{name}" (books()); file() finds the file for it. The title of the
+ * manual comes from the first heading of the start page. ComponentManager rebuilds the
+ * index after each change to the runtime lists - with the component its manual comes and
+ * goes.
  *
- * STICHWÖRTER
+ * KEYWORDS
  * --------------------
- * ***Fett und kursiv*** markiert ein Stichwort (Parsedown: <strong><em>…</em></strong>);
- * einfaches **Fett** ist nur Hervorhebung. Dazu kommen die Überschriften ab h2.
- * isTerm() sortiert Offensichtliches aus (nummerierte Schritte, "Achtung" …).
+ * ***Bold and italic*** marks a keyword (Parsedown: <strong><em>…</em></strong>);
+ * plain **bold** is only emphasis. In addition, the headings from h2 on.
+ * isTerm() filters out the obvious (numbered steps, "Attention" …).
  *
  * INDEX
  * --------------------
- * rebuildIndex() parst jede Datei EINMAL und schreibt:
+ * rebuildIndex() parses each file ONCE and writes:
  *
- *     doc_section   ein Eintrag je Abschnitt (Überschrift bis zur nächsten): Seite,
- *                   Handbuch, Titel, Slug, Überschrift, Ebene, Klartext ohne jede
- *                   Formatierung; FULLTEXT über heading + content
- *     doc_keyword   Stichwort -> Abschnitt
+ *     doc_section   one entry per section (heading up to the next): page,
+ *                   manual, title, slug, heading, level, plain text without any
+ *                   formatting; FULLTEXT over heading + content
+ *     doc_keyword   keyword -> section
  *
- * Aufgerufen von Tools → Entwickler ("Handbücher indexieren"), `camindo.php cache
- * docs|all`, `upgrade` und dem Installer - nach einem Core-Update passt der Index also
- * von selbst. Gerendert wird die angezeigte Seite dagegen bei jedem Aufruf (Parsedown
- * braucht dafür nur Millisekunden).
+ * Called from Tools → Developer ("Index manuals"), `camindo.php cache
+ * docs|all`, `upgrade` and the installer - so after a core update the index fits
+ * automatically. In contrast, the displayed page is rendered on every request (Parsedown
+ * needs only milliseconds for that).
  *
  * LINKS
  * --------------------
- * Relative Links auf .md-Dateien werden zu Aufrufen von Docs/index.php (page=…,
- * anchor=…); Anker (#abschnitt) zu Sprungzielen. Überschriften bekommen Ids wie auf
- * GitHub (slug()) mit dem Präfix "doc-". Links außerhalb der Handbücher bleiben reiner
- * Text, externe öffnen in einem neuen Fenster.
+ * Relative links to .md files become calls to Docs/index.php (page=…,
+ * anchor=…); anchors (#section) become jump targets. Headings get IDs like on
+ * GitHub (slug()) with the prefix "doc-". Links outside the manuals stay plain
+ * text, external ones open in a new window.
  *
- * CODEBEISPIELE MIT CMS-BEFEHLEN
+ * CODE EXAMPLES WITH CMS COMMANDS
  * --------------------
- * Codeblöcke mit der Sprache cms (```cms) färbt render() wie den Template-Editor ein:
- * Befehle lila, PHP-Code und Variablen orange (TemplateParserTrait::styleCode(),
- * Klassen c9-command/c9-php aus backend.css). ```cmscode färbt den ganzen Block
- * lila, ohne zu parsen - für Syntaxbeschreibungen, die kein gültiger Befehl sind:
- * (CMS:MESSAGE useval [parameter=wert …]). Andere Blöcke bleiben unverändert.
+ * Code blocks with the language cms (```cms) are colored by render() like the template editor:
+ * commands purple, PHP code and variables orange (TemplateParserTrait::styleCode(),
+ * classes c9-command/c9-php from backend.css). ```cmscode colors the whole block
+ * purple without parsing - for syntax descriptions that are not a valid command:
+ * (CMS:MESSAGE useval [parameter=value …]). Other blocks stay unchanged.
  *
- * DRUCKANSICHT
+ * PRINT VIEW
  * --------------------
- * bookPages() reiht alle Seiten eines Handbuchs zu einem Dokument: README.md, dann die
- * Seiten in der Reihenfolge ihrer Links aus der README, Unterseiten (z. B. extensions/)
- * hinter der Seite, die sie verlinkt. render() mit $idPrefix hält die Anker der
- * Seiten dabei auseinander (DocsBackend::printBook()).
+ * bookPages() puts all pages of a manual together into one document: README.md, then the
+ * pages in the order of their links from the README, subpages (e.g. extensions/)
+ * after the page that links them. render() with $idPrefix keeps the anchors of the
+ * pages apart (DocsBackend::printBook()).
  */
 namespace Camindo\Core\Modules\Docs;
 
@@ -88,21 +88,21 @@ use Camindo\Core\Modules\Template\Template;
 
 class Docs {
 
-    /** Die Handbücher, in der Reihenfolge der Auswahl */
+    /** The manuals, in the order of selection */
     public const BOOKS = ['editors', 'admins', 'templateprogrammers'];
 
-    /** Sprache, wenn es die des Backends nicht gibt */
+    /** Language if the backend's language does not exist */
     public const FALLBACK_LANG = 'en_US';
 
-    /** Art der Komponente (Laufzeitliste) => Präfix ihres Handbuchs */
+    /** Kind of the component (runtime list) => prefix of its manual */
     public const COMPONENT_KINDS = ['modules' => 'module', 'extensions' => 'extension', 'processors' => 'processor'];
 
-    /** Höchstzahl Treffer der Suche */
+    /** Maximum number of search hits */
     public const MAX_HITS = 60;
 
     /**
-     * Füllwörter von Fragen (de, en) - rank() lässt sie weg, damit "Wie lege ich einen
-     * Bereich an?" nach "lege Bereich" sucht
+     * Filler words of questions (de, en) - rank() omits them, so that "Wie lege ich einen
+     * Bereich an?" (example) searches for "lege Bereich"
      */
     private const QUESTION_WORDS = ['aber', 'alle', 'als', 'auch', 'auf', 'aus', 'bei', 'bitte', 'dann', 'das', 'dass', 'dem',
         'den', 'der', 'des', 'die', 'dies', 'diese', 'dieser', 'eine', 'einem', 'einen', 'einer', 'eines', 'gibt', 'habe', 'hat',
@@ -110,14 +110,14 @@ class Docs {
         'sind', 'und', 'unter', 'vom', 'von', 'was', 'welche', 'wenn', 'werden', 'wie', 'wir', 'wird', 'wo', 'zum', 'zur',
         'über', 'can', 'does', 'what', 'where', 'which', 'with', 'you', 'your'];
 
-    /** Wörter, die fett gesetzt sind, ohne Stichwort zu sein (Hervorhebungen) */
+    /** Words that are set in bold without being a keyword (emphasis) */
     private const NOT_TERMS = ['achtung', 'hinweis', 'tipp', 'wichtig', 'beispiel', 'note', 'warning', 'tip', 'example', 'important'];
 
-    /** Stoppwörter der InnoDB-Volltextsuche - in der Suche wertlos (MATCH fände nichts) */
+    /** Stop words of the InnoDB full-text search - worthless in search (MATCH would find nothing) */
     private const FT_STOPWORDS = ['about', 'are', 'com', 'for', 'from', 'how', 'that', 'the', 'this', 'was',
         'what', 'when', 'where', 'who', 'will', 'with', 'und', 'www'];
 
-    /** books() je Sprache */
+    /** books() per language */
     private array $books = [];
 
     public function __construct(
@@ -129,7 +129,7 @@ class Docs {
     }
 
     // ====================
-    // Ablage
+    // Location
 
     /** Core/docs */
     public function baseDir(): string
@@ -137,7 +137,7 @@ class Docs {
         return rtrim((string)$this->config->get('paths.core_dir'), '/') . '/docs';
     }
 
-    /** Vorhandene Sprachen (Verzeichnisse mit README.md) */
+    /** Available languages (directories with README.md) */
     public function languages(): array
     {
         $langs = [];
@@ -149,11 +149,11 @@ class Docs {
     }
 
     /**
-     * Die Handbücher einer Sprache: erst die des Core (BOOKS), dann die der aktiven
-     * Komponenten (siehe Klassenkommentar), nach Titel sortiert.
+     * The manuals of a language: first those of the core (BOOKS), then those of the active
+     * components (see class comment), sorted by title.
      *
-     * @return array  Handbuch => ['dir' => Verzeichnis, 'start' => Startseite relativ dazu,
-     *                'component' => '' bzw. "Modules/Ai", 'title' => '' bzw. Titel der Startseite]
+     * @return array  manual => ['dir' => directory, 'start' => start page relative to it,
+     *                'component' => '' or "Modules/Ai", 'title' => '' or title of the start page]
      */
     public function books(string $lang): array
     {
@@ -183,11 +183,11 @@ class Docs {
     }
 
     /**
-     * Aktive Komponenten aus den Laufzeitlisten (var/config/components/) - frisch
-     * gelesen, nicht aus Cms: nach einer Änderung durch den ComponentManager gilt
-     * sofort der neue Stand.
+     * Active components from the runtime lists (var/config/components/) - freshly
+     * read, not from Cms: after a change by the ComponentManager the new state applies
+     * immediately.
      *
-     * @return array  modules|extensions|processors => Name => Eintrag (u. a. 'path')
+     * @return array  modules|extensions|processors => name => entry (incl. 'path')
      */
     private function components(): array
     {
@@ -204,14 +204,14 @@ class Docs {
         return ['modules' => $lists->modules, 'extensions' => $lists->extensions, 'processors' => $lists->processors];
     }
 
-    /** Startseite eines Handbuchs als Seitenpfad, z. B. "module-ai/01-module-ai.md"; null: unbekannt */
+    /** Start page of a manual as page path, e.g. "module-ai/01-module-ai.md"; null: unknown */
     public function startPage(string $lang, string $book): ?string
     {
         $books = $this->books($lang);
         return isset($books[$book]) ? $book . '/' . $books[$book]['start'] : null;
     }
 
-    /** Datei einer (mit page() geprüften) Seite */
+    /** File of a page (checked with page()) */
     public function file(string $lang, string $page): string
     {
         $book = self::bookOf($page);
@@ -219,13 +219,13 @@ class Docs {
         return ($this->books($lang)[$book]['dir'] ?? '/nonexistent') . '/' . substr($page, strlen($book) + 1);
     }
 
-    /** Titel einer Seite (erste Überschrift) ohne sie ganz zu rendern; null: keine Überschrift */
+    /** Title of a page (first heading) without rendering it completely; null: no heading */
     public function pageTitle(string $lang, string $page): ?string
     {
         return $this->fileTitle($this->file($lang, $page));
     }
 
-    /** Erste Überschrift einer Markdown-Datei als Klartext (Codeblöcke zählen nicht) */
+    /** First heading of a Markdown file as plain text (code blocks do not count) */
     private function fileTitle(string $file): ?string
     {
         $fence = false;
@@ -236,7 +236,7 @@ class Docs {
         return null;
     }
 
-    /** Sprache der Handbücher zur Backend-Sprache $lang (sonst FALLBACK_LANG) */
+    /** Language of the manuals for the backend language $lang (otherwise FALLBACK_LANG) */
     public function language(string $lang): string
     {
         $lang = preg_replace('/[^A-Za-z_]/', '', $lang);
@@ -244,10 +244,10 @@ class Docs {
     }
 
     /**
-     * Seitenpfad prüfen und normalisieren: "README.md" oder "{Handbuch}/[…/]{datei}.md"
-     * (Handbuch aus books()).
+     * Check and normalize a page path: "README.md" or "{manual}/[…/]{file}.md"
+     * (manual from books()).
      *
-     * @return string|null  null: ungültig oder nicht vorhanden
+     * @return string|null  null: invalid or not present
      */
     public function page(string $lang, string $page): ?string
     {
@@ -259,25 +259,25 @@ class Docs {
         return is_file($this->file($lang, $page)) ? $page : null;
     }
 
-    /** Handbuch einer Seite ('' = Übersicht) */
+    /** Manual of a page ('' = overview) */
     public static function bookOf(string $page): string
     {
         return str_contains($page, '/') ? explode('/', $page, 2)[0] : '';
     }
 
     // ====================
-    // Rendern
+    // Rendering
 
     /**
-     * Seite als HTML.
+     * Page as HTML.
      *
-     * @param callable $link      fn(string $page, string $anchor): ?string - Attribute
-     *                            des <a>-Tags samt href für einen Link auf eine andere
-     *                            Handbuchseite (bzw. $page = '' für einen Anker derselben
-     *                            Seite, $page mit '?' für Parameter der Doku-Seite, z. B.
-     *                            ?lang=de_DE); null: nur der Linktext bleibt
-     * @param string   $idPrefix  vor dem Slug der Überschriften-Ids (doc-{Präfix}{slug}),
-     *                            wenn mehrere Seiten in einem Dokument stehen
+     * @param callable $link      fn(string $page, string $anchor): ?string - attributes
+     *                            of the <a> tag including href for a link to another
+     *                            manual page (or $page = '' for an anchor of the same
+     *                            page, $page with '?' for parameters of the doc page, e.g.
+     *                            ?lang=de_DE); null: only the link text remains
+     * @param string   $idPrefix  before the slug of the heading IDs (doc-{prefix}{slug}),
+     *                            if several pages are in one document
      * @return array              title, html
      */
     public function render(string $lang, string $page, callable $link, string $idPrefix = ''): array
@@ -290,17 +290,17 @@ class Docs {
         return ['title' => $this->title($html, $page), 'html' => $html];
     }
 
-    /** Markdown -> HTML (Core\Markdown: Safe Mode, HTML wird maskiert, nur <br> bleibt - z. B. in Tabellenzellen) */
+    /** Markdown -> HTML (Core\Markdown: safe mode, HTML is masked, only <br> remains - e.g. in table cells) */
     public function markdown(string $markdown): string
     {
         return (new \Camindo\Core\Markdown())->text($markdown);
     }
 
     /**
-     * ```cms-Blöcke einfärben wie im Template-Editor (TemplateParserTrait::styleCode()).
-     * Parsedown hat den Inhalt bereits maskiert - zurückwandeln, styleCode() maskiert
-     * selbst wieder. ```cmscode-Blöcke werden nicht geparst, sondern als Ganzes lila
-     * (c9-command) - der Inhalt bleibt so maskiert, wie Parsedown ihn liefert.
+     * Color ```cms blocks like in the template editor (TemplateParserTrait::styleCode()).
+     * Parsedown has already masked the content - convert it back; styleCode() masks
+     * it again itself. ```cmscode blocks are not parsed, but colored purple as a whole
+     * (c9-command) - the content stays masked as Parsedown delivers it.
      */
     private function cmsCode(string $html): string
     {
@@ -317,8 +317,8 @@ class Docs {
     }
 
     /**
-     * Anker wie GitHub: Kleinbuchstaben, Satzzeichen weg (Buchstaben aller Schriften,
-     * Ziffern, - und _ bleiben), Leerzeichen zu "-".
+     * Anchors like GitHub: lowercase, punctuation removed (letters of all scripts,
+     * digits, - and _ stay), spaces become "-".
      */
     public static function slug(string $text): string
     {
@@ -327,7 +327,7 @@ class Docs {
         return str_replace(' ', '-', $text);
     }
 
-    /** Überschriften mit id="doc-{Präfix}{slug}" versehen, doppelte mit -1, -2 … */
+    /** Give headings id="doc-{prefix}{slug}", duplicates with -1, -2 … */
     private function headingIds(string $html, string $prefix = ''): string
     {
         $seen = [];
@@ -340,7 +340,7 @@ class Docs {
         }, $html) ?? $html;
     }
 
-    /** Bilder …/_/{name}.svg -> Symbol der Icon-Schrift; andere Bilder -> Alt-Text */
+    /** Images …/_/{name}.svg -> symbol of the icon font; other images -> alt text */
     private function icons(string $html): string
     {
         return preg_replace_callback('~<img\s[^>]*>~', function ($m) {
@@ -353,7 +353,7 @@ class Docs {
         }, $html) ?? $html;
     }
 
-    /** Links umschreiben (siehe Klassenkommentar) */
+    /** Rewrite links (see class comment) */
     private function links(string $html, string $lang, string $page, callable $link): string
     {
         $dir = str_contains($page, '/') ? dirname($page) : '';
@@ -378,15 +378,15 @@ class Docs {
     }
 
     /**
-     * Die Seiten eines Handbuchs in Lesereihenfolge (siehe Klassenkommentar): die
-     * Startseite (README.md, bei Komponenten 01-{art}-{name}.md), die Links aus Listen
-     * und Tabellen der Startseite (Verweise im Fließtext wie "lesen Sie zuerst Kapitel 2"
-     * zählen nicht), dann jede übrige Seite hinter ihren Geschwistern im selben
-     * Unterverzeichnis, sonst hinter der ersten Seite, die sie verlinkt. Nie verlinkte
-     * Seiten am Ende (nach Dateinamen - nummerierte Kapitel stehen so in ihrer Folge).
-     * Grundlage der Druckansicht und der Links "Zurück"/"Weiter".
+     * The pages of a manual in reading order (see class comment): the
+     * start page (README.md, for components 01-{kind}-{name}.md), the links from lists
+     * and tables of the start page (references in running text such as "read chapter 2 first"
+     * do not count), then every other page after its siblings in the same
+     * subdirectory, otherwise after the first page that links it. Never linked
+     * pages at the end (by file name - numbered chapters stay in their sequence).
+     * Basis of the print view and the links "Back"/"Next".
      *
-     * @return string[]  Seitenpfade, z. B. "admins/README.md"; leer: kein Handbuch
+     * @return string[]  page paths, e.g. "admins/README.md"; empty: no manual
      */
     public function bookPages(string $lang, string $book): array
     {
@@ -401,7 +401,7 @@ class Docs {
         $contents = array_intersect($this->pageLinks($lang, $readme, true), $all);
         $order = array_values(array_unique(array_merge([$readme], $contents)));
         $rest = array_diff($all, $order);
-        // Übrige Seiten einhängen, solange eine neu eingereihte Seite weitere verlinkt
+        // Attach remaining pages, as long as a newly placed page links further ones
         do {
             $added = false;
             foreach ($rest as $index => $page) {
@@ -429,10 +429,10 @@ class Docs {
     }
 
     /**
-     * Ziele der Links einer Seite auf andere Handbuchseiten, in Reihenfolge, ohne Anker.
+     * Targets of a page's links to other manual pages, in order, without anchors.
      *
-     * @param bool $listsOnly  nur Links in Listen und Tabellen (samt eingerückten
-     *                         Folgezeilen), nicht im Fließtext
+     * @param bool $listsOnly  only links in lists and tables (including indented
+     *                         continuation lines), not in running text
      */
     private function pageLinks(string $lang, string $page, bool $listsOnly = false): array
     {
@@ -451,14 +451,14 @@ class Docs {
         return $targets;
     }
 
-    /** Kennung einer Seite für Ids: "admins/extensions/tinymce.md" -> "admins-extensions-tinymce" */
+    /** Identifier of a page for IDs: "admins/extensions/tinymce.md" -> "admins-extensions-tinymce" */
     public static function pageKey(string $page): string
     {
         return trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(preg_replace('/\.md$/i', '', $page) ?? '')) ?? '', '-');
     }
 
     /**
-     * Relativen Pfad einer .md-Datei auflösen - innerhalb der Handbücher, sonst null.
+     * Resolve the relative path of a .md file - within the manuals, otherwise null.
      */
     private function resolve(string $lang, string $dir, string $path): ?string
     {
@@ -478,7 +478,7 @@ class Docs {
         return isset($this->books($lang)[$parts[0]]) ? $target : null;
     }
 
-    /** Titel: die erste Überschrift, sonst der Dateiname */
+    /** Title: the first heading, otherwise the file name */
     private function title(string $html, string $page): string
     {
         if (preg_match('~<h[1-6][^>]*>(.*?)</h[1-6]>~s', $html, $m)) {
@@ -487,24 +487,24 @@ class Docs {
         return basename($page, '.md');
     }
 
-    /** HTML -> Klartext in einer Zeile */
+    /** HTML -> plain text in one line */
     private static function plain(string $html): string
     {
         return trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
     }
 
     // ====================
-    // Index (Datenbank)
+    // Index (database)
 
     /**
-     * Index neu aufbauen (siehe Klassenkommentar) - für eine oder alle Sprachen.
+     * Rebuild the index (see class comment) - for one or all languages.
      *
-     * @param string $lang  '' = alle Sprachen unter Core/docs
-     * @return array        je Sprache ['pages' => n, 'sections' => n, 'keywords' => n]
+     * @param string $lang  '' = all languages under Core/docs
+     * @return array        per language ['pages' => n, 'sections' => n, 'keywords' => n]
      */
     public function rebuildIndex(string $lang = ''): array
     {
-        // Komponenten können seit dem letzten Aufruf gekommen oder gegangen sein
+        // Components may have come or gone since the last call
         $this->books = [];
         $result = [];
         foreach ($lang === '' ? $this->languages() : [$lang] as $language) {
@@ -531,9 +531,9 @@ class Docs {
     }
 
     /**
-     * Eine Seite in Abschnitte zerlegen und eintragen.
+     * Split a page into sections and enter them.
      *
-     * @return array  [Abschnitte, Stichwörter]
+     * @return array  [sections, keywords]
      */
     private function indexPage(string $lang, string $page): array
     {
@@ -542,7 +542,7 @@ class Docs {
         $book = self::bookOf($page);
         $sections = 0;
         $keywords = 0;
-        // An den Überschriften zerlegen; was davor steht, gehört zur ersten
+        // Split at the headings; what comes before belongs to the first
         foreach (preg_split('~(?=<h[1-6] id=")~', $html) ?: [$html] as $position => $chunk) {
             $slug = '';
             $heading = '';
@@ -563,7 +563,7 @@ class Docs {
             $sectionId = (int)$this->db->insert_id;
             $sections++;
 
-            // Stichwörter: ***fett+kursiv*** und Überschriften ab h2 (nur in den Handbüchern)
+            // Keywords: ***bold+italic*** and headings from h2 (only in the manuals)
             if ($book === '') continue;
             $terms = [];
             if (preg_match_all('~<strong><em>(.*?)</em></strong>|<em><strong>(.*?)</strong></em>~s', $chunk, $b)) {
@@ -582,7 +582,7 @@ class Docs {
         return [$sections, $keywords];
     }
 
-    /** Gibt es einen Index für diese Sprache? */
+    /** Is there an index for this language? */
     public function indexed(string $lang): bool
     {
         $this->db->query("SELECT 1 FROM `doc_section` WHERE `lang` = ? LIMIT 1", 's', [$lang]);
@@ -590,9 +590,9 @@ class Docs {
     }
 
     /**
-     * Taugt ein Begriff oder eine Überschrift als Stichwort? Nicht: leer oder sehr lang,
-     * nummerierte Schritte ("1. …"), reine Hervorhebungen ("Achtung"), Werte und Code
-     * ohne Großbuchstaben.
+     * Is a term or heading suitable as a keyword? Not: empty or very long,
+     * numbered steps ("1. …"), pure emphasis ("Attention"), values and code
+     * without uppercase letters.
      */
     public static function isTerm(string $term): bool
     {
@@ -604,12 +604,12 @@ class Docs {
     }
 
     /**
-     * Volltextsuche im Index: alle Wörter (ab drei Zeichen, als Wortanfang) müssen im
-     * Abschnitt vorkommen. Treffer in Überschriften zählen mehr. Enthält die Suche nur
-     * kurze Wörter, sucht LIKE im Klartext.
+     * Full-text search in the index: all words (from three characters, as word start) must
+     * occur in the section. Hits in headings count more. If the search contains only
+     * short words, LIKE searches the plain text.
      *
-     * @param string $book  '' = alle Handbücher
-     * @return array        Liste aus page, title, slug, heading, excerpt (Klartext)
+     * @param string $book  '' = all manuals
+     * @return array        list of page, title, slug, heading, excerpt (plain text)
      */
     public function search(string $lang, string $query, string $book = ''): array
     {
@@ -630,8 +630,8 @@ class Docs {
         }
         if ($ftWords) {
             $against = implode(' ', array_map(fn($w) => '+' . $w . '*', $ftWords));
-            // Relevanz der Volltextsuche, dazu ein Bonus, wenn das erste Wort in der
-            // Überschrift steht
+            // Relevance of the full-text search, plus a bonus if the first word is in the
+            // heading
             $this->db->query("SELECT `page`, `title`, `slug`, `heading`, `content`,"
                 . " MATCH(`heading`, `content`) AGAINST (? IN BOOLEAN MODE) + 5 * (`heading` LIKE ?) AS `score`"
                 . " FROM `doc_section` WHERE $where AND MATCH(`heading`, `content`) AGAINST (? IN BOOLEAN MODE)"
@@ -665,13 +665,13 @@ class Docs {
     }
 
     /**
-     * Suche nach Relevanz - für die API und Sprachmodelle: anders als search() muss
-     * nicht jedes Wort vorkommen; Abschnitte mit mehr und selteneren Treffern stehen
-     * vorn, ein Wort in der Überschrift zählt extra. Nur kurze Wörter: wie search().
+     * Search by relevance - for the API and language models: unlike search(), not every
+     * word has to occur; sections with more and rarer hits come first, a word in the
+     * heading counts extra. Only short words: as search().
      *
-     * @param string $book   '' = alle Handbücher
-     * @param int    $limit  Höchstzahl Treffer
-     * @return array         Liste aus page, title, slug, heading, excerpt (Klartext)
+     * @param string $book   '' = all manuals
+     * @param int    $limit  maximum number of hits
+     * @return array         list of page, title, slug, heading, excerpt (plain text)
      */
     public function rank(string $lang, string $query, string $book = '', int $limit = 10): array
     {
@@ -712,12 +712,12 @@ class Docs {
     }
 
     /**
-     * Markdown-Quelltext einer Seite oder eines Abschnitts (samt Unterabschnitten) -
-     * für Sprachmodelle besser lesbar als der Klartext des Index (Tabellen, Listen).
-     * Die Anker entstehen wie in headingIds() (Codeblöcke zählen nicht).
+     * Markdown source of a page or section (including subsections) -
+     * more readable for language models than the plain text of the index (tables, lists).
+     * The anchors are created as in headingIds() (code blocks do not count).
      *
-     * @param string $anchor  Slug der Überschrift ('' = ganze Seite)
-     * @return ?array         title, heading, markdown - null: Seite oder Anker unbekannt
+     * @param string $anchor  slug of the heading ('' = whole page)
+     * @return ?array         title, heading, markdown - null: page or anchor unknown
      */
     public function source(string $lang, string $page, string $anchor = ''): ?array
     {
@@ -755,10 +755,10 @@ class Docs {
     }
 
     /**
-     * Stichwortverzeichnis aus dem Index, alphabetisch.
+     * Keyword index from the index, alphabetically.
      *
-     * @param string $book  '' = alle Handbücher
-     * @return array        Begriff => Liste aus page, title, slug, heading
+     * @param string $book  '' = all manuals
+     * @return array        term => list of page, title, slug, heading
      */
     public function keywords(string $lang, string $book = ''): array
     {
@@ -792,7 +792,7 @@ class Docs {
         return $result;
     }
 
-    /** Textausschnitt um das erste Vorkommen von $word */
+    /** Text excerpt around the first occurrence of $word */
     private function excerpt(string $text, string $word, int $length = 200): string
     {
         $pos = mb_stripos($text, $word);
@@ -801,7 +801,7 @@ class Docs {
         return ($start > 0 ? '…' : '') . $excerpt . (mb_strlen($text) > $start + $length ? '…' : '');
     }
 
-    /** Alle Seiten einer Sprache: README.md und die .md-Dateien der Handbücher (books()) */
+    /** All pages of a language: README.md and the .md files of the manuals (books()) */
     private function files(string $lang): array
     {
         $files = is_file($this->baseDir() . '/' . $lang . '/README.md') ? ['README.md'] : [];

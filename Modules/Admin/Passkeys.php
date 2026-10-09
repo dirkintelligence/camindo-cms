@@ -1,14 +1,14 @@
 <?php
 /**
- * Passkeys der Admins (Tabelle admin_passkey) - developer_docs/22-webauthn.md.
+ * Passkeys of the admins (table admin_passkey) - developer docs, chapter 13 (Security: authentication).
  *
- * Je Zeile ein Schlüssel: Credential-Id, öffentlicher Schlüssel (PEM), Verfahren,
- * Signaturzähler, Transportwege, Bezeichnung. Jede Zeile trägt eine Signatur
- * (Integrity::passkeySignature()); eine Zeile mit falscher Signatur zählt nicht und
- * steht im Log 'security'. Gesucht wird über credential_hash (SHA-256 der Id,
- * eindeutig) - die Id selbst ist bis 1023 Bytes lang.
+ * One key per row: credential id, public key (PEM), method,
+ * signature counter, transports, label. Every row carries a signature
+ * (Integrity::passkeySignature()); a row with a wrong signature does not count and
+ * is logged in 'security'. Lookups use credential_hash (SHA-256 of the id,
+ * unique) - the id itself is up to 1023 bytes long.
  *
- * Kennt keine Anmeldelogik - die liegt in WebAuthnFactor.
+ * Knows no login logic - that lives in WebAuthnFactor.
  *
  * @see Camindo\Core\Modules\Admin\WebAuthnFactor
  */
@@ -20,7 +20,7 @@ use Camindo\Core\System;
 
 class Passkeys {
 
-    /** Höchstzahl Passkeys je Konto */
+    /** Maximum number of passkeys per account */
     public const MAX_PER_ADMIN = 20;
 
     public function __construct(
@@ -32,9 +32,9 @@ class Passkeys {
     }
 
     /**
-     * Gültige Passkeys eines Admins, zuletzt angelegte zuerst.
+     * Valid passkeys of an admin, most recently created first.
      *
-     * @return array  Liste aus passkey_id, credential_id, public_key, alg, sign_count,
+     * @return array  list of passkey_id, credential_id, public_key, alg, sign_count,
      *                transports (string[]), label, created_at, last_used_at (UTC)
      */
     public function forAdmin(int $adminId): array
@@ -62,13 +62,13 @@ class Passkeys {
         return $list;
     }
 
-    /** Anzahl gültiger Passkeys */
+    /** Number of valid passkeys */
     public function count(int $adminId): int
     {
         return count($this->forAdmin($adminId));
     }
 
-    /** Passkey eines Admins zu einer Credential-Id (roh), null = unbekannt/ungültig */
+    /** Passkey of an admin for a credential id (raw), null = unknown/invalid */
     public function find(int $adminId, string $credentialId): ?array
     {
         if ($adminId < 1 || $credentialId === '') return null;
@@ -91,7 +91,7 @@ class Passkeys {
         return $this->shape($row);
     }
 
-    /** Gibt es die Credential-Id schon (bei irgendeinem Konto)? */
+    /** Does the credential id already exist (for any account)? */
     public function exists(string $credentialId): bool
     {
         $this->db->pushResult();
@@ -105,7 +105,7 @@ class Passkeys {
     }
 
     /**
-     * Passkey speichern und signieren.
+     * Save and sign the passkey.
      *
      * @param array    $credential  WebAuthn::verifyRegistration()
      * @param string[] $transports
@@ -134,8 +134,8 @@ class Passkeys {
     }
 
     /**
-     * Signaturzähler fortschreiben. Nur, wenn er noch auf dem gelesenen Stand steht -
-     * zwei gleichzeitige Anmeldungen mit derselben Antwort ergeben genau eine.
+     * Advance the signature counter. Only if it still has the value that was read -
+     * two simultaneous logins with the same response yield exactly one.
      */
     public function markUsed(int $passkeyId, int $oldCount, int $newCount): bool
     {
@@ -153,7 +153,7 @@ class Passkeys {
         }
     }
 
-    /** Einen Passkey des Admins löschen */
+    /** Delete one passkey of the admin */
     public function remove(int $adminId, int $passkeyId): bool
     {
         $this->db->pushResult();
@@ -166,7 +166,7 @@ class Passkeys {
         }
     }
 
-    /** Alle Passkeys eines Admins löschen (Zurücksetzen durch einen Superuser) */
+    /** Delete all passkeys of an admin (reset by a superuser) */
     public function removeAll(int $adminId): int
     {
         $this->db->pushResult();
@@ -179,7 +179,7 @@ class Passkeys {
         }
     }
 
-    /** Transportwege aus dem Browser (usb, nfc, ble, internal, hybrid, …) - nur bekannte Wörter */
+    /** Transports from the browser (usb, nfc, ble, internal, hybrid, …) - known words only */
     public static function transportsString(array $transports): string
     {
         $clean = [];

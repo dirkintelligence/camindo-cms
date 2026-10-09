@@ -1,7 +1,7 @@
 <?php
 /**
- * API-Methoden der Sprachen: auflisten, lesen, anlegen, ändern. Welche Sprachen eine
- * Website führt, legt die Instanz fest (instance.update, Feld languages).
+ * API methods of the languages: list, read, create, change. Which languages a
+ * website uses is set by the instance (instance.update, field languages).
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -29,7 +29,7 @@ class LanguageApi extends DatasetApi
         return ['backend_code' => $this->cms->backendLanguages()];
     }
 
-    /** Instanzen, die die Sprache führen */
+    /** Instances that use the language */
     protected function extra(int $id, array $data): array
     {
         $this->db->pushResult();
@@ -45,9 +45,9 @@ class LanguageApi extends DatasetApi
     }
 
     /**
-     * Alle Sprachen.
+     * All languages.
      *
-     * @param bool $withSchema  dazu die Beschreibung der Felder (für language.create)
+     * @param bool $withSchema  also the description of the fields (for language.create)
      */
     #[ApiMethod('language.list', '#language.api_list')]
     public function list(bool $withSchema = false): array
@@ -56,10 +56,10 @@ class LanguageApi extends DatasetApi
     }
 
     /**
-     * Eine Sprache mit den Instanzen, die sie führen.
+     * One language with the instances that use it.
      *
      * @param int  $id          language_id
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param bool $withSchema  also the description of the fields
      */
     #[ApiMethod('language.info', '#language.api_info')]
     public function info(int $id, bool $withSchema = false): array
@@ -68,10 +68,10 @@ class LanguageApi extends DatasetApi
     }
 
     /**
-     * Eine Sprache anlegen.
+     * Create a language.
      *
-     * @param array $data      Feld => Wert (siehe language.list with_schema)
-     * @param bool  $simulate  nur prüfen, nichts anlegen
+     * @param array $data      field => value (see language.list with_schema)
+     * @param bool  $simulate  only check, create nothing
      */
     #[ApiMethod('language.create', '#language.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(array $data, bool $simulate = false): array
@@ -80,11 +80,11 @@ class LanguageApi extends DatasetApi
     }
 
     /**
-     * Eine Sprache ändern.
+     * Change a language.
      *
      * @param int   $id        language_id
-     * @param array $data      Feld => Wert, nur die zu ändernden
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param array $data      field => value, only the ones to change
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('language.update', '#language.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array

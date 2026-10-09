@@ -1,37 +1,37 @@
 <?php
 /**
- * Medien-Prozessor FFmpegImage
+ * Media processor FFmpegImage
  *
- * Erzeugt ein Standbild (Thumbnail) aus einem Video mit dem Kommandozeilen-Werkzeug
- * ffmpeg. Die Quelle ist also ein Video, das Ergebnis ist ein Bild.
+ * Creates a still image (thumbnail) from a video with the command-line tool
+ * ffmpeg. The source is therefore a video, the result is an image.
  *
- * Im Unterschied zu FFmpegVideo wird hier nur EIN einziges Bild dekodiert, das
- * dauert auch bei langen Filmen nur Sekunden.
+ * In contrast to FFmpegVideo, only ONE single image is decoded here, which
+ * takes only seconds even for long films.
  *
- * Trotzdem gibt es den HINTERGRUNDPROZESS auch hier (siehe Feld
- * details.background_process): stammt die Quelle selbst aus einem
- * Hintergrundprozess, dann stößt trigger_ff.php diesen Konverter an, sobald das
- * gerenderte Video vorliegt. Das Vorschaubild folgt demselben Weg, damit der
- * Cronjob beide Schritte gleich behandeln kann.
+ * Nevertheless there is a BACKGROUND PROCESS here too (see field
+ * details.background_process): if the source itself comes from a
+ * background process, trigger_ff.php starts this converter as soon as the
+ * rendered video is available. The preview image follows the same path, so that the
+ * cron job can handle both steps in the same way.
  *
- * Der Prozess meldet sich mit derselben Typkennung wie FFmpegVideo in der
- * Tabelle `bgproc` an und schreibt seinen Fortschritt über "-progress" in eine
- * temporäre Datei unter paths.tmp_dir. Bei einem Standbild steht in
- * `bgproc`.`message` schlicht ein einziges zu berechnendes Bild.
+ * The process registers with the same type identifier as FFmpegVideo in the
+ * table `bgproc` and writes its progress via "-progress" into a
+ * temporary file under paths.tmp_dir. For a still image, `bgproc`.`message`
+ * simply holds a single image to be calculated.
  *
- * Die Quelldatei muss beim Aufruf vorhanden sein, im Vordergrund wie im
- * Hintergrund: die Zielabmessungen werden aus ihren Maßen ausgerechnet.
+ * The source file must exist when called, in the foreground as well as in the
+ * background: the target dimensions are calculated from its size.
  *
- * Kommandozeile (Expertenmodus):
- *     ffmpeg [erzeugte Eingabe-Optionen] [parameter1] -i QUELLE
- *            [erzeugte Ausgabe-Optionen] [parameter2] ZIEL
- * parameter1 sind also Eingabe-Optionen, parameter2 Ausgabe-Optionen.
+ * Command line (expert mode):
+ *     ffmpeg [generated input options] [parameter1] -i SOURCE
+ *            [generated output options] [parameter2] TARGET
+ * parameter1 are therefore input options, parameter2 output options.
  *
- * Voraussetzungen:
- *   - Konfiguration paths.ffmpeg  (Pfad zur ffmpeg-Binary)
- *   - Konfiguration paths.ffprobe (optional, sonst wird sie neben ffmpeg gesucht)
- *   - Konfiguration paths.tmp_dir (beschreibbares Verzeichnis für die Fortschrittsdateien)
- *   - MediaProcessor stellt $this->bgproc (Camindo\Core\BackgroundProcess) bereit.
+ * Requirements:
+ *   - configuration paths.ffmpeg  (path to the ffmpeg binary)
+ *   - configuration paths.ffprobe (optional, otherwise it is searched for next to ffmpeg)
+ *   - configuration paths.tmp_dir (writable directory for the progress files)
+ *   - MediaProcessor provides $this->bgproc (Camindo\Core\BackgroundProcess).
  */
 namespace Camindo\Core\Processors\FFmpegImage;
 
@@ -40,31 +40,31 @@ use Camindo\Core\BackgroundProcess;
 
 class FFmpegImage extends MediaProcessor {
 
-    /** Zeitlimits in Sekunden */
+    /** Time limits in seconds */
     protected const TIMEOUT_PROBE   = 30;
     protected const TIMEOUT_VERSION = 10;
 
-    /** Vorgabe für details.max_time_out, falls das Feld leer ist */
+    /** Default for details.max_time_out if the field is empty */
     protected const DEFAULT_TIMEOUT = 120;
 
     /**
-     * Typkennung in der Tabelle `bgproc`, danach sucht trigger_ff.php.
-     * Bewusst dieselbe wie bei FFmpegVideo: es ist derselbe Cronjob, der die
-     * Fortschrittsdatei ausliest und den Datensatz nachträgt.
+     * Type identifier in the table `bgproc`, which trigger_ff.php searches for.
+     * Deliberately the same as in FFmpegVideo: it is the same cron job that reads the
+     * progress file and updates the record.
      */
     public const BGPROC_TYPE = 'ffmpeg';
 
-    /** Präfix und Endung der temporären Fortschrittsdatei */
+    /** Prefix and extension of the temporary progress file */
     public const PROGRESS_PREFIX    = 'ffmpeg-';
     public const PROGRESS_EXTENSION = '.progress';
 
     /**
-     * Zielformat: Auswahlwert => [Encoder, Muxer für "-f", MIME-Type, Farbmodell]
+     * Target format: option value => [encoder, muxer for "-f", MIME type, color model]
      *
-     * Der Muxer wird per "-f" explizit gesetzt, damit die Dateiendung nicht
-     * fehlinterpretiert wird. Das Farbmodell gehört zum jeweiligen Encoder:
-     * mjpeg erwartet die volle Aussteuerung (yuvj420p), png arbeitet mit
-     * echten RGB-Werten, libwebp mit yuv420p.
+     * The muxer is set explicitly via "-f" so that the file extension is not
+     * misinterpreted. The color model belongs to the respective encoder:
+     * mjpeg expects full range (yuvj420p), png works with
+     * real RGB values, libwebp with yuv420p.
      */
     public const FORMATS = [
         'jpg'  => ['mjpeg',   'image2', 'image/jpeg', 'yuvj420p'],
@@ -73,15 +73,15 @@ class FFmpegImage extends MediaProcessor {
     ];
 
     /**
-     * Verfahren zur Auswahl des Bildes:
-     *   'fixed'   feste Stelle im Film (details.frame_time)
-     *   'percent' Anteil der Laufzeit (details.frame_percent)
-     *   'smart'   ffmpeg sucht sich aus mehreren Bildern das aussagekräftigste
-     *             heraus (Filter "thumbnail", siehe details.scan_frames)
+     * Method for selecting the image:
+     *   'fixed'   fixed position in the film (details.frame_time)
+     *   'percent' share of the runtime (details.frame_percent)
+     *   'smart'   ffmpeg picks the most meaningful one from several images
+     *             (filter "thumbnail", see details.scan_frames)
      */
     public const FRAME_MODES = ['fixed', 'percent', 'smart'];
 
-    /** Deinterlacing: Auswahlwert => Filter, '' = nicht deinterlacen */
+    /** Deinterlacing: option value => filter, '' = do not deinterlace */
     public const DEINTERLACE = [
         'no'     => '',
         'auto'   => 'yadif=deint=interlaced',
@@ -89,58 +89,57 @@ class FFmpegImage extends MediaProcessor {
     ];
 
     /**
-     * Farbmodelle mit halbierten Farbkanälen. Bei ihnen müssen die Kantenlängen
-     * gerade sein, sonst weisen die Encoder das Bild zurück. Bei rgb24 (png)
-     * darf die gewünschte Größe dagegen exakt eingehalten werden.
+     * Color models with halved color channels. For them the edge lengths must
+     * be even, otherwise the encoders reject the image. For rgb24 (png)
+     * the requested size may, however, be kept exactly.
      */
     protected const SUBSAMPLED = ['yuvj420p', 'yuv420p', 'yuvj422p', 'yuv422p', 'nv12'];
 
     /**
-     * Nachschärfen nach dem Verkleinern. Beim starken Herunterrechnen eines
-     * Videobildes gehen Kanten verloren, die Werte entsprechen einer moderaten,
-     * nicht sichtbar überzeichneten Schärfung.
+     * Sharpening after downscaling. When a video frame is strongly scaled down,
+     * edges are lost; the values correspond to moderate sharpening
+     * that is not visibly overdone.
      */
     protected const SHARPEN_FILTER = 'unsharp=5:5:0.8:3:3:0.4';
 
-    /** Grenzen für details.scan_frames im Modus 'smart' */
+    /** Limits for details.scan_frames in mode 'smart' */
     protected const SCAN_MIN =   2;
     protected const SCAN_MAX = 500;
 
     /**
-     * Sicherheitsabstand zum Dateiende in Sekunden.
-     * Ein "-ss" hinter dem letzten Bild liefert eine leere Ausgabe.
+     * Safety margin to the end of the file in seconds.
+     * A "-ss" after the last image produces empty output.
      */
     protected const SEEK_MARGIN = 0.2;
 
     /**
-     * Options-Gruppen für den "intelligenten Merge" (Expertenmodus).
+     * Option groups for the "intelligent merge" (expert mode).
      *
-     * Belegt der Administrator in parameter1 / parameter2 eine Option aus einer
-     * Gruppe, dann erzeugt der Konverter die zugehörigen eigenen Parameter NICHT mehr.
-     * Der handgeschriebene Parameter gewinnt also immer, aber nur für "seinen" Bereich.
-     * Alle übrigen Formularwerte bleiben wirksam.
+     * If the administrator sets an option from a group in parameter1 / parameter2, the converter
+     * no longer generates the corresponding own parameters. The hand-written parameter therefore
+     * always wins, but only for "its" area. All other form values remain effective.
      *
-     * Ein angehängter Stream-Index wird vorher entfernt ("-c:v:0" -> "c:v"),
-     * die Einträge sind danach exakte Treffer. "-c" (gilt für alle Streams) steht
-     * deshalb bewusst sowohl bei video_codec als auch bei audio.
+     * An appended stream index is removed beforehand ("-c:v:0" -> "c:v"),
+     * the entries are exact matches afterwards. "-c" (applies to all streams) is
+     * deliberately listed for both video_codec and audio.
      */
     protected const OPTION_GROUPS = [
-        // Zielformat                   -> ersetzt "-f"
+        // Target format                -> replaces "-f"
         'format'        => ['f'],
-        // Encoder                      -> ersetzt format (Encoder-Teil)
+        // Encoder                      -> replaces format (encoder part)
         'video_codec'   => ['c', 'c:v', 'codec', 'codec:v', 'vcodec'],
-        // Videofilterkette             -> ersetzt width, height, crop,
+        // Video filter chain           -> replaces width, height, crop,
         //                                 prevent_upscaling, deinterlace,
-        //                                 sharpen und die Auswahl im Modus 'smart'
+        //                                 sharpen and the selection in mode 'smart'
         'video_filter'  => ['vf', 'filter', 'filter:v', 'filter_complex', 'lavfi'],
-        // Bildqualität                 -> ersetzt quality
+        // Image quality                -> replaces quality
         'video_quality' => ['q:v', 'qscale:v', 'qscale', 'q', 'crf', 'cq',
                             'quality', 'compression_level', 'lossless', 'b:v'],
-        // Farbmodell                   -> ersetzt das Farbmodell des Zielformats
+        // Color model                  -> replaces the color model of the target format
         'pix_fmt'       => ['pix_fmt'],
-        // Stelle im Film               -> ersetzt frame_mode, frame_time, frame_percent
+        // Position in the film         -> replaces frame_mode, frame_time, frame_percent
         'seek'          => ['ss', 'sseof', 't', 'to', 'itsoffset'],
-        // Anzahl der Bilder            -> ersetzt "-frames:v 1"
+        // Number of images             -> replaces "-frames:v 1"
         'frames'        => ['frames:v', 'vframes', 'frames', 'update',
                             'r', 'fps_mode', 'vsync'],
         // Drehung                      -> ersetzt auto_rotation
@@ -151,7 +150,7 @@ class FFmpegImage extends MediaProcessor {
         'audio'         => ['c', 'c:a', 'codec', 'codec:a', 'acodec', 'an'],
         // Threads                      -> ersetzt threads
         'threads'       => ['threads', 'filter_threads', 'filter_complex_threads'],
-        // Überschreiben                -> ersetzt "-y"
+        // Overwrite                    -> replaces "-y"
         'overwrite'     => ['y', 'n'],
     ];
 
@@ -159,28 +158,28 @@ class FFmpegImage extends MediaProcessor {
     // ====================
 
     /**
-     * Tabellenstruktur für den Konverter
-     * Darauf basierend kann mit $this->backend->formField() ein Eingabefeld erzeugt werden
+     * Table structure for the converter.
+     * An input field can be created from it with $this->backend->formField()
      *
      * type:
      *     integer -> BIGINT
      *     chars -> VARCHAR(255)
      *     bit -> BIT(1)
      * display_type:
-     *     text:   einfaches Eingabefeld
-     *     select: Auswahl, Optionen werden am besten dynamisch erzeugt
-     *     label:  mehrsprachiges Snippet #proc.{processorname}.{snippetname}
+     *     text:   simple input field
+     *     select: selection, options are best generated dynamically
+     *     label:  multilingual snippet #proc.{processorname}.{snippetname}
      *     prefix,
-     *     suffix: erscheint vor / nach dem Eingabefeld
-     *     pattern: Javascript Pattern für Eingabevalidierung
-     *     min, max: Mindest- / Maximalwert, bei Text die Zeichenanzahl
+     *     suffix: appears before / after the input field
+     *     pattern: JavaScript pattern for input validation
+     *     min, max: minimum / maximum value, for text the number of characters
      */
     protected function hookDefinition(): void
     {
-        // Defaultwerte für Eingabefelder des Konverters.
-        // Die Quelle ist ein Video, auch wenn das Ergebnis ein Bild ist.
-        // Welche Formate tatsächlich zur Verfügung stehen, hängt davon ab, mit
-        // welchen Bibliotheken ffmpeg übersetzt wurde ("ffmpeg -formats").
+        // Default values for input fields of the converter.
+        // The source is a video, even if the result is an image.
+        // Which formats are actually available depends on which
+        // libraries ffmpeg was built with ("ffmpeg -formats").
         $this->defaults['media_types_incl'] = implode("\n", [
             "video/mp4",
             "video/quicktime",
@@ -197,9 +196,9 @@ class FFmpegImage extends MediaProcessor {
 
         $this->defaults['extension'] = 'jpg';
 
-        // Zusätzliche Eingabefelder für den Konverter
+        // Additional input fields for the converter
         $this->schema = [
-            // Ausgabeformat
+            // Output format
             // --------------------
             'details.format' => [
                 'type'  => 'chars',
@@ -219,7 +218,7 @@ class FFmpegImage extends MediaProcessor {
                 'max' => 100,
                 'suffix' => '%'
             ],
-            // Bildauswahl
+            // Image selection
             // --------------------
             'details.frame_mode' => [
                 'type'  => 'chars',
@@ -235,7 +234,7 @@ class FFmpegImage extends MediaProcessor {
                 'note' => '#proc.ffmpegimage.note_frame_time',
                 'tooltip' => '#proc.ffmpegimage.tooltip_field_frame_time',
                 'default' => '',
-                // Sekunden (12.5) oder [HH:]MM:SS[.mmm]
+                // seconds (12.5) or [HH:]MM:SS[.mmm]
                 'pattern' => '(\d+(\.\d+)?|(\d+:)?[0-5]?\d:[0-5]?\d(\.\d+)?)',
                 'max' => 20
             ],
@@ -258,7 +257,7 @@ class FFmpegImage extends MediaProcessor {
                 'min' => self::SCAN_MIN,
                 'max' => self::SCAN_MAX
             ],
-            // Abmessungen
+            // Dimensions
             // --------------------
             'details.width' => [
                 'type'  => 'integer',
@@ -288,7 +287,7 @@ class FFmpegImage extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 1
             ],
-            // Bildbearbeitung
+            // Image editing
             // --------------------
             'details.deinterlace' => [
                 'type'  => 'chars',
@@ -321,7 +320,7 @@ class FFmpegImage extends MediaProcessor {
                 'display_type' => 'switch',
                 'default' => 1
             ],
-            // Ausführung
+            // Execution
             // --------------------
             'details.threads' => [
                 'type'  => 'integer',
@@ -349,9 +348,9 @@ class FFmpegImage extends MediaProcessor {
                 'min' => 0,
                 'suffix' => 's'
             ],
-            // Expertenmodus
+            // Expert mode
             // --------------------
-            // ffmpeg [parameter1] -i {Quelldatei} [parameter2] {Zieldatei}
+            // ffmpeg [parameter1] -i {source file} [parameter2] {target file}
             'details.parameter1' => [
                 'type'  => 'chars',
                 'label' => '#proc.ffmpegimage.field_parameter1',
@@ -392,16 +391,16 @@ class FFmpegImage extends MediaProcessor {
     {
         $details = (array)($data['details'] ?? []);
 
-        // Auswahlfelder auf gültige Werte zurechtbiegen, damit später in
-        // convert() keine unbekannten Schlüssel ankommen.
+        // Adjust selection fields to valid values, so that later in
+        // convert() no unknown keys arrive.
         $details['format']      = $this->pick($details['format']      ?? '', array_keys(self::FORMATS),      'jpg');
         $details['frame_mode']  = $this->pick($details['frame_mode']  ?? '', self::FRAME_MODES,              'percent');
         $details['deinterlace'] = $this->pick($details['deinterlace'] ?? '', array_keys(self::DEINTERLACE),  'auto');
 
-        // Zeitangabe normalisieren, ungültige Eingaben werden verworfen
+        // Normalize time values, invalid input is discarded
         $details['frame_time'] = $this->normalizeTime((string)($details['frame_time'] ?? ''));
 
-        // Wertebereiche begrenzen
+        // Limit value ranges
         $details['quality']       = max(0, min(100, (int)($details['quality'] ?? 80)));
         $details['frame_percent'] = max(0, min(100, (int)($details['frame_percent'] ?? 10)));
 
@@ -410,12 +409,12 @@ class FFmpegImage extends MediaProcessor {
             ? max(self::SCAN_MIN, min(self::SCAN_MAX, $scan))
             : 100;
 
-        // Ohne Zeitlimit könnte ein hängender ffmpeg unbegrenzt Rechenzeit belegen
+        // Without a time limit, a hanging ffmpeg could use computing time indefinitely
         $timeout = (int)($details['max_time_out'] ?? 0);
         $details['max_time_out'] = $timeout > 0 ? $timeout : self::DEFAULT_TIMEOUT;
 
-        // Expertenmodus: Zeilenumbrüche und Mehrfach-Leerzeichen entfernen,
-        // damit die gespeicherte Kommandozeile immer einzeilig bleibt.
+        // Expert mode: remove line breaks and multiple spaces,
+        // so that the stored command line always stays on one line.
         foreach (['parameter1', 'parameter2'] as $key) {
             $value = trim((string)($details[$key] ?? ''));
             $details[$key] = (string)preg_replace('/\s+/', ' ', $value);
@@ -447,24 +446,24 @@ class FFmpegImage extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt eine Dateiversion basierend auf den übergebenen Parametern
+     * Creates a file version based on the passed parameters
      *
-     * @param string $srcPath   Pfad zur Quelldatei, relativ zu media_dir
-     * @param array  $srcData   Daten der Quell-Datei
+     * @param string $srcPath   path to the source file, relative to media_dir
+     * @param array  $srcData   data of the source file
      *      'extension' => $fileExtension,
      *      'mime_type' => $fileMime,
-     *      'filename'  => $fileOriginName,  // ursprünglicher Dateiname, gegen Injections gesäubert
-     *      'field_id'  => $fieldId,         // für Datei-Pfad / `data_fil`-Eintrag beim checkIn
-     * @param string $destPath  Pfad zur Zieldatei, relativ zu media_dir
-     * @param array  $details   Konfigurations-Array
-     * @param bool $forceBgproc true: erzwingt Ausführung als Hintergrundprozess
-     * @return array            Daten der Zieldatei, bzw ['size'=>0, 'errors'=>'...']
+     *      'filename'  => $fileOriginName,  // original file name, sanitized against injections
+     *      'field_id'  => $fieldId,         // for file path / `data_fil` entry at check-in
+     * @param string $destPath  path to the target file, relative to media_dir
+     * @param array  $details   configuration array
+     * @param bool $forceBgproc true: forces execution as a background process
+     * @return array            data of the target file, or ['size'=>0, 'errors'=>'...']
      *
-     * Im Hintergrundbetrieb ist die Zieldatei beim Rücksprung noch NICHT fertig.
-     * Die Rückgabe enthält dann 'size' => 0 und zusätzlich
+     * In background operation the target file is NOT finished yet on return.
+     * The return value then contains 'size' => 0 and additionally
      *     'pending' => true, 'bgproc_id' => int, 'pid' => int, 'token' => string
-     * Der Aufrufer sollte den Datensatz in diesem Fall als "in Arbeit" markieren
-     * und die endgültigen Werte nachtragen, sobald der Prozess beendet ist.
+     * In this case the caller should mark the record as "in progress"
+     * and add the final values once the process has ended.
      */
     public function convert(string $srcPath, array $srcData, string $destPath, array $details, bool $forceBgproc): array
     {
@@ -482,7 +481,7 @@ class FFmpegImage extends MediaProcessor {
             'extension' => '',
         ];
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return $fileData + ['errors' => 'proc.ffmpegimage.error_binary_missing'];
@@ -495,50 +494,50 @@ class FFmpegImage extends MediaProcessor {
 
         $background = !empty($details['background_process']) || $forceBgproc;
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist.
-        // Auch im Hintergrundbetrieb muss sie jetzt schon da sein: einen
-        // Konverter, dessen Quelle selbst noch gerendert wird, stößt
-        // trigger_ff.php erst nach dem Ende jenes Prozesses an.
+        // Check whether the source file exists and is readable.
+        // Even in background operation it must already be there: a
+        // converter whose source is itself still being rendered is only started by
+        // trigger_ff.php after that process has ended.
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return $fileData + ['errors' => 'error_file_not_found'];
         }
 
-        // Eigenschaften der Quelle ermitteln. Sie werden für die Zielabmessungen
-        // und für die Stelle gebraucht, an der das Bild entnommen wird.
+        // Determine properties of the source. They are needed for the target dimensions
+        // and for the position from which the image is taken.
         $srcInfo = $this->probe($ffprobe, $srcFile);
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
-            // (kein lesbares Format: writeThumbnails() probiert den nächsten Konverter)
+            // (no readable format: writeThumbnails() tries the next converter)
             return $fileData + ['errors' => 'proc.ffmpegimage.error_file_dimensions', 'unsupported' => true];
         }
 
-        // Expertenmodus: freie Parameter zerlegen und auswerten
+        // Expert mode: split and evaluate free parameters
         $params1 = $this->execute->tokenizeParameters((string)($details['parameter1'] ?? ''));
         $params2 = $this->execute->tokenizeParameters((string)($details['parameter2'] ?? ''));
         $tokens  = array_merge($params1, $params2);
         $claimed = $this->claimedGroups($tokens);
-        // Nicht nur OB der Encoder gesetzt wurde, sondern auch WELCHER:
-        // davon hängen die Qualitätsangabe und das Farbmodell ab.
+        // Not only WHETHER the encoder was set, but also WHICH one:
+        // the quality setting and the color model depend on it.
         $claimedCodec = $this->claimedCodecValue($tokens, self::OPTION_GROUPS['video_codec']);
 
         $format  = $this->pick((string)($details['format'] ?? ''), array_keys(self::FORMATS), 'jpg');
         $timeout = (int)($details['max_time_out'] ?? 0);
         if ($timeout <= 0) $timeout = self::DEFAULT_TIMEOUT;
 
-        // Stelle im Film, an der das Bild entnommen wird
+        // Position in the film from which the image is taken
         $seek = $this->seekTime($details, $srcInfo);
 
-        // Aus den Formularwerten erzeugte Parameter
+        // Parameters generated from the form values
         $inputArgs  = $this->buildInputArguments($details, $claimed, $seek);
         $outputArgs = $this->buildOutputArguments($details, $srcInfo, $format, $claimed, $claimedCodec);
 
-        // Zielverzeichnis anlegen (ffmpeg tut das nicht von sich aus)
+        // Create target directory (ffmpeg does not do this by itself)
         $destDir = dirname($destFile);
         if (!is_dir($destDir)) @mkdir($destDir, 0775, true);
 
-        // Fortschrittsdatei für den Hintergrundprozess.
+        // Progress file for the background process.
         $progressArgs = [];
         if ($background) {
-            // Token wird bis in den Hintergrundprozess weitergereicht!
+            // Token is passed on into the background process!
             $token  = $this->crypt->randomKey(16);
             $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
             if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
@@ -551,8 +550,8 @@ class FFmpegImage extends MediaProcessor {
             ];
         }
 
-        // ffmpeg [erzeugte Eingabe-Optionen] [parameter1] -i QUELLE
-        //        [erzeugte Ausgabe-Optionen] [parameter2] ZIEL
+        // ffmpeg [generated input options] [parameter1] -i SOURCE
+        //        [generated output options] [parameter2] TARGET
         $command = array_merge(
             [$ffmpeg, '-hide_banner', '-loglevel', 'error'],
             $progressArgs,
@@ -565,12 +564,12 @@ class FFmpegImage extends MediaProcessor {
         );
 
         if ($background) {
-            // Angaben für trigger_ff.php, dieselbe Struktur wie bei FFmpegVideo.
-            // 'frames'  : ein Standbild ist genau ein Bild
-            // 'dur'     : Laufzeit der Quelle
-            // 'timeout' : Eintrag aus details.max_time_out
-            // 'dest'    : Pfad zur Datei ab media-Verzeichnis
-            // ('proc' ergänzt startBackgroundProcess() selbst)
+            // Data for trigger_ff.php, same structure as in FFmpegVideo.
+            // 'frames'  : a still image is exactly one image
+            // 'dur'     : runtime of the source
+            // 'timeout' : entry from details.max_time_out
+            // 'dest'    : path to the file from the media directory
+            // ('proc' is added by startBackgroundProcess() itself)
             $message = [
                 'frames'  => '1',
                 'dur'     => (string)round((float)$srcInfo['duration'], 2),
@@ -594,11 +593,11 @@ class FFmpegImage extends MediaProcessor {
                 'filename'   => $srcData['filename'] ?? 'file',
                 'extension'  => $ext,
                 'data' => '{}',
-                // Infos zur Quell-Datei, soweit sie schon bekannt sind
+                // Info on the source file, as far as it is already known
                 'source_width'  => $srcInfo['width'],
                 'source_height' => $srcInfo['height'],
                 'source_data' => json_encode($srcData, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?: '{}',
-                // Infos zum Hintergrundprozess
+                // Info on the background process
                 'token'      => (string)$started['token'],
                 'bgproc_id'  => (int)$started['id'],
                 'pid'        => (int)$started['pid']
@@ -607,14 +606,14 @@ class FFmpegImage extends MediaProcessor {
 
         $exitCode = $this->execute->execute($command, $stdout, $stderr, $timeout);
 
-        // Prüfen ob das Speichern erfolgreich war
+        // Check whether saving was successful
         if ($exitCode !== 0 || !is_file($destFile) || filesize($destFile) === 0) {
-            // Angefangene oder leere Zieldatei nicht liegen lassen
+            // Do not leave a started or empty target file behind
             if (is_file($destFile)) @unlink($destFile);
 
-            // Läuft ffmpeg ohne Fehler durch, ohne eine Datei zu schreiben, dann
-            // lag die gewählte Stelle hinter dem letzten Bild oder die Quelle
-            // enthält an dieser Stelle kein dekodierbares Bild.
+            // If ffmpeg runs through without error but writes no file, then
+            // the chosen position was behind the last image, or the source
+            // contains no decodable image at that position.
             if ($exitCode === $this->execute::EXEC_TIMEOUT) {
                 $error = 'proc.ffmpegimage.error_timeout';
             } elseif ($exitCode === 0) {
@@ -625,17 +624,17 @@ class FFmpegImage extends MediaProcessor {
 
             return $fileData + [
                 'errors' => $error,
-                // Klartext-Meldung von ffmpeg, hilfreich für die Fehlersuche
+                // Plain-text message from ffmpeg, helpful for troubleshooting
                 'error_details' => trim((string)$stderr),
             ];
         }
 
-        // Fertige Zieldatei auslesen und Rückgabestruktur bauen.
-        // Die Abmessungen werden nicht berechnet, weil die freien Parameter
-        // das Ergebnis beliebig verändern können.
+        // Read the finished target file and build the return structure.
+        // The dimensions are not calculated, because the free parameters
+        // can change the result arbitrarily.
         $destInfo = $this->probe($ffprobe, $destFile);
 
-        // gleicher Dateiname
+        // same file name
         $destFilename = $srcData['filename'] ?? 'file';
         return [
             'width'         => $destInfo['width'] ?? 0,
@@ -644,15 +643,15 @@ class FFmpegImage extends MediaProcessor {
             'mime_type'     => self::FORMATS[$format][2] ?? ($destInfo['mime_type'] ?? ''),
             'filename'      => $destFilename,
             'extension'     => $ext,
-            // Stelle im Film festhalten, an der das Bild entnommen wurde.
-            // Hat der Administrator die Stelle im Expertenmodus selbst gesetzt,
-            // kennt der Prozessor sie nicht und trägt deshalb nichts ein.
+            // Record the position in the film from which the image was taken.
+            // If the administrator set the position themselves in expert mode,
+            // the processor does not know it and therefore records nothing.
             'data'          => json_encode(
                                     ['frame_at' => $claimed['seek'] ? '' : ($seek === '' ? '0' : $seek)]
                                         + (array)$destInfo,
                                     JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
                                ) ?: '{}',
-            // Zusätzliche Infos zur Quell-Datei wurden ermittelt:
+            // Additional info on the source file was determined:
             'source_width'  => $srcInfo['width'],
             'source_height' => $srcInfo['height'],
             'source_data'   => json_encode($srcInfo, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) ?: '{}',
@@ -663,30 +662,30 @@ class FFmpegImage extends MediaProcessor {
     // ====================
 
     /**
-     * Erzeugt die Optionen, die VOR "-i" stehen müssen (Eingabe-Optionen).
+     * Creates the options that must come BEFORE "-i" (input options).
      *
-     * @param array  $details Konfigurations-Array
-     * @param array  $claimed Ergebnis von claimedGroups()
-     * @param string $seek    Stelle im Film in Sekunden, '' = von vorne
-     * @return array          Argumentliste
+     * @param array  $details configuration array
+     * @param array  $claimed result of claimedGroups()
+     * @param string $seek    position in the film in seconds, '' = from the start
+     * @return array          argument list
      */
     protected function buildInputArguments(array $details, array $claimed, string $seek): array
     {
         $args = [];
 
-        // Vorhandene Zieldatei überschreiben, sonst wartet ffmpeg auf eine Eingabe
+        // Overwrite an existing target file, otherwise ffmpeg waits for input
         if (!$claimed['overwrite']) $args[] = '-y';
 
-        // Drehung aus den Metadaten anwenden. ffmpeg tut das von sich aus,
-        // abschalten lässt es sich nur ausdrücklich.
+        // Apply rotation from the metadata. ffmpeg does this by itself,
+        // it can only be switched off explicitly.
         if (!$claimed['orient'] && empty($details['auto_rotation'])) {
             $args[] = '-noautorotate';
         }
 
-        // Startzeit als Eingabe-Option: ffmpeg springt dann direkt an die Stelle,
-        // statt das Material bis dahin zu dekodieren. Bei einem einzelnen Bild
-        // aus einem langen Film macht das den Unterschied zwischen Sekunden
-        // und Minuten aus.
+        // Start time as input option: ffmpeg then jumps directly to the position,
+        // instead of decoding the material up to that point. For a single image
+        // from a long film this makes the difference between seconds
+        // and minutes.
         if (!$claimed['seek'] && $seek !== '') {
             $args[] = '-ss';
             $args[] = $seek;
@@ -696,16 +695,16 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Erzeugt die Optionen, die NACH "-i" und vor der Zieldatei stehen (Ausgabe-Optionen).
-     * Bereits vom Administrator belegte Options-Gruppen werden übersprungen.
+     * Creates the options that come AFTER "-i" and before the target file (output options).
+     * Option groups already set by the administrator are skipped.
      *
-     * @param array  $details      Konfigurations-Array
-     * @param array  $srcInfo      Ergebnis von probe() für die Quelldatei
-     * @param string $format       Zielformat, Schlüssel aus FORMATS
-     * @param array  $claimed      Ergebnis von claimedGroups()
-     * @param string $claimedCodec Ergebnis von claimedCodecValue(), '' wenn der
-     *                             Administrator den Encoder nicht selbst gesetzt hat
-     * @return array               Argumentliste
+     * @param array  $details      configuration array
+     * @param array  $srcInfo      result of probe() for the source file
+     * @param string $format       target format, key from FORMATS
+     * @param array  $claimed      result of claimedGroups()
+     * @param string $claimedCodec result of claimedCodecValue(), '' if the
+     *                             administrator did not set the encoder themselves
+     * @return array               argument list
      */
     protected function buildOutputArguments(array $details, array $srcInfo, string $format, array $claimed, string $claimedCodec = ''): array
     {
@@ -713,12 +712,12 @@ class FFmpegImage extends MediaProcessor {
 
         [$encoder, $muxer, , $pixFmt] = self::FORMATS[$format];
 
-        // Hat der Administrator den Encoder im Expertenmodus selbst gesetzt,
-        // dann gilt seiner. Qualitätsangabe und Farbmodell müssen zu DIESEM
-        // Encoder passen: "-compression_level" kennt mjpeg nicht, und ein
-        // erzwungenes yuvj420p macht aus einem png-Ziel ein Graustufen-Rätsel.
-        // Bei einem unbekannten Encoder erzeugt der Prozessor deshalb lieber
-        // gar keine Angabe als eine, die ffmpeg zurückweist.
+        // If the administrator set the encoder themselves in expert mode,
+        // theirs applies. Quality setting and color model must match THIS
+        // encoder: "-compression_level" is unknown to mjpeg, and a
+        // forced yuvj420p turns a png target into a grayscale puzzle.
+        // For an unknown encoder the processor therefore prefers to
+        // give no setting at all rather than one that ffmpeg rejects.
         $knownEncoder = true;
         if ($claimedCodec !== '') {
             $encoder      = $claimedCodec;
@@ -732,9 +731,9 @@ class FFmpegImage extends MediaProcessor {
             $args[] = $encoder;
         }
 
-        // ---- Videofilter (Bildauswahl, Deinterlace, Skalierung, Beschnitt, Schärfen) ----
+        // ---- Video filter (image selection, deinterlace, scaling, cropping, sharpening) ----
         if (!$claimed['video_filter']) {
-            // Gerade Kantenlängen sind nur bei halbierten Farbkanälen nötig
+            // Even edge lengths are only needed with halved color channels
             $even    = in_array($pixFmt, self::SUBSAMPLED, true);
             $filters = $this->buildFilterChain($details, $srcInfo, $claimed, $even);
             if ($filters !== []) {
@@ -743,9 +742,9 @@ class FFmpegImage extends MediaProcessor {
             }
         }
 
-        // ---- Genau ein Bild schreiben ----
-        // Ohne "-update 1" beschwert sich der image2-Muxer, dass im Dateinamen
-        // kein Zähler steht, sobald mehr als ein Bild ankommen könnte.
+        // ---- Write exactly one image ----
+        // Without "-update 1" the image2 muxer complains that there is no counter
+        // in the file name as soon as more than one image could arrive.
         if (!$claimed['frames']) {
             $args[] = '-frames:v';
             $args[] = '1';
@@ -755,25 +754,25 @@ class FFmpegImage extends MediaProcessor {
             }
         }
 
-        // ---- Qualität ----
+        // ---- Quality ----
         if ($knownEncoder && !$claimed['video_quality']) {
             $args = array_merge($args, $this->qualityArguments($encoder, (int)($details['quality'] ?? 80)));
         }
 
-        // ---- Farbmodell ----
+        // ---- Color model ----
         if ($knownEncoder && !$claimed['pix_fmt']) {
             $args[] = '-pix_fmt';
             $args[] = $pixFmt;
         }
 
-        // ---- Metadaten entfernen. Videos aus Mobiltelefonen enthalten
-        //      regelmäßig Geodaten, die nicht ins Web gehören. ----
+        // ---- Remove metadata. Videos from mobile phones regularly contain
+        //      geodata that does not belong on the web. ----
         if (!$claimed['metadata'] && !empty($details['strip_meta'])) {
             $args[] = '-map_metadata';
             $args[] = '-1';
         }
 
-        // ---- Ton weglassen: ein Standbild hat keine Tonspur ----
+        // ---- Omit audio: a still image has no audio track ----
         if (!$claimed['audio']) {
             $args[] = '-an';
         }
@@ -787,8 +786,8 @@ class FFmpegImage extends MediaProcessor {
             }
         }
 
-        // ---- Zielformat explizit vorgeben, damit die Endung nicht
-        //      fehlinterpretiert wird ----
+        // ---- Set the target format explicitly so that the extension is not
+        //      misinterpreted ----
         if (!$claimed['format']) {
             $args[] = '-f';
             $args[] = $muxer;
@@ -798,28 +797,28 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Baut die Videofilterkette auf.
+     * Builds the video filter chain.
      *
-     * Reihenfolge: erst die Auswahl des Bildes, dann Deinterlacing, dann die
-     * Abmessungen, zuletzt das Schärfen. Geschärft wird also nach dem
-     * Verkleinern, sonst hebt die Skalierung den Effekt wieder auf.
+     * Order: first the selection of the image, then deinterlacing, then the
+     * dimensions, finally sharpening. Sharpening is therefore applied after
+     * downscaling, otherwise the scaling would cancel the effect again.
      *
-     * Die Zielabmessungen werden hier in PHP ausgerechnet und nicht ffmpeg
-     * überlassen: die Abmessungen der Quelle sind durch probe() bekannt, und
-     * ausgerechnete Werte sind erheblich leichter nachzuvollziehen als
-     * verschachtelte scale-Ausdrücke.
+     * The target dimensions are calculated here in PHP and not left to ffmpeg:
+     * the dimensions of the source are known through probe(), and
+     * calculated values are considerably easier to follow than
+     * nested scale expressions.
      *
-     * @param bool $even gerade Kantenlängen erzwingen (yuv-Farbmodelle)
-     * @return array Liste einzelner Filter, z. B. ['thumbnail=100', 'scale=480:270']
+     * @param bool $even force even edge lengths (yuv color models)
+     * @return array list of individual filters, e.g. ['thumbnail=100', 'scale=480:270']
      */
     protected function buildFilterChain(array $details, array $srcInfo, array $claimed, bool $even): array
     {
         $filters = [];
 
-        // ---- Bildauswahl ----
-        // Der Filter "thumbnail" puffert eine Anzahl Bilder und gibt daraus das
-        // aussagekräftigste zurück. Er steht ganz vorne in der Kette, damit nur
-        // das ausgewählte Bild skaliert und geschärft werden muss.
+        // ---- Image selection ----
+        // The filter "thumbnail" buffers a number of images and returns the
+        // most meaningful one. It stands at the very front of the chain, so that only
+        // the selected image has to be scaled and sharpened.
         $mode = $this->pick((string)($details['frame_mode'] ?? ''), self::FRAME_MODES, 'percent');
         if ($mode === 'smart' && !$claimed['frames']) {
             $scan = (int)($details['scan_frames'] ?? 100);
@@ -831,9 +830,9 @@ class FFmpegImage extends MediaProcessor {
         $deinterlace = $this->pick((string)($details['deinterlace'] ?? ''), array_keys(self::DEINTERLACE), 'auto');
         if (self::DEINTERLACE[$deinterlace] !== '') $filters[] = self::DEINTERLACE[$deinterlace];
 
-        // ---- Abmessungen ----
-        // Bei 90/270 Grad Drehung tauscht die Autorotation Breite und Höhe,
-        // die Filterkette sieht das gedrehte Bild.
+        // ---- Dimensions ----
+        // With a 90/270 degree rotation, auto-rotation swaps width and height;
+        // the filter chain sees the rotated image.
         $srcW = (int)$srcInfo['width'];
         $srcH = (int)$srcInfo['height'];
         if (!empty($details['auto_rotation']) && in_array(abs((int)$srcInfo['rotation']), [90, 270], true)) {
@@ -843,43 +842,43 @@ class FFmpegImage extends MediaProcessor {
         $reqW = !empty($details['width'])  ? (int)$details['width']  : 0;
         $reqH = !empty($details['height']) ? (int)$details['height'] : 0;
 
-        // Beschneiden ist nur sinnvoll, wenn beide Maße vorgegeben sind.
-        // Fehlt eines, ergibt es sich aus dem Seitenverhältnis der Quelle,
-        // dann sind Einpassen und Ausfüllen identisch.
+        // Cropping only makes sense if both dimensions are specified.
+        // If one is missing, it results from the aspect ratio of the source,
+        // then fitting and filling are identical.
         $isCrop = !empty($details['crop']) && $reqW > 0 && $reqH > 0;
 
         $target = $this->targetSize($srcW, $srcH, $reqW, $reqH, $isCrop, !empty($details['prevent_upscaling']), $even);
 
         if ($target !== null) {
             if ($isCrop) {
-                // CROP: erst so skalieren, dass die Box vollständig bedeckt ist,
-                // dann mittig auf das Zielformat beschneiden
+                // CROP: first scale so that the box is completely covered,
+                // then crop centered to the target format
                 $filters[] = 'scale=' . $target['scale_w'] . ':' . $target['scale_h'];
                 $filters[] = 'crop=' . $target['width'] . ':' . $target['height'];
             } else {
-                // FIT: skalieren, so dass das Bild in die Box passt
+                // FIT: scale so that the image fits into the box
                 $filters[] = 'scale=' . $target['width'] . ':' . $target['height'];
             }
         }
 
-        // ---- Nachschärfen ----
+        // ---- Sharpen ----
         if (!empty($details['sharpen'])) $filters[] = self::SHARPEN_FILTER;
 
         return $filters;
     }
 
     /**
-     * Ermittelt die Stelle im Film, an der das Bild entnommen wird.
+     * Determines the position in the film from which the image is taken.
      *
-     * 'fixed'   feste Zeitangabe
-     * 'percent' Anteil der Laufzeit, z. B. 10% eines Zwei-Minuten-Films = 12 s
-     * 'smart'   die Zeitangabe ist der Beginn des untersuchten Abschnitts,
-     *           ausgewählt wird danach vom Filter "thumbnail"
+     * 'fixed'   fixed time value
+     * 'percent' share of the runtime, e.g. 10% of a two-minute film = 12 s
+     * 'smart'   the time value is the start of the examined section,
+     *           the image is then selected by the filter "thumbnail"
      *
-     * Der Wert wird immer auf die Laufzeit begrenzt: hinter dem letzten Bild
-     * liefert ffmpeg sonst kommentarlos eine leere Ausgabe.
+     * The value is always limited to the runtime: behind the last image
+     * otherwise ffmpeg silently returns empty output.
      *
-     * @return string Sekunden als Zeichenkette, '' = von vorne
+     * @return string seconds as string, '' = from the start
      */
     protected function seekTime(array $details, array $srcInfo): string
     {
@@ -888,13 +887,13 @@ class FFmpegImage extends MediaProcessor {
         $seconds  = 0.0;
 
         if ($mode === 'percent') {
-            // Ohne bekannte Laufzeit lässt sich kein Anteil berechnen,
-            // dann bleibt es beim Anfang des Films.
+            // Without a known runtime no share can be calculated,
+            // then it stays at the start of the film.
             if ($duration <= 0) return '';
             $percent = max(0, min(100, (int)($details['frame_percent'] ?? 10)));
             $seconds = $duration * $percent / 100;
         } else {
-            // 'fixed' und 'smart' benutzen dieselbe Zeitangabe
+            // 'fixed' and 'smart' use the same time value
             $time = $this->normalizeTime((string)($details['frame_time'] ?? ''));
             if ($time === '') return '';
             $seconds = $this->timeToSeconds($time);
@@ -902,7 +901,7 @@ class FFmpegImage extends MediaProcessor {
 
         if ($seconds <= 0) return '';
 
-        // Sicherheitsabstand zum Dateiende
+        // Safety margin to the end of the file
         if ($duration > 0) {
             $seconds = min($seconds, max(0.0, $duration - self::SEEK_MARGIN));
         }
@@ -913,21 +912,21 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Rechnet die Zielabmessungen aus.
+     * Calculates the target dimensions.
      *
-     * @param  int  $srcW              Breite der Quelle
-     * @param  int  $srcH              Höhe der Quelle
-     * @param  int  $reqW              gewünschte Breite, 0 = aus dem Seitenverhältnis
-     * @param  int  $reqH              gewünschte Höhe, 0 = aus dem Seitenverhältnis
-     * @param  bool $isCrop            Box ausfüllen statt einpassen
-     * @param  bool $preventUpscaling  nicht über die Originalgröße hinaus vergrößern
-     * @param  bool $even              gerade Kantenlängen erzwingen
-     * @return array|null ['width'=>int,'height'=>int,'scale_w'=>int,'scale_h'=>int] oder null
+     * @param  int  $srcW              width of the source
+     * @param  int  $srcH              height of the source
+     * @param  int  $reqW              requested width, 0 = from the aspect ratio
+     * @param  int  $reqH              requested height, 0 = from the aspect ratio
+     * @param  bool $isCrop            fill the box instead of fitting
+     * @param  bool $preventUpscaling  do not enlarge beyond the original size
+     * @param  bool $even              force even edge lengths
+     * @return array|null ['width'=>int,'height'=>int,'scale_w'=>int,'scale_h'=>int] or null
      */
     protected function targetSize(int $srcW, int $srcH, int $reqW, int $reqH, bool $isCrop, bool $preventUpscaling, bool $even): ?array
     {
         if ($srcW <= 0 || $srcH <= 0) return null;
-        // Keine Vorgabe -> Originalgröße beibehalten
+        // No specification -> keep original size
         if ($reqW <= 0 && $reqH <= 0) return null;
 
         if ($reqW > 0 && $reqH > 0) {
@@ -942,13 +941,13 @@ class FFmpegImage extends MediaProcessor {
         }
 
         if (!$isCrop && $reqW > 0 && $reqH > 0) {
-            // Einpassen: der kleinere der beiden Faktoren gewinnt
+            // Fit: the smaller of the two factors wins
             $factor = min($reqW / $srcW, $reqH / $srcH);
             if ($preventUpscaling) $factor = min($factor, 1.0);
             $width  = (int)round($srcW * $factor);
             $height = (int)round($srcH * $factor);
         } elseif ($preventUpscaling && ($width > $srcW || $height > $srcH)) {
-            // Nur verkleinern: auf die Originalgröße begrenzen
+            // Only downscale: limit to the original size
             $factor = min($srcW / max(1, $width), $srcH / max(1, $height), 1.0);
             $width  = (int)round($width * $factor);
             $height = (int)round($height * $factor);
@@ -957,8 +956,8 @@ class FFmpegImage extends MediaProcessor {
         $width  = $this->roundValue($width, $even);
         $height = $this->roundValue($height, $even);
 
-        // Beim Beschneiden muss vor dem Schnitt so skaliert werden, dass die
-        // Box vollständig bedeckt ist (der größere der beiden Faktoren).
+        // When cropping, scaling must be done before the crop so that the
+        // box is completely covered (the larger of the two factors).
         $scaleW = $width;
         $scaleH = $height;
         if ($isCrop) {
@@ -966,7 +965,7 @@ class FFmpegImage extends MediaProcessor {
             if ($preventUpscaling) $factor = min($factor, 1.0);
             $scaleW = $this->roundValue((int)ceil($srcW * $factor), $even);
             $scaleH = $this->roundValue((int)ceil($srcH * $factor), $even);
-            // Die Box kann nach dem Begrenzen größer sein als das skalierte Bild
+            // After limiting, the box can be larger than the scaled image
             $width  = min($width, $scaleW);
             $height = min($height, $scaleH);
         }
@@ -980,53 +979,53 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Kantenlänge begrenzen.
+     * Limit edge length.
      *
-     * Bei halbierten Farbkanälen (yuv420p und Verwandte) muss die Kantenlänge
-     * gerade sein, sonst weisen die Encoder das Bild zurück. Bei rgb24 (png)
-     * darf die gewünschte Größe dagegen exakt eingehalten werden.
+     * With halved color channels (yuv420p and related) the edge length must
+     * be even, otherwise the encoders reject the image. For rgb24 (png)
+     * the requested size may, however, be kept exactly.
      */
     protected function roundValue(int $value, bool $even): int
     {
         if (!$even) return max(1, $value);
 
-        // Nächstkleinere gerade Zahl, mindestens 2
+        // Next smaller even number, at least 2
         $value = (int)(floor($value / 2) * 2);
 
         return max(2, $value);
     }
 
     /**
-     * Qualitäts-Parameter je nach Encoder.
+     * Quality parameters depending on the encoder.
      *
-     * Nach außen ist die Qualität einheitlich eine Prozentangabe wie beim
-     * Magick-Prozessor: 100 = beste Qualität. Jeder Encoder rechnet intern
-     * aber mit einer eigenen Skala, teilweise sogar in umgekehrter Richtung.
+     * Externally the quality is uniformly a percentage, like in the
+     * Magick processor: 100 = best quality. Each encoder calculates internally
+     * but with its own scale, sometimes even in the reverse direction.
      *
-     * @param int $quality Qualität in Prozent (0-100)
+     * @param int $quality quality in percent (0-100)
      */
     protected function qualityArguments(string $encoder, int $quality): array
     {
         $quality = max(0, min(100, $quality));
 
         return match ($encoder) {
-            // mjpeg rechnet mit 2 (beste) bis 31 (schlechteste)
+            // mjpeg uses 2 (best) to 31 (worst)
             'mjpeg'   => ['-q:v', (string)max(2, min(31, (int)round(31 - $quality * 29 / 100)))],
-            // png ist verlustfrei, die Angabe steuert nur den Rechenaufwand
-            // beim Packen: 0 = schnell und groß, 9 = langsam und klein
+            // png is lossless, the value only controls the computing effort
+            // when packing: 0 = fast and large, 9 = slow and small
             'png'     => ['-compression_level', (string)max(0, min(9, (int)round(9 - $quality * 9 / 100)))],
-            // libwebp benutzt dieselbe Skala wie die Anzeige
+            // libwebp uses the same scale as the display
             'libwebp' => ['-quality', (string)$quality],
             default   => [],
         };
     }
 
     /**
-     * Passendes Farbmodell zu einem Encoder.
-     * Wird gebraucht, wenn der Administrator im Expertenmodus einen eigenen
-     * Encoder gesetzt hat.
+     * Matching color model for an encoder.
+     * Needed when the administrator sets their own
+     * encoder in expert mode.
      *
-     * @return string Farbmodell oder '' bei unbekanntem Encoder
+     * @return string color model or '' for unknown encoder
      */
     protected function encoderPixFmt(string $encoder): string
     {
@@ -1038,9 +1037,9 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Ermittelt, welche Options-Gruppen der Administrator selbst belegt hat.
+     * Determines which option groups the administrator has set themselves.
      *
-     * @param array $tokens Argumente aus parameter1 und parameter2
+     * @param array $tokens arguments from parameter1 and parameter2
      * @return array        ['video_filter' => bool, 'video_quality' => bool, ...]
      */
     protected function claimedGroups(array $tokens): array
@@ -1048,10 +1047,10 @@ class FFmpegImage extends MediaProcessor {
         $claimed = array_fill_keys(array_keys(self::OPTION_GROUPS), false);
 
         foreach ($tokens as $token) {
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:v:0" und "-frames:v:1" auf die Grundform zurückführen
+            // reduce "-c:v:0" and "-frames:v:1" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
@@ -1064,18 +1063,18 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Liest den Encoder aus, den der Administrator im Expertenmodus selbst
-     * gesetzt hat, z. B. 'libwebp' aus "-c:v libwebp".
+     * Reads the encoder that the administrator set themselves in expert mode
+     * e.g. 'libwebp' from "-c:v libwebp".
      *
-     * claimedGroups() beantwortet nur die Frage OB eine Gruppe belegt ist. Für
-     * die Qualitätsangabe und das Farbmodell reicht das nicht: beide sind in
-     * ihrer Schreibweise vom Encoder abhängig. Ohne diesen Wert würde der
-     * Prozessor seine Parameter weiterhin für den im Formular gewählten
-     * Encoder bauen.
+     * claimedGroups() only answers the question WHETHER a group is set. For
+     * the quality setting and the color model, that is not enough: both are in
+     * their notation depends on the encoder. Without this value the
+     * processor would still build its parameters for the one chosen in the form
+     * encoder.
      *
-     * @param array $tokens  Argumente aus parameter1 und parameter2
-     * @param array $options Optionsnamen der Codec-Gruppe, siehe OPTION_GROUPS
-     * @return string        Encoder, '' wenn nichts gesetzt wurde
+     * @param array $tokens  arguments from parameter1 and parameter2
+     * @param array $options option names of the codec group, see OPTION_GROUPS
+     * @return string        encoder, '' if nothing was set
      */
     protected function claimedCodecValue(array $tokens, array $options): string
     {
@@ -1084,17 +1083,17 @@ class FFmpegImage extends MediaProcessor {
         for ($i = 0; $i < $count; $i++) {
             $token = $tokens[$i];
 
-            // Nur Optionen betrachten, keine Werte
+            // Only consider options, not values
             if ($token === '' || $token[0] !== '-') continue;
 
-            // "-c:v:0" auf die Grundform zurückführen
+            // reduce "-c:v:0" to the base form
             $option = strtolower(ltrim($token, '-'));
             $option = (string)preg_replace('/:\d+$/', '', $option);
 
             if (!in_array($option, $options, true)) continue;
 
-            // Der nächste Token ist der Encodername, sofern dort nicht schon
-            // die nächste Option beginnt
+            // The next token is the encoder name, unless
+            // the next option already starts there
             $value = $tokens[$i + 1] ?? '';
             if ($value !== '' && $value[0] !== '-') return strtolower($value);
         }
@@ -1103,26 +1102,26 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Öffentliche Methode, um die Parameter eines per Hintergrundprozess erzeugten Thumbnails
-     * in Tabelle `data_fil` nachzutragen
+     * Public method to add the parameters of a thumbnail created by a background process
+     * to table `data_fil`
      * 
-     * @param string $srcPath   Relativer Pfad zur Datei ab Medienverzeichnis
-     * @return array            mittels ffprobe ermittelte Daten + Dateigröße
+     * @param string $srcPath   relative path to the file from the media directory
+     * @return array            data determined via ffprobe + file size
      *                          width, height, mime_type, extension, size
      */
     public function rectifyParams(string $srcPath): array
     {
-        // Absoluter Pfad zur Datei
+        // Absolute path to the file
         $srcFile = $this->config->get('paths.media_dir') . '/' . $srcPath;
 
-        // Prüfen, ob die Quelldatei existiert und lesbar ist
+        // Check whether the source file exists and is readable
         if (!file_exists($srcFile) || !is_readable($srcFile)) {
             return [
                 'error' => '#error_file_not_found'
             ];
         }
 
-        // ffmpeg muss verfügbar sein
+        // ffmpeg must be available
         $ffmpeg = (string)($this->config->get('paths.ffmpeg') ?? '');
         if ($ffmpeg === '' || !is_executable($ffmpeg)) {
             return [
@@ -1137,7 +1136,7 @@ class FFmpegImage extends MediaProcessor {
             ];
         }
 
-        // Eigenschaften der Datei ermitteln
+        // Determine properties of the file
         $srcInfo = $this->probe($ffprobe, $srcFile);
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
             return [
@@ -1145,15 +1144,15 @@ class FFmpegImage extends MediaProcessor {
             ];
         }
 
-        // Bei einem Standbild ist die "Laufzeit" ohne Aussage, sie stammt aus der
-        // Bildrate des einen Bildes. Sie wird deshalb nicht mitgegeben.
+        // For a still image the "runtime" is meaningless, it comes from the
+        // frame rate of the one image. It is therefore not passed on.
         unset($srcInfo['duration'], $srcInfo['frames']);
 
         $extension = strtolower(pathinfo($srcFile, PATHINFO_EXTENSION));
         $srcInfo['size']      = filesize($srcFile);
         $srcInfo['extension'] = $extension;
-        // Endung -> MIME-Type, damit der Datensatz denselben Wert bekommt wie
-        // beim Lauf im Vordergrund
+        // extension -> MIME type, so that the record gets the same value as
+        // in the foreground run
         foreach (self::FORMATS as $key => $format) {
             if ($key === $extension || ($extension === 'jpeg' && $key === 'jpg')) {
                 $srcInfo['mime_type'] = $format[2];
@@ -1168,13 +1167,13 @@ class FFmpegImage extends MediaProcessor {
     // ====================
 
     /**
-     * Liest die Eigenschaften einer Datei mit ffprobe.
+     * Reads the properties of a file with ffprobe.
      *
-     * Die Funktion wird für die Quelle (Video) und für das Ergebnis (Bild)
-     * benutzt: ein Standbild ist für ffprobe ein Videostream mit einem Bild.
+     * The function is used for the source (video) and for the result (image)
+     * a still image is a video stream with one image for ffprobe.
      *
      * @return array|null ['width'=>int, 'height'=>int, 'rotation'=>int,
-     *                     'duration'=>float, 'frames'=>int] oder null bei Fehler
+     *                     'duration'=>float, 'frames'=>int] or null on error
      */
     protected function probe(string $ffprobe, string $file): ?array
     {
@@ -1200,7 +1199,7 @@ class FFmpegImage extends MediaProcessor {
         foreach ($data['streams'] as $stream) {
             $type = $stream['codec_type'] ?? '';
 
-            // Der erste Videostream ist der gesuchte, Tonspuren sind hier ohne Belang
+            // The first video stream is the one sought, audio tracks are irrelevant here
             if ($type !== 'video' || $info['width'] > 0) continue;
 
             $info['width']  = (int)($stream['width'] ?? 0);
@@ -1220,8 +1219,8 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Drehung aus den Stream-Informationen lesen.
-     * Je nach ffprobe-Version steht sie in side_data_list oder in tags.rotate.
+     * Read the rotation from the stream information.
+     * Depending on the ffprobe version it is in side_data_list or in tags.rotate.
      */
     protected function parseRotation(array $stream): int
     {
@@ -1238,10 +1237,10 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe prüfen und normalisieren.
-     * Erlaubt sind Sekunden ("12.5") und [HH:]MM:SS[.mmm] ("00:01:30.5").
+     * Check and normalize a time value.
+     * Allowed are seconds ("12.5") and [HH:]MM:SS[.mmm] ("00:01:30.5").
      *
-     * @return string normalisierte Angabe oder '' bei ungültiger Eingabe
+     * @return string normalized value or '' for invalid input
      */
     protected function normalizeTime(string $value): string
     {
@@ -1255,7 +1254,7 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Zeitangabe in Sekunden umrechnen
+     * Convert time value to seconds
      */
     protected function timeToSeconds(string $value): float
     {
@@ -1275,7 +1274,7 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Wert gegen eine Liste erlaubter Werte prüfen
+     * Check value against a list of allowed values
      */
     protected function pick(string $value, array $allowed, string $fallback): string
     {
@@ -1285,10 +1284,10 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Pfad zu ffprobe ermitteln: entweder ausdrücklich konfiguriert oder
-     * neben ffmpeg im selben Verzeichnis.
+     * Determine the path to ffprobe: either explicitly configured or
+     * next to ffmpeg in the same directory.
      *
-     * @return string Pfad oder '' wenn nicht auffindbar
+     * @return string path or '' if not found
      */
     protected function ffprobePath(string $ffmpeg): string
     {
@@ -1302,9 +1301,9 @@ class FFmpegImage extends MediaProcessor {
     }
 
     /**
-     * Version des konfigurierten ffmpeg auslesen
+     * Read the version of the configured ffmpeg
      *
-     * @return string|null z. B. "6.1.1" oder null, wenn ffmpeg nicht läuft
+     * @return string|null e.g. "6.1.1" or null if ffmpeg is not running
      */
     public function getVersion(): ?string
     {

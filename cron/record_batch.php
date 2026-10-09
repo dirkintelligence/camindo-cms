@@ -1,23 +1,23 @@
 <?php
 /**
- * record_batch.php - Stapelverarbeitung von Datensätzen im Hintergrund
+ * record_batch.php - batch processing of records in the background
  *
- * Wird NICHT per Cronjob aufgerufen, sondern von RecordBatch::start(), wenn ein
- * Auftrag im Backend mehr Datensätze umfasst als admin.mass_delete_threshold - oder
- * der Redakteur den Hintergrund gewählt hat.
+ * NOT called by a cron job, but by RecordBatch::start() when a
+ * job in the backend covers more records than admin.mass_delete_threshold - or
+ * the editor chose the background.
  *
- * Das Skript ruft exakt dieselbe Methode auf wie der Web-Request:
- * RecordBatch::run(). Es gibt keinen zweiten Verarbeitungspfad - der Hintergrund
- * verlagert die Arbeit nur aus dem Request heraus. Der Auftrag liegt als JSON-Datei
- * in var/tmp (RecordBatch::start()), sie wird beim Lesen entfernt.
+ * The script calls exactly the same method as the web request:
+ * RecordBatch::run(). There is no second processing path - the background only
+ * moves the work out of the request. The job lies as a JSON file
+ * in var/tmp (RecordBatch::start()); it is removed when read.
  *
- * Fortschritt an das Backend über die Tabelle `bgproc`; am Ende schreibt
- * RecordBatch::report() das Ergebnis nach var/log/{Y-m-d}_batch-{token}.log und
- * schickt dem auslösenden Admin eine interne Nachricht (Modul Messaging).
+ * Progress to the backend via the table `bgproc`; at the end
+ * RecordBatch::report() writes the result to var/log/{Y-m-d}_batch-{token}.log and
+ * sends the triggering admin an internal message (module Messaging).
  *
- * Argumente:
- *     --job=/pfad/var/tmp/batch-{token}.json   Auftragsdatei (Pflicht)
- *     --token=...                              Token des bgproc-Eintrags
+ * Arguments:
+ *     --job=/path/var/tmp/batch-{token}.json   job file (required)
+ *     --token=...                              token of the bgproc entry
  */
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Session;
@@ -26,7 +26,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Modules\Admin\Admin;
 use Camindo\Core\Modules\Record\RecordBatch;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -40,11 +40,11 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 // --------------------
-// Argumente einlesen (--name=wert)
+// Read arguments (--name=value)
 
 $args = [];
 foreach (array_slice($argv, 1) as $argument) {
@@ -57,7 +57,7 @@ if ($jobFile === '') {
     exit("usage: record_batch.php --job=/path/to/batch-{token}.json --token=...\n");
 }
 
-// Container bereitstellen
+// Provide the container
 $app = $GLOBALS['app'];
 $system = $app->get(System::class);
 $bgproc = $app->get(BackgroundProcess::class);
@@ -69,11 +69,11 @@ try {
     if ($job === null) {
         throw new \RuntimeException("job file not readable: {$jobFile}");
     }
-    // Auslösenden Administrator hinterlegen: changed_by der Datensätze, Absender und
-    // Empfänger der Ergebnis-Nachricht - und seine Backend-Sprache/Zeitzone, damit
-    // Meldungen und Datumsangaben im Bericht so aussehen wie in seinem Backend
+    // Store the triggering administrator: changed_by of the records, sender and
+    // recipient of the result message - and their backend language/time zone, so that
+    // messages and dates in the report look the same as in their backend
     $adminId = (int)($job['admin_id'] ?? 0);
-    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // Rechte des auslösenden Admins
+    $app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // rights of the triggering admin
     if ($adminData = $app->get(Admin::class)->load($adminId)) {
         $app->get(Cms::class)->applyAdminSettings((array)($adminData['settings'] ?? []));
     }

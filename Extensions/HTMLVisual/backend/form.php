@@ -1,22 +1,22 @@
 <?php
 /**
- * Optionen der Extension HTMLVisual in der Feld-Eingabemaske (13 §3.3).
+ * Options of the extension HTMLVisual in the field input mask (developer docs, chapter 08 (Components and extensions)).
  *
- * Eingebunden von FieldBackend::_extensionOptionsHtml() mit
- *     $backend  Camindo\Core\Backend      Vorlagen
- *     $cms      Camindo\Core\Cms          Snippets
- *     $options  array                     bisherige Werte (details.extension_options)
- *     $name     string                    Namenspräfix der Eingaben: data[details][extension_options]
+ * Included by FieldBackend::_extensionOptionsHtml() with
+ *     $backend  Camindo\Core\Backend      templates
+ *     $cms      Camindo\Core\Cms          snippets
+ *     $options  array                     current values (details.extension_options)
+ *     $name     string                    name prefix of the inputs: data[details][extension_options]
  *
- * Optionen: toolbar (full|basic|custom), toolbar_custom (Schaltflächen bei custom),
- * min_height, max_height (px), stylesheet (Datei aus var/extensions/htmlvisual/),
- * css_class (leer = c9-htmlvisual-{feldname}).
+ * Options: toolbar (full|basic|custom), toolbar_custom (buttons for custom),
+ * min_height, max_height (px), stylesheet (file from var/extensions/htmlvisual/),
+ * css_class (empty = c9-htmlvisual-{feldname}).
  */
 $note = fn(string $key, array $params = []) => $backend->template('form-text', [
     '{text}' => $backend->escape(str_replace(array_keys($params), array_values($params), $cms->snippet('ext.htmlvisual.' . $key))),
 ]);
 
-// Werkzeugleiste
+// Toolbar
 $toolbar = (string)($options['toolbar'] ?? 'full');
 $toolbarOptions = [];
 foreach (['full', 'basic', 'custom'] as $value) {
@@ -40,7 +40,7 @@ echo $backend->template('edit_form_block', [
     ]),
 ]);
 
-// Höhe
+// Height
 echo $backend->template('edit_form_block', [
     '{label}' => $cms->snippet('ext.htmlvisual.option_min_height'),
     '{class}' => '',
@@ -60,7 +60,7 @@ echo $backend->template('edit_form_block', [
     ]),
 ]);
 
-// Stylesheet aus var/extensions/htmlvisual/
+// Stylesheet from var/extensions/htmlvisual/
 $dir = $backend->extensionVarDir('HTMLVisual');
 $dirShort = 'var/extensions/' . basename($dir) . '/';
 $files = $backend->extensionVarFiles('HTMLVisual');
@@ -81,7 +81,7 @@ echo $backend->template('edit_form_block', [
     ]),
 ]);
 
-// CSS-Klasse
+// CSS class
 echo $backend->template('edit_form_block', [
     '{label}' => $cms->snippet('ext.htmlvisual.option_css_class'),
     '{class}' => '',

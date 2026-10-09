@@ -1,9 +1,9 @@
 /*
- * cApp.forms – Formular-Behandlung
- * - Änderungstracking (data-changed)
- * - Speichern-Shortcut (Cmd/Ctrl+S)
- * - Asynchrones Absenden per Ajax
- * - checkAndExecute: prüft ungespeicherte Änderungen vor Navigation
+ * cApp.forms – Form handling
+ * - Change tracking (data-changed)
+ * - Save shortcut (Cmd/Ctrl+S)
+ * - Asynchronous submit via Ajax
+ * - checkAndExecute: checks for unsaved changes before navigation
  */
 (function (cApp) {
     'use strict';
@@ -17,12 +17,12 @@
             this._bindColumnToggle();
         },
 
-       // --- Öffentliche API ---
+       // --- Public API ---
 
         /**
-         * Sendet die Formularinhalte (außer Uploads) an das angegebene Script
-         * und hängt das Ergebnis in das jQuery-Element $el ein
-         * (Genutzt beispielsweise für Aktualisierung einer Select-Liste)
+         * Sends the form contents (except uploads) to the given script
+         * and inserts the result into the jQuery element $el
+         * (used e.g. for updating a select list)
          */
         updateElement(name, action) {
             if (!name) return;
@@ -30,7 +30,7 @@
             const $form = $('form:visible').first();
             if (!$form.length) return;
             const $el   = $form.find('[name="' + name + '"]');
-            // Das Feld muss es nicht geben (z. B. Bereich ohne Positionsfeld)
+            // The field does not have to exist (e.g. area without position field)
             if (!$el.length) return;
             const cData = new FormData($form[0]);
 
@@ -42,16 +42,16 @@
         },
 
         /**
-         * Prüft den obersten sichtbaren Layer auf ungespeicherte Änderungen.
-         * Führt callback aus, wenn keine Änderungen vorhanden oder der
-         * Benutzer das Verwerfen bestätigt hat.
+         * Checks the topmost visible layer for unsaved changes.
+         * Executes callback if there are no changes or the
+         * user has confirmed discarding them.
          *
-         * @param {function} callback  Wird bei "sauberem" Zustand aufgerufen
+         * @param {function} callback  Called in a "clean" state
          */
         checkAndExecute(callback) {
             const $form = $('form:visible').first();
 
-            // Prüft auf data-changed ODER das Vorhandensein des Markers
+            // Checks for data-changed OR the presence of the marker
             if ($form.length && $form.attr('data-changed') === 'true') {
                 const discard = confirm(window.cConfig.message_edited);
                 if (!discard) return;
@@ -62,28 +62,28 @@
         },
 
         /**
-         * Prüft den obersten Layer anhand seines DOM-Elements auf ungespeicherte Änderungen.
-         * Wird von cApp.layers für die sukzessive Breadcrumb-Schließlogik verwendet.
+         * Checks the topmost layer by its DOM element for unsaved changes.
+         * Used by cApp.layers for the successive breadcrumb closing logic.
          *
-         * @param {jQuery}   $layer    Das zu prüfende Layer-Element
-         * @param {function} callback  Wird ausgeführt, wenn der Layer "sauber" ist
+         * @param {jQuery}   $layer    The layer element to check
+         * @param {function} callback  Executed if the layer is "clean"
          */
         checkLayerAndExecute($layer, callback) {
             const $form = $layer.find('form').first();
 
             if ($form.length && $form.attr('data-changed') === 'true') {
                 const discard = confirm(window.cConfig.message_edited);
-                if (!discard) return; // Kette stoppt hier
+                if (!discard) return; // chain stops here
                 $form.attr('data-changed', 'false');
             }
 
             if (typeof callback === 'function') callback();
         },
 
-        // --- Privat: Event-Bindungen ---
+        // --- Private: event bindings ---
 
         /**
-         * Markiert ein Formular als geändert, sobald eine Eingabe erfolgt.
+         * Marks a form as changed as soon as input occurs.
          */
         _bindChangeTracking() {
             $(document).on('input change', 'input, textarea, select', (e) => {
@@ -92,19 +92,19 @@
         },
 
         /**
-         * Formular als geändert markieren - für Feld-Extensions, deren Editoren
-         * keine input/change-Ereignisse auf dem versteckten Feld auslösen.
+         * Mark a form as changed - for field extensions whose editors
+         * do not trigger input/change events on the hidden field.
          */
         markChanged(el) {
             $(el).closest('form').attr('data-changed', 'true');
         },
 
         /**
-         * Rechte-Tabellen (table.c9-access-table, Gruppen-Info / Reiter "Zugriff"):
-         * ein Klick auf einen Spaltenkopf der unteren Kopfzeile schaltet alle
-         * aktiven Checkboxen der Spalte - ist mindestens eine leer, werden alle
-         * gesetzt, sonst alle gelöscht. change wird ausgelöst, damit die Kopplung
-         * "Lesen" -> übrige Spalten (onchange der Zeile) mitzieht.
+         * Permission tables (table.c9-access-table, group info / tab "Access"):
+         * a click on a column header of the lower header row toggles all
+         * active checkboxes of the column - if at least one is empty, all are
+         * checked, otherwise all are cleared. change is triggered so that the coupling
+         * "Read" -> other columns (onchange of the row) follows.
          */
         _bindColumnToggle() {
             $(document).on('click', 'table.c9-access-table thead tr:last-child th', (e) => {
@@ -122,7 +122,7 @@
         },
 
         /**
-         * Cmd+S / Ctrl+S löst das sichtbare Formular aus.
+         * Cmd+S / Ctrl+S triggers the visible form.
          */
         _bindSaveShortcut() {
             $(document).on('keydown', (e) => {
@@ -141,7 +141,7 @@
         },
 
         /**
-         * Fängt alle Formular-Submits ab und sendet sie asynchron.
+         * Intercepts all form submits and sends them asynchronously.
          */
         _bindAjaxSubmit() {
             $(document).on('submit', 'form', (e) => {
@@ -151,7 +151,7 @@
                 const $form      = $(e.currentTarget);                
                 const action     = $form.attr('action');
                 const method     = $form.attr('method') || 'GET';
-                // Feld-Extensions: Editorinhalte in die Felder zurückschreiben
+                // Field extensions: write editor contents back into the fields
                 if (cApp.extensions && cApp.extensions.beforeSubmit) {
                     cApp.extensions.beforeSubmit($form);
                 }
@@ -159,8 +159,8 @@
 
                 if (!cData) return;
 
-                // data-layer="new": Antwort in einem neuen Layer zeigen (z. B. Import-
-                // Protokoll über den Einstellungen, die so erhalten bleiben)
+                // data-layer="new": show the response in a new layer (e.g. import
+                // log above the settings, which are kept that way)
                 if ($form.attr('data-layer') === 'new') {
                     cApp.layers.addPost(action, cData);
                     $form.attr('data-changed', 'false');
@@ -175,10 +175,10 @@
                         $form.attr('data-changed', 'false');
 
                         $('article').scrollTop(0);
-                        // (Früher lief hier der Code eines onsubmit-Attributs ein zweites
-                        // Mal per new Function - ungenutzt, und die Script-Policy verbietet
-                        // eval. Ein onsubmit läuft jetzt wie jeder Handler beim Absenden,
-                        // backend-handlers.js; 19-csp.md.)
+                        // (Formerly the code of an onsubmit attribute ran here a second
+                        // time via new Function - unused, and the script policy forbids
+                        // eval. An onsubmit now runs like any handler on submit,
+                        // backend-handlers.js; developer docs, chapter 14 (Security: web).)
                     }
                 });
             });

@@ -1,72 +1,72 @@
 <?php
 /**
- * Sicherheits-Header für jede Antwort über HTTP (developer_docs/16-sicherheit.md §10,
- * Script-Policy des Backends: developer_docs/19-csp.md).
+ * Security headers for every response over HTTP (developer docs, chapter 14 (Security: web));
+ * script policy of the backend: same chapter).
  *
- * Aufgerufen einmal im Bootstrap (Core.php), vor jeder Ausgabe und vor jedem Cookie.
- * Der Kontext ergibt sich aus den Konstanten des Einstiegs:
+ * Called once in the bootstrap (Core.php), before any output and before any cookie.
+ * The context follows from the constants of the entry point:
  *
- *   Backend   CAMINDO_BACKEND ohne CAMINDO_PREVIEW (index.php, module.php, file.php)
- *             Das Backend läuft nie in einem Rahmen; Formulare gehen nur an sich selbst.
- *             Scripts nur aus eigenen Dateien oder mit der Nonce der Seite (script-src,
- *             je nach security.backend_csp erzwungen, nur gemeldet oder aus).
- *   Frontend  public/index.php, public/file.php und die Vorschau aus dem Backend
- *             (backend/preview.php definiert CAMINDO_PREVIEW) - dort gibt das Template
- *             das HTML vor, der Core setzt nur Voreinstellungen. Jedes Template kann sie
- *             mit (CMS:HEADER …) ersetzen oder mit einem leeren Wert entfernen
- *             (Cms::cmsHeader()), der spätere header()-Aufruf gewinnt.
+ *   Backend   CAMINDO_BACKEND without CAMINDO_PREVIEW (index.php, module.php, file.php)
+ *             The backend never runs in a frame; forms only post to themselves.
+ *             Scripts only from own files or with the page's nonce (script-src,
+ *             enforced, only reported or off, depending on security.backend_csp).
+ *   Frontend  public/index.php, public/file.php and the preview from the backend
+ *             (backend/preview.php defines CAMINDO_PREVIEW) - there the template
+ *             dictates the HTML, the core only sets defaults. Every template can replace
+ *             them with (CMS:HEADER …) or remove them with an empty value
+ *             (Cms::cmsHeader()); the later header() call wins.
  *
  * NONCE
  * --------------------
- * Eine je Seite: backend/index.php erzeugt sie (hier), gibt sie als cConfig.nonce aus,
- * und das Javascript schickt sie mit jedem Ajax-Request als X-Camindo-Nonce zurück. Ein
- * nachgeladenes HTML-Stück trägt so die Nonce der Seite, in die es eingesetzt wird - die
- * Policy im Header des Stücks selbst gilt nicht, nur die des Dokuments. Den Wert aus dem
- * Request zu übernehmen ist unbedenklich: einen eigenen Header kann eine fremde Seite
- * nicht mitschicken (CORS), und eine Navigation schickt keinen.
+ * One per page: backend/index.php creates it (here), outputs it as cConfig.nonce,
+ * and the JavaScript sends it back with every Ajax request as X-Camindo-Nonce. An
+ * HTML fragment loaded later thus carries the nonce of the page it is inserted into - the
+ * policy in the header of the fragment itself does not apply, only that of the document. Taking
+ * the value from the request is harmless: a foreign page cannot send its own header
+ * (CORS), and a navigation sends none.
  *
- * SCRIPT-POLICY DES FRONTENDS (zuschaltbar, 19-csp.md §9)
+ * FRONTEND SCRIPT POLICY (switchable, developer docs, chapter 14 (Security: web))
  * --------------------
- * Je Instanz (instance.details.csp, sonst security.frontend_csp): 'off' (Vorgabe),
- * 'report' oder 'enforce'. Page::resolve() sendet sie, sobald die Instanz feststeht
- * (sendFrontendCsp()); sie ersetzt die Voreinstellung frame-ancestors 'self' und
- * enthält sie weiter. Die Nonce der Seite setzt der Template-Programmierer mit
- * <script(CMS:NONCE)> selbst in jedes Script; der Template-Editor weist auf Scripts
- * ohne hin (TemplateParserTrait::inlineHandlerWarnings()). Was zur Laufzeit aus
- * Inhalten ins HTML kommt, trägt keine Nonce und läuft nicht.
- * CMS:CSP ändert die Policy einer Seite (weitere Quellen, anderer Modus) und sendet
- * sie neu, solange noch nichts ausgegeben ist.
+ * Per instance (instance.details.csp, otherwise security.frontend_csp): 'off' (default),
+ * 'report' or 'enforce'. Page::resolve() sends it as soon as the instance is known
+ * (sendFrontendCsp()); it replaces the default frame-ancestors 'self' and
+ * keeps it. The template programmer sets the page's nonce himself in every script
+ * with <script(CMS:NONCE)>; the template editor warns about scripts
+ * without it (TemplateParserTrait::inlineHandlerWarnings()). What comes into the HTML
+ * from content at runtime carries no nonce and does not run.
+ * CMS:CSP changes a page's policy (more sources, other mode) and sends it
+ * again as long as nothing has been output yet.
  *
- * HSTS nur auf Wunsch (security.hsts_max_age > 0) und nur über HTTPS: der Browser
- * merkt sich die Regel bis zu max-age, eine Installation ohne durchgehendes HTTPS
- * sperrt sich damit aus. Über http:// ignoriert der Browser den Header ohnehin.
+ * HSTS only on request (security.hsts_max_age > 0) and only over HTTPS: the browser
+ * remembers the rule up to max-age, so an installation without consistent HTTPS
+ * would lock itself out. Over http:// the browser ignores the header anyway.
  */
 namespace Camindo\Core;
 
 class SecurityHeaders
 {
-    /** Request-Header, in dem das Javascript die Nonce der Seite zurückschickt */
+    /** Request header in which the JavaScript sends back the page's nonce */
     public const NONCE_HEADER = 'HTTP_X_CAMINDO_NONCE';
 
-    /** Modi der Frontend-Policy (instance.details.csp, security.frontend_csp) */
+    /** Modes of the frontend policy (instance.details.csp, security.frontend_csp) */
     public const FRONTEND_MODES = ['off', 'report', 'enforce'];
 
-    /** Endpunkt für Verstoßmeldungen des Frontends (public/csp_report.php) */
+    /** Endpoint for violation reports of the frontend (public/csp_report.php) */
     public const FRONTEND_REPORT_PATH = '/csp_report.php';
 
     private ?string $nonce = null;
 
-    /** Instanz der laufenden Frontend-Seite (sendFrontendCsp()) */
+    /** Instance of the running frontend page (sendFrontendCsp()) */
     private ?array $frontendInstance = null;
 
-    /** Änderungen der Seite über CMS:CSP: mode, script[], form[] */
+    /** Changes to the page via CMS:CSP: mode, script[], form[] */
     private array $pageCsp = ['mode' => '', 'script' => [], 'form' => []];
 
     public function __construct(private Config $config) {}
 
     /**
-     * Header des Kontexts senden. Nichts auf der Kommandozeile oder wenn schon
-     * ausgegeben wurde.
+     * Send the headers of the context. Nothing on the command line or if output
+     * has already been sent.
      */
     public function send(): void
     {
@@ -91,30 +91,30 @@ class SecurityHeaders
     }
 
     /**
-     * Nonce dieser Seite: die aus dem Request (Ajax-Nachladen), sonst eine neue.
-     * 32 Hex-Zeichen - taugt so auch als Teil eines Attributnamens (Backend::template()).
+     * Nonce of this page: the one from the request (Ajax reload), otherwise a new one.
+     * 32 hex characters - thus also usable as part of an attribute name (Backend::template()).
      */
     public function nonce(): string
     {
         if ($this->nonce === null) {
-            // Nur das Backend lädt HTML-Stücke per Ajax in eine bestehende Seite nach;
-            // im Frontend hat jede Antwort ihre eigene Nonce
+            // Only the backend loads HTML fragments via Ajax into an existing page;
+            // in the frontend every response has its own nonce
             $sent = $this->isBackend() ? (string)($_SERVER[self::NONCE_HEADER] ?? '') : '';
             $this->nonce = preg_match('/^[0-9a-f]{32}$/', $sent) ? $sent : bin2hex(random_bytes(16));
         }
         return $this->nonce;
     }
 
-    /** ' nonce="…"' für ein <script>-Tag im Backend */
+    /** ' nonce="…"' for a <script> tag in the backend */
     public function nonceAttr(): string
     {
         return ' nonce="' . $this->nonce() . '"';
     }
 
     /**
-     * security.backend_csp: 'enforce' (Scripts ohne Nonce laufen nicht), 'report' (sie
-     * laufen, der Browser meldet sie - Start/csp_report.php schreibt var/log/…_csp.log),
-     * 'off'. Unbekannte Werte gelten als 'enforce'.
+     * security.backend_csp: 'enforce' (scripts without nonce do not run), 'report' (they
+     * run, the browser reports them - csp_report.php writes var/log/…_csp.log),
+     * 'off'. Unknown values count as 'enforce'.
      */
     public function backendCspMode(): string
     {
@@ -122,27 +122,27 @@ class SecurityHeaders
         return in_array($mode, ['enforce', 'report', 'off'], true) ? $mode : 'enforce';
     }
 
-    /** Die Script-Regeln des Backends */
+    /** The script rules of the backend */
     public function scriptPolicy(): string
     {
         return "script-src 'self' 'nonce-" . $this->nonce() . "' 'report-sample'";
     }
 
     /**
-     * @param bool $withScripts  script-src in die erzwungene Policy aufnehmen
+     * @param bool $withScripts  include script-src in the enforced policy
      * @return array<string,string>
      */
     public function backendHeaders(bool $withScripts = false): array
     {
         return [
-            // Clickjacking: nie in einem Rahmen (X-Frame-Options für ältere Browser)
+            // Clickjacking: never in a frame (X-Frame-Options for older browsers)
             'X-Frame-Options'         => 'DENY',
-            // base-uri / form-action: ein eingeschleustes <base> oder <form action="https://…">
-            // lenkt nichts um; object-src: keine Plugins
+            // base-uri / form-action: an injected <base> or <form action="https://…">
+            // redirects nothing; object-src: no plugins
             'Content-Security-Policy' => "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
                 . ($withScripts ? '; ' . $this->scriptPolicy() : ''),
             'X-Content-Type-Options'  => 'nosniff',
-            // Backend-Adressen (mit IDs) nicht an externe Seiten weitergeben
+            // Do not pass backend addresses (with IDs) on to external sites
             'Referrer-Policy'         => 'same-origin',
         ];
     }
@@ -151,21 +151,21 @@ class SecurityHeaders
     public function frontendHeaders(): array
     {
         return [
-            // Clickjacking auf Login, Profil, Warenkorb: nur die eigene Website darf rahmen
+            // Clickjacking on login, profile, basket: only the own website may frame
             'X-Frame-Options'         => 'SAMEORIGIN',
             'Content-Security-Policy' => "frame-ancestors 'self'",
-            // Templates, die CSS/JS/JSON ausliefern, setzen ihren Content-Type per CMS:HEADER
+            // Templates that deliver CSS/JS/JSON set their Content-Type via CMS:HEADER
             'X-Content-Type-Options'  => 'nosniff',
             'Referrer-Policy'         => 'strict-origin-when-cross-origin',
         ];
     }
 
     // ====================
-    // Frontend: Script-Policy
+    // Frontend: script policy
 
     /**
-     * Modus der Frontend-Policy einer Instanz: instance.details.csp, sonst
-     * security.frontend_csp, sonst 'off'. CMS:CSP mode=… hat Vorrang.
+     * Mode of the frontend policy of an instance: instance.details.csp, otherwise
+     * security.frontend_csp, otherwise 'off'. CMS:CSP mode=… takes precedence.
      */
     public function frontendCspMode(array $instance): string
     {
@@ -178,15 +178,15 @@ class SecurityHeaders
     }
 
     /**
-     * Die Policy der Frontend-Seite (ohne Header-Namen).
+     * The policy of the frontend page (without header name).
      *
      *     script-src 'self' 'nonce-…' [Quellen] ['strict-dynamic'];
      *     object-src 'none'; base-uri 'self'; frame-ancestors 'self'
      *     [; form-action 'self' [Quellen]] ; report-uri /csp_report.php
      *
-     * Bewusst nur Scripts (plus object-src/base-uri, die dazugehören): style-src,
-     * img-src, connect-src brächen Schriften, Karten, Zahlungsanbieter und schützen
-     * wenig. Wer mehr will, schreibt die ganze Policy mit CMS:HEADER.
+     * Deliberately only scripts (plus object-src/base-uri, which belong to it): style-src,
+     * img-src, connect-src would break fonts, maps, payment providers and protect
+     * little. Whoever wants more writes the whole policy with CMS:HEADER.
      */
     public function frontendPolicy(array $instance): string
     {
@@ -212,10 +212,10 @@ class SecurityHeaders
     }
 
     /**
-     * Frontend-Policy senden (Page::resolve(), sobald die Instanz feststeht; erneut
-     * nach CMS:CSP). 'off': nur die Voreinstellung frame-ancestors aus send().
+     * Send the frontend policy (Page::resolve(), as soon as the instance is known; again
+     * after CMS:CSP). 'off': only the default frame-ancestors from send().
      *
-     * @return bool  false = schon ausgegeben, nichts gesendet
+     * @return bool  false = already output, nothing sent
      */
     public function sendFrontendCsp(array $instance): bool
     {
@@ -239,12 +239,12 @@ class SecurityHeaders
     }
 
     /**
-     * CMS:CSP - Policy dieser Seite ändern und neu senden.
+     * CMS:CSP - change the policy of this page and send it again.
      *
-     * @param string   $mode    '' = unverändert, sonst off|report|enforce
-     * @param string[] $script  weitere Script-Quellen
-     * @param string[] $form    weitere Formularziele (schaltet form-action ein)
-     * @return bool             false = schon ausgegeben
+     * @param string   $mode    '' = unchanged, otherwise off|report|enforce
+     * @param string[] $script  additional script sources
+     * @param string[] $form    additional form targets (enables form-action)
+     * @return bool             false = already output
      */
     public function changeFrontendCsp(string $mode, array $script, array $form): bool
     {
@@ -255,10 +255,10 @@ class SecurityHeaders
     }
 
     /**
-     * Quellenliste bereinigen: je Eintrag eine Host-Angabe (https://js.example.com,
-     * *.example.com, mit Port oder Pfad) - keine Schlüsselwörter wie 'unsafe-inline',
-     * keine reinen Schemata (https: erlaubte jede Website), keine Trennzeichen, die
-     * eine eigene Direktive einschmuggeln.
+     * Clean the source list: one host entry per item (https://js.example.com,
+     * *.example.com, with port or path) - no keywords such as 'unsafe-inline',
+     * no bare schemes (https: would allow every website), no separators that
+     * smuggle in a directive of their own.
      *
      * @return string[]
      */
@@ -282,9 +282,9 @@ class SecurityHeaders
     }
 
     /**
-     * Wert für Strict-Transport-Security oder null (aus bzw. kein HTTPS).
-     * X-Forwarded-Proto zählt mit (TLS endet am Proxy); ein gefälschtes 'https' über
-     * http:// bleibt folgenlos, weil der Browser HSTS nur über HTTPS annimmt.
+     * Value for Strict-Transport-Security or null (off, or no HTTPS).
+     * X-Forwarded-Proto counts too (TLS ends at the proxy); a forged 'https' over
+     * http:// has no effect, because the browser only accepts HSTS over HTTPS.
      */
     public function hstsHeader(): ?string
     {

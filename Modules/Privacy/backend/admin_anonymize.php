@@ -1,6 +1,6 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Gelöschten Benutzer anonymisieren (Modul Privacy, Zusatzrecht admin_anonymize)
+// Anonymize a deleted user (module Privacy, additional right admin_anonymize)
 use Camindo\Core\Modules\Privacy\PrivacyBackend;
 
 $app->get(PrivacyBackend::class)->adminAnonymize();

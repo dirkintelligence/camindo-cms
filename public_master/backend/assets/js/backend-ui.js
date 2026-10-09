@@ -1,8 +1,8 @@
 /*
- * cApp.ui – Allgemeine UI-Events
- * - Bootstrap-Tooltip-Initialisierung per Event Delegation
- * - "Mehr laden"-Schaltflächen (.c9-load-more)
- * - Auto-Resize für Textareas (.c9-textarea-grow)
+ * cApp.ui – General UI events
+ * - Bootstrap tooltip initialization via event delegation
+ * - "Load more" buttons (.c9-load-more)
+ * - Auto-resize for textareas (.c9-textarea-grow)
  */
 (function (cApp) {
     'use strict';
@@ -24,18 +24,18 @@
             this._bindBgprocRemove();
         },
 
-        // --- Anmeldeformular: Backend-Sprache, Locale und Zeitzone ---
+        // --- Login form: backend language, locale and time zone ---
         //
-        // Die letzte Wahl liegt im localStorage (Schlüssel c9.backend_code,
-        // c9.locale, c9.timezone) - abgelegt beim Anmelden und beim Speichern der
-        // persönlichen Einstellungen (AdminBackend::settings()). Ohne Eintrag
-        // entscheiden Browsersprache, -locale und -zeitzone; eine Sprache, die das
-        // Backend nicht kennt, löst der Server zu 'en_US' auf (Cms::resolveBackendLang()),
-        // eine unbekannte Locale zu system.locale. Backend-Sprachen haben die Form
-        // de_DE; ein früher gemerktes "de" gilt für die erste Option mit "de_".
+        // The last choice is kept in localStorage (keys c9.backend_code,
+        // c9.locale, c9.timezone) - stored at login and when saving the
+        // personal settings (AdminBackend::settings()). Without an entry
+        // the browser language, locale and time zone decide; a language the
+        // backend does not know is resolved by the server to 'en_US' (Cms::resolveBackendLang()),
+        // an unknown locale to system.locale. Backend languages have the form
+        // de_DE; a previously remembered "de" applies to the first option with "de_".
 
         /**
-         * Gemerkte Wahl lesen.
+         * Read the remembered choice.
          * @returns {{backend_code: string, timezone: string, locale: string}}
          */
         loginPrefs() {
@@ -44,33 +44,33 @@
                 prefs.backend_code = localStorage.getItem('c9.backend_code') || '';
                 prefs.timezone     = localStorage.getItem('c9.timezone') || '';
                 prefs.locale       = localStorage.getItem('c9.locale') || '';
-            } catch (e) { /* localStorage gesperrt - dann ohne Vorbelegung */ }
+            } catch (e) { /* localStorage blocked - then without preselection */ }
             return prefs;
         },
 
         /**
-         * Wahl merken (leere Werte lassen den bisherigen Eintrag stehen).
+         * Remember the choice (empty values leave the previous entry in place).
          */
         loginPrefsStore(backendCode, timezone, locale) {
             try {
                 if (backendCode) localStorage.setItem('c9.backend_code', backendCode);
                 if (timezone)    localStorage.setItem('c9.timezone', timezone);
                 if (locale)      localStorage.setItem('c9.locale', locale);
-            } catch (e) { /* siehe loginPrefs() */ }
+            } catch (e) { /* see loginPrefs() */ }
         },
 
         /**
-         * Cookie des Frontend-Editings auf allen Websites abgleichen
+         * Synchronize the frontend editing cookie on all websites
          * (FrontendHandover::fedSyncData(), AdminBackend::settings()).
          *
-         * Je Website erst eine Probe per Bild (c9probe=1): nur Domains, die erreichbar
-         * sind und zu dieser Installation gehören, kommen in die Kette. Dann läuft das
-         * Fenster als normale Navigation durch diese Websites (jede setzt ihr Cookie)
-         * und kehrt ins Backend zurück - der Hash bleibt über die Weiterleitungen
-         * erhalten, die Layer bauen sich wieder auf.
+         * For each website first a probe via image (c9probe=1): only domains that are reachable
+         * and belong to this installation go into the chain. Then the window runs
+         * as a normal navigation through these websites (each sets its cookie)
+         * and returns to the backend - the hash is preserved across the redirects,
+         * the layers are rebuilt.
          *
          * @param {{token: string, sites: {i: number, origin: string}[]}} data
-         * @param {function} [fallback]  keine Website erreichbar (z. B. neu laden)
+         * @param {function} [fallback]  no website reachable (e.g. reload)
          */
         fedSync(data, fallback) {
             const param = '/index.php?c9fed=' + encodeURIComponent(data.token) + '&c9hops=';
@@ -93,14 +93,14 @@
         },
 
         /**
-         * QR-Codes zeichnen: jedes Element mit data-c9-qr="…" bekommt ein SVG seines
-         * Inhalts (Einrichten der Authenticator-App, AdminBackend::totp()).
+         * Draw QR codes: each element with data-c9-qr="…" gets an SVG of its
+         * content (setting up the authenticator app, AdminBackend::totp()).
          *
-         * Erzeugt wird im Browser mit qrcode-generator (MIT, von cdnjs nach
-         * assets/qrcode/ übernommen, erst beim ersten Bedarf geladen) - die
-         * otpauth://-URI samt Secret geht an keinen fremden Dienst.
+         * Generated in the browser with qrcode-generator (MIT, taken over from cdnjs into
+         * assets/qrcode/, only loaded when first needed) - the
+         * otpauth:// URI including the secret is not sent to any third-party service.
          *
-         * @param {Element} [root]  Bereich, sonst das ganze Dokument
+         * @param {Element} [root]  area, otherwise the whole document
          */
         qrCodes(root) {
             const els = (root || document).querySelectorAll('[data-c9-qr]:not([data-c9-qr-ready])');
@@ -118,8 +118,8 @@
         },
 
         /**
-         * Text aus data-copy des Knopfs in die Zwischenablage, Rückmeldung als Balloon
-         * (Text aus data-copied).
+         * Copy the text from data-copy of the button to the clipboard, feedback as a balloon
+         * (text from data-copied).
          */
         copyText(button) {
             const text = button.dataset.copy || '';
@@ -129,13 +129,13 @@
             });
         },
 
-        // --- Passkeys (WebAuthn, developer_docs/22-webauthn.md) ---
+        // --- Passkeys (WebAuthn, developer docs, chapter 13 (Security: authentication)) ---
         //
-        // Der Server liefert die Optionen als JSON im Attribut data-options des
-        // Knopfs, Binärwerte base64url. Die Antwort des Geräts landet in versteckten
-        // Feldern des Formulars, das dann wie jedes andere abgeschickt wird
-        // (cApp.forms, Ajax). Fehler zeigt das Element [data-c9-passkey-error] im
-        // Formular (Texte in data-cancelled / data-failed / data-unsupported).
+        // The server delivers the options as JSON in the attribute data-options of the
+        // button, binary values base64url. The device's response ends up in hidden
+        // fields of the form, which is then submitted like any other
+        // (cApp.forms, Ajax). Errors are shown by the element [data-c9-passkey-error] in the
+        // form (texts in data-cancelled / data-failed / data-unsupported).
 
         _b64uToBuf(text) {
             let s = String(text).replace(/-/g, '+').replace(/_/g, '/');
@@ -175,8 +175,8 @@
         },
 
         /**
-         * Anmeldung, zweite Stufe: Signatur vom Gerät holen, ins Feld 'passkey'
-         * (JSON) schreiben, Formular abschicken (StartBackend, function=step2).
+         * Login, second stage: get the signature from the device, write it into the field 'passkey'
+         * (JSON), submit the form (StartBackend, function=step2).
          */
         async passkeyLogin(button) {
             const form = button.closest('form');
@@ -208,9 +208,9 @@
         },
 
         /**
-         * Passkey anlegen (AdminBackend, function=passkey_add): Schlüsselpaar auf dem
-         * Gerät erzeugen lassen, Antwort in die Felder client_data, attestation und
-         * transports, Formular abschicken.
+         * Create a passkey (AdminBackend, function=passkey_add): have the device generate
+         * a key pair, response into the fields client_data, attestation and
+         * transports, submit the form.
          */
         async passkeyRegister(button) {
             const form = button.closest('form');
@@ -240,8 +240,8 @@
         },
 
         /**
-         * Locales des Browsers in ICU-Schreibweise (de-AT -> de_AT), nur die mit
-         * Region - erst sie legt ein Datumsformat fest.
+         * Locales of the browser in ICU notation (de-AT -> de_AT), only those with
+         * a region - only that determines a date format.
          * @returns {string[]}
          */
         browserLocales() {
@@ -252,9 +252,9 @@
         },
 
         /**
-         * Sprache, mit der das Anmeldeformular geladen wird: die gemerkte, sonst die
-         * des Browsers ("de-AT"; der Server wählt de_AT, sonst die erste Backend-
-         * Sprache mit "de_", sonst 'en_US').
+         * Language with which the login form is loaded: the remembered one, otherwise the
+         * browser's ("de-AT"; the server chooses de_AT, otherwise the first backend
+         * language with "de_", otherwise 'en_US').
          */
         loginPrefLang() {
             const stored = this.loginPrefs().backend_code;
@@ -263,8 +263,8 @@
         },
 
         /**
-         * Auswahllisten des Anmeldeformulars vorbelegen - Aufruf nach dem Laden des
-         * Formulars (StartBackend::login()). Nur Werte, die es als Option gibt.
+         * Preselect the select lists of the login form - called after the
+         * form has loaded (StartBackend::login()). Only values that exist as an option.
          */
         loginPrefsInit() {
             const prefs = this.loginPrefs();
@@ -275,8 +275,8 @@
                 return true;
             };
 
-            // Backend-Sprache: exakt ("de_AT"), sonst die erste Option mit demselben
-            // Sprachteil ("de" -> "de_DE") - wie Cms::matchLanguage()
+            // Backend language: exact ("de_AT"), otherwise the first option with the same
+            // language part ("de" -> "de_DE") - like Cms::matchLanguage()
             const setLangOption = ($select, value) => {
                 const parts = String(value || '').split(/[-_]/);
                 const base = parts[0].toLowerCase();
@@ -289,7 +289,7 @@
             };
             const $lang = $('#login-lang');
             if (!setLangOption($lang, prefs.backend_code)) {
-                // Browsersprache ("de-AT"); unbekannt -> 'en_US'
+                // Browser language ("de-AT"); unknown -> 'en_US'
                 if (!setLangOption($lang, navigator.language)) setIfOption($lang, 'en_US');
             }
 
@@ -302,13 +302,13 @@
 
             const $locale = $('#login-locale');
             if (!setIfOption($locale, prefs.locale)) {
-                // Erste Browser-Locale, die es als Option gibt; sonst bleibt system.locale
+                // First browser locale that exists as an option; otherwise system.locale stays
                 this.browserLocales().some((tag) => setIfOption($locale, tag));
             }
         },
 
         /**
-         * Jede Änderung im Anmeldeformular sofort merken.
+         * Remember every change in the login form immediately.
          */
         _bindLoginPrefs() {
             $(document).on('change', 'select.c9-login-pref', (e) => {
@@ -322,9 +322,9 @@
         },
 
         /**
-         * Zahnrad rechts oben: persönliche Einstellungen als Layer - nur einmal
-         * (cApp.layers.addOnce(): ein weiterer Klick wird ignoriert, solange der
-         * Layer oben liegt)
+         * Gear icon at the top right: personal settings as a layer - only once
+         * (cApp.layers.addOnce(): a further click is ignored as long as the
+         * layer is on top)
          */
         _initSettingsButton() {
             $('#c9-settings-btn').on('click', (e) => {
@@ -334,7 +334,7 @@
         },
 
         /**
-         * Logout-Button rechts oben
+         * Logout button at the top right
          */
         _initLogoutButton() {
             $('#c9-logout-btn').on('click', (e) => {
@@ -344,15 +344,15 @@
         },
 
         /**
-         * Eingabemaske der Datensätze: Sprach-Reiter wechseln.
+         * Input mask of records: switch language tabs.
          *
-         * Die Maske wird nicht einfach umgeschaltet, sondern über das Formular
-         * zwischengespeichert (function=tab) und mit dem Ziel-Reiter neu geladen -
-         * siehe RecordBackendEdit::_editTab(). Das Formular trägt die versteckten
-         * Felder tab (angezeigter Reiter) und tab_target (Ziel).
+         * The mask is not simply switched, but saved temporarily via the form
+         * (function=tab) and reloaded with the target tab -
+         * see RecordBackendEdit::_editTab(). The form carries the hidden
+         * fields tab (displayed tab) and tab_target (target).
          *
-         * @param {Element} el      angeklickter Reiter (steht innerhalb des Formulars)
-         * @param {string}  target  language_id oder 'all'
+         * @param {Element} el      clicked tab (located inside the form)
+         * @param {string}  target  language_id or 'all'
          */
         recordTab(el, target) {
             const $form = $(el).closest('form');
@@ -364,11 +364,11 @@
         },
 
         /**
-         * Ändert den Visibility-Status eines Feldes
+         * Changes the visibility status of a field
          */
         visibility(el, id, name, value) {
             const $parent = $(el).closest('.form-check').parent();
-            // POST: schreibt visibility_* des Feldes (17-csrf.md §2.7)
+            // POST: writes visibility_* of the field (developer docs, chapter 14 (Security: web))
             const params = new FormData();
             params.append('id', id);
             params.append('name', name);
@@ -391,7 +391,7 @@
         },
 
         /**
-         * Lookupfeld: Verlassen mit Tab
+         * Lookup field: leave with Tab
          */
         lookupTab() {
             const element = event.currentTarget;             
@@ -405,7 +405,7 @@
         },
 
         /**
-         * sLookupfeld: Verlassen mit Tab
+         * sLookup field: leave with Tab
          */
         sLookupTab() {
             const element = event.currentTarget;             
@@ -419,15 +419,15 @@
         },
 
         /**
-         * Lookupfeld: Klick auf Such-Button
+         * Lookup field: click on the search button
          */
         lookupSearch(forceElement = null) {
-            // Wenn von lookupTab aufgerufen, nutze das übergebene Element, sonst event.currentTarget vom Klick
+            // If called from lookupTab, use the passed element, otherwise event.currentTarget of the click
             const targetElement = forceElement || event.currentTarget;
             const $container = $(targetElement).closest('.c9-lookup-field');
             let searchUrl = $container.data('search-url');
             if (searchUrl) {
-                // Hänge Text aus Eingabefeld an
+                // Append text from the input field
                 const searchText = $container.find('input[type="text"]').val();
                 if (searchText.trim() !== '') {
                     searchUrl += '&filter[_default]=' + encodeURIComponent(searchText.trim());
@@ -437,7 +437,7 @@
         },
 
         /**
-         * Lookupfeld: Klick auf Lookup-Feld Plus-Button
+         * Lookup field: click on the lookup field plus button
          */
         lookupCreate() {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -448,15 +448,15 @@
         },
 
         /**
-         * Lookupfeld eines Layers finden. In einer Maske mit eingebetteten Inhalten
-         * (Feldtyp 'link', backend-embedded.js) kann dasselbe Feld mehrfach stehen -
-         * je Inhalt einmal; dann entscheidet zusätzlich die src_id (die Arbeitskopie,
-         * an der die Verknüpfungen hängen). Ohne src_id bzw. ohne Treffer damit gilt
-         * das erste Feld mit der src_field.
+         * Find the lookup field of a layer. In a mask with embedded contents
+         * (field type 'link', backend-embedded.js) the same field can appear several times -
+         * once per content; then the src_id (the working copy the relations
+         * are attached to) also decides. Without src_id or without a match with it, the
+         * first field with the src_field applies.
          *
          * @param {jQuery} $layer
          * @param {string} selector  '.c9-lookup-field' | '.c9-upload-field'
-         * @param {string} extra     weitere Attribut-Selektoren, z. B. '[data-lang="3"]'
+         * @param {string} extra     further attribute selectors, e.g. '[data-lang="3"]'
          */
         _fieldContainer($layer, selector, srcField, srcId = 0, extra = '') {
             const base = selector + '[data-src-field="' + srcField + '"]' + extra;
@@ -468,7 +468,7 @@
         },
 
         /**
-         * Lookupfeld: Focus auf Lookup-Text-Feld setzen
+         * Lookup field: set focus on the lookup text field
          */
         lookupFocus(srcField, clear=false, srcId = 0) {
             const $container = this._fieldContainer($('.c9-layer:last'), '.c9-lookup-field', srcField, srcId);
@@ -478,7 +478,7 @@
         },
 
         /**
-         * Lookupfeld: Klick auf Update-/Clear-/Move-Button
+         * Lookup field: click on the update/clear/move button
          */
         lookupUpdate(func = null, destId = null, swapId = null) {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -489,7 +489,7 @@
         },
 
         /**
-         * Lookupfeld im Referrer-Layer: Preview-Container aktualisieren
+         * Lookup field in the referrer layer: update the preview container
          */
         lookupRUpdate(srcField, func = '', destId = 0, swapId = 0, preventClosing = false, srcId = 0) {
             const $referrerLayer = $('.c9-layer').eq(-2);
@@ -498,19 +498,19 @@
         },
 
         /**
-         * Lookupfeld: Hilfsfunktion
+         * Lookup field: helper function
          */
         _lookupUpdate($container, srcField, func = '', destId = 0, swapId = 0, preventClosing = false) {
             const max = $container.data('max');
             const $previewContainer = $container.find('.lookup-preview');
 
-            // preview-Container aktualisieren. POST: bei einem Datensatz-Lookup
-            // schreibt der Aufruf die Verknüpfung der Arbeitskopie
-            // (RecordBackendEdit::lookupPreview(), 17-csrf.md §2.7). Die Lookups der
-            // Module Admin und Template lesen nur - POST stört sie nicht.
+            // Update the preview container. POST: for a record lookup
+            // the call writes the relation of the working copy
+            // (RecordBackendEdit::lookupPreview(), developer docs, chapter 14 (Security: web)). The lookups of the
+            // modules Admin and Template only read - POST does not bother them.
             let updateUrl = $container.data('update-url');
             if ($previewContainer.length && updateUrl) {
-                // src_field und src_id stecken schon in der update-url
+                // src_field and src_id are already in the update-url
                 const params = new FormData();
                 params.append('function', func);
                 params.append('dest_id', destId);
@@ -523,15 +523,15 @@
                 });
             }
 
-            // Wenn Datensatz verlinkt wird, aber max eine Verlinkung erlaubt ist:
-            // obersten Layer jetzt schließen
+            // If a record is linked, but at most one link is allowed:
+            // close the topmost layer now
             if (func == 'link' && max == 1 && !preventClosing) {
                 cApp.layers.close();
             }
         },
 
         /**
-         * Lookupfeld: Zeile im Preview-Bereich nach Verschieben highlighten
+         * Lookup field: highlight the row in the preview area after moving
          */
         lookupHighlightRow(srcField, destId) {
             const $container = $('.c9-layer:last').find('.c9-lookup-field[data-src-field="' + srcField + '"]');
@@ -541,9 +541,9 @@
         },
 
         /**
-         * Checkbox "alle" (z. B. Felder des Exports): setzt alle sichtbaren Checkboxen
-         * im Container mit data-check-all - sind schon alle gesetzt, nimmt sie alle
-         * heraus. Zugeklappte Zeilen (Unterfelder) bleiben unberührt.
+         * Checkbox "all" (e.g. fields of the export): checks all visible checkboxes
+         * in the container with data-check-all - if all are already checked, it unchecks
+         * them all. Collapsed rows (sub-fields) remain untouched.
          */
         checkAll(element) {
             const $boxes = $(element).closest('[data-check-all]').find('tbody input[type="checkbox"]:visible');
@@ -553,8 +553,8 @@
         },
 
         /**
-         * Checkbox "alle" nachführen, wenn eine einzelne Checkbox wechselt
-         * (onchange am Container mit data-check-all)
+         * Update the checkbox "all" when a single checkbox changes
+         * (onchange on the container with data-check-all)
          */
         checkAllSync(container) {
             const $boxes = $(container).find('tbody input[type="checkbox"]:visible');
@@ -563,7 +563,7 @@
         },
 
         /**
-         * Search Lookupfeld: Auswahl entfernen
+         * Search lookup field: remove selection
          */
         slookupEmpty() {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -573,7 +573,7 @@
         },
 
         /**
-         * Search Lookupfeld: Datensatzliste öffnen
+         * Search lookup field: open the record list
          */
         slookupSearch(forceElement = null) {
             const targetElement = forceElement || event.currentTarget;
@@ -583,12 +583,12 @@
 
             let searchUrl = $container.data('search-url');
             if (searchUrl) {
-                // Hänge Text aus Eingabefeld an
+                // Append text from the input field
                 const searchText = $container.find('input[type="text"]').val();
                 if (searchText.trim() !== '') {
                     searchUrl += '&filter[_default]=' + encodeURIComponent(searchText.trim());
                 }
-                // Hänge bereits ausgewählte Datensatz-Ids als "checked"-Parameter an
+                // Append already selected record ids as the "checked" parameter
                 searchUrl += '&checked=' + encodeURIComponent(ids);
                 
                 cApp.layers.add(searchUrl, false, false, true);
@@ -596,7 +596,7 @@
         },
 
         /**
-         * Search Lookupfeld: Preview-Container aktualisieren
+         * Search lookup field: update the preview container
          */
         slookupUpdate(srcField, func = '', id = 0, preventClosing = false) {
             const $referrerLayer = $('.c9-layer').eq(-2);
@@ -605,7 +605,7 @@
             const $previewContainer = $container.find('.lookup-preview');
             const newIds = cApp.ui._slookupUpdate($container, srcField, func, id, max);
 
-            // preview-Container aktualisieren
+            // Update the preview container
             let updateUrl = $container.data('update-url');
             if (updateUrl) {
                 updateUrl += '&ids=' + encodeURIComponent(newIds);
@@ -621,7 +621,7 @@
         },
 
         /**
-         * Search Lookupfeld: Preview-Container aktualisieren
+         * Search lookup field: update the preview container
          */
         slookupUnlink(id) {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -629,7 +629,7 @@
             const srcField = $container.data('src-field');
             const newIds = cApp.ui._slookupUpdate($container, srcField, 'unlink', id, 0);
 
-            // preview-Container aktualisieren
+            // Update the preview container
             let updateUrl = $container.data('update-url');
             if (updateUrl) {
                 updateUrl += '&ids=' + encodeURIComponent(newIds);
@@ -638,9 +638,9 @@
         },
 
         /**
-         * Search Lookupfeld mit Reihenfolge (Trigger-Templates): zwei Einträge
-         * tauschen und die Vorschau neu laden - sie trägt die Hiddenfelder, ihre
-         * Reihenfolge ist der gespeicherte Wert
+         * Search lookup field with order (trigger templates): swap two entries
+         * and reload the preview - it carries the hidden fields, their
+         * order is the saved value
          */
         slookupSwap(id, otherId) {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -659,7 +659,7 @@
         },
 
         /**
-         * Parent-Lookupfeld: Verlassen mit Tab
+         * Parent lookup field: leave with Tab
          */
         pLookupTab() {
             const element = event.currentTarget;
@@ -673,10 +673,10 @@
         },
 
         /**
-         * Parent-Lookupfeld: Datensatzliste öffnen
+         * Parent lookup field: open the record list
          *
-         * Der bereits gewählte Vaterdatensatz reist als 'checked' mit - nur so kann
-         * die Liste die Zeile angehakt darstellen; im Datensatz steht er noch nicht.
+         * The already chosen parent record travels along as 'checked' - only then can
+         * the list show the row as checked; it is not yet in the record.
          */
         plookupSearch(forceElement = null) {
             const targetElement = forceElement || event.currentTarget;
@@ -693,23 +693,23 @@
         },
 
         /**
-         * Parent-Lookupfeld: Auswahl aus der Datensatzliste übernehmen
+         * Parent lookup field: take over the selection from the record list
          *
-         * Aufgerufen aus dem Listen-Layer, das Feld steckt im Layer darunter.
-         * Geschrieben wird nichts - die Auswahl landet als verstecktes
-         * data[parent_id] in der Vorschau und geht erst mit dem Formular ab.
+         * Called from the list layer, the field is in the layer below.
+         * Nothing is written - the selection ends up as a hidden
+         * data[parent_id] in the preview and is only sent with the form.
          */
         plookupUpdate(srcField, func = 'link', id = 0, preventClosing = false) {
-            // Nicht über eq(-2) suchen: das Feld liegt nicht zwingend im Layer direkt
-            // darunter (beim Anlegen aus der Auswahlliste heraus etwa nicht). Es gibt
-            // je src-field nur ein Feld, das letzte Vorkommen ist das oberste.
+            // Do not search via eq(-2): the field is not necessarily in the layer directly
+            // below (e.g. not when creating from the selection list). There is
+            // only one field per src-field, the last occurrence is the topmost.
             const $container = $('.c9-lookup-field[data-src-field="' + srcField + '"]').last();
             if (func === 'link' && !preventClosing) cApp.layers.close();
             cApp.ui._plookupUpdate($container, func, id);
         },
 
         /**
-         * Parent-Lookupfeld: Auswahl entfernen (Datensatz kommt auf die Wurzelebene)
+         * Parent lookup field: remove selection (record moves to the root level)
          */
         plookupEmpty() {
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
@@ -717,11 +717,11 @@
         },
 
         /**
-         * Parent-Lookupfeld: Hilfsfunktion
+         * Parent lookup field: helper function
          *
-         * Höchstens ein Vaterdatensatz, deshalb ersetzt 'link' die bisherige Auswahl
-         * und 'unlink' leert sie. Nach dem Neuaufbau der Vorschau wird die
-         * Vorgängerliste nachgezogen - sie zeigt nur Geschwister des neuen Parents.
+         * At most one parent record, therefore 'link' replaces the previous selection
+         * and 'unlink' clears it. After the preview is rebuilt, the
+         * predecessor list is updated - it only shows siblings of the new parent.
          */
         _plookupUpdate($container, func, id) {
             if (!$container.length) return;
@@ -742,11 +742,11 @@
         },
 
         /**
-         * Parent-Lookupfeld: Vorgängerliste im selben Formular nachladen.
+         * Parent lookup field: reload the predecessor list in the same form.
          *
-         * Nicht über cApp.forms.updateElement(): das nimmt das oberste sichtbare
-         * Formular, und das ist nicht zwangsläufig dieses. Ein Bereich ohne
-         * Positionsfeld hat gar keine Vorgängerliste - dann ist hier nichts zu tun.
+         * Not via cApp.forms.updateElement(): that takes the topmost visible
+         * form, and that is not necessarily this one. An area without a
+         * position field has no predecessor list at all - then there is nothing to do here.
          */
         _plookupPrevious($container) {
             const $form = $container.closest('form');
@@ -762,16 +762,16 @@
         },
 
         /**
-         * Search Lookupfeld: Hilfsfunktion
+         * Search lookup field: helper function
          */
         _slookupUpdate($container, srcField, func, id, max) {
             const idsStr = String($container.data('ids') ?? '');
             const idStr = String(id);
-            // Bestehende IDs in ein Array aufteilen (leere Einträge herausfiltern)
+            // Split existing IDs into an array (filter out empty entries)
             let idArray = idsStr ? idsStr.split(',') : [];
 
             if (func == 'link') {
-                // id hinzufügen
+                // add id
                 if (max == 1) {
                     idArray = [id];
                 }
@@ -783,11 +783,11 @@
             }
 
             if (func == 'unlink') {
-                // id entfernen
+                // remove id
                 idArray = idArray.filter(item => item !== idStr);
             }
 
-            // Id-String zurück ins data-Attribut schreiben
+            // Write the id string back into the data attribute
             const newIds = idArray.join(',');
             $container.data('ids', newIds); 
 
@@ -795,9 +795,9 @@
         },
 
         /**
-         * Info-Seite: ursprünglichen Dateinamen bearbeiten - blendet das
-         * Eingabefeld der Zelle ein (Backend::fileNameCell()). Die Endung ist
-         * nicht Teil der Eingabe.
+         * Info page: edit the original file name - shows the
+         * input field of the cell (Backend::fileNameCell()). The extension is
+         * not part of the input.
          */
         fileRename(button) {
             const $cell = $(button).closest('.c9-file-filename');
@@ -815,8 +815,8 @@
         },
 
         /**
-         * Neuen Namen speichern (POST, RecordBackendInfo::fileRename()) - die
-         * Antwort ersetzt die Zelle (neuer Name bzw. Fehlermeldung)
+         * Save the new name (POST, RecordBackendInfo::fileRename()) - the
+         * response replaces the cell (new name or error message)
          */
         fileRenameSave(element) {
             const $cell = $(element).closest('.c9-file-filename');
@@ -833,18 +833,18 @@
         },
 
         /**
-         * File aus File-Feld löschen (Ajax)
+         * Delete a file from a file field (Ajax)
          */
         fileUnlink() {
             const $container = $(event.currentTarget).closest('.c9-upload-field');
             const $previewContainer = $container.find('.file-preview');
             const srcField = $container.data('src-field');
             const srcId = $container.data('src-id');
-            // Sprache der Datei bei mehrsprachigen Upload-Feldern ('' einsprachig)
+            // Language of the file for multilingual upload fields ('' monolingual)
             const lang = String($container.data('lang') ?? '');
 
-            // preview-Container aktualisieren
-            // POST: markiert die Datei der Arbeitskopie als gelöscht (17-csrf.md §2.7)
+            // Update the preview container
+            // POST: marks the file of the working copy as deleted (developer docs, chapter 14 (Security: web))
             const params = new FormData();
             params.append('id', srcId);
             params.append('field_id', srcField);
@@ -857,10 +857,10 @@
         },
 
         /**
-         * Filename aus Uploadverzeichnis des Servers eintragen
+         * Enter a file name from the server's upload directory
          *
-         * @param {string} lang         Sprache des Upload-Feldes ('' bei einsprachigen Feldern)
-         * @param {number} wantedSrcId  Arbeitskopie (eingebettete Inhalte, siehe _fieldContainer())
+         * @param {string} lang         Language of the upload field ('' for monolingual fields)
+         * @param {number} wantedSrcId  Working copy (embedded contents, see _fieldContainer())
          */
         selectUploadFile(srcField, filename, lang, wantedSrcId = 0) {
             lang = String(lang ?? '');
@@ -869,19 +869,19 @@
             const srcId = $container.data('src-id');
             const $previewContainer = $container.find('.file-preview');
 
-            // preview-Container aktualisieren. Ein Feld ohne Datensatz (Import-Maske)
-            // nennt sein eigenes Script in data-select-url
+            // Update the preview container. A field without a record (import mask)
+            // names its own script in data-select-url
             const selectUrl = $container.data('select-url');
             if (selectUrl) {
-                // Import-Maske: die Vorschau trägt den Pfad nur ins Formular ein,
-                // geschrieben wird nichts (RecordBackendImport::serverFilePreview())
+                // Import mask: the preview only enters the path into the form,
+                // nothing is written (RecordBackendImport::serverFilePreview())
                 $previewContainer.cLoadContent(
                     selectUrl + (selectUrl.includes('?') ? '&' : '?') + 'filename=' + encodeURIComponent(filename)
                 );
             }
             else {
-                // POST: übernimmt die Datei ins Feld und markiert die bisherige als
-                // gelöscht (17-csrf.md §2.7)
+                // POST: takes the file into the field and marks the previous one as
+                // deleted (developer docs, chapter 14 (Security: web))
                 const params = new FormData();
                 params.append('id', srcId);
                 params.append('field_id', srcField);
@@ -897,9 +897,9 @@
         },
 
         /**
-         * Alle Checkboxes einer Tabellen-Spalte (außer disabled) toggeln - nur in der
-         * Tabelle des angeklickten Spaltenkopfs. Die Checkboxes werden angeklickt
-         * (nicht nur umgesetzt), damit ihre change-Handler laufen.
+         * Toggle all checkboxes of a table column (except disabled) - only in the
+         * table of the clicked column header. The checkboxes are clicked
+         * (not just set), so that their change handlers run.
          */
         toggleColumnCheckboxes(element) {
             const columnIndex = $(element).closest('th, td').index();
@@ -907,22 +907,22 @@
             var $checkboxes = $(element).closest('table').find('tbody tr').find('td:eq(' + targetIndex + ') input[type="checkbox"]:not(:disabled)');
             if ($checkboxes.length === 0) return;
 
-            // Prüfen, ob bereits alle aktiv sind
+            // Check whether all are already active
             var allChecked = $checkboxes.length === $checkboxes.filter(':checked').length;
 
             if (allChecked) {
-                // Wenn alle aktiv sind: Alle klicken, die aktuell "checked" sind (um sie zu deaktivieren)
+                // If all are active: click all that are currently "checked" (to deactivate them)
                 $checkboxes.filter(':checked').trigger('click');
             } else {
-                // Wenn nicht alle aktiv sind: Nur die klicken, die aktuell "nicht checked" sind (um sie zu aktivieren)
+                // If not all are active: click only those that are currently "not checked" (to activate them)
                 $checkboxes.not(':checked').trigger('click');
             }
         },
 
         /**
-         * Sprachrechte einer Benutzergruppe (GroupBackend, Vorlage group_language_row):
-         * "schreiben" setzt "lesen" mit, "lesen" abhaken nimmt "schreiben" mit.
-         * "schreiben" abhaken lässt "lesen" stehen.
+         * Language permissions of a user group (GroupBackend, template group_language_row):
+         * "write" also sets "read", unchecking "read" also removes "write".
+         * Unchecking "write" leaves "read" in place.
          */
         groupLanguageRight(checkbox) {
             const $row = $(checkbox).closest('tr');
@@ -935,21 +935,21 @@
         },
 
         /**
-         * Prüft, ob der Layer mit den Hintergrundprozessen sichtbar (geöffnet) ist
+         * Checks whether the layer with the background processes is visible (open)
          */
         bgprocVisible() {
             return $('#c9-bgproc-container').is(':visible');
         },
 
         /**
-         * Buttons zum Beenden von Hintergrundprozessen initialisieren
+         * Initialize the buttons for ending background processes
          */
         _bindBgprocRemove() {
             $(document).on('click', '.c9-abort-bgproc', (e) => {
                 e.preventDefault();
                 const $listElement = $(e.currentTarget).closest('li');
                 const token = $listElement.data('token');
-                // POST: bricht einen laufenden Prozess ab (17-csrf.md §2.7)
+                // POST: aborts a running process (developer docs, chapter 14 (Security: web))
                 const params = new FormData();
                 params.append('token', token);
                 $listElement.cLoadContent({
@@ -961,7 +961,7 @@
         },
 
         /**
-         * Klickbare Tabellen-Spaltenköpfe initialisieren
+         * Initialize clickable table column headers
          */
         _bindColumnCheckboxes() {
             $(document).on('click', '.c9-toggle-col-checkboxes', (e) => {
@@ -971,7 +971,7 @@
         },
 
         /**
-         * Initialisiert Bootstrap-Tooltips lazy per Event Delegation.
+         * Initializes Bootstrap tooltips lazily via event delegation.
          */
         _bindTooltips() {
             $('body').on('mouseenter', '[data-bs-toggle="tooltip"]', (e) => {
@@ -984,7 +984,7 @@
         },
 
         /**
-         * Lädt weiteren Inhalt per Ajax in den Eltern-Container.
+         * Loads further content via Ajax into the parent container.
          */
         _bindLoadMore() {
             $(document).on('click', '.c9-load-more', (e) => {
@@ -995,16 +995,16 @@
         },
 
         /**
-         * Delegierter Handler für Textarea-Auto-Resize.
-         * Reagiert auf Eingaben in beliebig späte DOM-Ergänzungen.
+         * Delegated handler for textarea auto-resize.
+         * Reacts to input in DOM additions made at any later time.
          */
         _bindTextareaGrow() {
-            // 1. Für normale Textfelder (mit Limitierung auf 75vh)
+            // 1. For normal text fields (limited to 75vh)
             $(document).on('input', 'textarea.c9-textarea-grow', (e) => {
                 this._resizeTextarea(e.currentTarget);
             });
             
-            // 2. Für Code-Editoren (endloses Wachstum + Zeilennummern)
+            // 2. For code editors (endless growth + line numbers)
             $(document).on('input', 'textarea.c9-code-grow', (e) => {
                 this._resizeCodeTextarea(e.currentTarget);
                 this._updateLineNumbers(e.currentTarget);
@@ -1012,18 +1012,18 @@
         },
 
         /**
-         * Initialisiert alle .c9-textarea-grow innerhalb eines Containers.
-         * Aufruf nach Ajax-Ladungen mit dem geladenen Container als Scope.
+         * Initializes all .c9-textarea-grow within a container.
+         * Called after Ajax loads with the loaded container as scope.
          *
-         * @param {jQuery} $scope – Container des geladenen Inhalts
+         * @param {jQuery} $scope – container of the loaded content
          */
         _initTextareaGrow($scope) {
-            // 1. Normale Textfelder
+            // 1. Normal text fields
             $scope.find('textarea.c9-textarea-grow').each((_, el) => {
                 this._resizeTextarea(el);
             });
             
-            // 2. Code-Editoren
+            // 2. Code editors
             $scope.find('textarea.c9-code-grow').each((_, el) => {
                 this._resizeCodeTextarea(el);
                 this._updateLineNumbers(el);
@@ -1031,16 +1031,16 @@
         },
 
         /**
-         * Initialisiert alle .c9-textarea-grow nach Ajax-Loads
+         * Initializes all .c9-textarea-grow after Ajax loads
          */
         _bindAjaxTextareaGrow() {
             $(document).ajaxComplete((event, xhr, settings) => {
-                // 1. Normale Textfelder
+                // 1. Normal text fields
                 $('textarea.c9-textarea-grow').each((index, element) => {
                     this._resizeTextarea(element);
                 });
                 
-                // 2. Code-Editoren
+                // 2. Code editors
                 $('textarea.c9-code-grow').each((index, element) => {
                     this._resizeCodeTextarea(element);
                     this._updateLineNumbers(element);
@@ -1049,8 +1049,8 @@
         },
 
         /**
-         * Berechnet und setzt die Höhe einer Textarea.
-         * Mindesthöhe wird beim ersten Aufruf einmalig gespeichert.
+         * Calculates and sets the height of a textarea.
+         * The minimum height is stored once on the first call.
          *
          * @param {HTMLElement} el
          */
@@ -1066,8 +1066,8 @@
         },
 
         /**
-         * Berechnet und setzt die Höhe der Code-Textarea.
-         * Wächst endlos mit (ohne window.innerHeight Limit).
+         * Calculates and sets the height of the code textarea.
+         * Grows endlessly (without the window.innerHeight limit).
          *
          * @param {HTMLElement} el
          */
@@ -1077,7 +1077,7 @@
             }
             el.style.height = 'auto';
 
-            // Prüfen, ob eine horizontale Scrollbar aktiv ist
+            // Check whether a horizontal scrollbar is active
             const hasHorizontalScrollbar = el.scrollWidth > el.clientWidth;
             const horizontalScrollbarHeight = hasHorizontalScrollbar 
                 ? (el.offsetHeight - el.clientHeight) 
@@ -1090,8 +1090,8 @@
         },
 
         /**
-         * Zählt die Zeilenumbrüche in der Textarea und baut 
-         * den HTML-String für die Zeilennummern auf.
+         * Counts the line breaks in the textarea and builds
+         * the HTML string for the line numbers.
          *
          * @param {HTMLElement} el
          */
@@ -1102,14 +1102,14 @@
             const targetDiv = document.querySelector(targetSelector);
             if (!targetDiv) return;
 
-            // Anzahl der Zeilen anhand der \n (Newlines) ermitteln
+            // Determine the number of lines based on \n (newlines)
             const linesCount = el.value.split('\n').length;
             
-            // Performance-Check: DOM nur updaten, wenn sich die Zeilenanzahl geändert hat
+            // Performance check: only update the DOM if the number of lines has changed
             if (el._c9LinesCount === linesCount) return;
             el._c9LinesCount = linesCount;
 
-            // Nummern neu generieren
+            // Regenerate the numbers
             let numbersHtml = '';
             for (let i = 1; i <= linesCount; i++) {
                 numbersHtml += i + '<br>';
@@ -1122,8 +1122,8 @@
                 const $button = $('#c9-hamburger');
                 const $menu = $('#c9-menu-container');
 
-                // Inhalt bei jedem Öffnen neu vom Server (Start/menu.php): Info,
-                // Handbücher und die Module, die die Gruppe gerade darf
+                // Content fresh from the server on every opening (Start/menu.php): info,
+                // manuals and the modules the group is currently allowed to use
                 $button.on('click', function(e) {
                     e.stopPropagation();
                     if (!$menu.is(':visible')) {

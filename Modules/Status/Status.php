@@ -1,25 +1,25 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `status` - die Redaktions-Zustände eines Datensatzes.
+ * Dataset child class for the table `status` - the editorial states of a record.
  *
- * Ein Status ist reine Anzeige-Information: Beschriftung, Material-Icon und
- * Bootstrap-Farbklasse. Er steuert (noch) nicht, ob ein Datensatz im Frontend
- * erscheint - dafür sind record.online_at / offline_at zuständig.
+ * A status is pure display information: label, Material icon and
+ * Bootstrap color class. It does not (yet) control whether a record appears in the frontend -
+ * record.online_at / offline_at are responsible for that.
  *
- *     icon          Ligatur der Material-Icons-Schrift, z. B. 'check', 'block'
- *     color_class   CSS-Klasse für die Einfärbung, z. B. 'text-success', 'c9-text-yellow'
- *     position      Reihenfolge in Auswahllisten
- *     group_ids     Benutzergruppen, die den Status setzen dürfen (`rel_group_status`,
- *                   'reltable') - dieselben Zeilen wie im Formular der Gruppe
- *                   (Group, Feld statuses). Die Superuser-Gruppe darf immer alles
- *                   und wird nicht geführt. Ändern darf die Zuordnung nur ein
- *                   Superuser (wie die Rechte der Gruppen); ein neuer Status ohne
- *                   Angabe ist für alle Gruppen setzbar.
+ *     icon          ligature of the Material Icons font, e.g. 'check', 'block'
+ *     color_class   CSS class for the coloring, e.g. 'text-success', 'c9-text-yellow'
+ *     position      order in select lists
+ *     group_ids     user groups that may set the status (`rel_group_status`,
+ *                   'reltable') - the same rows as in the form of the group
+ *                   (Group, field statuses). The superuser group may always do everything
+ *                   and is not listed. Only a superuser may change the assignment
+ *                   (like the permissions of the groups); a new status without
+ *                   specification can be set by all groups.
  *
- * Verwendet wird der Status über record.status_id.
- * Records mit stauts_id > 0 sind im Frontend nicht sichtbar.
+ * The status is used via record.status_id.
+ * Records with status_id > 0 are not visible in the frontend.
  *
- * @see Camindo\Core\Access::statusWrite()            setzen = Recht, lesen = alle
+ * @see Camindo\Core\Access::statusWrite()            set = permission, read = everyone
  * @see Camindo\Core\Modules\Status\StatusBackend
  * @see Camindo\Core\Dataset
  */
@@ -34,11 +34,11 @@ use Camindo\Core\Modules\Admin\Group;
 class Status extends Dataset {
     
     /**
-     * Ersatz-Status, auf den Datensätze beim Löschen dieses Status umgestellt werden.
-     * Vorbelegt mit 1 weil dieser Status nicht gelöscht werden kann und alle löschbaren
-     * Status die selbe Auswirkung haben: Datensatz wird nicht im Frontend angezeigt
+     * Replacement status to which records are switched when this status is deleted.
+     * Preset to 1 because this status cannot be deleted and all deletable
+     * statuses have the same effect: record is not shown in the frontend
      */
-    protected int $replacementId = 1; // Ersatz für gelöschten Status in Tabelle `record`
+    protected int $replacementId = 1; // Replacement for a deleted status in table `record`
 
     protected function hookDefinition(): void
     {
@@ -60,7 +60,7 @@ class Status extends Dataset {
                 'type'  => 'chars',
                 'label' => '#status.field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select a snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'color_class' => [
@@ -75,7 +75,7 @@ class Status extends Dataset {
                 'label' => '#status.field_position',
                 'display_type' => 'select',
             ],
-            // Tabelle `rel_group_status` (ohne die Superuser-Gruppe)
+            // Table `rel_group_status` (without the superuser group)
             'group_ids' => [
                 'type'  => 'reltable',
                 'display_type' => 'multiselect',
@@ -86,27 +86,27 @@ class Status extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: neuen Status ans Ende der Sortierung stellen.
+     * Before creating: put the new status at the end of the sort order.
      */
     protected function hookOnCreate(array &$data): void
     {
         $sql = "SELECT COALESCE(MAX(`position`), 0) + 1 FROM `status`";
         $this->db->query($sql);
         $data['position'] = $this->db->fetchNum()[0] ?? 0;
-        // Voreinstellung: alle Gruppen dürfen den neuen Status setzen
+        // Default: all groups may set the new status
         $data['group_ids'] = $this->groupIds();
     }
 
     /**
-     * Vor dem Speichern: group_ids nur von einem Superuser, nur vorhandene Gruppen
-     * (ohne die Superuser-Gruppe).
+     * Before saving: group_ids only from a superuser, only existing groups
+     * (without the superuser group).
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         if (!in_array('group_ids', $fields, true)) return;
         $access = $this->container->get(Access::class);
         if ($access->isLoaded() && !$access->isSuperuser()) {
-            // Rechte vergibt nur ein Superuser - die Angabe bleibt unbeachtet
+            // Only a superuser grants permissions - the specification is ignored
             $fields = array_values(array_diff($fields, ['group_ids']));
             unset($data['group_ids']);
             return;
@@ -118,8 +118,8 @@ class Status extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: die Gruppenzuordnung schreiben (writeGroups()). Ein neuer
-     * Status ohne Angabe wird für alle Gruppen setzbar.
+     * After saving: write the group assignment (writeGroups()). A new
+     * status without specification can be set by all groups.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
@@ -132,11 +132,11 @@ class Status extends Dataset {
     }
 
     /**
-     * Gruppenzuordnung eines Status ohne save() ändern - für die beiden Grundstatus:
-     * status_id 0 hielte Dataset::save() für einen neuen Datensatz. Nur Superuser.
+     * Change the group assignment of a status without save() - for the two basic statuses:
+     * status_id 0 would be treated by Dataset::save() as a new record. Superusers only.
      *
-     * @param int[] $groupIds  Gruppen, die den Status setzen dürfen
-     * @return bool            false: Meldung in Cms::errors
+     * @param int[] $groupIds  groups that may set the status
+     * @return bool            false: message in Cms::errors
      */
     public function saveGroups(int $statusId, array $groupIds): bool
     {
@@ -154,8 +154,8 @@ class Status extends Dataset {
     }
 
     /**
-     * `rel_group_status` eines Status schreiben (signiert, Integrity), dann
-     * Gruppendateien und Sessions der betroffenen Gruppen erneuern.
+     * Write `rel_group_status` of a status (signed, Integrity), then
+     * renew group files and sessions of the affected groups.
      */
     private function writeGroups(int $statusId, array $groupIds, array $oldIds, bool $isNew = false): void
     {
@@ -174,7 +174,7 @@ class Status extends Dataset {
             if ($isNew) $this->container->get(InstanceCache::class)->rebuild();
             return;
         }
-        // Gruppendateien neu, Sessions der Admins dieser Gruppen nachziehen
+        // Renew group files, update the sessions of the administrators of these groups
         $group = $this->container->get(Group::class);
         foreach ($changed as $groupId) {
             $group->afterChange($groupId);
@@ -182,7 +182,7 @@ class Status extends Dataset {
     }
 
     /**
-     * Nach dem Laden: die Gruppen, die den Status setzen dürfen.
+     * After loading: the groups that may set the status.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -193,8 +193,8 @@ class Status extends Dataset {
     }
 
     /**
-     * Nach dem Löschen: die Zeilen in `rel_group_status` räumt der Fremdschlüssel ab,
-     * die Gruppendateien werden neu geschrieben.
+     * After deleting: the foreign key removes the rows in `rel_group_status`,
+     * the group files are rewritten.
      */
     protected function hookOnDeleted(array $data): void
     {
@@ -202,8 +202,8 @@ class Status extends Dataset {
     }
 
     /**
-     * Gruppen, denen Status zugeordnet werden können: alle außer der
-     * Superuser-Gruppe (sie darf ohnehin alles), sortiert nach group_id.
+     * Groups to which statuses can be assigned: all except the
+     * superuser group (it may do everything anyway), sorted by group_id.
      *
      * @return int[]
      */
@@ -217,30 +217,30 @@ class Status extends Dataset {
     }
 
     /**
-     * Vor dem Löschen... (Rollback bei Fehlern)
+     * Before deleting... (rollback on errors)
      *
-     * Hängt alle Datensätze mit dem gelöschten Status auf $replacementId um. Ohne das
-     * zeigte record.status_id auf einen nicht mehr existierenden Status (es gibt für
-     * dieses Feld keinen Fremdschlüssel, der das verhindern würde).
+     * Moves all records with the deleted status to $replacementId. Without this,
+     * record.status_id would point to a status that no longer exists (there is no
+     * foreign key for this field that would prevent it).
      *
-     * Läuft in der Transaktion von Dataset::delete(): wirft das UPDATE, wird auch die
-     * Löschung zurückgerollt.
+     * Runs in the transaction of Dataset::delete(): if the UPDATE throws, the
+     * deletion is rolled back too.
      */
     protected function hookOnDelete(array $data): void
     {
-        // Stelle Records auf Ersatz-Status um
+        // Switch records to the replacement status
         $query = "UPDATE `record` SET `status_id` = ? WHERE `status_id` = ?";
         $this->db->query($query, 'ii', [$this->replacementId, $data['status_id']]);
     }
 
-    // Sonderfunktionen für Status
+    // Special functions for Status
     // --------------------
 
     /**
-     * Ersatz-Status für den nächsten delete()-Aufruf festlegen.
-     * Muss VOR delete() gesetzt werden, danach ist es wirkungslos.
+     * Set the replacement status for the next delete() call.
+     * Must be set BEFORE delete(); afterwards it has no effect.
      *
-     * @param int $replacementId  status_id, auf die betroffene Datensätze umgestellt werden
+     * @param int $replacementId  status_id to which affected records are switched
      */
     public function setReplacementId(int $replacementId): void
     {

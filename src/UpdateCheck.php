@@ -1,30 +1,30 @@
 <?php
 /**
- * Update-Prüfung: gibt es neuere Versionen von camindo CMS und den installierten
- * Paketen, und sind Sicherheitslücken bekannt?
+ * Update check: are there newer versions of camindo CMS and the installed
+ * packages, and are security vulnerabilities known?
  *
- * Grundlage ist Composer, das die Installation ohnehin verwaltet
- * (docs/developers/14-installation-und-update.md):
+ * The basis is Composer, which manages the installation anyway
+ * (developer docs, chapter 09 (Installation and update)):
  *
- *     composer outdated --format=json   neuere Versionen aller installierten Pakete
- *                                       (camindo/cms, Zusatzmodule, Bibliotheken;
- *                                       direkte und abhängige)
- *     composer audit --format=json      bekannte Sicherheitslücken (Advisory-Datenbank
- *                                       von Packagist/GitHub) und aufgegebene Pakete
+ *     composer outdated --format=json   newer versions of all installed packages
+ *                                       (camindo/cms, add-on modules, libraries;
+ *                                       direct and dependent)
+ *     composer audit --format=json      known security vulnerabilities (advisory database
+ *                                       of Packagist/GitHub) and abandoned packages
  *
- * Beides braucht Netz und dauert einige Sekunden. Deshalb läuft die Prüfung als
- * Aufgabe des Zeitplaners (Typ updatecheck, Vorgabe täglich nachts) und
- * auf Knopfdruck in der Info-Seite (StartBackend::info()); angezeigt wird das
- * gespeicherte Ergebnis (var/cache/update-check.json). Die Startseite warnt
- * Superuser über SystemHealth (Prüfung 'updates').
+ * Both need a network connection and take a few seconds. That is why the check runs as
+ * a task of the scheduler (type updatecheck, default daily at night) and
+ * on demand in the info page (StartBackend::info()); the stored result
+ * (var/cache/update-check.json) is displayed. The start page warns
+ * superusers via SystemHealth (check 'updates').
  *
- * Nicht erfasst: Javascript-Bibliotheken, die als Dateien im Core liegen (jQuery,
- * Bootstrap, qrcode-generator, vanillajs-datepicker) - sie kommen mit dem
- * Update von camindo/cms.
+ * Not covered: JavaScript libraries that are files in the core (jQuery,
+ * Bootstrap, qrcode-generator, vanillajs-datepicker) - they come with the
+ * update of camindo/cms.
  *
- * Composer bekommt ein eigenes COMPOSER_HOME unter var/tmp: der Webserver-Benutzer
- * hat meist kein beschreibbares Home-Verzeichnis. paths.composer = '' schaltet die
- * Prüfung ab.
+ * Composer gets its own COMPOSER_HOME under var/tmp: the web server user
+ * usually has no writable home directory. paths.composer = '' switches the
+ * check off.
  */
 namespace Camindo\Core;
 
@@ -33,7 +33,7 @@ class UpdateCheck {
     /** Ergebnisdatei unter var/cache */
     public const CACHE_FILE = 'update-check.json';
 
-    /** Höchstdauer je Composer-Aufruf in Sekunden */
+    /** Maximum duration per Composer call in seconds */
     public const TIMEOUT = 120;
 
     public function __construct(
@@ -44,19 +44,19 @@ class UpdateCheck {
     {
     }
 
-    /** Ist die Prüfung eingerichtet (paths.composer)? */
+    /** Is the check set up (paths.composer)? */
     public function enabled(): bool
     {
         return trim((string)$this->config->get('paths.composer')) !== '';
     }
 
     /**
-     * Gespeichertes Ergebnis der letzten Prüfung, null = noch nie geprüft.
+     * Stored result of the last check, null = never checked.
      *
      * @return array|null  checked_at (UTC), core (installed, latest|null),
-     *                     outdated (Liste: name, version, latest, direct, status),
-     *                     advisories (Liste: package, title, cve, link, severity,
-     *                     affected), abandoned (Liste: package, replacement), error
+     *                     outdated (list: name, version, latest, direct, status),
+     *                     advisories (list: package, title, cve, link, severity,
+     *                     affected), abandoned (list: package, replacement), error
      */
     public function result(): ?array
     {
@@ -67,7 +67,7 @@ class UpdateCheck {
     }
 
     /**
-     * Prüfung ausführen und das Ergebnis speichern.
+     * Run the check and save the result.
      */
     public function run(): array
     {
@@ -84,7 +84,7 @@ class UpdateCheck {
             return $result;
         }
 
-        // composer outdated: Exit-Code 0, JSON auf stdout
+        // composer outdated: exit code 0, JSON on stdout
         $outdated = $this->composer(['outdated', '--format=json'], $error);
         if ($outdated === null) {
             $result['error'] = $error;
@@ -98,14 +98,14 @@ class UpdateCheck {
                 'version' => (string)($package['version'] ?? ''),
                 'latest' => $latest,
                 'direct' => !empty($package['direct-dependency']),
-                // semver-safe-update | update-possible (neue Hauptversion)
+                // semver-safe-update | update-possible (new major version)
                 'status' => (string)($package['latest-status'] ?? ''),
             ];
             if ($name === 'camindo/cms') $result['core']['latest'] = $latest;
             $result['outdated'][] = $entry;
         }
 
-        // composer audit: Exit-Code > 0, wenn es Befunde gibt - das JSON zählt
+        // composer audit: exit code > 0 if there are findings - the JSON counts
         $audit = $this->composer(['audit', '--format=json', '--locked'], $error, acceptExitCodes: true);
         if ($audit === null) {
             $result['error'] = trim($result['error'] . ' ' . $error);
@@ -136,10 +136,10 @@ class UpdateCheck {
     }
 
     /**
-     * Composer im Projektverzeichnis aufrufen und die JSON-Ausgabe lesen.
+     * Call Composer in the project directory and read the JSON output.
      *
-     * @param bool $acceptExitCodes  Exit-Code ungleich 0 ist kein Fehler (audit)
-     * @return array|null            null: Fehler in $error
+     * @param bool $acceptExitCodes  Exit code other than 0 is not an error (audit)
+     * @return array|null            null: error in $error
      */
     private function composer(array $args, ?string &$error, bool $acceptExitCodes = false): ?array
     {

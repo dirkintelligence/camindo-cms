@@ -1,116 +1,116 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `area` - die Inhaltsbereiche.
+ * Dataset subclass for the table `area` - the content areas.
  *
- * Ein Inhaltsbereich ist der Container, der festlegt, WELCHE Eingabefelder seine
- * Datensätze haben. Der Redakteur baut sich sein Datenmodell damit selbst zusammen:
- * Bereich anlegen, Felder definieren (Tabelle `field`), Datensätze einpflegen
+ * A content area is the container that defines WHICH input fields its
+ * records have. The editor builds their data model themselves with it:
+ * create an area, define fields (table `field`), enter records
  * (Tabelle `record`).
  *
- * FÜNF ARTEN VON BEREICHEN (Spalte `type`)
+ * FIVE KINDS OF AREAS (column `type`)
  * --------------------
- *     record     Bereich für Inhaltsdatensätze - der Normalfall
- *     profile    Inhaltsdatensätze, die User-Profile der Frontend-Community sind:
- *                ein Datensatz je User; login_name_field_id und
- *                login_password_field_id nennen die beiden Eingabefelder,
- *                mit denen sich der User an der Website anmeldet (CMS:USER_LOGIN)
- *     ugc        Inhaltsdatensätze, die User im Frontend anlegen ("user generated
- *                content", CMS:USER_INPUT): details.profile_area_ids sagt, aus
- *                welchen Profil-Bereichen die Autoren stammen dürfen
- *     template   Bereich für Frontend-Templates
- *     folder     reiner Ordner zum Gliedern der Baumnavigation, ohne eigene Inhalte
+ *     record     area for content records - the normal case
+ *     profile    content records that are the user profiles of the frontend community:
+ *                one record per user; login_name_field_id and
+ *                login_password_field_id name the two input fields
+ *                with which the user logs in to the website (CMS:USER_LOGIN)
+ *     ugc        content records that users create in the frontend ("user generated
+ *                content", CMS:USER_INPUT): details.profile_area_ids says which
+ *                profile areas the authors may come from
+ *     template   area for frontend templates
+ *     folder     plain folder for structuring the tree navigation, without its own content
  *
- * record, profile und ugc sind für Eingabemaske, Listen, Suche und Cms::select()
- * dasselbe: Datensatzbereiche (CONTENT_TYPES). Wo bisher auf 'record' geprüft
- * wurde, gilt jetzt isContentType().
+ * record, profile and ugc are the same for the input mask, lists, search and Cms::select():
+ * record areas (CONTENT_TYPES). Where checks used to be made for 'record'
+ * now isContentType() applies.
  *
  * BAUMSTRUKTUR
  * --------------------
- * Bereiche bilden einen Baum. Über TreeManagerTrait werden parallel Nested Set
- * (lft/rgt) und Adjacency List (parent_id/position/depth/parent_ids) geführt -
- * daher die Standardsortierung 'lft ASC', die den Baum in Anzeigereihenfolge liefert.
+ * Areas form a tree. Via TreeManagerTrait, a nested set
+ * (lft/rgt) and an adjacency list (parent_id/position/depth/parent_ids) are kept in parallel -
+ * hence the default sort order 'lft ASC', which returns the tree in display order.
  *
  * NAME
  * --------------------
  * `name` (Pflichtfeld, Kleinbuchstaben/Ziffern/Unterstrich, eindeutig innerhalb
- * der Instanz und ihrer lesbaren Instanzen - siehe InstanceCache::uniqueScope()) ist
- * der Bezeichner, über den Templates den Bereich ansprechen: CMS:SELECT übersetzt
- * filter[area]=artikel und sort=area über den Instanz-Dateicache in area_id. Damit
- * die Übersetzung stimmt, schreiben hookOnSaved() und hookOnDeleted() den Cache neu
- * (InstanceCache::rebuild()) - genau wie die Module Instance und Language.
+ * of the instance and its readable instances - see InstanceCache::uniqueScope()) is
+ * the identifier by which templates address the area: CMS:SELECT translates
+ * filter[area]=artikel and sort=area via the instance file cache into area_id. For this
+ * the translation to be correct, hookOnSaved() and hookOnDeleted() rewrite the cache
+ * (InstanceCache::rebuild()) - just like the modules Instance and Language.
  *
- * VORGABEN FÜR DIE DATENSÄTZE DES BEREICHS
+ * DEFAULTS FOR THE RECORDS OF THE AREA
  * --------------------
- *     default_field_id      welches Feld als "Titel" gilt. Sein Inhalt landet
- *                           zusätzlich in data_dft und ist über den Pseudo-Feldnamen
- *                           _default filter- und sortierbar.
- *     default_template_id   Template, wenn der Datensatz keins gewählt hat
- *     list_template_id      Template, das die Datensatzliste im Backend um eine
- *                           Spalte ergänzt (RecordBackendList) und die ausführliche
- *                           Lookup-Vorschau abschließt (RecordBackendEdit) - je
- *                           Datensatz mit dessen Inhalten als $cms ausgeführt
- *     trigger_template_ids  Templates mit Ereignis-Methoden (onCreate, onSave ...),
- *                           die beim Anlegen, Laden, Speichern, Löschen und
- *                           Wiederherstellen der Datensätze nacheinander laufen
- *                           (TriggerTemplates) - Tabelle `rel_area_trigger` mit
- *                           `position`, kein Feld der Tabelle `area`
- *     overview_template_id  Übersichts-Template: die Adresse, die nur aus dem
- *                           Slug-Präfix des Bereichs besteht (/de/modelle), zeigt
- *                           dieses Template ohne Datensatz (Page::resolveRequest(),
- *                           Cms::areaUrl()) - ohne Präfix oder Template: 404
- *     sort_field_id/-order  Standardsortierung der Datensatzliste
+ *     default_field_id      which field counts as "title". Its content also goes
+ *                           into data_dft and can be filtered and sorted via the pseudo field name
+ *                           _default.
+ *     default_template_id   template if the record has not selected one
+ *     list_template_id      template that adds a column to the record list in the backend
+ *                           (RecordBackendList) and completes the detailed
+ *                           lookup preview (RecordBackendEdit) - per
+ *                           record, executed as $cms with that record's contents
+ *     trigger_template_ids  templates with event methods (onCreate, onSave ...),
+ *                           which run in sequence when records are created, loaded, saved, deleted and
+ *                           restored
+ *                           (TriggerTemplates) - table `rel_area_trigger` with
+ *                           `position`, not a field of the table `area`
+ *     overview_template_id  overview template: the address that consists only of the
+ *                           slug prefix of the area (/de/modelle) shows
+ *                           this template without a record (Page::resolveRequest(),
+ *                           Cms::areaUrl()) - without prefix or template: 404
+ *     sort_field_id/-order  default sort order of the record list
  *
- * Jeder Datensatzbereich hat den Volltext `fulltext` über alle Text- und Upload-Felder -
- * ohne eigenes Eingabefeld (VirtualFieldsTrait::refreshStandardFulltext()).
+ * Every record area has the full text `fulltext` over all text and upload fields -
+ * without its own input field (VirtualFieldsTrait::refreshStandardFulltext()).
  *
- * LÖSCHEN IN ZWEI STUFEN
+ * DELETION IN TWO STAGES
  * --------------------
- * Soft-Delete markiert Bereich UND Datensätze mit demselben changed_at-Zeitstempel
- * (hookOnSoftDelete); hookOnRestore macht genau diesen einen Vorgang wieder rückgängig
- * und lässt frühere Löschvorgänge in Ruhe. Endgültig gelöscht wird der Bereich samt
- * seiner Datensätze erst durch das Systemtool (hookOnDelete).
+ * Soft delete marks the area AND its records with the same changed_at timestamp
+ * (hookOnSoftDelete); hookOnRestore reverts exactly this one operation
+ * and leaves earlier deletions alone. The area is only permanently deleted, together with
+ * its records, by the system tool (hookOnDelete).
  *
- * Alle drei Hooks schicken die Datensätze EINZELN durch die passende Record-Funktion
- * (softDelete / restoreOne / finalDelete), damit je Datensatz dessen eigene Hooks
- * laufen - insbesondere das Verschieben der Mediendateien in den Papierkorb und zurück.
- * Massen-UPDATEs über area_id gibt es hier bewusst nicht mehr.
+ * All three hooks send the records ONE BY ONE through the matching Record function
+ * (softDelete / restoreOne / finalDelete), so that each record's own hooks
+ * run - in particular moving the media files to the trash and back.
+ * Mass UPDATEs via area_id are deliberately no longer used here.
  *
- * SLUG-PRÄFIX (details.slug_prefix)
+ * SLUG PREFIX (details.slug_prefix)
  * --------------------
- * Ein Datensatzbereich kann den URLs seiner Datensätze einen Präfix voranstellen:
- * Bereich Farben mit "farben", Datensatz mit dem Slug "blau" -> /farben/blau. Damit
- * dürfen gleichnamige Slugs in verschiedenen Bereichen vorkommen (/farben/rot und
- * /rot). Der Präfix ist mehrsprachig (language_id => Präfix, Fallback auf die
- * Hauptsprache der Instanz), ein einzelner Pfadteil ohne Slash. Ordner und
- * Template-Bereiche haben keinen.
+ * A record area can put a prefix in front of the URLs of its records:
+ * area Colors with "farben", record with the slug "blau" -> /farben/blau. This way
+ * slugs with the same name may occur in different areas (/farben/rot and
+ * /rot). The prefix is multilingual (language_id => prefix, falling back to the
+ * main language of the instance), a single path part without a slash. Folders and
+ * template areas have none.
  *
- * Innerhalb der Instanz und ihrer zusammengeschalteten Instanzen (InstanceCache::
+ * Within the instance and its linked instances (InstanceCache::
  * uniqueScope()) gilt je Sprache (slugPrefixErrors()):
- *     - kein anderer Bereich führt denselben Präfix
- *     - kein Datensatz eines Bereichs OHNE Präfix hat einen Slug, dessen erster
- *       Pfadteil der neue Präfix ist ("farben" oder "farben/gelb")
- *     - fällt der Präfix weg, darf keiner der eigenen Datensätze danach denselben
- *       Pfad haben wie ein Datensatz eines Bereichs ohne Präfix oder mit dem Präfix
+ *     - no other area uses the same prefix
+ *     - no record of an area WITHOUT a prefix has a slug whose first
+ *       path part is the new prefix ("farben" or "farben/gelb")
+ *     - if the prefix is dropped, none of the own records may then have the same
+ *       path as a record of an area without a prefix or with the prefix
  *       eines anderen Bereichs beginnen
- * Die Gegenrichtung (ein Datensatz bekommt einen Slug, der mit einem Präfix
- * beginnt) prüft Record::slugPathOk(). Aufgelöst werden die Pfade in
- * Cms::recordIdsBySlugPath(), erzeugt in Cms::recordUrl(); der Instanz-Dateicache
- * führt die Präfixe je Sprache (InstanceCache::slugPrefix()).
+ * The reverse direction (a record gets a slug that begins with a prefix)
+ * is checked by Record::slugPathOk(). Paths are resolved in
+ * Cms::recordIdsBySlugPath(), generated in Cms::recordUrl(); the instance file cache
+ * keeps the prefixes per language (InstanceCache::slugPrefix()).
  *
- * BEREICHSRECHTE (rel_group_area, docs/developers/12-group-rights.md)
+ * AREA RIGHTS (rel_group_area, developer docs, chapter 11 (Permissions))
  * --------------------
- * Welche Benutzergruppe einen Bereich lesen darf und was sie mit seinen Datensätzen
- * tun darf, steht in `rel_group_area` (Zeile = Leserecht + Flags). Gepflegt wird das
- * im Reiter "Zugriff" des Bereichs (AreaBackend::infoAccess() -> saveAccess(): alle
- * Gruppen, ein Bereich) und in der Gruppe (GroupBackend::access(): alle Bereiche,
- * eine Gruppe). Ein NEUER Bereich bekommt seine Zeilen in hookOnSaved(): für die im
- * Formular gewählten Gruppen (Feld access_group_ids) - fehlt das Feld (Import,
- * Kopie, CLI), für alle Gruppen, denen die Instanz zugewiesen ist. Nur Gruppen mit
- * der Instanz des Bereichs bekommen eine Zeile; Ordner haben keine Rechte.
- * Eine Kopie übernimmt die Rechte des Originals (copyAccess()).
+ * Which user group may read an area and what it may do with its records is
+ * stored in `rel_group_area` (row = read right + flags). This is maintained
+ * in the "Access" tab of the area (AreaBackend::infoAccess() -> saveAccess(): all
+ * groups, one area) and in the group (GroupBackend::access(): all areas,
+ * one group). A NEW area gets its rows in hookOnSaved(): for the groups
+ * selected in the form (field access_group_ids) - if the field is missing (import,
+ * copy, CLI), for all groups to which the instance is assigned. Only groups with
+ * the instance of the area get a row; folders have no rights.
+ * A copy takes over the rights of the original (copyAccess()).
  *
- * @see Camindo\Core\Modules\Area\Field         Eingabefelder des Bereichs
- * @see Camindo\Core\Modules\Area\AreaBackend   Backend-Oberfläche
+ * @see Camindo\Core\Modules\Area\Field         input fields of the area
+ * @see Camindo\Core\Modules\Area\AreaBackend   Backend interface
  * @see Camindo\Core\TreeManagerTrait            Baumverwaltung
  * @see Camindo\Core\Dataset
  */
@@ -126,13 +126,13 @@ use Camindo\Core\TreeManagerTrait;
 use Camindo\Core\Modules\Template\TemplateFiles;
 
 /**
- * @property-read Field $field  Nachgeladen, siehe $lazyServices
+ * @property-read Field $field  Loaded on demand, see $lazyServices
  */
 class Area extends Dataset {
     
     use TreeManagerTrait;
 
-    /** Bereichstypen, die Datensätze (`record`) enthalten - siehe Klassenkommentar */
+    /** Area types that contain records (`record`) - see class comment */
     public const CONTENT_TYPES = ['record', 'profile', 'ugc'];
 
     /** Standard-Icon je Bereichstyp (hookOnSave()) */
@@ -145,7 +145,7 @@ class Area extends Dataset {
     ];
 
     /**
-     * Ist es ein Bereichstyp mit Datensätzen (record, profile, ugc)?
+     * Is it an area type with records (record, profile, ugc)?
      */
     public static function isContentType(string $type): bool
     {
@@ -153,9 +153,9 @@ class Area extends Dataset {
     }
 
     /**
-     * Nachladbare Dienste - hookOnDelete() räumt über Field::cleanupFieldname() die
-     * nicht mehr belegten Feldnamen ab. Ohne diesen Eintrag liefe der Zugriff
-     * $this->field in die Ausnahme von LazyServicesTrait.
+     * Lazy-loaded services - hookOnDelete() clears via Field::cleanupFieldname() the
+     * field names that are no longer in use. Without this entry the access
+     * $this->field would run into the exception of LazyServicesTrait.
      */
     protected array $lazyServices = [
         'field' => Field::class,
@@ -171,14 +171,14 @@ class Area extends Dataset {
                 'type'  => 'integer',
                 'label' => 'area_id',
             ],
-            // Zu welcher Website gehört dieser Container?
-            // Gilt für alle drei Typen (record, template, folder). Die Inhalte des
-            // Containers erben die Zuordnung: hookOnSaved() trägt sie in die
-            // `record`-Zeilen des Bereichs nach, die Templates hängen über
-            // fk_template_area_id ohnehin am Bereich.
-            // 0 ist die Standard-Instance und immer vorhanden.
+            // To which website does this container belong?
+            // Applies to all three types (record, template, folder). The contents of the
+            // container inherit the assignment: hookOnSaved() carries it into the
+            // `record` rows of the area, the templates attach via
+            // fk_template_area_id to the area anyway.
+            // 0 is the default instance and always exists.
             'instance_id' => [
-                'type'  => 'integer', // FK auf `instance`, NOT NULL -> nicht 'id'
+                'type'  => 'integer', // FK to `instance`, NOT NULL -> not 'id'
                 'label' => '#area.field_area_instance_id',
                 'tooltip' => '#area.tooltip_field_area_instance_id',
                 'display_type' => 'select',
@@ -191,8 +191,8 @@ class Area extends Dataset {
                 'options' => ['record' => 'record', 'profile' => 'profile', 'ugc' => 'ugc', 'template' => 'template', 'folder' => 'folder'],
                 'flags' => ['not_empty'],
             ],
-            // Bezeichner für Templates (CMS:SELECT filter[area]=..., sort=area),
-            // siehe Klassenkommentar "Name". Spalte: char(32).
+            // Identifier for templates (CMS:SELECT filter[area]=..., sort=area),
+            // see class comment "Name". Column: char(32).
             'name' => [
                 'type'  => 'chars',
                 'label' => '#area.field_area_name',
@@ -204,63 +204,63 @@ class Area extends Dataset {
                 'label' => '#area.field_area_icon',
                 'max'   => 64,
                 'flags' => ['trim', 'name'],
-                'extension' => 'IconPicker',   // Core-Extension: Material-Icon auswählen
+                'extension' => 'IconPicker',   // Core extension: select Material icon
             ],
             'label' => [
                 'type'  => 'chars',
                 'label' => '#area.field_area_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty', 'ft'],
             ],
             'details' => [
                 'type'  => 'json',
                 'label' => '#area.field_area_details',
             ],
-            // Eingabemaske bei mehrsprachigen Feldern (nur type 'record'):
-            //     0  alle Sprachen untereinander auf einer Seite
-            //     1  ein Reiter je Sprache (plus "Alle")
-            // Ohne weitere Sprachen in der Instanz ohne Wirkung.
+            // Input mask for multilingual fields (only type 'record'):
+            //     0  all languages one below the other on one page
+            //     1  one tab per language (plus "All")
+            // Without further languages in the instance, no effect.
             'details.tabs' => [
                 'type'  => 'bit',
                 'display_type' => 'radio',
                 'label' => '#area.field_area_tabs',
                 'tooltip' => '#area.tooltip_field_area_tabs',
             ],
-            // Slug-Präfix (nur Datensatzbereiche): steht in der URL vor dem Slug der
-            // Datensätze - /farben/blau statt /blau. Je Sprache der Instanz
-            // (language_id => Präfix, leer = der der Hauptsprache), ohne Slash.
-            // Siehe Klassenkommentar "Slug-Präfix".
+            // Slug prefix (record areas only): stands in the URL before the slug of the
+            // records - /farben/blau instead of /blau. Per language of the instance
+            // (language_id => prefix, empty = that of the main language), without slash.
+            // See class comment "Slug prefix".
             'details.slug_prefix' => [
                 'type'  => 'json',
                 'label' => '#area.field_area_slug_prefix',
                 'tooltip' => '#area.tooltip_field_area_slug_prefix',
             ],
-            // Abhängiger Bereich (nur Datensatzbereiche): seine Datensätze gehören
-            // exklusiv je einem Quelldatensatz, der sie über ein Feld vom Typ 'link'
-            // hält (Camindo\Core\LinkTrait). Nur solche Bereiche sind als
-            // Zielbereich eines 'link'-Feldes wählbar. Der Bereich fehlt in der
-            // Bereichsliste des Moduls Record (RecordBackendFolderList); seine
-            // Datensätze erreicht man über die Eingabemaske des Quelldatensatzes
-            // bzw. den Reiter "Datensätze" der Bereichs-Info.
+            // Dependent area (record areas only): its records belong
+            // exclusively to one source record each, which holds them via a field of type 'link'
+            // (Camindo\Core\LinkTrait). Only such areas can be selected as
+            // the target area of a 'link' field. The area is missing from the
+            // area list of module Record (RecordBackendFolderList); its
+            // records are reached via the input mask of the source record
+            // or the "Records" tab of the area info.
             'dependent' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
                 'label' => '#area.field_area_dependent',
                 'tooltip' => '#area.tooltip_field_area_dependent',
             ],
-            // Nur beim Anlegen: Benutzergruppen, die den neuen Bereich lesen dürfen
-            // (`rel_group_area`, alle Rechte außer set_owner) - siehe Klassenkommentar
-            // "Bereichsrechte". Kein Feld der Tabelle ('reltable').
+            // Only when creating: user groups that may read the new area
+            // (`rel_group_area`, all rights except set_owner) - see class comment
+            // "Area rights". Not a field of the table ('reltable').
             'access_group_ids' => [
                 'type'  => 'reltable',
                 'display_type' => 'checkbox',
                 'label' => '#area.field_area_access_group_ids',
                 'tooltip' => '#area.tooltip_field_area_access_group_ids',
             ],
-            // Nur Inhaltsbereiche: Lösch-Policy (Modul Privacy, DeletePolicy) - was
-            // beim Löschen eines Datensatzes geschieht. Pflicht; leer = die
-            // Standard-Policy des Bereichstyps (hookOnSave())
+            // Content areas only: deletion policy (module Privacy, DeletePolicy) - what
+            // happens when a record is deleted. Required; empty = the
+            // default policy of the area type (hookOnSave())
             'privacy_policy_id' => [
                 'type'  => 'id',
                 'display_type' => 'select',
@@ -268,11 +268,11 @@ class Area extends Dataset {
                 'tooltip' => '#area.tooltip_field_area_privacy_policy_id',
                 'table' => 'privacy_policy',
             ],
-            // Nur type 'profile': Eingabefelder, mit denen sich der User an der
-            // Website anmeldet (CMS:USER_LOGIN) - Name: ein Feld vom Typ 'chars' oder
-            // 'encrypted', Passwort: ein Feld vom Typ 'password'. Beide gehören zum
-            // Bereich selbst (AreaBackend::_editForm()). Eigene Spalten mit
-            // Fremdschlüssel auf `field` (ON DELETE SET NULL) - seit 2026-09-14,
+            // Only type 'profile': input fields with which the user logs in at the
+            // website (CMS:USER_LOGIN) - name: a field of type 'chars' or
+            // 'encrypted', password: a field of type 'password'. Both belong to the
+            // area itself (AreaBackend::_editForm()). Own columns with
+            // foreign keys to `field` (ON DELETE SET NULL) - since 2026-09-14,
             // vorher in details (Migration 2026, Script inzwischen entfernt).
             'login_name_field_id' => [
                 'type'  => 'id',
@@ -288,8 +288,8 @@ class Area extends Dataset {
                 'tooltip' => '#area.tooltip_field_login_password_field_id',
                 'table' => 'field',
             ],
-            // Nur type 'profile': zweiter Faktor der Anmeldung (Camindo\Core\Modules\
-            // Record\UserSecondFactor, developer_docs/20-frontend-schutz.md B):
+            // Only type 'profile': second factor of the login (Camindo\Core\Modules\
+            // Record\UserSecondFactor, developer docs, chapter 14 (Security: web):
             // none | optional | new_device | required
             'details.second_factor' => [
                 'type'  => 'chars',
@@ -297,9 +297,9 @@ class Area extends Dataset {
                 'label' => '#area.field_area_second_factor',
                 'tooltip' => '#area.tooltip_field_second_factor',
             ],
-            // Nur type 'ugc': Profil-Bereiche (type 'profile' der eigenen Instanz
-            // und ihrer lesbaren Instanzen), deren User hier Datensätze anlegen
-            // dürfen (CMS:USER_INPUT). Leer = kein User darf schreiben.
+            // Only type 'ugc': profile areas (type 'profile' of the own instance
+            // and its readable instances) whose users may create records here
+            // (CMS:USER_INPUT). Empty = no user may write.
             'details.profile_area_ids' => [
                 'type'  => 'json',
                 'display_type' => 'checkbox',
@@ -312,7 +312,7 @@ class Area extends Dataset {
                 'label' => '#area.field_area_note',
                 'tooltip' => '#area.tooltip_field_area_note',
                 'max' => '500',
-                'extension' => 'Snippets',   // wie label: auch ein Snippet (#custom.…)
+                'extension' => 'Snippets',   // like label: also a snippet (#custom.…)
             ],
             'default_field_id' => [
                 'type'  => 'id',
@@ -338,8 +338,8 @@ class Area extends Dataset {
                 'table' => 'template',
                 'max' => 1
             ],
-            // Darstellung im Backend (nur Datensatzbereiche): formatiert je Datensatz
-            // die letzte Spalte der Liste und den Abschluss der ausführlichen
+            // Display in the backend (record areas only): formats per record
+            // the last column of the list and the end of the detailed
             // Lookup-Vorschau. FK auf `template`, ON DELETE SET NULL.
             'list_template_id' => [
                 'type'  => 'id',
@@ -349,18 +349,18 @@ class Area extends Dataset {
                 'table' => 'template',
                 'max' => 1
             ],
-            // Ereignis-Methoden für die Datensätze des Bereichs (TriggerTemplates,
-            // Aufruf aus den Hooks von Record) - mehrere, in Ausführungsreihenfolge.
-            // Kein Feld der Tabelle ('reltable'): `rel_area_trigger`, FK auf
+            // Event methods for the records of the area (TriggerTemplates,
+            // called from the hooks of Record) - several, in execution order.
+            // Not a field of the table ('reltable'): `rel_area_trigger`, FK to
             // `template` ON DELETE CASCADE. Laden: hookOnLoaded(), Schreiben:
-            // hookOnSaved() - nur wenn das Feld übergeben wird.
+            // hookOnSaved() - only if the field is passed.
             'trigger_template_ids' => [
                 'type'  => 'reltable',
                 'label' => '#area.field_area_trigger_template_ids',
                 'tooltip' => '#area.tooltip_field_trigger_template_ids',
                 'table' => 'template',
             ],
-            // Übersichts-Template für die Präfix-Adresse (/de/modelle) - siehe
+            // Overview template for the prefix address (/de/modelle) - see
             // Klassenkommentar. FK auf `template`, ON DELETE SET NULL.
             'overview_template_id' => [
                 'type'  => 'id',
@@ -413,15 +413,15 @@ class Area extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: neuen Bereich ans Ende seiner Geschwister stellen.
+     * Before creating: place the new area at the end of its siblings.
      *
-     * COALESCE(MAX(position), -1) + 1 startet bei 0, wenn es noch keine Geschwister gibt.
-     * Gelöschte Bereiche zählen nicht mit - ihre Positionen dürfen wieder vergeben werden.
+     * COALESCE(MAX(position), -1) + 1 starts at 0 if there are no siblings yet.
+     * Deleted areas do not count - their positions may be assigned again.
      */
     protected function hookOnCreate(array &$data): void
     {
-        // Neue position = MAX(position unter gleichem Parent) + 1
-        // Für Wurzel-Datensätze (parent_id = 0): MAX über alle Wurzeln
+        // New position = MAX(position under the same parent) + 1
+        // For root records (parent_id = 0): MAX over all roots
         $parentId = (int)($data['parent_id'] ?? 0);
         $this->db->query(
             "SELECT COALESCE(MAX(`position`), -1) + 1 FROM `area` WHERE `parent_id` = ? AND `deleted`=0",
@@ -431,7 +431,7 @@ class Area extends Dataset {
     }
 
     /**
-     * Nach dem Laden: Trigger-Templates in ihrer Reihenfolge (`rel_area_trigger`).
+     * After loading: trigger templates in their order (`rel_area_trigger`).
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -444,14 +444,14 @@ class Area extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: Standard-Icon setzen, Community-Angaben bereinigen.
-     * Ein Bereich ohne Icon wäre in der Baumnavigation nicht anklickbar dargestellt.
+     * Before saving: set the default icon, clean up community data.
+     * An area without an icon would not be displayed clickable in the tree navigation.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         $type = (string)($data['type'] ?? $previousData['type'] ?? 'record');
-        // Nur bekannte Typen - die Auswahlliste schützt nicht vor API und manipulierten
-        // Formularen, und ein Bereich ohne gültigen Typ wäre nirgends verwendbar
+        // Only known types - the selection list does not protect against the API and manipulated
+        // forms, and an area without a valid type would be usable nowhere
         if (array_key_exists('type', $data) && !isset(self::DEFAULT_ICONS[$type])) {
             $this->createFieldError('error_invalid_format', 'type', $this->schema['type']['label'] ?? 'type');
             throw new \Exception('#' . $this->cms->errorMsgLast());
@@ -463,8 +463,8 @@ class Area extends Dataset {
         $data['sort_order'] = strtoupper($data['sort_order'] ?? 'DESC');
         if ($data['sort_order'] != 'DESC') $data['sort_order'] = 'ASC';
 
-        // Jeder Mandant führt seinen eigenen Baum: der Vater muss derselben Instanz
-        // angehören, sonst stünde der Bereich im Baum eines fremden Mandanten
+        // Each tenant keeps its own tree: the parent must belong to the same instance
+        // otherwise the area would stand in the tree of a foreign tenant
         // (Backend: RecordBackendFolderList, AreaBackend::list() zeigen je Instanz)
         $parentId = (int)($data['parent_id'] ?? $previousData['parent_id'] ?? 0);
         if ($parentId > 0 && (array_key_exists('parent_id', $data) || array_key_exists('instance_id', $data))) {
@@ -476,7 +476,7 @@ class Area extends Dataset {
             }
         }
 
-        // Trigger-Templates: Reihenfolge der Eingabe, ohne 0 und Doppelte; nur
+        // Trigger templates: order of input, without 0 and duplicates; only
         // vorhandene Templates
         if (array_key_exists('trigger_template_ids', $data)) {
             $ids = is_array($data['trigger_template_ids']) ? $data['trigger_template_ids'] : [];
@@ -495,15 +495,15 @@ class Area extends Dataset {
             }
         }
 
-        // Gruppen des neuen Bereichs (nur beim Anlegen ausgewertet, siehe hookOnSaved())
+        // Groups of the new area (only evaluated when creating, see hookOnSaved())
         if (array_key_exists('access_group_ids', $data)) {
             $ids = $this->system->sanitizeIds((array)$data['access_group_ids'], true);
             $data['access_group_ids'] = array_values(array_diff($ids, [InstanceCache::SUPERUSER_GROUP_ID]));
         }
 
-        // Lösch-Policy (Modul Privacy): Inhaltsbereiche brauchen eine - ohne Angabe
-        // die Standard-Policy ihres Typs; wählbar sind die für alle Instanzen und die
-        // der eigenen Instanz. Andere Bereichstypen haben keine.
+        // Deletion policy (module Privacy): content areas need one - without specification
+        // the default policy of their type; selectable are those for all instances and those
+        // of the own instance. Other area types have none.
         $isNew = empty($previousData);
         if ($isNew || array_key_exists('privacy_policy_id', $data)) {
             $policyId = (int)($data['privacy_policy_id'] ?? 0);
@@ -521,15 +521,15 @@ class Area extends Dataset {
             if (!in_array('privacy_policy_id', $fields, true) && $fields) $fields[] = 'privacy_policy_id';
         }
 
-        // Abhängiger Bereich: nur Datensatzbereiche; ein ausgeschalteter Switch steht
-        // nicht im POST
+        // Dependent area: only record areas; a switched-off switch is not
+        // in the POST
         if (in_array('dependent', $fields, true)) {
             $data['dependent'] = (self::isContentType($type) && !empty($data['dependent'])) ? 1 : 0;
         }
 
-        // Anmeldefelder (type 'profile'): nur Felder dieses Bereichs mit passendem
-        // Typ - der Wert kommt aus einer Auswahlliste, ein veraltetes Formular darf
-        // aber kein fremdes Feld eintragen
+        // Login fields (type 'profile'): only fields of this area with a matching
+        // type - the value comes from a selection list; an outdated form must not
+        // enter a foreign field either
         $areaId = (int)($data['area_id'] ?? 0);
         foreach (['login_name_field_id' => ['chars', 'encrypted'], 'login_password_field_id' => ['password']] as $key => $types) {
             if (!array_key_exists($key, $data)) continue;
@@ -549,7 +549,7 @@ class Area extends Dataset {
             $data[$key] = $fieldId;
         }
         if (isset($data['details']) && is_array($data['details'])) {
-            // Profil-Bereiche (type 'ugc'): nur Ids bestehender Profil-Bereiche
+            // Profile areas (type 'ugc'): only ids of existing profile areas
             if (array_key_exists('profile_area_ids', $data['details'])) {
                 $ids = $this->system->sanitizeIds((array)$data['details']['profile_area_ids'], true);
                 if (!empty($ids) && $type === 'ugc') {
@@ -567,7 +567,7 @@ class Area extends Dataset {
                 $data['details']['profile_area_ids'] = array_values($ids);
             }
 
-            // Zweiter Faktor (type 'profile'): nur bekannte Werte, sonst weg
+            // Second factor (type 'profile'): only known values, otherwise removed
             if (array_key_exists('second_factor', $data['details'])) {
                 $policy = (string)$data['details']['second_factor'];
                 if ($type !== 'profile' || !in_array($policy, UserSecondFactor::POLICIES, true) || $policy === 'none') {
@@ -575,9 +575,9 @@ class Area extends Dataset {
                 }
             }
 
-            // Slug-Präfix (siehe Klassenkommentar): nur Datensatzbereiche. Fehlt der
-            // Schlüssel, ist der Präfix geleert (leere Eingaben schickt das Formular
-            // nicht mit) - auch das wird geprüft
+            // Slug prefix (see class comment): record areas only. If the
+            // key is missing, the prefix is cleared (the form does not send empty inputs
+            // either) - this is checked too
             if (!self::isContentType($type)) {
                 unset($data['details']['slug_prefix']);
             }
@@ -599,19 +599,19 @@ class Area extends Dataset {
     }
 
     /**
-     * Slug-Präfix eines Bereichs normalisieren und prüfen (Klassenkommentar
-     * "Slug-Präfix").
+     * Normalize and check the slug prefix of an area (class comment
+     * "Slug prefix").
      *
-     * Eingabe je Sprache: Leerzeichen und Slashes am Rand fallen weg ("farben/" ->
-     * "farben"), ein Slash in der Mitte ist ein Fehler (keine Pfadangaben), der Rest
-     * wird wie ein Slug geschrieben (Cms::textToUri(): klein, Sonderzeichen zu '-').
-     * Ein einzelner Wert statt eines Arrays gilt für die Hauptsprache; Sprachen, die
-     * die Instanz nicht führt, fallen weg.
+     * Input per language: spaces and slashes at the edges are removed ("farben/" ->
+     * "farben"), a slash in the middle is an error (no path specifications), the rest
+     * is written like a slug (Cms::textToUri(): lowercase, special characters to '-').
+     * A single value instead of an array applies to the main language; languages that
+     * the instance does not maintain are removed.
      *
-     * @param mixed $raw         details.slug_prefix aus dem Formular / der Datei
-     * @param int   $instanceId  Instanz des Bereichs
-     * @param int   $areaId      der Bereich (0 = neu)
-     * @param array $clean       Ergebnis: language_id => Präfix (nur nicht leere)
+     * @param mixed $raw         details.slug_prefix from the form / the file
+     * @param int   $instanceId  instance of the area
+     * @param int   $areaId      the area (0 = new)
+     * @param array $clean       result: language_id => prefix (only non-empty ones)
      * @return array  language_id => Fehlermeldung; leer = in Ordnung
      */
     public function slugPrefixErrors(mixed $raw, int $instanceId, int $areaId, array &$clean = []): array
@@ -645,8 +645,8 @@ class Area extends Dataset {
 
         // 2. Konflikte je Sprache
         // --------------------
-        // Gemeldet wird am Eingabefeld der Sprache, aus der der Präfix stammt (eine
-        // leere Sprache übernimmt den der Hauptsprache)
+        // Reported at the input field of the language the prefix comes from (an
+        // empty language takes over that of the main language)
         $resolved = InstanceCache::resolveSlugPrefixes($clean, $languageIds, $primaryId);
         $previous = ($areaId > 0) ? $cache->slugPrefixes($areaId) : [];
         $scope = $cache->uniqueScope($instanceId) ?: [$instanceId];
@@ -658,7 +658,7 @@ class Area extends Dataset {
             $new = (string)($resolved[$languageId] ?? '');
             $old = (string)($previous[$languageId] ?? '');
             if ($new !== '') {
-                // derselbe Präfix bei einem anderen Bereich
+                // same prefix in another area
                 foreach (array_keys($others) as $otherId) {
                     if ($lower($cache->slugPrefix($otherId, $languageId)) !== $lower($new)) continue;
                     $errors[$errorKey] = strtr($this->cms->snippet('area.error_slug_prefix_used'), [
@@ -667,7 +667,7 @@ class Area extends Dataset {
                     ]);
                     continue 2;
                 }
-                // Datensätze ohne Präfix, deren Pfad damit beginnt
+                // records without prefix whose path begins with it
                 if ($lower($new) !== $lower($old)) {
                     $hit = $this->slugPathsStartingWith([$new], $languageId, $scope, $areaId);
                     if ($hit !== null) {
@@ -681,7 +681,7 @@ class Area extends Dataset {
                 }
             }
             elseif ($old !== '' && $areaId > 0) {
-                // Präfix fällt weg: die eigenen Datensätze stehen danach ohne da
+                // Prefix is dropped: the own records then stand without it
                 $hit = $this->slugPathCollision($areaId, $languageId, $scope);
                 if ($hit !== null) {
                     $errors[$errorKey] = strtr($this->cms->snippet('area.error_slug_prefix_remove'), [
@@ -714,11 +714,11 @@ class Area extends Dataset {
     }
 
     /**
-     * Ein produktiver Datensatz, dessen Slug (Sprache $languageId) einer der Präfixe
-     * ist oder mit "{präfix}/" beginnt - wahlweise nur in Bereichen OHNE Präfix in
-     * dieser Sprache (alle außer $excludeAreaId) oder nur im Bereich $onlyAreaId.
+     * A live record whose slug (language $languageId) is one of the prefixes
+     * or begins with "{prefix}/" - either only in areas WITHOUT a prefix in
+     * this language (all except $excludeAreaId) or only in the area $onlyAreaId.
      *
-     * @return array|null  ['record_id', 'area_id', 'data'] oder null
+     * @return array|null  ['record_id', 'area_id', 'data'] or null
      */
     private function slugPathsStartingWith(array $prefixes, int $languageId, array $instanceIds, int $excludeAreaId, int $onlyAreaId = 0): ?array
     {
@@ -760,11 +760,11 @@ class Area extends Dataset {
     }
 
     /**
-     * Ein Datensatz des Bereichs, dessen Slug (Sprache $languageId) auch ein
-     * Datensatz eines Bereichs ohne Präfix trägt - der Pfad wäre ohne den Präfix
-     * des Bereichs doppelt.
+     * A record of the area whose slug (language $languageId) also
+     * belongs to a record of an area without a prefix - the path would be without the prefix
+     * of the area twice.
      *
-     * @return array|null  ['record_id', 'data', 'other_id', 'area_id' (des anderen)]
+     * @return array|null  ['record_id', 'data', 'other_id', 'area_id' (of the other)]
      */
     private function slugPathCollision(int $areaId, int $languageId, array $instanceIds): ?array
     {
@@ -790,7 +790,7 @@ class Area extends Dataset {
     }
 
     /**
-     * Beschriftung eines Bereichs für Meldungen: "Label (name)".
+     * Label of an area for messages: "Label (name)".
      */
     private function areaTitle(int $areaId): string
     {
@@ -808,14 +808,14 @@ class Area extends Dataset {
 
         // instance_id
         // --------------------
-        // Die Datensätze des Bereichs führen eine Kopie der Zuordnung (`record` hat
-        // KEINEN Fremdschlüssel auf `area`, der Bereich kann sie also nicht für sie
-        // mitverwalten - der Fremdschlüssel auf `instance` hängt an der Kopie).
-        // Wechselt der Bereich die Instanz, müssen sie mitwandern; sonst zeigten sie
-        // weiter auf die alte Website und verschwänden mit ihr.
-        // Dasselbe gilt für die Templates eines Template-Containers: auch sie führen
-        // eine Kopie, damit Cms::select() ohne JOIN über den Bereich filtern kann
-        // (siehe Cms::$sqlAccess).
+        // The records of the area keep a copy of the assignment (`record` has
+        // NO foreign key to `area`, so the area cannot manage them for them
+        // - the foreign key to `instance` is attached to the copy).
+        // If the area changes instance, they must move along; otherwise they would point
+        // to the old website and disappear with it.
+        // The same applies to the templates of a template container: they too keep
+        // a copy, so that Cms::select() can filter via the area without a JOIN
+        // (see Cms::$sqlAccess).
         $instanceId = (int)($data['instance_id'] ?? 0);
         $previousInstanceId = (int)($previousData['instance_id'] ?? -1);
         if ($instanceId !== $previousInstanceId) {
@@ -829,9 +829,9 @@ class Area extends Dataset {
                 'ii',
                 [$instanceId, $areaId]
             );
-            // Die Mediendateien liegen unter media/{instance_id}/{field_id} und
-            // müssen mit umziehen (Camindo\Core\MediaAccess). Cms merkt sich die
-            // Instanz je Feld für den Request - die Zuordnung ist jetzt veraltet.
+            // The media files are stored under media/{instance_id}/{field_id} and
+            // must move along (Camindo\Core\MediaAccess). Cms remembers the
+            // instance per field for the request - the assignment is now outdated.
             if ($previousInstanceId > 0 && !empty($previousData)) {
                 $this->cms->clearFieldInstanceCache();
                 $this->container->get(MediaAccess::class)->moveAreaMedia($areaId, $previousInstanceId, $instanceId);
@@ -840,15 +840,15 @@ class Area extends Dataset {
 
         // default_field_id
         // --------------------
-        // Wenn default_field_id geändert wurde - dann auch Tabelle `field` aktualisieren
+        // If default_field_id was changed - then also update table `field`
         $defaultFieldId = (int)$data['default_field_id'];
         if ($defaultFieldId !== (int)$previousData['default_field_id']) {
-            // -> kein anderes Feld des Bereichs kann das default Field bleiben
+            // -> no other field of the area may remain the default field
             $this->db->query("UPDATE `field` SET `default_field`=0 WHERE `area_id` = ?", 'i', [$areaId]);
-            // -> Feld markieren und dabei area_id validieren
+            // -> mark the field and validate area_id in the process
             $this->db->query("UPDATE `field` SET `default_field`=1 WHERE `field_id` = ? AND `area_id` = ?", 'ii', [$defaultFieldId, $areaId]);
             if ($this->db->affected_rows < 1) {
-                // Feld konnte nicht upgedated werden
+                // Field could not be updated
                 $label = $this->schema['default_field_id']['label'] ?? 'default_field_id';
                 $this->createFieldError('error_field_not_found', 'default_field_id', $label);
                 throw new \Exception($this->cms->errorMsgLast());
@@ -857,9 +857,9 @@ class Area extends Dataset {
 
         // Template-Zuweisungen (selectable, url-override)
         // --------------------
-        // Nur die übergebenen Listen ersetzen: load() liefert sie nicht mit, ein
-        // load()+save() (API area.update, Import ...) ließe sonst nur das
-        // Standard-Template übrig. Das Formular schickt beide immer (AreaBackend).
+        // Replace only the lists passed: load() does not return them, so a
+        // load()+save() (API area.update, import ...) would otherwise leave only the
+        // default template. The form always sends both (AreaBackend).
         $selectableTemplates = array_key_exists('selectable_templates', $data)
             ? (array)$data['selectable_templates']
             : $this->templateIds($areaId, 'selectable');
@@ -869,15 +869,15 @@ class Area extends Dataset {
 
         $this->db->query("DELETE FROM `rel_area_template` WHERE `area_id`= ? ", 'i', [$areaId]);
 
-        // Das Default-Template wird immer auch zu den wählbaren Templates gezählt
-        // (vereinfacht die Zugriffsprüfung in class Page)
-        // (sanitizeIds wirft 0 oder Duplette wieder raus)
+        // The default template is always also counted among the selectable templates
+        // (simplifies the access check in class Page)
+        // (sanitizeIds removes 0 or duplicates again)
         $selectableTemplates[] = (int)($data['default_template_id'] ?? $previousData['default_template_id'] ?? 0);
         $selectableTemplates = $this->system->sanitizeIds($selectableTemplates, true);
 
         $overrideTemplates = $this->system->sanitizeIds($overrideTemplates, true);
 
-        // Templates-Ids aus beiden Arrays
+        // Template ids from both arrays
         $mergedIds = array_unique(array_merge($selectableTemplates, $overrideTemplates));
 
         if (count($mergedIds) > 0) {
@@ -897,8 +897,8 @@ class Area extends Dataset {
             $this->db->query($sql, $sqlTypes, $sqlValues);
         }
 
-        // Trigger-Templates (`rel_area_trigger`) - nur wenn übergeben; `position`
-        // ist die Reihenfolge der Eingabe, hookOnSave() hat die Ids bereinigt
+        // Trigger templates (`rel_area_trigger`) - only if passed; `position`
+        // is the order of input, hookOnSave() has cleaned up the ids
         // --------------------
         if (array_key_exists('trigger_template_ids', $data)) {
             $this->db->query("DELETE FROM `rel_area_trigger` WHERE `area_id` = ?", 'i', [$areaId]);
@@ -914,7 +914,7 @@ class Area extends Dataset {
             }
         }
 
-        // Bereichsrechte eines NEUEN Bereichs (siehe Klassenkommentar)
+        // Area rights of a NEW area (see class comment)
         // --------------------
         $type = (string)($data['type'] ?? $previousData['type'] ?? '');
         if (empty($previousData) && $type !== 'folder') {
@@ -924,17 +924,17 @@ class Area extends Dataset {
 
         // Instanz-Dateicache (Bereichsnamen)
         // --------------------
-        // Die Übersetzung area_id => name in var/cache/instance-{id}.php und
-        // instances.php muss mitziehen (siehe Klassenkommentar "Name") - bei neuem
-        // Bereich, geändertem Namen, Instanzwechsel oder Verschieben im Baum. Der
-        // Neuaufbau kostet wenige Abfragen und Bereiche ändern sich selten, deshalb
-        // ohne Fallunterscheidung. Läuft noch in der Transaktion, die Abfragen sehen
-        // also den gerade geschriebenen Stand.
+        // The translation area_id => name in var/cache/instance-{id}.php and
+        // instances.php must be updated too (see class comment "Name") - on a new
+        // area, changed name, instance change or move in the tree. The
+        // rebuild costs a few queries and areas change rarely, so
+        // without distinguishing cases. Still runs in the transaction, so the queries see
+        // the state just written.
         $this->instanceCache()->rebuild();
 
-        // Quelltext-Verzeichnis der Templates (var/templates/{instance_id}/{name},
-        // siehe TemplateFiles): bei neuem Template-Bereich anlegen, bei geändertem
-        // Namen oder Instanzwechsel umbenennen bzw. verschieben
+        // Source directory of the templates (var/templates/{instance_id}/{name},
+        // see TemplateFiles): create on a new template area, on a changed
+        // name or instance change rename or move it
         // --------------------
         if ($type === 'template') {
             $name = (string)($data['name'] ?? $previousData['name'] ?? '');
@@ -965,57 +965,57 @@ class Area extends Dataset {
     }
 
     /**
-     * vor dem Soft-Löschen...
+     * before soft deletion...
      *
-     * Markiert alle Datensätze des Bereichs mit demselben Zeitstempel wie den Bereich
-     * selbst. Nur dadurch weiß hookOnRestore() später, welche Datensätze zu genau
-     * diesem Löschvorgang gehören und wiederhergestellt werden dürfen. Danach plant
-     * die Lösch-Policy des Bereichs ihre Blöcke für den Auslöser 'area'.
+     * Marks all records of the area with the same timestamp as the area
+     * itself. Only this way hookOnRestore() knows later which records belong to exactly
+     * this deletion and may be restored. Afterwards the deletion policy of the area schedules
+     * its blocks for the trigger 'area'.
      */
     protected function hookOnSoftDelete(array $data): void
     {
         $areaId = (int)$data['area_id'];
         $record = $this->recordDataset();
 
-        // getMarkTimestamp(): Vorgangs-Zeitstempel, den auch der area-Datensatz
-        // selbst als changed_at erhält -> records bekommen exakt denselben Wert
-        // (für die Wiederherstellung nötig)
+        // getMarkTimestamp(): operation timestamp, which the area record itself also
+        // receives as changed_at -> records get exactly the same value
+        // (needed for restoration)
         $record->setMarkTimestamp($this->getMarkTimestamp());
 
-        // Jeder Datensatz einzeln - so läuft je Datensatz Record::hookOnSoftDelete()
-        // und schiebt dessen Mediendateien in den Papierkorb.
-        // Reihenfolge: Blätter zuerst (siehe cascadeIds()).
+        // Each record individually - so Record::hookOnSoftDelete() runs per record
+        // and moves its media files to the trash.
+        // Order: leaves first (see cascadeIds()).
         $recordIds = $record->cascadeIds('area_id', $areaId, 'delete');
         foreach ($recordIds as $recordId) {
             if (!$record->softDelete($recordId)) {
-                // Fehlermeldung steht bereits in Cms::errors -> Transaktion verwerfen
+                // The error message is already in Cms::errors -> discard the transaction
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
-        // Lösch-Policy des Bereichs, Auslöser "Bereich wurde gelöscht" (Modul Privacy) -
-        // läuft mit der Zeitplaner-Aufgabe, eine Wiederherstellung verwirft die Aufträge
+        // Deletion policy of the area, trigger "area was deleted" (module Privacy) -
+        // runs with the scheduler task; a restoration discards the jobs
         if ($recordIds) {
             $this->container->get(\Camindo\Core\Modules\Privacy\PrivacyJobs::class)->scheduleArea($areaId, $recordIds);
         }
 
-        // Template-Bereich: Quelltext-Verzeichnis in den Papierkorb (var/templates/
-        // .trash/{area_id}) - sonst legte TemplateFiles::sync() zu dem verwaisten
-        // Verzeichnis einen neuen Bereich an. hookOnRestore() holt es von dort zurück.
+        // Template area: source directory to the trash (var/templates/
+        // .trash/{area_id}) - otherwise TemplateFiles::sync() would create a new area for the orphaned
+        // directory. hookOnRestore() fetches it back from there.
         if ((string)($data['type'] ?? '') === 'template') {
             $this->templateFiles()->trashAreaDir($areaId, (int)$data['instance_id'], (string)$data['name']);
         }
     }
 
     /**
-     * vor dem Endgültigen löschen...
+     * before the final deletion...
      *
-     * Die Datensätze des Bereichs müssen hier weg, bevor die area-Zeile verschwindet:
-     * `record` hat KEINEN Fremdschlüssel auf `area`, sie blieben sonst mit einer
-     * area_id zurück, die es nicht mehr gibt - samt ihrer Mediendateien.
-     * Jeder Datensatz einzeln, damit Record::hookOnDelete() je Datensatz läuft.
+     * The records of the area must go first, before the area row disappears:
+     * `record` has NO foreign key to `area`, otherwise they would remain with an
+     * area_id that no longer exists - along with their media files.
+     * Each record individually, so that Record::hookOnDelete() runs per record.
      *
-     * Eingabefelder (`field`) und deren Inhalte (`data_*`) räumt dagegen die Datenbank
-     * selbst ab: fk_field_area und die data_*-Fremdschlüssel stehen auf
+     * Input fields (`field`) and their contents (`data_*`), by contrast, are cleared by the database
+     * itself: fk_field_area and the data_* foreign keys are set to
      * ON DELETE CASCADE.
      */
     protected function hookOnDelete(array $data): void
@@ -1023,19 +1023,19 @@ class Area extends Dataset {
         $areaId = (int)$data['area_id'];
         $record = $this->recordDataset();
 
-        // Datensätze des Bereichs endgültig löschen
-        // Blätter zuerst (siehe cascadeIds()), damit kein Datensatz per
-        // ON DELETE CASCADE über record.parent_id an seinem Hook vorbei verschwindet.
+        // Permanently delete the records of the area
+        // leaves first (see cascadeIds()), so that no record is removed via
+        // ON DELETE CASCADE through record.parent_id, bypassing its hook.
         foreach ($record->cascadeIds('area_id', $areaId, 'purge') as $recordId) {
             if (!$record->finalDelete($recordId)) {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
 
-        // Template-Bereich: die Templates verschwinden mit der area-Zeile
-        // (fk_template_area_id ON DELETE CASCADE) - ohne Template::hookOnDelete().
-        // Deshalb hier deren Dateien: kompiliertes PHP (var/php/{area_id}) und
-        // Quelltext-Verzeichnis (var/templates/{instance_id}/{name} bzw. dessen
+        // Template area: the templates disappear with the area row
+        // (fk_template_area_id ON DELETE CASCADE) - without Template::hookOnDelete().
+        // Therefore their files are removed here: compiled PHP (var/php/{area_id}) and
+        // source directory (var/templates/{instance_id}/{name} or its
         // Papierkorb-Kopie).
         if ((string)($data['type'] ?? '') === 'template') {
             $phpDir = $this->config->get('paths.var_dir') . '/php/' . $areaId;
@@ -1046,38 +1046,38 @@ class Area extends Dataset {
             $this->templateFiles()->removeAreaDir((int)$data['instance_id'], (string)$data['name'], $areaId);
         }
 
-        // Eingabefelder des Bereichs endgültig löschen
-        // (Bidirektionale Gegenfelder werden über FK automatisch gelöscht)
+        // Permanently delete the input fields of the area
+        // (bidirectional counter-fields are deleted automatically via FK)
         // -> erledigt fk_field_area ON DELETE CASCADE
     }
 
     /**
-     * nach dem endgültigen Löschen...
+     * after the final deletion...
      *
-     * Die Eingabefelder des Bereichs verschwinden erst MIT der area-Zeile
-     * (fk_field_area ON DELETE CASCADE) - also nach hookOnDelete(). Ein Aufräumen
-     * der Feldnamen dort käme zu früh: cleanupFieldname() fände die Felder noch und
-     * ließe ihre Namen stehen. Deshalb erst hier.
+     * The input fields of the area disappear only WITH the area row
+     * (fk_field_area ON DELETE CASCADE) - so after hookOnDelete(). A cleanup
+     * of the field names there would come too early: cleanupFieldname() would still find the fields and
+     * would leave their names in place. That is why it is done only here.
      */
     protected function hookOnDeleted(array $data): void
     {
-        // Fieldname-Ids, die nicht mehr benötigt werden, löschen
+        // Delete fieldname ids that are no longer needed
         $this->field->cleanupFieldname();
 
-        // Bereich aus dem Instanz-Dateicache nehmen (siehe Klassenkommentar "Name")
+        // Remove the area from the instance file cache (see class comment "Name")
         $this->instanceCache()->rebuild();
     }
 
     /**
-     * vor dem Wiederherstellen
-     * Als "gelöscht" markierte Datensätze des Breichs ebenfalls wiederherstellen -
-     * allerdings nur die mit exakt dem Löschzeitpunkt des Bereichs.
-     * (Läuft innerhalb Transaktion - wird also im Frontend erst sichtbar, wenn
-     * der Bereich selbst wieder sichtbar ist)
-     * getRestoreTimestamp(): Zeitstempel des Löschvorgangs, der rückgängig
-     *     gemacht wird -> nur records mit exakt diesem Zeitstempel
-     * getMarkTimestamp(): neuer, einheitlicher Änderungszeitpunkt
-     *     für alle wiederhergestellten Datensätze
+     * before restoring
+     * Also restore records of the area marked as "deleted" -
+     * but only those with exactly the deletion time of the area.
+     * (Runs within the transaction - so it becomes visible in the frontend only once
+     * the area itself is visible again)
+     * getRestoreTimestamp(): timestamp of the deletion that is reverted
+     *     -> only records with exactly this timestamp
+     * getMarkTimestamp(): new, uniform change time
+     *     for all restored records
      */
     protected function hookOnRestore(array $data): void
     {
@@ -1085,10 +1085,10 @@ class Area extends Dataset {
         $record = $this->recordDataset();
         $record->setMarkTimestamp($this->getMarkTimestamp());
 
-        // Nur Datensätze mit exakt dem changed_at des rückgängig zu machenden
-        // Löschvorgangs - Datensätze aus früheren Löschvorgängen bleiben markiert.
-        // Jeder einzeln, damit Record::hookOnRestore() seine Mediendateien
-        // aus dem Papierkorb zurückholt. Reihenfolge: Eltern zuerst.
+        // Only records with exactly the changed_at of the deletion to be reverted
+        // - records from earlier deletions remain marked.
+        // Each one individually, so that Record::hookOnRestore() fetches its media files
+        // back from the trash. Order: parents first.
         $ids = $record->cascadeIds('area_id', $areaId, 'restore', $this->getRestoreTimestamp());
         foreach ($ids as $recordId) {
             if (!$record->restoreOne($recordId)) {
@@ -1096,16 +1096,16 @@ class Area extends Dataset {
             }
         }
 
-        // Template-Bereich: Quelltext-Verzeichnis aus dem Papierkorb zurückholen
-        // (hookOnSoftDelete() hatte es dorthin verschoben) - nicht aus der Datenbank
-        // neu schreiben, siehe TemplateFiles
+        // Template area: fetch the source directory back from the trash
+        // (hookOnSoftDelete() had moved it there) - not rewritten from the database
+        // again, see TemplateFiles
         if ((string)($data['type'] ?? '') === 'template') {
             $this->templateFiles()->restoreAreaDir($areaId, (int)$data['instance_id'], (string)$data['name']);
         }
     }
 
     // ====================
-    // Bereichsrechte (rel_group_area) - siehe Klassenkommentar
+    // Area rights (rel_group_area) - see class comment
 
     /**
      * Rechte aller Gruppen an einem Bereich: group_id => Flags (Zeile = Leserecht).
@@ -1133,8 +1133,8 @@ class Area extends Dataset {
     }
 
     /**
-     * Gruppen, die für einen Bereich in Frage kommen: alle außer der Superuser-
-     * Gruppe, denen die Instanz des Bereichs zugewiesen ist (Reiter "Zugriff",
+     * Groups that may come into question for an area: all except the superuser
+     * group, to which the instance of the area is assigned (tab "Access",
      * Anlegen eines Bereichs).
      *
      * @return int[]  group_ids
@@ -1154,9 +1154,9 @@ class Area extends Dataset {
      * Rechte aller Gruppen an einem Bereich schreiben (AreaBackend::infoAccess()).
      *
      * @param int   $areaId
-     * @param array $rows  group_id => ['read' => 1, 'group_write' => 1, ...]; ohne
-     *                     'read' fällt die Zeile weg. Nur Gruppen aus
-     *                     accessCandidates(); Template-Bereiche behalten nur group_write.
+     * @param array $rows  group_id => ['read' => 1, 'group_write' => 1, ...]; without
+     *                     'read' the row is dropped. Only groups from
+     *                     accessCandidates(); template areas keep only group_write.
      * @return bool  false: Meldung in Cms::errors
      */
     public function saveAccess(int $areaId, array $rows): bool
@@ -1189,16 +1189,16 @@ class Area extends Dataset {
                     array_merge([$groupId, $areaId], array_values($row), [$this->integrity()->areaRightSignature($groupId, $areaId, $row)])
                 );
             }
-            // Die Rechte liegen in den Gruppendateien - Access liest sie je Request
+            // The rights are stored in the group files - Access reads them per request
             $this->instanceCache()->rebuild();
             return true;
         }, false);
     }
 
     /**
-     * Neuen Bereich für Gruppen freigeben: volle Rechte außer set_owner.
+     * Release a new area for groups: full rights except set_owner.
      *
-     * @param int[]|null $groupIds  gewählte Gruppen; null = alle Gruppen mit der Instanz
+     * @param int[]|null $groupIds  selected groups; null = all groups with the instance
      */
     private function grantGroups(int $areaId, int $instanceId, ?array $groupIds): void
     {
@@ -1207,7 +1207,7 @@ class Area extends Dataset {
             $candidates = array_values(array_intersect($candidates, array_map('intval', $groupIds)));
         }
         foreach ($candidates as $groupId) {
-            // Spalten-Defaults: alle Flags außer set_owner (Signatur ebenso)
+            // Column defaults: all flags except set_owner (signature likewise)
             $this->db->query(
                 "INSERT IGNORE INTO `rel_group_area` (`group_id`, `area_id`, `set_owner`, `sig`) VALUES (?, ?, 0, ?)",
                 'iis', [$groupId, $areaId, $this->integrity()->areaRightSignature($groupId, $areaId, ['set_owner' => 0])]
@@ -1216,15 +1216,15 @@ class Area extends Dataset {
     }
 
     /**
-     * Rechte eines Bereichs auf einen anderen übertragen (Kopie eines Bereichs).
-     * Der Cache wird vom Aufrufer bzw. dem Speichern des Ziels erneuert.
+     * Transfer the rights of one area to another (copy of an area).
+     * The cache is refreshed by the caller or by saving the target.
      */
     public function copyAccess(int $sourceId, int $targetId): void
     {
         if ($sourceId < 1 || $targetId < 1) return;
         $this->db->query("DELETE FROM `rel_group_area` WHERE `area_id` = ?", 'i', [$targetId]);
-        // Zeile für Zeile statt INSERT ... SELECT: jede Kopie braucht ihre eigene
-        // Signatur (Integrity), und nur geprüfte Quellzeilen werden übernommen.
+        // Row by row instead of INSERT ... SELECT: each copy needs its own
+        // signature (Integrity), and only checked source rows are taken over.
         $this->db->query("SELECT * FROM `rel_group_area` WHERE `area_id` = ?", 'i', [$sourceId]);
         $rows = $this->db->fetchAll();
         foreach ($rows as $row) {
@@ -1245,8 +1245,8 @@ class Area extends Dataset {
     }
 
     /**
-     * Anzahl der Eingabefelder eines Bereichs ermitteln
-     * @param int $areaId  : Id des Bereichs
+     * Determine the number of input fields of an area
+     * @param int $areaId  : id of the area
      */
     public function fieldsNumber(int $areaId): int {
         $sql = "SELECT COUNT(*) FROM `field` WHERE `area_id`= ?";
@@ -1255,20 +1255,20 @@ class Area extends Dataset {
     }
 
     /**
-     * Bereiche und Ordner laden, die mindestens einen Bereich in ihrer Baumstruktur
-     * (zwischen lft und rgt) enthalten, also nicht nur leere Ordner enthalten.
+     * Load areas and folders that contain at least one area in their tree structure
+     * (between lft and rgt), i.e. not just empty folders.
      *
-     * Mit $instanceId nur die Bereiche dieser Instanz - der Baum wird im Backend je
-     * Mandant gezeigt (hookOnSave() lässt einen Bereich nur unter einem Ordner
-     * derselben Instanz zu, ein Teilbaum ist also einheitlich). Die Nested-Set-
-     * Werte bleiben tabellenweit; innerhalb einer Instanz stimmt die lft-Reihenfolge.
+     * With $instanceId only the areas of this instance - the tree is shown in the backend per
+     * tenant (hookOnSave() only allows an area under a folder
+     * of the same instance, so a subtree is uniform). The nested-set
+     * values remain table-wide; within an instance the lft order is correct.
      *
-     * Mit $areaIds nur diese Bereiche (die lesbaren der Benutzergruppe,
-     * Access::areaFilter()) - ein Ordner erscheint dann nur, wenn er mittelbar einen
-     * davon enthält; null = keine Einschränkung, [] = nichts.
+     * With $areaIds only these areas (the readable ones of the user group,
+     * Access::areaFilter()) - a folder then appears only if it indirectly contains one
+     * of them; null = no restriction, [] = nothing.
      *
      * @param array      $areaTypes
-     * @param int        $instanceId  0 = alle Instanzen
+     * @param int        $instanceId  0 = all instances
      * @param bool       $hideDependent
      * @param int[]|null $areaIds
      */
@@ -1277,11 +1277,11 @@ class Area extends Dataset {
         $types = "'" . implode("','", $areaTypes) . "'";
         $instanceA = $instanceId > 0 ? " AND a.`instance_id` = " . $instanceId : '';
         $instanceB = $instanceId > 0 ? " AND b.`instance_id` = " . $instanceId : '';
-        // Abhängige Bereiche (`dependent` = 1, Zielbereiche von 'link'-Feldern) auf
-        // Wunsch weglassen - samt Ordnern, die nur solche enthalten
+        // Dependent areas (`dependent` = 1, target areas of 'link' fields) on
+        // on request leave out - including folders that contain only such areas
         $dependentA = $hideDependent ? " AND a.`dependent` = 0" : '';
         $dependentB = $hideDependent ? " AND b.`dependent` = 0" : '';
-        // Lesbare Bereiche der Benutzergruppe (Ids aus dem Cache, keine Fremdeingabe)
+        // Readable areas of the user group (ids from the cache, no external input)
         $idsA = $idsB = '';
         if ($areaIds !== null) {
             $list = implode(',', array_map('intval', $areaIds)) ?: '0';
@@ -1304,20 +1304,20 @@ class Area extends Dataset {
     }
 
     /**
-     * Record-Instanz bereitstellen (Factory hier unnötig)
+     * Provide the Record instance (factory not needed here)
      *
-     * Bewusst NICHT über den Konstruktor injiziert: Dataset-Kindklassen erben den
-     * Konstruktor der Basisklasse und deklarieren keinen eigenen. Eine zusätzliche
-     * Abhängigkeit hieße, die komplette Signatur von Dataset::__construct() zu
-     * wiederholen. Der Zugriff über den Container holt die Instanz stattdessen erst
-     * dann, wenn sie gebraucht wird - dieselbe geteilte Instanz wie überall sonst.
+     * Deliberately NOT injected via the constructor: dataset subclasses inherit the
+     * constructor of the base class and declare none of their own. An additional
+     * dependency would mean repeating the complete signature of Dataset::__construct() in
+     * the subclasses. Instead, access via the container fetches the instance only
+     * when it is needed - the same shared instance as everywhere else.
      */
     private function recordDataset() {
         return $GLOBALS['app']->get(Record::class);
     }
 
     /**
-     * Quelltext-Dateien der Templates (siehe TemplateFiles).
+     * Source files of the templates (see TemplateFiles).
      */
     private function templateFiles(): TemplateFiles
     {
@@ -1325,7 +1325,7 @@ class Area extends Dataset {
     }
 
     /**
-     * Dateicache der Instanzen (siehe Camindo\Core\InstanceCache).
+     * File cache of the instances (see Camindo\Core\InstanceCache).
      */
     private function instanceCache(): InstanceCache
     {

@@ -1,76 +1,75 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `privacy_policy` - Lösch-Policies (Modul Privacy).
+ * Dataset child class for the table `privacy_policy` - deletion policies (module Privacy).
  *
- * Jeder Inhaltsbereich (record, profile, ugc) hat genau eine Policy
- * (area.privacy_policy_id). Sie legt fest, was geschieht, wenn ein Datensatz des
- * Bereichs gelöscht wird - ausgeführt von PrivacyJobs.
+ * Each content area (record, profile, ugc) has exactly one policy
+ * (area.privacy_policy_id). It determines what happens when a record of the
+ * area is deleted - executed by PrivacyJobs.
  *
- * AUFBAU
+ * STRUCTURE
  * --------------------
- *     label        Label (Text oder Snippet #prefix.key)
- *     instance_id  Instanz (Mandant), für die die Policy wählbar ist;
- *                  ALL_INSTANCES (-1) = für alle (die drei Standard-Policies). Nicht
- *                  NULL: Instanz 0 ist die Standard-Instanz, der Typ 'id' machte 0
- *                  zu NULL. Kein Fremdschlüssel - die Policy einer gelöschten
- *                  Instanz bleibt stehen, bis sie jemand löscht.
- *     standard     '' oder record | profile | ugc: Standard-Policy dieses
- *                  Bereichstyps - nicht löschbar, aber änderbar; neue Bereiche
- *                  bekommen sie vorbelegt (Area::hookOnSave())
- *     blocks       JSON-Liste der Blöcke, je Block:
- *         sources  Auslöser, mindestens einer von SOURCES:
- *                      record   der Datensatz wird gelöscht - gleich auf welchem Weg
- *                               (Maske, Stapelverarbeitung, API, CMS:USER_DELETE),
- *                               auch als Unterdatensatz (Kind im Baum, fest
- *                               verknüpfter Inhalt) eines gelöschten Datensatzes
- *                      profile  das Profil des Users (record.user_id) wurde gelöscht -
- *                               gilt immer für alle seine Datensätze, ohne eigene
- *                               Aktion in der Policy des Profils
- *                      area     der Bereich wurde gelöscht - seine Datensätze liegen
- *                               schon im Papierkorb, darum weder soft_delete noch
+ *     label        label (text or snippet #prefix.key)
+ *     instance_id  instance (tenant) for which the policy can be selected;
+ *                  ALL_INSTANCES (-1) = for all (the three default policies). Not
+ *                  NULL: instance 0 is the default instance, the type 'id' would turn 0
+ *                  into NULL. No foreign key - the policy of a deleted
+ *                  instance remains until someone deletes it.
+ *     standard     '' or record | profile | ugc: default policy of this
+ *                  area type - not deletable, but changeable; new areas
+ *                  are prefilled with them (Area::hookOnSave())
+ *     blocks       JSON list of the blocks, per block:
+ *         sources  triggers, at least one of SOURCES:
+ *                      record   the record is deleted - no matter by which way
+ *                               (mask, batch processing, API, CMS:USER_DELETE),
+ *                               also as a sub-record (child in the tree, firmly
+ *                               linked content) of a deleted record
+ *                      profile  the profile of the user (record.user_id) was deleted -
+ *                               always applies to all its records, without its own
+ *                               action in the policy of the profile
+ *                      area     the area was deleted - its records already lie
+ *                               in the trash, therefore neither soft_delete nor
  *                               set_fields (AREA_ACTIONS)
- *         delay    Zeitpunkt ab dem Auslösen, 0 = sofort
+ *         delay    point in time from triggering, 0 = immediately
  *         unit     days | years
- *         action   eine von ACTIONS (Gruppen in der Auswahl: ACTION_GROUPS):
- *                      soft_delete       in den Papierkorb - endgültig gelöscht nach
- *                                        admin.trash_retention_days (Zeitplaner, Typ trash)
- *                      set_fields        Felder des Datensatzes überschreiben
- *                      record_trigger    onPrivacyAction() des Trigger-Templates mit
- *                                        dem Datensatz aufrufen; was es an $data
- *                                        ändert, wird gespeichert
- *                      audit_set_fields  Felder im Audit-Log überschreiben
- *                      audit_trigger     onPrivacyAction() für jeden Eintrag im
- *                                        Audit-Log des Datensatzes; was es am Eintrag
- *                                        ändert, wird zurückgeschrieben
- *                      audit_delete      Audit-Log des Datensatzes löschen
- *                      purge             endgültig löschen, samt Audit-Log
- *                  Ein Audit-Log-Eintrag nennt Handelnde nur als Id (AuditLog). Die
- *                  Verbindung zum User bleibt deshalb immer bestehen; anonym wird sie,
- *                  sobald der Profil-Datensatz keine personenbezogenen Daten mehr
- *                  enthält bzw. endgültig gelöscht ist.
- *         category Kategorie des Blocks (CATEGORIES), nur zur Einordnung - ohne
- *                  Funktion beim Ausführen; '' = keine
- *         trigger  für record_trigger / audit_trigger: Kennung (TRIGGER_PATTERN), die
- *                  das Template als $action bekommt - daran unterscheidet es die
- *                  Blöcke
- *         fields   für set_fields / audit_set_fields: Feld => Wert. Feld ist der
- *                  Feldname (status_id, username …) - bei mehrsprachigen Feldern alle
- *                  Sprachen; ein Upload-Feld nimmt nur "" an (Datei samt Thumbnails
- *                  sofort entfernen). Im Audit-Log zusätzlich _label (Bezeichnung des
- *                  Eintrags) und * (alle übrigen Felder - gleich, an welcher Stelle es
- *                  steht). Im Wert: {record_id}, {user_id}.
- * Ob Blöcke einander widersprechen oder doppelt sind, prüft niemand - das ist Sache
- * dessen, der die Policy einrichtet.
+ *         action   one of ACTIONS (groups in the selection: ACTION_GROUPS):
+ *                      soft_delete       to the trash - finally deleted after
+ *                                        admin.trash_retention_days (scheduler, type trash)
+ *                      set_fields        overwrite fields of the record
+ *                      record_trigger    call onPrivacyAction() of the trigger template with
+ *                                        the record; what it changes in $data
+ *                                        is saved
+ *                      audit_set_fields  overwrite fields in the audit log
+ *                      audit_trigger     onPrivacyAction() for each entry in the
+ *                                        audit log of the record; what it changes
+ *                                        in the entry is written back
+ *                      audit_delete      delete the audit log of the record
+ *                      purge             finally delete, including the audit log
+ *                  An audit log entry names actors only as an id (AuditLog). The
+ *                  link to the user therefore always remains; it becomes anonymous
+ *                  as soon as the profile record no longer contains personal data
+ *                  resp. is finally deleted.
+ *         category category of the block (CATEGORIES), only for classification - without
+ *                  function when running; '' = none
+ *         trigger  for record_trigger / audit_trigger: identifier (TRIGGER_PATTERN) that
+ *                  the template receives as $action - this is how it distinguishes the
+ *                  blocks
+ *         fields   for set_fields / audit_set_fields: field => value. Field is the
+ *                  field name (status_id, username …) - for multilingual fields all
+ *                  languages; an upload field only accepts "" (remove the file including
+ *                  thumbnails immediately). In the audit log additionally _label (label of the
+ *                  entry) and * (all other fields - same wherever it stands). In the value: {record_id}, {user_id}.
+ * Whether blocks contradict each other or are duplicated is checked by nobody - that is the
+ * responsibility of the one who sets up the policy.
  *
- * WER DARF WAS
+ * WHO MAY DO WHAT
  * --------------------
- * Policies einer Instanz pflegt, wer das Zusatzrecht policy_edit des Moduls Privacy
- * hat und die Instanz bearbeiten darf; Policies für alle Instanzen (darunter die
- * Standard-Policies) nur der Superuser (canEdit()). Gelöscht werden kann eine Policy
- * nur, wenn sie keine Standard-Policy ist und kein Bereich sie benutzt.
+ * Whoever has the additional right policy_edit of the module Privacy
+ * and may edit the instance maintains the policies of an instance; policies for all instances (including the
+ * default policies) only the superuser (canEdit()). A policy can only be deleted
+ * if it is not a default policy and no area uses it.
  *
- * @see Camindo\Core\Modules\Privacy\PrivacyJobs     Ausführung
- * @see Camindo\Core\Modules\Privacy\PrivacyBackend  Oberfläche
+ * @see Camindo\Core\Modules\Privacy\PrivacyJobs     Execution
+ * @see Camindo\Core\Modules\Privacy\PrivacyBackend  Interface
  */
 namespace Camindo\Core\Modules\Privacy;
 
@@ -82,53 +81,53 @@ class DeletePolicy extends Dataset {
 
     public const SOURCES = ['record', 'profile', 'area'];
 
-    /** Aktionen im Audit-Log */
+    /** Actions in the audit log */
     public const AUDIT_ACTIONS = ['audit_trigger', 'audit_set_fields', 'audit_delete'];
 
-    /** Aktionen in der Reihenfolge, in der sie bei gleichem Zeitpunkt laufen */
+    /** Actions in the order in which they run at the same point in time */
     public const ACTIONS = ['record_trigger', 'set_fields', 'soft_delete', 'purge',
         'audit_trigger', 'audit_set_fields', 'audit_delete'];
 
-    /** Aktionen in der Auswahl des Formulars, gruppiert (Snippet privacy.action_group_{gruppe}) */
+    /** Actions in the selection of the form, grouped (snippet privacy.action_group_{group}) */
     public const ACTION_GROUPS = [
         'record' => ['soft_delete', 'set_fields', 'record_trigger'],
         'audit'  => ['audit_set_fields', 'audit_trigger', 'audit_delete'],
         'all'    => ['purge'],
     ];
 
-    /** Aktionen, die den Datensatz selbst entfernen - bei Unterdatensätzen übernimmt sie der Hauptdatensatz */
+    /** Actions that remove the record itself - for sub-records the main record takes them over */
     public const REMOVE_ACTIONS = ['soft_delete', 'purge'];
 
-    /** Aktionen für den Auslöser 'area': die Datensätze liegen schon im Papierkorb */
+    /** Actions for the trigger 'area': the records already lie in the trash */
     public const AREA_ACTIONS = ['record_trigger', 'purge', 'audit_trigger', 'audit_set_fields', 'audit_delete'];
 
     /**
-     * Kategorien eines Blocks (Einordnung ohne Funktion): in den Papierkorb, nicht mehr
-     * benötigte Daten entfernen (Datenminimierung), vollständig anonymisieren,
-     * endgültig löschen
+     * Categories of a block (classification without function): to the trash, remove
+     * no longer needed data (data minimization), fully anonymize,
+     * finally delete
      */
     public const CATEGORIES = ['trash', 'minimize', 'anonymize', 'delete'];
 
-    /** Aktionen, die die Datenbank betreffen (Hinweis im Löschdialog) */
+    /** Actions that affect the database (note in the delete dialog) */
     public const DB_ACTIONS = ['record_trigger', 'set_fields', 'soft_delete', 'purge'];
 
-    /** Aktionen, die die Methode onPrivacyAction() des Trigger-Templates aufrufen */
+    /** Actions that call the method onPrivacyAction() of the trigger template */
     public const TRIGGER_ACTIONS = ['record_trigger', 'audit_trigger'];
 
-    /** Kennung, die eine Trigger-Aktion dem Template übergibt ($action) */
+    /** Identifier that a trigger action passes to the template ($action) */
     public const TRIGGER_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
     public const UNITS = ['days', 'years'];
 
-    /** instance_id einer Policy für alle Instanzen */
+    /** instance_id of a policy for all instances */
     public const ALL_INSTANCES = -1;
 
-    /** Bereichstypen mit Standard-Policy */
+    /** Area types with default policy */
     public const TYPES = ['record', 'profile', 'ugc'];
 
     /**
-     * Die drei Standard-Policies - bei der Installation (seed.sql) und mit der
-     * Migration 9.1.0 angelegt (ensureStandard()).
+     * The three default policies - created at installation (seed.sql) and with the
+     * migration 9.1.0 (ensureStandard()).
      */
     public const STANDARD = [
         'record' => [
@@ -157,8 +156,8 @@ class DeletePolicy extends Dataset {
     ];
 
     /**
-     * Felder eines Blocks im Formular (Backend::formField() mit varName 'blocks',
-     * Name '{i}.{feld}' -> blocks[{i}][{feld}]). Optionen setzt PrivacyBackend.
+     * Fields of a block in the form (Backend::formField() with varName 'blocks',
+     * name '{i}.{field}' -> blocks[{i}][{field}]). Options are set by PrivacyBackend.
      */
     public const BLOCK_SCHEMA = [
         'sources' => [
@@ -225,7 +224,7 @@ class DeletePolicy extends Dataset {
                 'type'  => 'chars',
                 'label' => '#privacy.field_label',
                 'max'   => 128,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'standard' => [
@@ -241,8 +240,8 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Blöcke vor dem Speichern in die feste Form bringen (normalizeBlocks()); eine
-     * Standard-Policy bleibt Standard-Policy und gilt für alle Instanzen.
+     * Bring blocks into the fixed form before saving (normalizeBlocks()); a
+     * default policy stays a default policy and applies to all instances.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
@@ -259,7 +258,7 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Löschen nur ohne Verwendung und nicht für Standard-Policies.
+     * Delete only if unused and not for default policies.
      */
     protected function hookOnDelete(array $data): void
     {
@@ -272,13 +271,13 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Blöcke bereinigen: nur bekannte Auslöser, Einheiten und Aktionen ('area' nur
-     * mit AREA_ACTIONS); Zeitpunkt
-     * ganzzahlig ab 0; Felder nur bei den Aktionen, die welche brauchen. Blöcke ohne
-     * Auslöser oder Aktion fallen weg, ebenso Trigger-Aktionen ohne gültige Kennung
-     * (das Formular meldet das vorher - PrivacyBackend::edit()).
+     * Clean up blocks: only known triggers, units and actions ('area' only
+     * with AREA_ACTIONS); point in time
+     * integer from 0; fields only for the actions that need them. Blocks without
+     * trigger or action are dropped, likewise trigger actions without a valid identifier
+     * (the form reports this beforehand - PrivacyBackend::edit()).
      *
-     * @param array $blocks  Liste wie in der Tabelle oder aus dem Formular
+     * @param array $blocks  list as in the table or from the form
      * @return array
      */
     public static function normalizeBlocks(array $blocks): array
@@ -288,7 +287,7 @@ class DeletePolicy extends Dataset {
             if (!is_array($block)) continue;
             $sources = array_values(array_intersect(self::SOURCES, array_map('strval', (array)($block['sources'] ?? []))));
             $action = (string)($block['action'] ?? '');
-            // Bereich gelöscht: die Datensätze liegen schon im Papierkorb
+            // Area deleted: the records already lie in the trash
             if (!in_array($action, self::AREA_ACTIONS, true)) $sources = array_values(array_diff($sources, ['area']));
             if (!$sources || !in_array($action, self::ACTIONS, true)) continue;
             $unit = in_array($block['unit'] ?? '', self::UNITS, true) ? (string)$block['unit'] : 'days';
@@ -323,8 +322,8 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Felder aus der Eingabe "feld = wert" (eine Zeile je Feld; Wert ohne oder in
-     * Anführungszeichen) - Formular der Policy.
+     * Fields from the input "field = value" (one line per field; value without or in
+     * quotation marks) - form of the policy.
      */
     public static function parseFields(string $text): array
     {
@@ -338,7 +337,7 @@ class DeletePolicy extends Dataset {
         return $fields;
     }
 
-    /** Gegenstück zu parseFields(): Felder als Text für das Formular */
+    /** Counterpart to parseFields(): fields as text for the form */
     public static function fieldsText(array $fields): string
     {
         $lines = [];
@@ -346,14 +345,14 @@ class DeletePolicy extends Dataset {
         return implode("\n", $lines);
     }
 
-    /** Bezeichnung einer Aktion - "In den Papierkorb" mit der Frist des Papierkorbs */
+    /** Label of an action - "To the trash" with the period of the trash */
     public function actionLabel(string $action): string
     {
         return strtr($this->cms->snippet('privacy.action_' . $action),
             ['{days}' => (string)max(0, (int)($this->config->get('admin.trash_retention_days') ?? 7))]);
     }
 
-    /** Wie viele Bereiche (auch im Papierkorb) benutzen die Policy? */
+    /** How many areas (also in the trash) use the policy? */
     public function usageCount(int $policyId): int
     {
         $this->db->pushResult();
@@ -366,7 +365,7 @@ class DeletePolicy extends Dataset {
         }
     }
 
-    /** Standard-Policy eines Bereichstyps (privacy_policy_id, 0 = keine) */
+    /** Default policy of an area type (privacy_policy_id, 0 = none) */
     public function standardId(string $type): int
     {
         $this->db->pushResult();
@@ -380,10 +379,10 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Policies, die ein Bereich der Instanz wählen kann: die für alle Instanzen und
-     * die der Instanz selbst.
+     * Policies an area of the instance can select: those for all instances and
+     * the instance's own ones.
      *
-     * @return array  privacy_policy_id => Bezeichnung (Snippets aufgelöst)
+     * @return array  privacy_policy_id => label (snippets resolved)
      */
     public function optionsFor(int $instanceId): array
     {
@@ -403,10 +402,10 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Darf der angemeldete Admin die Policy ändern (bzw. eine für diese Instanz
-     * anlegen)? Siehe Klassenkommentar "Wer darf was".
+     * May the logged-in admin change the policy (or create one for this instance
+     * )? See class comment "Who may do what".
      *
-     * @param int $instanceId  Instanz der Policy, ALL_INSTANCES = alle
+     * @param int $instanceId  instance of the policy, ALL_INSTANCES = all
      */
     public function canEdit(int $instanceId): bool
     {
@@ -417,8 +416,8 @@ class DeletePolicy extends Dataset {
     }
 
     /**
-     * Die Standard-Policies anlegen, wo sie fehlen (Migration 9.1.0). Direkt per
-     * SQL: läuft auch ohne Backend und vor dem Aufbau der Laufzeitlisten.
+     * Create the default policies where they are missing (migration 9.1.0). Directly via
+     * SQL: also runs without the backend and before the runtime lists are built.
      *
      * @return array  Bereichstyp => privacy_policy_id
      */

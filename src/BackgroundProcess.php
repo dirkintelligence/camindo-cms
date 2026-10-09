@@ -2,26 +2,26 @@
 /**
  * class BackgroundProcess, Instanzname $bgproc
  *
- * Verwaltet langlaufende Kommandos, die abgekoppelt vom Webrequest im Hintergrund laufen.
- * Der eigentliche Start und die Prozessüberwachung liegen in Execute, diese Klasse hält
- * ausschließlich den Zustand in der Tabelle `bgproc` (siehe bgproc.sql).
+ * Manages long-running commands that run in the background, detached from the web request.
+ * The actual start and process monitoring are in Execute; this class holds
+ * only the state in the table `bgproc` (see bgproc.sql).
  *
- * Ablauf:
- *  1. start() erzeugt ein Token (falls nicht als Parameter mitgegeben), startet das Kommando
- *     und schreibt PID + Token in die Datenbank.
- *  2. Der Hintergrundprozess meldet seinen Fortschritt über das Token zurück
- *     (setProgressByToken()), er braucht dafür keine Session.
- *  3. list() gleicht bei jedem Aufruf den gespeicherten mit dem tatsächlichen Zustand ab.
+ * Flow:
+ *  1. start() creates a token (unless passed as a parameter), starts the command
+ *     and writes PID + token to the database.
+ *  2. The background process reports its progress back via the token
+ *     (setProgressByToken()); it needs no session for this.
+ *  3. list() reconciles the stored state with the actual state on every call.
  *
- * Sicherheit: abort() und remove() beenden bzw. löschen ausschließlich PIDs, die auch in
- * `bgproc` stehen. Eine beliebige PID des Systems lässt sich darüber nicht abschießen.
+ * Security: abort() and remove() only terminate or delete PIDs that are also listed in
+ * `bgproc`. Any PID of the system cannot be shot down this way.
  */
 namespace Camindo\Core;
 
 class BackgroundProcess {
 
     /**
-     * Werte der Spalte `status`, identisch zu den STATE_*-Konstanten von Execute
+     * Values of the column `status`, identical to the STATE_* constants of Execute
      */
     public const STATUS_FINISHED = 0;
     public const STATUS_RUNNING  = 1;
@@ -29,17 +29,17 @@ class BackgroundProcess {
     public const STATUS_FAILED   = 3;
 
     /**
-     * Prozesstypen, deren Einträge nach dem Ende noch gebraucht werden: der Trigger
-     * (TriggerMedia::finalize()) liest das Ergebnis aus und entfernt den Eintrag
-     * selbst. Alle anderen beendeten Einträge räumt die Liste im Backend ab
-     * (purgeFinishedOfAdmin()) - ein fertiger Prozess interessiert dort nicht mehr.
+     * Process types whose entries are still needed after they end: the trigger
+     * (TriggerMedia::finalize()) reads the result and removes the entry
+     * itself. All other finished entries are cleaned up by the list in the backend
+     * (purgeFinishedOfAdmin()) - a finished process is no longer of interest there.
      */
     public const TRIGGER_TYPES = ['ffmpeg', 'magick'];
 
-    /** File Ressource für Methode lock(), null = keine Sperre gehalten */
+    /** File resource for method lock(), null = no lock held */
     private mixed $triggerLock = null;
 
-    /** Der Browser wurde in diesem Request bereits zur Überwachung aufgefordert */
+    /** The browser has already been asked for monitoring in this request */
     private bool $watchScriptSent = false;
 
     public function __construct(
@@ -54,11 +54,11 @@ class BackgroundProcess {
     }
 
     /**
-     * Alle Hintergrundprozesse aus der Datenbank laden inkl. Status und Fortschritt.
-     * Für jeden noch nicht beendeten Prozess tatsächlichen Status ermitteln.
-     * Wenn beendet dann auch als "beendet" in der Datenbank aktualisieren.
-     * @param  int   $adminId Prozesse dieses Admin listen, 0 = alle Admins
-     * @return array Datensätze aus `bgproc`, neueste zuerst; leeres Array, wenn keine existieren
+     * Load all background processes from the database incl. status and progress.
+     * Determine the actual status for every process not yet finished.
+     * If finished, also update it as "finished" in the database.
+     * @param  int   $adminId list processes of this admin, 0 = all admins
+     * @return array rows from `bgproc`, newest first; empty array if none exist
      */
     public function list(int $adminId = 0): array
     {
@@ -74,14 +74,14 @@ class BackgroundProcess {
     }
 
     /**
-     * Kommando im Hintergrund starten und den Prozess registrieren.
+     * Start the command in the background and register the process.
      *
-     * @param array       $command    Kommando inklusive aller Argumente
-     * @param string      $type       Freie Typkennung, z. B. 'import' oder 'thumbnails'
-     * @param string|null $stdoutFile Logdatei für die Ausgabe, null = verwerfen
-     * @param string|null $stderrFile Logdatei für die Fehlerausgabe, null = verwerfen
-     * @param string|null $error      Grund eines Fehlschlags
-     * @return array|null             ['pid' => int, 'token' => string, 'id' => int] oder null
+     * @param array       $command    command including all arguments
+     * @param string      $type       free type identifier, e.g. 'import' or 'thumbnails'
+     * @param string|null $stdoutFile log file for the output, null = discard
+     * @param string|null $stderrFile log file for the error output, null = discard
+     * @param string|null $error      reason of a failure
+     * @return array|null             ['pid' => int, 'token' => string, 'id' => int] or null
      */
     public function start(array $command, string $type, ?string $token = null, ?string $stdoutFile = null, ?string $stderrFile = null, ?string &$error = null): ?array
     {
@@ -95,7 +95,7 @@ class BackgroundProcess {
         }
 
         if (!$this->create($pid, $type, $token)) {
-            // Datenbankeintrag fehlgeschlagen: der Prozess wäre sonst unbeaufsichtigt
+            // Database entry failed: otherwise the process would be unsupervised
             $this->execute->stopProcess($pid, 2);
             $error = 'process could not be registered';
             return null;
@@ -109,11 +109,11 @@ class BackgroundProcess {
     }
 
     /**
-     * Neuen Prozess in die Datenbank eintragen
-     * @param  int         $pid   PID des laufenden Prozesses, muss > 0 sein
-     * @param  string      $type  Freie Typkennung
-     * @param  string|null $token Vorgegebenes Token, null = neues Token erzeugen
-     * @return bool        true, wenn der Datensatz angelegt wurde
+     * Enter a new process in the database
+     * @param  int         $pid   PID of the running process, must be > 0
+     * @param  string      $type  free type identifier
+     * @param  string|null $token given token, null = create a new token
+     * @return bool        true if the record was created
      */
     public function create(int $pid, string $type, ?string $token = null): bool
     {
@@ -131,9 +131,9 @@ class BackgroundProcess {
         );
         if ($this->db->affected_rows !== 1) return false;
 
-        // Backend-Request: den Browser zur Überwachung auffordern (cApp.polling
-        // fragt den Stand der Prozesse nur ab, solange einer läuft). Das Script geht
-        // mit der Antwort dieses Requests zurück, einmal je Request genügt.
+        // Backend request: ask the browser to monitor (cApp.polling
+        // only queries the state of the processes while one is running). The script goes
+        // back with the response of this request; once per request is enough.
         if (!$this->watchScriptSent && defined('CAMINDO_BACKEND') && PHP_SAPI !== 'cli') {
             $this->watchScriptSent = true;
             echo '<script' . $this->securityHeaders->nonceAttr() . ">if (window.cApp && cApp.polling) cApp.polling.watchBgproc();</script>\n";
@@ -142,12 +142,12 @@ class BackgroundProcess {
     }
 
     /**
-     * Bricht einen laufenden Prozess ab und entfernt seinen Datensatz.
+     * Aborts a running process and removes its record.
      *
-     * Nur PIDs, die in `bgproc` stehen, werden angefasst.
+     * Only PIDs that are listed in `bgproc` are touched.
      *
-     * @param  string $token    Token des abzubrechenden Prozesses
-     * @return bool             true, wenn der Datensatz entfernt wurde; false, wenn die PID unbekannt ist
+     * @param  string $token    token of the process to abort
+     * @return bool             true if the record was removed; false if the PID is unknown
      */
     public function abort(string $token): bool
     {
@@ -156,7 +156,7 @@ class BackgroundProcess {
         $pid = (int)$row['pid'];
 
         if ((int)$row['status'] !== self::STATUS_FINISHED) {
-            // Erst SIGTERM, damit der Prozess aufräumen kann, danach SIGKILL
+            // First SIGTERM so the process can clean up, then SIGKILL
             $this->execute->stopProcess($pid, 3, (string)$row['token']);
         }
 
@@ -164,9 +164,9 @@ class BackgroundProcess {
     }
 
     /**
-     * Regulär beendeten Prozess aus der Datenbank entfernen
-     * @param  string $token    Token des zu entfernenden Prozesses
-     * @return bool             true, wenn der Datensatz entfernt wurde; false, wenn die PID unbekannt ist oder der Prozess noch läuft
+     * Remove a regularly finished process from the database
+     * @param  string $token    token of the process to remove
+     * @return bool             true if the record was removed; false if the PID is unknown or the process is still running
      */
     public function remove(string $token): bool
     {
@@ -174,8 +174,8 @@ class BackgroundProcess {
         if ($row === null) return false;
         $pid = (int)$row['pid'];
 
-        // Läuft der Prozess wider Erwarten noch, bleibt der Eintrag bestehen.
-        // Zum Beenden ist abort() zuständig.
+        // If the process unexpectedly is still running, the entry stays.
+        // abort() is responsible for ending it.
         if ($this->execute->processState($pid, (string)$row['token']) === Execute::STATE_RUNNING) {
             return false;
         }
@@ -184,12 +184,12 @@ class BackgroundProcess {
     }
 
     /**
-     * Prozess-Fortschritt aktualiseren
+     * Update process progress
      *
-     * @param  string      $token       Token aus dem Startargument
-     * @param  int         $progress    Fortschritt in Prozent, 0-100
-     * @param  string|null $message     null: keine Änderung, der JSON-String
-     * @return bool                     true, wenn ein Datensatz aktualisiert wurde
+     * @param  string      $token       token from the start argument
+     * @param  int         $progress    progress in percent, 0-100
+     * @param  string|null $message     null: no change, the JSON string
+     * @return bool                     true if a record was updated
      */
     public function setProgressByToken(string $token, int $progress, ?string $message = null): bool
     {
@@ -216,16 +216,16 @@ class BackgroundProcess {
     }
 
     /**
-     * Prozess-Status aktualiseren
+     * Update process status
      *
-     * @param  string $token    Token aus dem Startargument
-     * @param  int $status      Status 0: beendet, 1: laufend
-     * @return bool             true, wenn ein Datensatz aktualisiert wurde
+     * @param  string $token    token from the start argument
+     * @param  int $status      status 0: finished, 1: running
+     * @return bool             true if a record was updated
      */
     public function setStatusByToken(string $token, int $status): bool
     {
         if ($token === '') return false;
-        // Bei Status 0 ("completed") den Fortschritt auf 100% setzen
+        // With status 0 ("completed") set the progress to 100%
         $sqlProgress = '';
         if ($status === 0) {
             $sqlProgress = '`progress` = 100, `finished_at` = UTC_TIMESTAMP(), ';
@@ -236,11 +236,11 @@ class BackgroundProcess {
     }
 
     /**
-     * Prozess-Message aktualiseren
+     * Update process message
      *
-     * @param  string $token    Token aus dem Startargument
-     * @param  string $message  JSON-String
-     * @return bool             true, wenn ein Datensatz aktualisiert wurde
+     * @param  string $token    token from the start argument
+     * @param  string $message  JSON string
+     * @return bool             true if a record was updated
      */
     public function setMessageByToken(string $token, string $message): bool
     {
@@ -252,10 +252,10 @@ class BackgroundProcess {
 
 
    /**
-     * Holt einen einzelnen Datensatz anhand der PID.
+     * Fetches a single record by PID.
      *
-     * @param  int        $pid PID des Prozesses
-     * @return array|null      Datensatz aus `bgproc` oder null, wenn die PID unbekannt ist
+     * @param  int        $pid PID of the process
+     * @return array|null      record from `bgproc` or null if the PID is unknown
      */
     public function get(int $pid): ?array
     {
@@ -268,10 +268,10 @@ class BackgroundProcess {
     }
 
     /**
-     * Holt einen einzelnen Datensatz anhand des Tokens.
+     * Fetches a single record by token.
      *
-     * @param  string     $token Token des Prozesses
-     * @return array|null        Datensatz aus `bgproc` oder null, wenn das Token unbekannt ist
+     * @param  string     $token token of the process
+     * @return array|null        record from `bgproc` or null if the token is unknown
      */
     public function getByToken(string $token): ?array
     {
@@ -284,13 +284,13 @@ class BackgroundProcess {
     }
 
     /**
-     * Räumt beendete Einträge auf, deren letzte Änderung länger zurückliegt.
+     * Cleans up finished entries whose last change is older.
      *
-     * Laufende und als Zombie markierte Prozesse bleiben in jedem Fall erhalten.
-     * Sinnvoll per Cronjob oder beim Öffnen der Übersicht, damit die Tabelle nicht unbegrenzt wächst.
+     * Running processes and processes marked as zombies are always kept.
+     * Useful via cron job or when opening the overview, so the table does not grow without limit.
      *
-     * @param  int $hours Mindestalter in Stunden, minimal 1
-     * @return int        Anzahl der gelöschten Einträge
+     * @param  int $hours minimum age in hours, at least 1
+     * @return int        number of deleted entries
      */
     public function purgeFinished(int $hours = 24): int
     {
@@ -305,10 +305,10 @@ class BackgroundProcess {
     }
 
     /**
-     * Regulär beendete Einträge eines Admins entfernen - außer denen, die ein Trigger
-     * noch finalisieren muss (TRIGGER_TYPES). Läuft vor jeder Listenausgabe im Backend.
+     * Remove regularly finished entries of an admin - except those a trigger
+     * still has to finalize (TRIGGER_TYPES). Runs before every list output in the backend.
      *
-     * @return int  Anzahl der gelöschten Einträge
+     * @return int  number of deleted entries
      */
     public function purgeFinishedOfAdmin(int $adminId): int
     {
@@ -324,39 +324,38 @@ class BackgroundProcess {
     }
 
     /**
-     * Gleicht den gespeicherten Status mit dem tatsächlichen Zustand der Prozesse ab.
+     * Reconciles the stored status with the actual state of the processes.
      *
-     * Alle noch nicht als beendet markierten Einträge werden dafür mit einem einzigen
-     * Aufruf von ps bzw. tasklist geprüft, die Kosten sind also unabhängig von der Anzahl
-     * der Prozesse. Geschrieben wird nur, wenn sich der Status tatsächlich geändert hat.
+     * All entries not yet marked as finished are checked with a single call of
+     * ps or tasklist, so the cost is independent of the number of processes. Written only
+     * if the status has actually changed.
      *
-     * Liefert Execute STATE_UNKNOWN, ist der Zustand nicht ermittelbar (weder ps/tasklist
-     * noch posix_kill verfügbar). Der Eintrag bleibt dann unverändert, sonst würde ein
-     * laufender Prozess fälschlich als beendet angezeigt.
+     * If Execute returns STATE_UNKNOWN, the state cannot be determined (neither ps/tasklist
+     * nor posix_kill available). The entry then stays unchanged, otherwise a
+     * running process would wrongly be shown as finished.
      *
-     * Achtung: PIDs werden wiederverwendet. Ein Prozess gilt hier als laufend, solange es
-     * irgendeinen Prozess mit dieser PID gibt.
+     * Note: PIDs are reused. A process counts as running here as long as
+     * there is any process with this PID.
      *
-     * @param  int  $adminId Nur Prozesse dieses Admin prüfen, 0 = alle Admins
+     * @param  int  $adminId check only processes of this admin, 0 = all admins
      * @return void
      */
     private function refresh(int $adminId = 0): void
     {
         
-        // Nur LAUFENDE Einträge abgleichen. Ein als fehlgeschlagen oder abgelaufen
-        // eingetragener Prozess (Trigger, mass_delete, Scheduler) bleibt es - sein
-        // Prozess ist ohnehin weg, und aus "weg" darf hier nicht "erfolgreich
-        // beendet" werden. (STATUS_TIMEOUT und Execute::STATE_ZOMBIE teilen sich
-        // den Wert 2 - ein Zombie gilt unten deshalb als noch laufend, bis er
-        // eingesammelt ist.)
+        // Only reconcile RUNNING entries. A process recorded as failed or timed out
+        // (trigger, mass_delete, scheduler) stays so - its process is gone anyway, and
+        // "gone" must not become "finished successfully" here. (STATUS_TIMEOUT and
+        // Execute::STATE_ZOMBIE share the value 2 - so a zombie counts below as still
+        // running until it has been collected.)
         if (!empty($adminId)) {
             $this->db->query("SELECT `id`, `pid`, `status`, `token` FROM `bgproc` WHERE `status` = ? AND `admin_id` = ?", 'ii', [self::STATUS_RUNNING, $adminId]);
         } else {
             $this->db->query("SELECT `id`, `pid`, `status`, `token` FROM `bgproc` WHERE `status` = ?", 'i', [self::STATUS_RUNNING]);
         }
 
-        // Erst vollständig einlesen, danach schreiben: die folgenden UPDATEs
-        // überschreiben das aktuelle Result der Datenbankklasse.
+        // Read everything completely first, then write: the following UPDATEs
+        // overwrite the current result of the database class.
         $rows = $this->db->fetchAll();
         if (empty($rows)) return;
 
@@ -369,10 +368,10 @@ class BackgroundProcess {
             $pid   = (int)$row['pid'];
             $state = $states[$pid] ?? Execute::STATE_UNKNOWN;
 
-            // Zustand nicht ermittelbar: Eintrag unverändert lassen, sonst würde
-            // ein laufender Prozess fälschlich als beendet angezeigt.
+            // State cannot be determined: leave the entry unchanged, otherwise
+            // a running process would wrongly be shown as finished.
             if ($state === Execute::STATE_UNKNOWN) continue;
-            if ($state === Execute::STATE_ZOMBIE) continue; // noch nicht eingesammelt
+            if ($state === Execute::STATE_ZOMBIE) continue; // not yet collected
             if ($state === (int)$row['status']) continue;
 
             if ($state === Execute::STATE_FINISHED) {
@@ -395,13 +394,13 @@ class BackgroundProcess {
     }
 
     /**
-     * Löscht einen Datensatz anhand des Primärschlüssels.
+     * Deletes a record by its primary key.
      *
-     * Bewusst über `id` statt über `pid`: bei wiederverwendeten PIDs würde sonst der
-     * Datensatz eines anderen Prozesses mitgelöscht.
+     * Deliberately via `id` instead of `pid`: with reused PIDs the record of another
+     * process would otherwise be deleted as well.
      *
-     * @param  int  $id Primärschlüssel aus `bgproc`
-     * @return bool     true, wenn genau ein Datensatz gelöscht wurde
+     * @param  int  $id primary key from `bgproc`
+     * @return bool     true if exactly one record was deleted
      */
     private function deleteById(int $id): bool
     {
@@ -414,11 +413,11 @@ class BackgroundProcess {
 
 
     /**
-     * Erzeugt Lock, damit Prozesse vom selben Typ nicht parallel gestartet werden.
-     * Liefert false, wenn Prozess bereits läuft, true wenn neues Lock erzeugt wurde.
-     * Garbage collection hebt Lock auf, oder auch unlock()
-     * 
-     * @param string $type  Zur Unterscheidung parallel laufender Prozesse
+     * Creates a lock so that processes of the same type are not started in parallel.
+     * Returns false if a process is already running, true if a new lock was created.
+     * Garbage collection releases the lock, or also unlock()
+     *
+     * @param string $type  to distinguish processes running in parallel
      */
     public function lock(string $type): bool
     {
@@ -427,7 +426,7 @@ class BackgroundProcess {
         $f = @fopen($lockFile, 'c');
         if ($f === false) return false;
 
-        // Versuchen, ein exklusives, nicht-blockierendes Lock zu bekommen
+        // Try to get an exclusive, non-blocking lock
         if (!flock($f, LOCK_EX | LOCK_NB)) {
             fclose($f);
             return false;
@@ -437,7 +436,7 @@ class BackgroundProcess {
     }
 
     /**
-     * siehe lock()
+     * see lock()
      */
     public function unlock(): void
     {

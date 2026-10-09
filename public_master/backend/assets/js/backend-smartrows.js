@@ -1,20 +1,20 @@
 /*
- * cApp.smartrows – Zeilenmanipulation in Formularen
- * Zeilen Verschieben, Anfügen, Löschen
+ * cApp.smartrows – Row manipulation in forms
+ * Moving, appending, deleting rows
  *
- * Aufbau im HTML:
- *     .c9-smartrows-container      umschließt alle Zeilen
- *       .c9-smartrows-row          eine Zeile
- *         .c9-smartrows-up         Zeile nach oben  (optional)
- *         .c9-smartrows-down       Zeile nach unten (optional)
- *         .c9-smartrows-remove     Zeile entfernen  (optional)
- *       .c9-smartrows-add          Zeile anfügen    (optional, außerhalb der Zeilen)
+ * Structure in the HTML:
+ *     .c9-smartrows-container      wraps all rows
+ *       .c9-smartrows-row          one row
+ *         .c9-smartrows-up         row up      (optional)
+ *         .c9-smartrows-down       row down    (optional)
+ *         .c9-smartrows-remove     remove row  (optional)
+ *       .c9-smartrows-add          append row  (optional, outside the rows)
  *
- * Nicht jeder Container braucht alle vier Aktionen: der display_type 'sortable'
- * (Backend::formField) bringt nur Up/Down mit - dort steht die Auswahl fest und
- * frei ist nur ihre Reihenfolge.
+ * Not every container needs all four actions: the display_type 'sortable'
+ * (Backend::formField) only brings Up/Down - there the selection is fixed and
+ * only its order is free.
  */
-window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
+window.cApp = window.cApp || {}; // Make sure cApp exists
 
 (function (cApp, $) {
     'use strict';
@@ -22,14 +22,14 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
     cApp.smartrows = {
 
         /**
-         * Einmalig die Klick-Handler binden und alle Container auffrischen.
+         * Bind the click handlers once and refresh all containers.
          *
-         * Idempotent: init() wird zweimal gerufen - das Modul meldet sich am Ende
-         * dieser Datei selbst an (falls es allein geladen wird) UND backend-init.js
-         * ruft es in der Startreihenfolge auf. Ohne die Sperre hingen alle
-         * delegierten Handler doppelt am document: ein Klick auf "Zeile anfügen"
-         * erzeugte zwei Zeilen, ein Klick auf "Runter" schob die Zeile zwei
-         * Positionen weiter.
+         * Idempotent: init() is called twice - the module registers itself at the end
+         * of this file (in case it is loaded alone) AND backend-init.js
+         * calls it in the startup order. Without the lock all delegated
+         * handlers would be attached twice to the document: a click on "Add row"
+         * would create two rows, a click on "Down" would move the row two
+         * positions further.
          */
         init() {
             if (!this._bound) {
@@ -39,14 +39,14 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
             this.refreshAll();
         },
 
-        /** true, sobald _bindButtons() gelaufen ist */
+        /** true as soon as _bindButtons() has run */
         _bound: false,
 
         /**
-         * Alle Container auf der Seite auffrischen.
-         * Nötig beim ersten Aufbau: die Zeilen kommen fertig vom Server, ohne
-         * Refresh zeigte die erste Zeile einen Hoch- und die letzte einen
-         * Runter-Button, der ins Leere greift.
+         * Refresh all containers on the page.
+         * Needed on the first build: the rows come ready-made from the server, without
+         * refresh the first row would show an up button and the last a
+         * down button that leads nowhere.
          */
         refreshAll($scope) {
             const $root = $scope || $(document);
@@ -55,37 +55,37 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
                 .each((i, el) => this.refresh($(el)));
         },
 
-        // --- Öffentliche API ---
+        // --- Public API ---
 
         /**
-         * Sichtbarkeit von .c9-smartrows-up und .c9-smartrows-down in einem .c9-smartrows-container Element
-         * aktualisieren (erste .c9-smartrows-row nur nach unten schiebbar, letzte nur nach oben,
-         * restliche in beide Richtungen, bei nur einem Eintrag in keine Richtung)
+         * Update the visibility of .c9-smartrows-up and .c9-smartrows-down in a .c9-smartrows-container element
+         * (first .c9-smartrows-row can only be moved down, last only up,
+         * the rest in both directions, with only one entry in no direction)
          */
         refresh($container) {
             const $rows = $container.find('div.c9-smartrows-row');
             const rowCount = $rows.length;
 
-            // Zunächst alle Buttons ausblenden (Setzt den Zustand für "nur 1 Eintrag" oder Basis-Reset)
+            // First hide all buttons (sets the state for "only 1 entry" or base reset)
             $rows.find('.c9-smartrows-up, .c9-smartrows-down').css('visibility', 'hidden');
 
             if (rowCount > 1) {
-                // Wenn mehr als eine Zeile existiert, blenden wir erstmal alle Buttons ein ...
+                // If more than one row exists, we first show all buttons ...
                 $rows.find('.c9-smartrows-up, .c9-smartrows-down').css('visibility', 'visible');
 
-                // ... und verstecken die unlogischen Aktionen für die erste und letzte Zeile
+                // ... and hide the illogical actions for the first and last row
                 $rows.first().find('.c9-smartrows-up').css('visibility', 'hidden');
                 $rows.last().find('.c9-smartrows-down').css('visibility', 'hidden');
             }
         },
         
-        // --- Intern ---
+        // --- Internal ---
 
         _bindButtons() {
             const self = this;
 
             $(document)
-                // --- NACH OBEN VERSCHIEBEN ---
+                // --- MOVE UP ---
                 .on('click', '.c9-smartrows-up', function (e) {
                     e.preventDefault();
                     const $btn = $(this);
@@ -93,13 +93,13 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
                     const $prevRow = $row.prev('div.c9-smartrows-row');
 
                     if ($prevRow.length) {
-                        $row.insertBefore($prevRow); // Zeile nach oben schieben
+                        $row.insertBefore($prevRow); // move row up
                         const $container = $row.closest('div.c9-smartrows-container');
-                        self.refresh($container); // Sichtbarkeiten aktualisieren
+                        self.refresh($container); // update visibility
                     }
                 })
 
-                // --- NACH UNTEN VERSCHIEBEN ---
+                // --- MOVE DOWN ---
                 .on('click', '.c9-smartrows-down', function (e) {
                     e.preventDefault();
                     const $btn = $(this);
@@ -107,13 +107,13 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
                     const $nextRow = $row.next('div.c9-smartrows-row');
 
                     if ($nextRow.length) {
-                        $row.insertAfter($nextRow); // Zeile nach unten schieben
+                        $row.insertAfter($nextRow); // move row down
                         const $container = $row.closest('div.c9-smartrows-container');
-                        self.refresh($container); // Sichtbarkeiten aktualisieren
+                        self.refresh($container); // update visibility
                     }
                 })
 
-                // --- ENTFERNEN ---
+                // --- REMOVE ---
                 .on('click', '.c9-smartrows-remove', function (e) {
                     e.preventDefault();
                     const $btn = $(this);
@@ -121,19 +121,19 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
                     const $container = $row.closest('div.c9-smartrows-container');
 
                     if ($container.find('div.c9-smartrows-row').length > 1) {
-                        $row.remove(); // Zeile löschen
+                        $row.remove(); // delete row
                     }
                     else {
-                        // Die letzte Zeile bleibt stehen und wird nur geleert:
-                        // "Anfügen" klont eine vorhandene Zeile - ohne sie gäbe es
-                        // keine Vorlage mehr und der Container ließe sich nicht
-                        // wieder füllen.
+                        // The last row stays and is only cleared:
+                        // "Append" clones an existing row - without it there would
+                        // be no template left and the container could not be
+                        // filled again.
                         self._clearRow($row);
                     }
-                    self.refresh($container); // Buttons der verbleibenden Zeilen aktualisieren
+                    self.refresh($container); // update buttons of the remaining rows
                 })
 
-                // --- HINZUFÜGEN ---
+                // --- ADD ---
                 .on('click', '.c9-smartrows-add', function (e) {
                     e.preventDefault();
                     const $btn = $(this);
@@ -141,34 +141,34 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
                     const $lastRow = $container.find('div.c9-smartrows-row').last();
 
                     if ($lastRow.length) {
-                        // Letzte Zeile inkl. Event-Handler (false) klonen
-                        // und die Formularfelder der Kopie leeren
+                        // Clone the last row incl. event handlers (false)
+                        // and clear the form fields of the copy
                         const $newRow = $lastRow.clone(false);
                         self._clearRow($newRow);
 
-                        // Neue Zeile hinter die letzte anhängen
+                        // Append the new row after the last one
                         $lastRow.after($newRow);
 
-                        // Sichtbarkeiten aktualisieren
+                        // Update visibility
                         self.refresh($container);
                     }
                 });
         },
 
         /**
-         * Formularfelder einer Zeile leeren - gemeinsamer Kern von "Anfügen"
-         * (die geklonte Zeile) und "Entfernen" (die letzte verbliebene Zeile).
+         * Clear the form fields of a row - common core of "Append"
+         * (the cloned row) and "Remove" (the last remaining row).
          */
         _clearRow($row) {
             $row.find('input, select, textarea').each(function () {
                 const $el = $(this);
                 const type = this.type || this.tagName.toLowerCase();
 
-                // Checkboxen und Radio-Buttons unchecken
+                // Uncheck checkboxes and radio buttons
                 if (type === 'checkbox' || type === 'radio') {
                     $el.prop('checked', false);
                 }
-                // Keine Buttons oder Submit-Inputs leeren, nur Eingabefelder
+                // Do not clear buttons or submit inputs, only input fields
                 else if (type !== 'button' && type !== 'submit' && type !== 'reset') {
                     $el.val('');
                 }
@@ -176,7 +176,7 @@ window.cApp = window.cApp || {}; // Stelle sicher, dass cApp existiert
         }
     };
 
-    // Im Document-Ready initialisieren, falls das Modul direkt geladen wird
+    // Initialize on document ready, in case the module is loaded directly
     $(function() {
         cApp.smartrows.init();
     });

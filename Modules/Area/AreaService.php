@@ -1,24 +1,24 @@
 <?php
 /**
- * Bereiche anlegen und kopieren - der gemeinsame Weg von Oberfläche (AreaBackend)
- * und API (AreaApi). Beides braucht mehr als Area::save():
+ * Create and copy areas - the common path of the interface (AreaBackend)
+ * and API (AreaApi). Both need more than Area::save():
  *
- *     create()  Bereich speichern; mit Bauplan danach dessen Felder und Bezüge
+ *     create()  save the area; with blueprint, afterwards its fields and references
  *               anlegen (RecordImport::importBlueprint())
- *     copy()    Bereich mit den Einstellungen des Originals speichern, dessen
- *               Bereichsrechte übernehmen und die Felder über einen Bauplan des
+ *     copy()    save the area with the settings of the original, take over its
+ *               area rights, and the fields via a blueprint of the
  *               Originals anlegen (RecordExport::areaBlueprintFile())
  *
- * Fehler im zweiten Schritt lassen den Bereich bestehen: Rückgabe ist dann die neue
- * Id, die Meldungen stehen in Cms::$errors (blueprintFailed()).
+ * Errors in the second step leave the area in place: the return value is then the new
+ * id, the messages are in Cms::$errors (blueprintFailed()).
  *
- * BAUPLÄNE
+ * BLUEPRINTS
  * --------------------
- * Dateien blueprints/{type}/{name}.xml (Exportformat: ein Bereich mit Einstellungen
- * und Feldern, keine Datensätze) - für die Typen BLUEPRINT_TYPES. Eigene Baupläne
+ * files blueprints/{type}/{name}.xml (export format: one area with settings
+ * and fields, no records) - for the types BLUEPRINT_TYPES. Own blueprints
  * einer Installation liegen in var/area_blueprints/{name}.xml (blueprintFiles()).
- * Label und Notiz des <area> sind Beschriftung und Erklärung in der Auswahl beim
- * Anlegen (Text oder Snippet-Verweis #…).
+ * Label and note of the <area> are the label and explanation in the selection when
+ * creating (text or snippet reference #…).
  */
 namespace Camindo\Core\Modules\Area;
 
@@ -29,13 +29,13 @@ use Camindo\Core\Modules\Record\RecordImport;
 
 class AreaService
 {
-    /** Content-Typen, für die es Baupläne geben kann (Unterordner von blueprints/) */
+    /** Content types for which blueprints can exist (subfolders of blueprints/) */
     public const BLUEPRINT_TYPES = ['record', 'profile', 'ugc'];
 
-    /** Eigene Baupläne einer Installation, relativ zu paths.var_dir */
+    /** Own blueprints of an installation, relative to paths.var_dir */
     public const CUSTOM_BLUEPRINT_DIR = 'area_blueprints';
 
-    /** Felder, die eine Kopie aus der Eingabe nimmt - alles andere vom Original */
+    /** Fields that a copy takes from the input - everything else from the original */
     public const COPY_FIELDS = ['instance_id', 'parent_id', 'previous_id', 'label', 'name', 'icon', 'note'];
 
     private bool $blueprintFailed = false;
@@ -51,10 +51,10 @@ class AreaService
     }
 
     // ====================
-    // Baupläne
+    // Blueprints
 
     /**
-     * Baupläne eines Typs: Name (Datei ohne .xml) => Bereich der Datei
+     * blueprints of a type: name (file without .xml) => area of the file
      * (RecordImport::readBlueprint()), alphabetisch.
      */
     public function blueprints(string $type): array
@@ -64,7 +64,7 @@ class AreaService
         return $blueprints;
     }
 
-    /** Ein Bauplan des Typs - null, wenn es ihn nicht gibt */
+    /** A blueprint of the type - null if it does not exist */
     public function blueprint(string $type, string $name): ?array
     {
         if ($name === '' || !preg_match('/^[a-z0-9_\-]+$/i', $name)) return null;
@@ -72,9 +72,9 @@ class AreaService
     }
 
     /**
-     * Vorgaben eines Bauplans für einen neuen Bereich: name, icon, sort_order,
-     * details.tabs - Label und Notiz bleiben leer, die Feldbezüge (default_field_id …)
-     * entstehen erst mit den Feldern.
+     * Defaults of a blueprint for a new area: name, icon, sort_order,
+     * details.tabs - label and note stay empty, the field references (default_field_id …)
+     * only arise together with the fieldsn.
      */
     public function blueprintDefaults(?array $blueprint): array
     {
@@ -88,12 +88,12 @@ class AreaService
     }
 
     /**
-     * Bauplan-Dateien eines Typs: Name => ['path' => Pfad, 'area' => Bereich der
-     * Datei]. Erst die des Moduls
-     * (blueprints/{type}/*.xml), dann die eigenen der Installation
-     * (var/area_blueprints/*.xml, ohne Unterordner - der Typ steht im <area> der
-     * Datei). Ein eigener Bauplan mit dem Namen eines mitgelieferten ersetzt
-     * diesen. Dateien, deren Bereich einen anderen Typ hat, fallen heraus.
+     * blueprint files of a type: name => ['path' => path, 'area' => area of the
+     * file]. First those of the module
+     * (blueprints/{type}/*.xml), then the installation's own
+     * (var/area_blueprints/*.xml, without subfolders - the type is in the <area> of the
+     * file). An own blueprint with the name of a bundled one replaces
+     * it. Files whose area has a different type are dropped.
      */
     private function blueprintFiles(string $type): array
     {
@@ -113,13 +113,13 @@ class AreaService
         return $files;
     }
 
-    /** Verzeichnis der eigenen Baupläne einer Installation */
+    /** Directory of the own blueprints of an installation */
     public function customBlueprintDir(): string
     {
         return rtrim((string)$this->config->get('paths.var_dir'), '/') . '/' . self::CUSTOM_BLUEPRINT_DIR;
     }
 
-    /** Pfad des Bauplans $name für den Typ ('' = gibt es nicht) */
+    /** Path of blueprint $name for the type ('' = does not exist) */
     private function blueprintPath(string $type, string $name): string
     {
         if ($name === '' || !preg_match('/^[a-z0-9_\-]+$/i', $name)) return '';
@@ -127,14 +127,14 @@ class AreaService
     }
 
     // ====================
-    // Anlegen und kopieren
+    // Create and copy
 
     /**
-     * Neuen Bereich speichern, mit Bauplan danach dessen Felder anlegen.
+     * Save a new area; with blueprint, create its fields afterwards.
      *
-     * @param array  $data       Daten wie Area::save() (area_id 0)
-     * @param string $blueprint  Name eines Bauplans des Typs ('' = keiner)
-     * @return ?int              neue Id; null: Bereich nicht gespeichert (Cms::$errors)
+     * @param array  $data       data as Area::save() (area_id 0)
+     * @param string $blueprint  name of a blueprint of the type ('' = none)
+     * @return ?int              new id; null: area not saved (Cms::$errors)
      */
     public function create(array $data, string $blueprint = ''): ?int
     {
@@ -152,15 +152,15 @@ class AreaService
     }
 
     /**
-     * Kopie eines Bereichs: Label, Name, Icon, Instanz, Vater, Vorgänger und Hinweis
-     * aus $input (COPY_FIELDS), Typ, Sortierrichtung, details und Lösch-Policy vom Original. Danach
-     * die Bereichsrechte des Originals und - über den Bauplan-Import - seine Felder
-     * und Feldbezüge (Datensatzbereiche; Ordner und Template-Bereiche nur die
+     * Copy of an area: label, name, icon, instance, parent, predecessor and note
+     * from $input (COPY_FIELDS), type, sort direction, details and deletion policy from the original. Afterwards
+     * the area rights of the original and - via the blueprint import - its fields
+     * and field references (record areas; folders and template areas only the
      * Template-Zuweisungen).
      *
-     * @param array $source  Area::load() des Originals
-     * @param array $input   Werte aus COPY_FIELDS
-     * @return ?int          neue Id; null: nicht gespeichert (Cms::$errors)
+     * @param array $source  Area::load() of the original
+     * @param array $input   values from COPY_FIELDS
+     * @return ?int          new id; null: not saved (Cms::$errors)
      */
     public function copy(array $source, array $input): ?int
     {
@@ -180,7 +180,7 @@ class AreaService
         return $areaId;
     }
 
-    /** Die Daten der Kopie (erster Schritt von copy()) - auch für die Prüfung */
+    /** The data of the copy (first step of copy()) - also for the check */
     public function copyData(array $source, array $input): array
     {
         $data = [
@@ -195,17 +195,17 @@ class AreaService
             'note'        => (string)($input['note'] ?? ''),
             'sort_order'  => (string)($source['sort_order'] ?? ''),
             'details'     => (array)($source['details'] ?? []),
-            // Lösch-Policy des Originals (passt sie nicht zur Ziel-Instanz, setzt
-            // Area::hookOnSave() die Standard-Policy des Typs)
+            // Deletion policy of the original (if it does not fit the target instance, sets
+            // Area::hookOnSave() the default policy of the type)
             'privacy_policy_id' => (int)($source['privacy_policy_id'] ?? 0),
         ];
-        // Der Slug-Präfix gehört genau einem Bereich (Area::slugPrefixErrors()) -
-        // die Kopie startet ohne
+        // The slug prefix belongs to exactly one area (Area::slugPrefixErrors()) -
+        // the copy starts without it
         unset($data['details']['slug_prefix']);
         return $data;
     }
 
-    /** Ist beim letzten create()/copy() der zweite Schritt (Felder) gescheitert? */
+    /** Did the second step (fields) fail in the last create()/copy()? */
     public function blueprintFailed(): bool
     {
         return $this->blueprintFailed;

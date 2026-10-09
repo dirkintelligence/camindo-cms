@@ -1,20 +1,20 @@
 <?php
 /**
- * check_dateparse.php - Selbsttest für Dataset::dateInputToIso() / timeInputToIso()
+ * check_dateparse.php - self-test for Dataset::dateInputToIso() / timeInputToIso()
  *
  *     php Core/cron/check_dateparse.php
  *
- * Prüft die locale-abhängige Erkennung (IntlDateFormatter) für en_US, de_AT,
- * en_GB, ar_SA und bn_BD mit und ohne Uhrzeit - bei ar_SA/bn_BD mit eigenen und mit
- * lateinischen Ziffern. Insbesondere: ein Datum mit Uhrzeit darf nie über ein
- * reines Datumsmuster (Präfix-Treffer) zu 00:00:00 werden, und das getippte normale
- * Leerzeichen vor "PM" muss wie das geschützte (U+202F, ICU 72) akzeptiert werden.
- * Exit-Code 1 bei Abweichungen.
+ * Checks the locale-dependent recognition (IntlDateFormatter) for en_US, de_AT,
+ * en_GB, ar_SA and bn_BD with and without time - for ar_SA/bn_BD with native and with
+ * Latin digits. In particular: a date with time must never turn into 00:00:00 via a
+ * pure date pattern (prefix match), and the typed normal space before "PM" must be
+ * accepted like the protected one (U+202F, ICU 72).
+ * Exit code 1 on deviations.
  */
 use Camindo\Core\Dataset;
 use Camindo\Core\Modules\Record\Record;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -23,17 +23,17 @@ if (PHP_SAPI !== 'cli') {
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
-// Die Parser sind protected - über eine an Dataset gebundene Closure aufrufen
+// The parsers are protected - call them via a closure bound to Dataset
 $call = \Closure::bind(
     fn(string $method, string $value) => $this->$method($value),
     $app->get(Record::class),
     Dataset::class
 );
 
-// [Locale, Methode, Eingabe, erwartetes Ergebnis]
+// [Locale, method, input, expected result]
 $cases = [
     ['en_US', 'dateInputToIso', "Sep 24, 2026, 2:30 PM",          '2026-09-24 14:30:00'],
     ['en_US', 'dateInputToIso', "Sep 24, 2026, 2:30\u{202F}PM",   '2026-09-24 14:30:00'],
@@ -67,9 +67,9 @@ $cases = [
     ['en_GB', 'dateInputToIso', "24 Sept 2026",                   '2026-09-24 00:00:00'],
     ['en_GB', 'timeInputToIso', "14:30",                          '14:30:00'],
     ['en_GB', 'timeInputToIso', "2:30 pm",                        '14:30:00'],
-    // 24-Stunden-Zeit in einer Locale mit 12-Stunden-Format: Datum und Zeit getrennt
+    // 24-hour time in a locale with 12-hour format: date and time separately
     ['en_US', 'dateInputToIso', "9/24/2026 14:30",                '2026-09-24 14:30:00'],
-    // Eigene Ziffern (so zeigt das Backend an) und lateinische Ziffern, ohne Ära/RLM
+    // Own digits (as the backend shows them) and Latin digits, without era/RLM
     ['ar_SA', 'dateInputToIso', "٢٤ سبتمبر ٢٠٢٦ م",                '2026-09-24 00:00:00'],
     ['ar_SA', 'dateInputToIso', "24/09/2026",                     '2026-09-24 00:00:00'],
     ['ar_SA', 'dateInputToIso', "24/09/2026 2:30 م",               '2026-09-24 14:30:00'],

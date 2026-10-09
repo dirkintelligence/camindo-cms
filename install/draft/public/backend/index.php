@@ -1,3 +1,3 @@
 <?php
-// Backend-Einstieg - Stub, der Code liegt im Core
+// Backend entry point - stub, the code is in the core
 require dirname(__DIR__, 2) . '/Core/public_master/backend/index.php';

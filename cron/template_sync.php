@@ -1,16 +1,16 @@
 <?php
 /**
- * template_sync.php - Quelltext-Dateien der Templates in die Datenbank übernehmen
- * (var/templates/{instance_id}/{bereich}/{name}.cms.php, siehe TemplateFiles).
+ * template_sync.php - take the source files of the templates into the database
+ * (var/templates/{instance_id}/{area}/{name}.cms.php, see TemplateFiles).
  *
- * Wird von TriggerCron::tick1m() jede Minute als eigener Prozess gestartet; manuell:
+ * Started every minute as its own process by TriggerCron::tick1m(); manually:
  *     php template_sync.php
  *
  * @see Camindo\Core\Modules\Template\TemplateFiles
  */
 use Camindo\Core\Modules\Template\TemplateFiles;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -22,7 +22,7 @@ ignore_user_abort(true);
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 $app = $GLOBALS['app'];

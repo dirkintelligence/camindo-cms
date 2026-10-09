@@ -1,71 +1,71 @@
 <?php
 /**
- * Detailansicht eines Datensatzes (Erweiterung für RecordBackend).
+ * Detail view of a record (extension for RecordBackend).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     record_info.php          -> info()          Detailansicht mit Reitern
- *     ajax_field_details.php   -> fieldDetails()  eine einzelne Zeile nachladen
- *                                                 (DSGVO, RecordPersonalData)
- *     record_second_factor.php -> secondFactor()  zweiter Faktor eines Profils
- *                                                 anzeigen und zurücksetzen
+ *     record_info.php          -> info()          detail view with tabs
+ *     ajax_field_details.php   -> fieldDetails()  load a single row afterwards
+ *                                                 (GDPR, RecordPersonalData)
+ *     record_second_factor.php -> secondFactor()  show and reset the second factor
+ *                                                 of a profile
  *
- * Der Button "Verschieben" führt zu RecordBackendMove (record_move.php); er fehlt,
- * wenn die Ansicht aus einem Lookup-Fenster geöffnet wurde (src_id > 0).
+ * The button "Move" leads to RecordBackendMove (record_move.php); it is missing
+ * if the view was opened from a lookup window (src_id > 0).
  *
- * REITER
+ * TABS
  * --------------------
- *     Inhalte     die Felder, die der Redakteur im Bereich definiert hat
- *     Metafelder  die festen Spalten der Tabelle `record` - Id, Zeiten, Status,
- *                 Template, Urheber, Baumposition
- *     Änderungen  der Verlauf aus dem Audit-Log (Camindo\Core\AuditLog), die
- *                 letzten zehn Einträge, je Eintrag Vorher/Nachher aller geänderten
- *                 Felder (Backend::auditHistory() -> AuditDiff); längere Verläufe im Modul Audit.
- *                 Sichtbar für jeden mit Leserecht auf den Bereich - die IP-Adresse
- *                 nur für Superuser. Nicht im Lookup-Fenster (src_field).
+ *     Contents    the fields that the editor has defined in the area
+ *     Meta fields the fixed columns of the table `record` - id, times, status,
+ *                 template, creator, tree position
+ *     Changes     the history from the audit log (Camindo\Core\AuditLog), the
+ *                 last ten entries, for each entry before/after of all changed
+ *                 fields (Backend::auditHistory() -> AuditDiff); longer histories in the module Audit.
+ *                 Visible to everyone with read right on the area - the IP address
+ *                 only for superusers. Not in the lookup window (src_field).
  *
- * Führt die Instanz des Datensatzes mehrere Sprachen und teilt der Bereich sie auf
- * Reiter auf (details.tabs), bleibt es - anders als in der Eingabemaske
- * (RecordBackendEdit) - beim einen Reiter "Inhalte"; die Sprache wählt ein Pulldown
- * darunter (je Sprache ein Eintrag, zuletzt "Alle Sprachen"). Eine Sprache lädt nur
- * den Inhalts-Cache dieser Sprache (`record_cache`) und zeigt je Feld eine Zeile;
- * "Alle Sprachen" lädt jede Sprache und zeigt mehrsprachige Felder je Sprache.
- * Nicht übersetzte Werte (Fallback aus der Hauptsprache) erscheinen ausgegraut.
- * Zuerst geöffnet wird die bevorzugte Sprachversion des Admins (persönliche
- * Einstellung), sonst die Hauptsprache - siehe _infoCurrentTab().
+ * If the instance of the record has several languages and the area splits them into
+ * tabs (details.tabs), it stays - unlike in the input mask
+ * (RecordBackendEdit) - with the one tab "Contents"; a drop-down below it selects the language
+ * (one entry per language, last "All languages"). A language loads only
+ * the content cache of this language (`record_cache`) and shows one row per field;
+ * "All languages" loads each language and shows multilingual fields per language.
+ * Untranslated values (fallback from the primary language) appear grayed out.
+ * The first thing opened is the admin's preferred language version (personal
+ * setting), otherwise the primary language - see _infoCurrentTab().
  *
- * Umgeschaltet wird über den Request-Parameter tab ('meta', 'all', eine language_id
- * oder leer); alle Reiter und Pulldown-Einträge sind derselbe Einstiegspunkt, nur
- * mit anderem Rumpf (_infoContents() / _infoMeta()).
+ * It is switched via the request parameter tab ('meta', 'all', a language_id
+ * or empty); all tabs and drop-down entries are the same entry point, only
+ * with a different body (_infoContents() / _infoMeta()).
  *
- * Die Trennung ist mehr als Kosmetik: template_id erscheint im Inhalte-Reiter
- * absichtlich NICHT, obwohl es im Schema steht - es gehört zu den Metafeldern und
- * würde dort doppelt auftauchen. status_id steht dort nur, wenn der Bereich ein
- * Eingabefeld dafür angelegt hat (er arbeitet dann mit dem Workflow) - hervorgehoben
+ * The separation is more than cosmetic: template_id deliberately does NOT appear in the contents tab,
+ * although it is in the schema - it belongs to the meta fields and
+ * would otherwise appear twice there. status_id appears there only if the area has
+ * created an input field for it (it then works with the workflow) - highlighted
  * ('primary').
  *
- * FLACHER WORKFLOW
+ * FLAT WORKFLOW
  * --------------------
- * Trägt der Datensatz einen Status, den die Gruppe nicht setzen darf
- * (Access::recordWrite()), ist der Bearbeiten-Knopf ausgegraut - auch mit
- * Schreibrecht im Bereich.
+ * If the record carries a status that the group may not set
+ * (Access::recordWrite()), the edit button is grayed out - even with
+ * write right in the area.
  *
- * BAUMFELDER NUR BEI BAUM-BEREICHEN
+ * TREE FIELDS ONLY FOR TREE AREAS
  * --------------------
- * position, depth, lft und parent_id werden im Metafeld-Reiter nur gezeigt, wenn der
- * Bereich überhaupt eine Hierarchie hat (also ein Eingabefeld für parent_id definiert
- * ist). Ohne das sind die Werte zwar vorhanden, aber ohne Aussage.
+ * position, depth, lft and parent_id are shown on the meta fields tab only if
+ * the area has a hierarchy at all (i.e. an input field for parent_id is defined).
+ * Without that the values are present but meaningless.
  *
- * LANGE INHALTE WERDEN NACHGELADEN
+ * LONG CONTENTS ARE LOADED LATER
  * --------------------
- * Die Zeilen des Inhalte-Reiters bekommen das Kennzeichen 'expandable': sie zeigen
- * zunächst nur einen Anriss und holen sich den vollen Inhalt bei Bedarf über
- * fieldDetails() nach. Sonst müsste die Detailansicht sämtliche Textfelder,
- * Verknüpfungen und Vorschaubilder eines Datensatzes auf einmal aufbereiten.
+ * The rows of the contents tab get the flag 'expandable': they first show
+ * only a preview and fetch the full content via fieldDetails() when needed.
+ * Otherwise the detail view would have to prepare all text fields,
+ * links and preview images of a record at once.
  *
- * @see Camindo\Core\Modules\Record\RecordBackend      gemeinsame Basis
- * @see Camindo\Core\Modules\Record\RecordBackendEdit  die Eingabemaske dazu
- * @see Camindo\Core\Backend::infoAdd()                  baut die Zeilen
+ * @see Camindo\Core\Modules\Record\RecordBackend      shared base
+ * @see Camindo\Core\Modules\Record\RecordBackendEdit  the input mask for it
+ * @see Camindo\Core\Backend::infoAdd()                  builds the rows
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -107,24 +107,25 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Detailansicht ausgeben (backend/record_info.php).
+    /**
+     * Output the detail view (backend/record_info.php).
      *
-     * $this->function wird vorab auf 'info' gesetzt - _resolveParams() schaltet bei
-     * einem Fehler auf 'errors' um, der Vergleich danach fängt genau das ab. Dieselbe
-     * Stelle steuert außerdem headline(), das nur bei 'info' und 'delete' den
-     * Datensatz selbst über die Seite schreibt.
+     * $this->function is set to 'info' in advance - _resolveParams() switches to
+     * 'errors' on an error, the comparison afterwards catches exactly that. The same
+     * place also controls headline(), which only writes the record
+     * itself above the page for 'info' and 'delete'.
      *
-     * Das Status-Symbol erscheint in der Überschrift nur, wenn der Bereich für
-     * status_id ein eigenes Eingabefeld angelegt hat - daran erkennt man, dass der
-     * Redakteur mit dem Status überhaupt arbeitet. Erkennbar ist das an 'field_id' in
-     * der Spaltendefinition: nur virtuelle Felder haben eine.
+     * The status symbol appears in the headline only if the area has created
+     * its own input field for status_id - this shows that the editor
+     * works with the status at all. This is recognizable by 'field_id' in
+     * the column definition: only virtual fields have one.
      *
-     * Request: id, area_id, tab ('meta', 'all', language_id oder leer)
+     * Request: id, area_id, tab ('meta', 'all', language_id or empty)
      */
-    /** Höchstzahl verknüpfter Datensätze je Feld in der Detailansicht (_infoRelated()) */
+    /** Maximum number of linked records per field in the detail view (_infoRelated()) */
     private const RELATED_MAX = 20;
 
-    /** Inhalte je Sprache aus record_cache lesen (mehrsprachige Instanz + Felder) */
+    /** read contents per language from record_cache (multilingual instance + fields) */
     private bool $useLanguageCaches = false;
 
     public function info()
@@ -156,7 +157,7 @@ class RecordBackendInfo extends RecordBackend {
         }
         $this->areaId = (int)$this->data['area_id'];
 
-        // Rechte der Benutzergruppe: Leserecht auf den Bereich (12-group-rights.md)
+        // rights of the user group: read right on the area (developer docs, chapter 11 (Permissions))
         $access = $this->backend->access();
         if (!$access->areaRead($this->areaId)) {
             echo $access->deniedHtml();
@@ -164,12 +165,12 @@ class RecordBackendInfo extends RecordBackend {
             return;
         }
         $ownerId = isset($this->data['owner_id']) ? (int)$this->data['owner_id'] : null;
-        // Stift hinter "Original filename" nur mit Schreibrecht (fileRename())
+        // pencil behind "Original filename" only with write right (fileRename())
         if ($access->areaWrite($this->areaId, $ownerId)) {
             $this->backend->fileRenameIds[$this->id] = true;
         }
 
-        // Virtuelle Felder laden - Verknüpfungsfelder ohne lesbaren Zielbereich bleiben weg
+        // load virtual fields - link fields without a readable target area are left out
         $schemaVirtual = array_filter(
             $this->record->virtualSchema($this->areaId, false),
             fn(array $colDef) => $this->record->relationTargetReadable($colDef)
@@ -177,8 +178,8 @@ class RecordBackendInfo extends RecordBackend {
         $this->hasParentId = isset($schemaVirtual['parent_id']);
 
         // H1
-        // Wenn virtuelles Feld auf status_id basiert (field_id in Spaltendefinition enthalten)
-        // dann zeige das Status-Icon vor der Headline
+        // if the virtual field is based on status_id (field_id contained in the column definition)
+        // then show the status icon before the headline
         $statusCol = (array)($schemaVirtual['status_id'] ?? []);
         if (!empty($statusCol['field_id'])) {
             $displayIcon = true;
@@ -195,8 +196,8 @@ class RecordBackendInfo extends RecordBackend {
             $this->backend->buttonAdd('button_edit_primary', "cApp.layers.replace('Record/record_edit.php?{$this->params}&id={$this->id}');");
         }
         elseif ($access->areaWrite($this->areaId, $ownerId)) {
-            // Schreibrecht, aber der Status ist für die Gruppe nicht setzbar: der
-            // Datensatz ist für sie abgeschlossen (flacher Workflow)
+            // write right, but the status is not settable for the group: the
+            // record is closed for them (flat workflow)
             $this->backend->buttonAdd('record.button_edit_status_denied', '');
         }
         if ($access->areaCreate($this->areaId)) {
@@ -206,8 +207,8 @@ class RecordBackendInfo extends RecordBackend {
             $this->backend->buttonAdd('button_delete', "cApp.layers.replace('Record/record_edit.php?{$this->params}&id={$this->id}&function=delete');");
         }
         /*
-          Wenn Default-Template im Bereich definiert ist, oder dem Datensatz ein Template explizit zugewiesen
-          wurde, dann Preview-Link anzeigen
+          If a default template is defined in the area, or a template was explicitly assigned
+          to the record, then show the preview link
         */
         if (
             !empty($this->areaData['default_template_id'])
@@ -222,13 +223,13 @@ class RecordBackendInfo extends RecordBackend {
             $this->backend->buttonAdd('button_close', "cApp.layers.close()");
         }
         if ($this->srcId < 1) {
-            // Menü rechts: Verschieben (Schreiben + Löschen im Quellbereich, keine
-            // Verknüpfungsfelder ohne Zielzugriff), Message zu Record schreiben
+            // menu on the right: move (write + delete in the source area, no
+            // link fields without target access), write message to Record
             $canMove = $access->areaWrite($this->areaId, $ownerId) && $access->areaDelete($this->areaId, $ownerId)
                 && $this->record->relationTargetsReadable($this->areaId);
             $this->backend->buttonAdd($canMove ? 'record.record_info_more_dropdown' : 'record.record_info_more_dropdown_nomove', '', '', alignRight:true);
-            // Profil-Datensätze: Datenexport (Modul Privacy) - vor {record_id}/{area_id},
-            // die Vorlage des Eintrags bringt diese Platzhalter mit
+            // profile records: data export (module Privacy) - before {record_id}/{area_id},
+            // the template of the entry carries these placeholders
             $this->backend->buttonBarReplace('{extra_items}', ($this->_personalDataAllowed()
                 ? $this->backend->template('record.record_info_item_personal_data') : '')
                 . ($this->_areaType() === 'profile'
@@ -240,53 +241,53 @@ class RecordBackendInfo extends RecordBackend {
 
         // Tabs
         // ----------
-        // Inhalte | Metadaten
-        // Wenn im Content-Bereich aktiviert, dann mit Tabs je Sprache
+        // Contents | Meta fields
+        // if activated in the content area, then with tabs per language
         $languages = $this->instanceCache->languages((int)($this->data['instance_id'] ?? 0));
-        // Mehrsprachig: Inhalte je Sprache aus dem Inhalts-Cache (auch wenn die
-        // Gruppe nur eine Sprache lesen darf - Record::load() liefert die
-        // Hauptsprache, und die darf sie vielleicht gerade nicht sehen)
-        // Ein einsprachiger Slug mit je Sprache verschiedenem Slug-Präfix zählt wie
-        // ein mehrsprachiges Feld (_infoSlug())
+        // Multilingual: contents per language from the content cache (even if the
+        // group may only read one language - Record::load() returns the
+        // primary language, and they may not be allowed to see it at the moment)
+        // A single-language slug with a slug prefix that differs per language counts like
+        // a multilingual field (_infoSlug())
         $this->useLanguageCaches = count($languages) > 1
             && ($this->_hasMultilingualField($schemaVirtual) || $this->_slugPrefixMultilingual($schemaVirtual, $languages));
         if (!$this->useLanguageCaches) {
             $languages = array_slice($languages, 0, 1, true);
         }
         else {
-            // nur lesbare Sprachen der Benutzergruppe (Reiter und Zeilen)
+            // only readable languages of the user group (tabs and rows)
             $languages = $this->record->readableLanguages($languages);
         }
-        // Aktiver Reiter: Request-Wert, sonst die bevorzugte Sprachversion des Admins,
-        // sonst die Hauptsprache (siehe _infoCurrentTab()) - NICHT der rohe
-        // Request-Parameter, sonst bliebe beim ersten Aufruf (kein tab= in der URL)
-        // kein Reiter aktiv und _infoContents() läse (int)'' = Sprache 0 statt der
-        // bevorzugten/Haupt-Sprache.
+        // Active tab: request value, otherwise the admin's preferred language version,
+        // otherwise the primary language (see _infoCurrentTab()) - NOT the raw
+        // request parameter, otherwise on the first call (no tab= in the URL)
+        // no tab would be active and _infoContents() would read (int)'' = language 0 instead of the
+        // preferred/primary language.
         $tab = $this->_infoCurrentTab($languages);
         $url = "Record/record_info.php?{$this->params}&id={$this->id}";
         $this->backend->tabBarReset();
-        // Tab "Inhalte" - auch bei auf Reiter aufgeteilten Sprachen nur ein Reiter,
-        // die Sprache wählt das Pulldown darunter (_infoLanguageDropdown())
+        // tab "Contents" - even with languages split into tabs only one tab,
+        // the language is selected by the drop-down below it (_infoLanguageDropdown())
         $isContents = ($tab !== 'meta' && $tab !== 'audit');
         $this->backend->tabAdd('#record.tab_data_fields', $isContents ? '' : "cApp.layers.replace('{$url}')", $isContents);
-        // Tab "Metafelder"
+        // tab "Meta fields"
         $this->backend->tabAdd('#record.tab_meta_fields', $tab === 'meta' ? '' : "cApp.layers.replace('{$url}&tab=meta')", $tab === 'meta');
-        // Tab "Änderungen" (Audit-Log) - nicht im Lookup-Fenster
+        // tab "Changes" (audit log) - not in the lookup window
         if ($this->auditLog->enabled() && $this->srcField < 1) {
             $this->backend->tabAdd('#tab_audit', $tab === 'audit' ? '' : "cApp.layers.replace('{$url}&tab=audit')", $tab === 'audit');
         }
         echo $this->backend->tabBar();
 
         if ($tab === 'meta') {
-            // Panel "Metafelder"
+            // panel "Meta fields"
             $this->_infoMeta($schemaVirtual);
         }
         elseif ($tab === 'audit') {
-            // Panel "Änderungen"
+            // panel "Changes"
             $this->_infoAudit();
         }
         else {
-            // Panel "Inhalte": eine Sprache oder alle
+            // panel "Contents": one language or all
             $this->_infoContents($schemaVirtual, $languages, $tab);
         }
     
@@ -294,7 +295,7 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Führt der Bereich mindestens ein mehrsprachiges Feld (field.multilingual)?
+     * Does the area have at least one multilingual field (field.multilingual)?
      */
     private function _hasMultilingualField(array $schemaVirtual): bool
     {
@@ -305,11 +306,11 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Hat der Bereich ein einsprachiges Slug-Feld, aber einen je Sprache
-     * verschiedenen Slug-Präfix? Dann ist auch die Adresse je Sprache verschieden,
-     * und die Info-Seite zeigt den Slug wie ein mehrsprachiges Feld (_infoSlug()).
+     * Does the area have a single-language slug field, but a slug prefix that
+     * differs per language? Then the address is also different per language,
+     * and the info page shows the slug like a multilingual field (_infoSlug()).
      *
-     * @param array $languages  language_id => Sprachzeile der Instanz
+     * @param array $languages  language_id => language row of the instance
      */
     private function _slugPrefixMultilingual(array $schemaVirtual, array $languages): bool
     {
@@ -322,15 +323,15 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Zeile(n) des Slugs: "{Präfix}/" grau vor dem Slug - so, wie er in der Adresse
-     * steht (Cms::slugWithPrefix()). Präfix und Slug gelten je Sprache: ein
-     * mehrsprachiger Slug kommt aus dem Inhalts-Cache, ein einsprachiger gilt für
-     * alle Sprachen. Bei "Alle Sprachen" eine Zeile je Sprache, sonst die gewählte
-     * bzw. (ohne Sprachauswahl) die Hauptsprache.
+     * Row(s) of the slug: "{prefix}/" in gray before the slug - as it appears in the address
+     * (Cms::slugWithPrefix()). Prefix and slug apply per language: a
+     * multilingual slug comes from the content cache, a single-language one applies to
+     * all languages. For "All languages" one row per language, otherwise the selected
+     * one or (without language selection) the primary language.
      *
-     * @param array      $languageCaches  language_id => Inhalts-Cache (_infoRows())
-     * @param array      $languages       Sprachen (siehe _infoContents())
-     * @param int|string $tab             'all' oder language_id
+     * @param array      $languageCaches  language_id => content cache (_infoRows())
+     * @param array      $languages       languages (see _infoContents())
+     * @param int|string $tab             'all' or language_id
      */
     private function _infoSlug(array $colDef, array $schemaVirtual, array $languageCaches, array $languages, int|string $tab, array $flags): void
     {
@@ -373,14 +374,14 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Aktiver Reiter: 'meta', 'all' oder eine language_id.
+     * Active tab: 'meta', 'all' or a language_id.
      *
-     * Ohne Angabe (erster Aufruf) die bevorzugte Sprachversion des Admins
-     * (persönliche Einstellung settings.language_id), sofern die Instanz sie führt,
-     * sonst die Hauptsprache. Führt die Instanz nur eine Sprache, gibt es keine
-     * Sprachauswahl - dann ist 'all' der Inhalte-Reiter.
+     * Without a specification (first call) the admin's preferred language version
+     * (personal setting settings.language_id), provided the instance maintains it,
+     * otherwise the primary language. If the instance has only one language, there is no
+     * language selection - then 'all' is the contents tab.
      *
-     * @param array $languages  language_id => Sprachzeile (InstanceCache::languages())
+     * @param array $languages  language_id => language row (InstanceCache::languages())
      * @return int|string
      */
     private function _infoCurrentTab(array $languages): int|string
@@ -399,7 +400,7 @@ class RecordBackendInfo extends RecordBackend {
             if ($preferred !== '' && in_array((int)$preferred, $languageIds, true)) {
                 return (int)$preferred;
             }
-            // sonst der erste Reiter (Hauptsprache bzw. erste lesbare Sprache)
+            // otherwise the first tab (primary language or first readable language)
             return (int)($languageIds[0] ?? 0);
         }
         if (!in_array((int)$tab, $languageIds, true)) return (int)($languageIds[0] ?? 0);
@@ -407,10 +408,10 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Wert eines Feldes aus dem Inhalts-Cache einer Sprache lesen (record_cache):
-     * Eintrag [typ, wert, (1 = Fallback aus der Hauptsprache)].
+     * Read a field value from the content cache of a language (record_cache):
+     * entry [type, value, (1 = fallback from the primary language)].
      *
-     * @return array  [Wert im Format von Record::load(), bool Fallback]
+     * @return array  [value in the format of Record::load(), bool fallback]
      */
     private function _infoCacheValue(?array $entry, array $colDef): array
     {
@@ -426,30 +427,29 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Reiter "Inhalte": die vom Redakteur definierten Felder.
+     * Tab "Contents": the fields defined by the editor.
      *
-     * Läuft über das Schema des Bereichs, überspringt die Felder, die in den
-     * Metafeld-Reiter gehören, und lässt die Aufbereitung von Backend::infoAdd()
-     * erledigen - die Spaltendefinition sagt ihr, wie ein Wert darzustellen ist.
+     * Runs over the schema of the area, skips the fields that belong on the
+     * meta fields tab, and lets Backend::infoAdd() do the preparation - the column definition
+     * tells it how a value is to be displayed.
      *
-     * Von Hand behandelt werden nur die drei Fälle, die aus einer Zahl etwas Lesbares
-     * machen müssen: needs_review (Symbol und Text), parent_id (Verweis auf den
-     * übergeordneten Datensatz).
+     * Only three cases are handled by hand, which have to turn a number into something readable:
+     * needs_review (symbol and text), parent_id (link to the parent record).
      *
-     * 'expandable' an jeder Zeile: lange Inhalte werden erst auf Klick nachgeladen
-     * (siehe fieldDetails()).
+     * 'expandable' on each row: long contents are only loaded on click
+     * (see fieldDetails()).
      *
-     * infoReset() vorweg, weil in dieser Anfrage schon eine andere Infotabelle
-     * gesammelt worden sein könnte.
+     * infoReset() first, because another info table may already have been
+     * collected in this request.
      *
-     * @param array      $schemaVirtual  Schema des Bereichs
-     * @param array      $languages      Sprachen der Instanz (Hauptsprache zuerst)
-     * @param int|string $tab            'all' oder die gewählte language_id
+     * @param array      $schemaVirtual  schema of the area
+     * @param array      $languages      languages of the instance (primary language first)
+     * @param int|string $tab            'all' or the selected language_id
      */
     private function _infoContents(array $schemaVirtual, array $languages = [], int|string $tab = 'all'): void
     {
-        // kein infoReset - es geht Tab bereits voraus
-        // Sprachauswahl (nur bei auf Reiter aufgeteilten Sprachen)
+        // no infoReset - the tab has already gone ahead
+        // language selection (only with languages split into tabs)
         if ($this->useLanguageCaches && $this->_languageTabs()) {
             $this->backend->infoStatic('', $this->_infoLanguageDropdown($languages, $tab), ['fullsize']);
         }
@@ -458,12 +458,12 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Pulldown der Sprachauswahl im Reiter "Inhalte": je lesbare Sprache ein Eintrag
-     * "Label (Code)", zuletzt "Alle Sprachen" - aufgemacht wie das Pulldown der
-     * Vorschau (Backend::buttonAddPreview()); der Button zeigt die gewählte Sprache.
+     * Drop-down of the language selection in the "Contents" tab: one entry per readable language
+     * "Label (code)", last "All languages" - built like the drop-down of the
+     * preview (Backend::buttonAddPreview()); the button shows the selected language.
      *
-     * @param array      $languages  Sprachen (siehe _infoContents())
-     * @param int|string $tab        'all' oder language_id
+     * @param array      $languages  languages (see _infoContents())
+     * @param int|string $tab        'all' or language_id
      */
     private function _infoLanguageDropdown(array $languages, int|string $tab): string
     {
@@ -493,29 +493,29 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Die Zeilen des Reiters "Inhalte" für den Datensatz $this->id / $this->data
-     * sammeln (Backend::infoAdd()) - für den Datensatz der Seite und, mit $depth > 0,
-     * für die fest verknüpften Inhalte eines 'link'-Feldes (_infoLinkBlocks()).
+     * Collect the rows of the "Contents" tab for the record $this->id / $this->data
+     * (Backend::infoAdd()) - for the record of the page and, with $depth > 0,
+     * for the firmly linked contents of a 'link' field (_infoLinkBlocks()).
      *
-     * Ein 'link'-Feld zeigt auf der Seite selbst seine Inhalte als Blöcke
-     * untereinander, jeder mit den Eingabefeldern (visibility_input = 1) seines
-     * Bereichs; in einem solchen Block (Tiefe > 0) erscheinen 'link'-Felder wie
-     * überall sonst nur mit den Default-Feldern ihrer Inhalte (Backend::backendValue()).
-     * 'expandable' gilt nur auf der Seite selbst - der Nachlade-Parameter kennt nur
-     * einen Feldnamen.
+     * A 'link' field shows on the page itself its contents as blocks
+     * one below the other, each with the input fields (visibility_input = 1) of its
+     * area; in such a block (depth > 0) 'link' fields appear, as everywhere else,
+     * only with the default fields of their contents (Backend::backendValue()).
+     * 'expandable' applies only to the page itself - the reload parameter knows
+     * only one field name.
      *
-     * @param array      $schemaVirtual  Schema des Bereichs von $this->id
-     * @param array      $languages      Sprachen (siehe _infoContents())
-     * @param int|string $tab            'all' oder language_id
-     * @param int        $depth          0 = Seite, 1 = Inhalt eines 'link'-Feldes
+     * @param array      $schemaVirtual  schema of the area of $this->id
+     * @param array      $languages      languages (see _infoContents())
+     * @param int|string $tab            'all' or language_id
+     * @param int        $depth          0 = page, 1 = content of a 'link' field
      */
     private function _infoRows(array $schemaVirtual, array $languages, int|string $tab, int $depth = 0): void
     {
-        // Inhalts-Cache je Sprache (`record_cache`): bei einer gewählten Sprache nur
-        // diese Sprache, bei "Alle Sprachen" jede Sprache der Instanz. Eine
-        // einsprachige Instanz braucht keinen - Record::load() hat die Hauptsprache
-        // bereits geliefert. Fallback-Werte (nicht übersetzt, Kennzeichen im Cache)
-        // werden als solche markiert.
+        // content cache per language (`record_cache`): with a selected language only
+        // this language, with "All languages" each language of the instance. A
+        // single-language instance does not need one - Record::load() has already
+        // delivered the primary language. Fallback values (untranslated, marked in the cache)
+        // are marked as such.
         $languageCaches = [];
         if ($this->useLanguageCaches) {
             $cacheLanguages = ($tab === 'all') ? array_keys($languages) : [(int)$tab];
@@ -525,8 +525,8 @@ class RecordBackendInfo extends RecordBackend {
         }
 
         foreach ($schemaVirtual as $name => $colDef) {
-            // Status: als Eingabefeld des Bereichs (field_id) auch hier, hervorgehoben -
-            // er ist der Stand des Workflows (Access::statusWrite())
+            // status: as an input field of the area (field_id) also here, highlighted -
+            // it is the state of the workflow (Access::statusWrite())
             if ($name === 'status_id') {
                 if ($depth === 0 && (int)($colDef['field_id'] ?? 0) > 0) {
                     $this->backend->infoAdd($this->record, $name, $this->backend->teaser('status', (int)($this->data['status_id'] ?? 0)),
@@ -534,11 +534,11 @@ class RecordBackendInfo extends RecordBackend {
                 }
                 continue;
             }
-            // Manche Felder nur nur im Metafeld-Tab
+            // some fields only on the meta fields tab
             if ($name === 'template_id') continue;
-            // Volltext: abgeleitet, eigene Seite (Metafelder -> "Volltext anzeigen")
+            // full text: derived, own page (meta fields -> "Show full text")
             if ((string)($colDef['type'] ?? '') === 'fulltext') continue;
-            // Inhalt eines 'link'-Feldes: nur seine Eingabefelder
+            // content of a 'link' field: only its input fields
             if ($depth > 0 && (int)($colDef['visibility_input'] ?? 0) !== 1) continue;
             $value = $this->data[$name] ?? null;
             $flags = $depth === 0 ? ['expandable'] : [];
@@ -546,7 +546,7 @@ class RecordBackendInfo extends RecordBackend {
                 $flags[] = 'primary';
             }
 
-            // Fest verknüpfte Inhalte: je Inhalt ein Block mit seinen Feldern
+            // firmly linked contents: one block per content with its fields
             if ($depth === 0 && in_array((string)($colDef['type'] ?? ''), $this->cms->dependentTypes, true)) {
                 $flags[] = 'html';
                 $flags[] = 'fullsize';
@@ -555,7 +555,7 @@ class RecordBackendInfo extends RecordBackend {
                 continue;
             }
 
-            // Verknüpfte Datensätze: untereinander, je mit Symbol und Verweis
+            // linked records: one below the other, each with symbol and link
             if (in_array((string)($colDef['type'] ?? ''), $this->cms->relationTypes, true)) {
                 $flags = array_values(array_diff($flags, ['expandable']));
                 $flags[] = 'html';
@@ -563,7 +563,7 @@ class RecordBackendInfo extends RecordBackend {
                 continue;
             }
 
-            // Slug mit dem Slug-Präfix des Bereichs davor
+            // slug with the slug prefix of the area in front of it
             if ($name === 'slug') {
                 $this->_infoSlug($colDef, $schemaVirtual, $languageCaches, $languages, $tab, $flags);
                 continue;
@@ -571,7 +571,7 @@ class RecordBackendInfo extends RecordBackend {
 
             if (!empty($languageCaches) && $this->cms->isMultilingualField($colDef)) {
                 if ($tab === 'all') {
-                    // eine Zeile je Sprache, mit Sprachkürzel
+                    // one row per language, with language code
                     foreach ($languages as $languageId => $language) {
                         [$langValue, $isFallback] = $this->_infoCacheValue($languageCaches[(int)$languageId][$name] ?? null, $colDef);
                         $langFlags = $flags;
@@ -580,7 +580,7 @@ class RecordBackendInfo extends RecordBackend {
                     }
                 }
                 else {
-                    // gewählte Sprache: nur der Wert dieser Sprache
+                    // selected language: only the value of this language
                     [$value, $isFallback] = $this->_infoCacheValue($languageCaches[(int)$tab][$name] ?? null, $colDef);
                     if ($isFallback) $flags[] = 'grey';
                     $this->backend->infoAdd($this->record, $name, $value, $flags, $schemaVirtual, id: $this->id);
@@ -597,7 +597,7 @@ class RecordBackendInfo extends RecordBackend {
                 $flags[] = 'html';
             }
             elseif ($name === 'position') {
-                // vorangehenden Datensatz listen
+                // list the preceding record
                 if ($previousId = $this->presenter->previousId($this->data, $this->hasParentId)) {
                     $value = $this->backend->teaser('record', $previousId);
                     $flags[] = 'html';
@@ -611,21 +611,21 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Die fest verknüpften Inhalte eines 'link'-Feldes (LinkTrait) als Blöcke
-     * untereinander, in ihrer Reihenfolge (data_rel.position): Kopfzeile mit dem
-     * Datensatz-Teaser (Link auf seine Info-Seite), darunter seine Eingabefelder
-     * in der Darstellung dieser Seite (_infoRows() mit Tiefe 1, Sprachen wie hier).
-     * Ein Sonderfall der Info-Seite - in Listen und Vorschauen zeigt
-     * Backend::backendValue() wie bei jedem Verknüpfungsfeld nur die Default-Felder.
+     * The firmly linked contents of a 'link' field (LinkTrait) as blocks
+     * one below the other, in their order (data_rel.position): header row with the
+     * record teaser (link to its info page), below it its input fields
+     * in the display of this page (_infoRows() with depth 1, languages as here).
+     * A special case of the info page - in lists and previews
+     * Backend::backendValue() shows, as with any link field, only the default fields.
      *
-     * _infoRows() arbeitet auf $this->id / $this->data / $this->areaId /
-     * $this->areaData - der Zusammenhang wird je Inhalt ausgetauscht; die Zeilen
-     * entstehen in einer eigenen Sammlung (Backend::infoPush()/infoPop()).
+     * _infoRows() works on $this->id / $this->data / $this->areaId /
+     * $this->areaData - the context is swapped per content; the rows
+     * are created in their own collection (Backend::infoPush()/infoPop()).
      *
-     * @param array      $colDef     das 'link'-Feld
-     * @param array      $languages  Sprachen (siehe _infoContents())
-     * @param int|string $tab        'all' oder language_id
-     * @return string  HTML der Blöcke, '' ohne Inhalte
+     * @param array      $colDef     the 'link' field
+     * @param array      $languages  languages (see _infoContents())
+     * @param int|string $tab        'all' or language_id
+     * @return string  HTML of the blocks, '' without contents
      */
     private function _infoLinkBlocks(array $colDef, array $languages, int|string $tab): string
     {
@@ -656,8 +656,8 @@ class RecordBackendInfo extends RecordBackend {
                 $this->areaData = $areaData;
                 $schemaVirtual = $this->record->virtualSchema($areaId, false);
 
-                // Schreibrecht auf den verknüpften Datensatz: Edit-Button und Stift
-                // hinter "Original filename" (fileRename())
+                // write right on the linked record: edit button and pencil
+                // behind "Original filename" (fileRename())
                 $canWrite = $access->areaWrite($areaId, isset($data['owner_id']) ? (int)$data['owner_id'] : null);
                 if ($canWrite) $this->backend->fileRenameIds[$destId] = true;
 
@@ -665,9 +665,9 @@ class RecordBackendInfo extends RecordBackend {
                 $this->_infoRows($schemaVirtual, $languages, $tab, 1);
                 $rows = $this->backend->infoPop();
 
-                // Edit-Button rechts oben im Block: öffnet die Eingabemaske des
-                // verknüpften Datensatzes als eigene Ebene (Speichern/Abbrechen
-                // schließen sie und aktualisieren diese Seite)
+                // edit button at the top right of the block: opens the input mask of the
+                // linked record as its own layer (saving/cancelling
+                // close it and update this page)
                 $button = '';
                 if ($canWrite && $access->statusWrite((int)($data['status_id'] ?? 0))) {
                     $button = $this->backend->template('record.button_link_item_edit', [
@@ -688,12 +688,12 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Verknüpfte Datensätze eines Verknüpfungsfeldes als Liste von Teasern
-     * (Backend::teaser(): Symbol des Bereichs, Standardfeld, Verweis auf die
-     * Detailansicht), höchstens RELATED_MAX. Gibt es mehr, führt "mehr" nicht zum
-     * Nachladen, sondern zur Trefferliste aller verknüpften Datensätze
-     * (RecordBackendList mit src_id + relation) in einem neuen Layer.
-     * Reihenfolge wie in den Listen (Backend::relatedIds()).
+     * Linked records of a link field as a list of teasers
+     * (Backend::teaser(): symbol of the area, default field, link to the
+     * detail view), at most RELATED_MAX. If there are more, "more" does not lead to
+     * a reload, but to the result list of all linked records
+     * (RecordBackendList with src_id + relation) in a new layer.
+     * Order as in the lists (Backend::relatedIds()).
      */
     private function _infoRelated(array $colDef): string
     {
@@ -715,19 +715,19 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Reiter "Metafelder": die festen Spalten der Tabelle `record`.
+     * Meta fields tab: the fixed columns of the table `record`.
      *
-     * Die Feldliste steht hier ausdrücklich und in fester Reihenfolge - sie soll sich
-     * nicht ändern, wenn jemand am Schema arbeitet, und die Reihenfolge ist eine
-     * inhaltliche (Zugehörigkeit, Sichtbarkeit, Baum, Herkunft).
+     * The field list is stated here explicitly and in a fixed order - it should not
+     * change when someone works on the schema, and the order is a content-based one
+     * (belonging, visibility, tree, origin).
      *
-     * Vier Felder werden übersprungen, wenn der Bereich keine Hierarchie hat:
-     * position, parent_id, lft und depth (siehe Klassenkommentar).
+     * Four fields are skipped if the area has no hierarchy:
+     * position, parent_id, lft and depth (see class comment).
      *
-     * Ids werden zu Verweisen: status_id, created_by/changed_by/owner_id und
-     * parent_id gehen durch Backend::teaser(), template_id durch _infoTemplate().
-     * Am Ende "Verwendet von": Knopf zur Liste aller Datensätze, die auf diesen
-     * verweisen.
+     * Ids become links: status_id, created_by/changed_by/owner_id and
+     * parent_id go through Backend::teaser(), template_id through _infoTemplate().
+     * At the end "Used by": button to the list of all records that point
+     * to this one.
      */
     private function _infoMeta(array $schemaVirtual): void
     {
@@ -776,7 +776,7 @@ class RecordBackendInfo extends RecordBackend {
                 }
             }
             elseif ($name === 'user_id') {
-                // Besitzer im Frontend (Profil-Datensatz), nur wenn gesetzt
+                // owner in the frontend (profile record), only if set
                 $userId = (int)($this->data[$name] ?? 0);
                 if (empty($userId)) continue;
                 $value = $this->backend->teaser('record', $userId);
@@ -801,15 +801,15 @@ class RecordBackendInfo extends RecordBackend {
             $this->backend->infoAdd($this->record, $name, $value, $flags);
         }
 
-        // "Verwendet von": alle Datensätze, die über irgendein Verweisfeld auf diesen
-        // zeigen - globale Trefferliste mit relation=any + dest_id
-        // (RecordBackendList::list(), Cms::filter()); nicht im Lookup-Modus
+        // "Used by": all records that point to this one via any link field -
+        // global result list with relation=any + dest_id
+        // (RecordBackendList::list(), Cms::filter()); not in lookup mode
         if ($this->srcField < 1) {
             $this->backend->infoStatic('#record.label_used_by', $this->backend->template('button_secondary', [
                 '{onclick}' => "cApp.layers.add('Record/record_list.php?relation=any&dest_id={$this->id}')",
                 '{label}' => htmlspecialchars($this->cms->snippet('record.button_references')),
             ]));
-            // Volltext (Standardfeld und Volltextfelder des Bereichs): eigene Seite
+            // full text (standard field and full-text fields of the area): own page
             $this->backend->infoStatic('#area.label_field_fulltext', $this->backend->template('button_secondary', [
                 '{onclick}' => "cApp.layers.add('Record/record_fulltext.php?id={$this->id}')",
                 '{label}' => htmlspecialchars($this->cms->snippet('record.button_show_fulltext')),
@@ -819,11 +819,11 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * "Volltext anzeigen" (backend/record_fulltext.php, aus dem Reiter "Metafelder"):
-     * was in `data_ftx` für den Datensatz steht - zuerst das Volltext-Standardfeld,
-     * dann die Volltextfelder des Bereichs, je lesbare Sprache. Nur lesen; der Text
-     * entsteht beim Speichern (VirtualFieldsTrait::refreshStandardFulltext(),
-     * refreshFulltext()). Recht: Leserecht auf den Bereich.
+     * "Show full text" (backend/record_fulltext.php, from the "Meta fields" tab):
+     * what is in `data_ftx` for the record - first the standard full-text field,
+     * then the full-text fields of the area, per readable language. Read only; the text
+     * is created on saving (VirtualFieldsTrait::refreshStandardFulltext(),
+     * refreshFulltext()). Right: read right on the area.
      *
      * Request: id
      */
@@ -851,7 +851,7 @@ class RecordBackendInfo extends RecordBackend {
         $this->backend->buttonAdd('button_close', "cApp.layers.close()");
         echo $this->backend->buttonBar();
 
-        // Standardfeld zuerst, dann die Volltextfelder des Bereichs: fieldname_id => Label
+        // standard field first, then the full-text fields of the area: fieldname_id => label
         $sources = [$this->record->standardFulltextFieldnameId() => '#area.label_field_fulltext'];
         foreach ($this->record->virtualSchema($this->areaId, false) as $name => $colDef) {
             if ((string)($colDef['type'] ?? '') !== 'fulltext') continue;
@@ -884,12 +884,12 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Template des Datensatzes als verlinkte Beschriftung.
+     * Template of the record as a linked label.
      *
-     * Ein Datensatz muss kein Template gesetzt haben - dann gilt das des Bereichs.
-     * Das wird hier auch so gezeigt: das Bereichs-Template mit dem Zusatz
-     * "(Standard)", damit erkennbar bleibt, dass es nicht am Datensatz hängt. Hat auch
-     * der Bereich keins, bleibt nur der Hinweis.
+     * A record does not have to have a template set - then that of the area applies.
+     * This is shown here too: the area template with the addition
+     * "(default)", so that it remains recognizable that it does not hang on the record. If the
+     * area has none either, only the note remains.
      */
     private function _infoTemplate(int $templateId): string
     {
@@ -897,7 +897,7 @@ class RecordBackendInfo extends RecordBackend {
             $value = $this->backend->teaser('template', $templateId);
         }
         else {
-            // Default-Tempalte des Bereichs ermitteln
+            // determine the default template of the area
             $defaultTemplateId = (int) $this->areaData['default_template_id'];
             if (!empty($defaultTemplateId)) {
                 $value = $this->backend->teaser('template', $defaultTemplateId)
@@ -911,16 +911,16 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Ajax: eine einzelne Zeile der Detailansicht nachladen.
+     * Ajax: load a single row of the detail view afterwards.
      *
-     * Gegenstück zum Kennzeichen 'expandable' in _infoContents(): der Redakteur klappt
-     * ein Feld auf, das Javascript holt sich hier den vollen Inhalt und ersetzt damit
-     * den Anriss. Ausgegeben wird deshalb nur die Zeile (Vorlage 'info_table_part'),
-     * nicht die ganze Tabelle.
+     * Counterpart to the flag 'expandable' in _infoContents(): the editor expands
+     * a field, the JavaScript fetches the full content here and thereby replaces
+     * the preview. Therefore only the row is output (template 'info_table_part'),
+     * not the whole table.
      *
-     * Zur Zugriffsprüfung wird der Datensatz regulär über Record::load() geholt - der
-     * Feldname allein darf nicht genügen, um an einen Inhalt zu kommen. Er wird
-     * zusätzlich hart auf [a-z0-9_-] gefiltert.
+     * For the access check the record is fetched regularly via Record::load() - the
+     * field name alone must not suffice to get at a content. It is additionally
+     * filtered strictly to [a-z0-9_-].
      *
      * Request: id, name
      */
@@ -931,7 +931,7 @@ class RecordBackendInfo extends RecordBackend {
         if (empty($id)) die('error');
         if (empty($name)) die('error');
 
-        // Zugriffsprüfung über record->load()
+        // access check via record->load()
         if (!$data = $this->record->load($id)) die('error');
         $areaId = (int)$data['area_id'];
         $schemaVirtual = $this->record->virtualSchema($areaId, false);
@@ -940,23 +940,23 @@ class RecordBackendInfo extends RecordBackend {
             $this->backend->fileRenameIds[$id] = true;
         }
 
-        // Zeile rendern
+        // render the row
         $this->backend->infoAdd($this->record, $name, $data[$name], ['expandable'], $schemaVirtual, id: $id);
 
-        // ohne Tabellengerüst ausgeben
+        // output without the table frame
         echo $this->backend->infoTable('info_table_part');
     }
 
     /**
-     * Ajax (POST): ursprünglichen Dateinamen einer Datei ändern - der Stift hinter
-     * "Original filename" auf der Info-Seite (Backend::fileNameCell(),
-     * cApp.ui.fileRename()). Die Endung bleibt, siehe Record::renameFile().
+     * Ajax (POST): change the original file name of a file - the pencil behind
+     * "Original filename" on the info page (Backend::fileNameCell(),
+     * cApp.ui.fileRename()). The extension remains, see Record::renameFile().
      *
-     * Antwort: der Inhalt der Tabellenzelle - neuer Name mit Stift, im Fehlerfall
-     * davor die Meldung und der bisherige Name.
+     * Response: the content of the table cell - new name with pencil, on error
+     * the message before it and the previous name.
      *
-     * Request: id (produktiver Datensatz), field_id, lang (Sprache der Datei, ''
-     * bei einsprachigen Feldern), name (neuer Name ohne Endung)
+     * Request: id (productive record), field_id, lang (language of the file, ''
+     * for single-language fields), name (new name without extension)
      */
     public function fileRename(): void
     {
@@ -970,7 +970,7 @@ class RecordBackendInfo extends RecordBackend {
         $fileLanguageId = ($lang === '' || !ctype_digit($lang)) ? null : (int)$lang;
         if ($id < 1 || $fieldId < 1) die('error');
 
-        // Zugriffsprüfung über record->load(), dann Schreibrecht auf den Bereich
+        // access check via record->load(), then write right on the area
         if (!$data = $this->record->load($id)) {
             $this->errors();
             return;
@@ -982,7 +982,7 @@ class RecordBackendInfo extends RecordBackend {
             echo $access->deniedHtml();
             return;
         }
-        // Das Feld muss ein Datei-Feld dieses Bereichs sein
+        // the field must be a file field of this area
         $colDef = null;
         foreach ($this->record->virtualSchema($areaId, false) as $name => $def) {
             if ((int)($def['field_id'] ?? 0) === $fieldId && ($def['type'] ?? '') === 'file') {
@@ -997,7 +997,7 @@ class RecordBackendInfo extends RecordBackend {
             $this->errors();
         }
 
-        // Zelle mit dem aktuellen Stand neu ausgeben
+        // output the cell anew with the current state
         $this->backend->fileRenameIds[$id] = true;
         echo $this->backend->fileNameCell(
             $this->record->fileRow($id, $fieldId, $fileLanguageId) ?? [], $id, $fieldId, $fileLanguageId
@@ -1005,14 +1005,14 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Erzeugt den Frontend-Pfad (ohne führenden Slash) anhand der Datensatz-Daten
-     * ($this->data) - Backend::buttonAddPreview() macht daraus je Sprache eine
-     * Vorschau-Adresse (public/backend/preview.php: mit Admin-Session, auch für
-     * Datensätze, die nicht oder nicht mehr veröffentlicht sind).
+     * Creates the frontend path (without leading slash) from the record data
+     * ($this->data) - Backend::buttonAddPreview() turns it into a preview
+     * address per language (public/backend/preview.php: with admin session, also for
+     * records that are not or no longer published).
      *
-     * Immer die record_id: derselbe Pfad gilt für alle Sprachen, Slug und
-     * Slug-Präfix können aber je Sprache verschieden sein (die Vorschau leitet
-     * nicht auf die kanonische URL um).
+     * Always the record_id: the same path applies to all languages, but slug and
+     * slug prefix can differ per language (the preview does not redirect
+     * to the canonical URL).
      */
     private function createPreviewLink(): string
     {
@@ -1020,7 +1020,7 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Reiter "Änderungen": der Verlauf des Datensatzes aus dem Audit-Log.
+     * Tab "Changes": the history of the record from the audit log.
      */
     private function _infoAudit(): void
     {
@@ -1028,10 +1028,10 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Zweiter Faktor eines Profil-Datensatzes (backend/record_second_factor.php,
-     * UserSecondFactor): Zustand anzeigen und - mit Schreibrecht auf den Bereich,
-     * per POST - zurücksetzen. Für User, die Telefon und Wiederherstellungscodes
-     * verloren haben. Das Zurücksetzen steht im Audit-Log (Handelnder = Admin).
+     * Second factor of a profile record (backend/record_second_factor.php,
+     * UserSecondFactor): show the state and - with write right on the area,
+     * via POST - reset it. For users who have lost their phone and recovery codes.
+     * The reset is recorded in the audit log (acting party = admin).
      *
      * Request: id, area_id, function ('' | 'reset')
      */
@@ -1078,7 +1078,7 @@ class RecordBackendInfo extends RecordBackend {
         $this->db->query("SELECT `details` FROM `area` WHERE `area_id` = ?", 'i', [$this->areaId]);
         $policy = $this->userSecondFactor->policy(['details' => (string)($this->db->fetchNum()[0] ?? '')]);
         $since = $state['enabled_at'] !== '' ? $this->cms->_formatDate($state['enabled_at']) : '';
-        // Platzhalter selbst einsetzen (Snippets interpolieren nur ICU-Muster)
+        // insert the placeholders ourselves (snippets only interpolate ICU patterns)
         $text = strtr(match ($state['method']) {
             'totp'  => $this->cms->snippet('record.second_factor_state_totp'),
             'email' => $this->cms->snippet('record.second_factor_state_email'),
@@ -1099,8 +1099,8 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Menüpunkt "Datenexport personenbezogener Daten" (Modul Privacy): Profil-Bereich,
-     * Modulzugriff und Zusatzrecht 'export' (Superuser immer).
+     * Menu item "Export of personal data" (module Privacy): profile area,
+     * module access and additional right 'export' (superuser always).
      */
     private function _personalDataAllowed(): bool
     {
@@ -1110,7 +1110,7 @@ class RecordBackendInfo extends RecordBackend {
     }
 
     /**
-     * Typ des aktuellen Bereichs ('record', 'profile', 'ugc' …).
+     * Type of the current area ('record', 'profile', 'ugc' …).
      */
     private function _areaType(): string
     {

@@ -1,56 +1,56 @@
 <?php
 /**
- * Suchmaske und Suchausführung für Datensätze (Erweiterung für RecordBackend).
+ * Search mask and search execution for records (extension for RecordBackend).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     record_search.php         -> search()           Maske bzw. Ausführung
- *     record_global_search.php  -> searchCrossArea()  leerer Zwischen-Layer
- *     ajax_slookup_preview.php  -> sLookupPreview()   Lookup-Vorschau aktualisieren
+ *     record_search.php         -> search()           mask or execution
+ *     record_global_search.php  -> searchCrossArea()  empty intermediate layer
+ *     ajax_slookup_preview.php  -> sLookupPreview()   update the lookup preview
  *
- * DIE MASKE STEHT NICHT FEST
+ * THE MASK IS NOT FIXED
  * --------------------
- * Wie die Liste hat auch die Suchmaske keine festen Felder: gesucht werden kann nach
- * dem, was der Redakteur je Bereich mit visibility_search=1 gekennzeichnet hat. Dazu
- * kommen immer das Feld _url (record_id, Slug oder URL) und vier Zeitfelder (online_at, offline_at, created_at,
- * changed_at), die ans Ende gehängt werden, und immer das Volltext-Standardfeld
- * (fulltext, ohne Eingabefeld). Die globale Suche (ohne Bereich) bietet zusätzlich das
- * Default-Feld (_default) an - es heißt, wie `fulltext`, in jedem Bereich gleich.
+ * Like the list, the search mask has no fixed fields: one can search by
+ * what the editor has marked per area with visibility_search=1. In addition,
+ * the field _url (record_id, slug or URL) and four time fields (online_at, offline_at, created_at,
+ * changed_at) are always included, appended at the end, and always the standard full-text field
+ * (fulltext, without input field). The global search (without area) additionally offers the
+ * default field (_default) - it is called the same as `fulltext` and is the same in every area.
  *
- * Ohne eindeutigen Bereich (globale Suche) erscheint zusätzlich eine Mehrfachauswahl
- * der Bereiche; bei einem Pointer-Aufruf ist sie auf dessen Zielbereiche eingegrenzt.
+ * Without a unique area (global search) an additional multiple selection of
+ * the areas appears; with a pointer call it is limited to the target areas of that call.
  *
- * DIE SUCHE RENDERT KEINE TREFFERLISTE
+ * THE SEARCH DOES NOT RENDER A RESULT LIST
  * --------------------
- * _searchAction() schließt den Suchlayer und lädt den darunterliegenden Listenlayer
- * mit den Suchparametern in der URL neu - RecordBackendList wertet sie aus. Dadurch
- * funktionieren Sortierung, Paginierung und Filtertext danach wie sonst auch.
+ * _searchAction() closes the search layer and reloads the list layer beneath it
+ * with the search parameters in the URL - RecordBackendList evaluates them. As a result
+ * sorting, pagination and filter text work afterwards as usual.
  *
- * VERKNÜPFUNGEN ALS SUCHKRITERIUM
+ * LINKS AS A SEARCH CRITERION
  * --------------------
- * Nach einem Relations- oder Pointer-Feld sucht man nicht mit Text, sondern indem man
- * die gemeinten Datensätze auswählt. Dafür gibt es dasselbe Lookup-Verfahren wie im
- * Eingabeformular, nur mit dem Formularpräfix 'filter' statt 'data':
+ * After a relation or pointer field one does not search with text, but by
+ * selecting the intended records. For this there is the same lookup procedure as in the
+ * input form, only with the form prefix 'filter' instead of 'data':
  *
- *     _sLookupInit()           baut die Vorschau beim ersten Aufbau der Maske
- *     sLookupPreview()         aktualisiert sie per Ajax nach einer Auswahl
- *     _sLookupPreviewCreate()  der gemeinsame Kern
+ *     _sLookupInit()           builds the preview when the mask is first built
+ *     sLookupPreview()         updates it via Ajax after a selection
+ *     _sLookupPreviewCreate()  the common core
  *
- * Dasselbe Verfahren trägt das Meta-Feld `parent_id`, wenn es als Lookup eingerichtet
- * ist. Anders als in der Eingabemaske (RecordBackendEdit, dort genau EIN Vaterdatensatz
- * und ein eigenes Feld) braucht es hier keine Sonderbehandlung: der Filter `parent_id`
- * sucht die Nachkommen der angegebenen Datensätze und verträgt mehrere Werte.
+ * The same procedure applies to the meta field `parent_id` when it is set up as a lookup.
+ * Unlike in the input mask (RecordBackendEdit, where there is exactly ONE parent record
+ * and its own field), no special handling is needed here: the filter `parent_id`
+ * searches the descendants of the given records and accepts several values.
  *
- * SORTIERFELDER
+ * SORT FIELDS
  * --------------------
- * Die Auswahlliste "sortieren nach" wird nebenbei mitgebaut. Nicht jedes Feld taugt
- * dafür: nach 'relation'/'pointer' (n Ziele) lässt sich nicht sortieren, bei den
- * 1:1-Varianten wird über das Default-Feld des Ziels sortiert (name._default), bei
- * Dateifeldern über den Dateinamen (name.filename).
+ * The selection list "sort by" is built along the way. Not every field is suitable
+ * for this: one cannot sort by 'relation'/'pointer' (n targets); for the
+ * 1:1 variants sorting is done via the default field of the target (name._default), for
+ * file fields via the file name (name.filename).
  *
- * @see Camindo\Core\Modules\Record\RecordBackend      gemeinsame Basis
- * @see Camindo\Core\Modules\Record\RecordBackendList  wertet die Suchparameter aus
- * @see docs/developers/05-select-und-filter.md                      Filter-Syntax
+ * @see Camindo\Core\Modules\Record\RecordBackend      shared base
+ * @see Camindo\Core\Modules\Record\RecordBackendList  evaluates the search parameters
+ * @see developer docs, chapter 04 (Select and filter)                      filter syntax
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -59,15 +59,15 @@ use Camindo\Core\Modules\Area\Field;
 class RecordBackendSearch extends RecordBackend {
 
     /**
-     * Suche (backend/record_search.php).
+     * Search (backend/record_search.php).
      *
-     * Ohne function die Maske, mit function=search die Ausführung.
+     * Without function the mask, with function=search the execution.
      */
     public function search(): void
     {
         $function = (string)($_REQUEST['function'] ?? '');
         $this->_resolveParams();
-        // Erstelle temporären Datensatz, um relations per Lookupfeld hunzufügen zu können
+        // create a temporary record so that relations can be added via a lookup field
 
         if ($function == 'search') {
             $this->_searchAction();
@@ -78,13 +78,13 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Leerer Zwischen-Layer für die bereichsübergreifende Suche.
+     * Empty intermediate layer for the cross-area search.
      *
-     * Die Layer stapeln sich: Bereichsbaum, darüber die Trefferliste. Eine Suche über
-     * alle Bereiche hat aber keinen Bereich, aus dem heraus sie geöffnet wäre - ohne
-     * diesen Platzhalter läge die Trefferliste direkt auf dem Baum und würde ihn beim
-     * Schließen mitnehmen. Der Layer enthält deshalb nichts außer einem
-     * Schließen-Knopf.
+     * The layers stack: area tree, the result list above it. A search across
+     * all areas, however, has no area from which it would be opened - without
+     * this placeholder the result list would lie directly on the tree and would take it along
+     * when closed. The layer therefore contains nothing except a
+     * close button.
      */
     public function searchCrossArea(): void
     {
@@ -98,84 +98,84 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Metafelder, die die globale Suche (ohne Bereich) über "weitere Felder"
-     * temporär anbietet. (Ohne Bereich gibt es kein parent_id - und damit auch keine
-     * Tiefe, die sich nur auf parent_id bezieht.)
+     * Meta fields that the global search (without area) temporarily offers via "more fields".
+     * (Without an area there is no parent_id - and therefore also no
+     * depth that refers only to parent_id.)
      */
     private const GLOBAL_EXTRA_FIELDS = ['status_id', 'user_id', 'owner_id', 'instance_id', 'needs_review', 'template_id'];
 
-    /** Unterfelder eines Upload-Feldes in der Suchmaske (Cms::buildFileExists()) */
+    /** Subfields of an upload field in the search mask (Cms::buildFileExists()) */
     private const FILE_SUBFIELDS = ['width', 'height', 'size', 'mime_type', 'extension'];
 
     /**
-     * Die Suchmaske.
+     * The search mask.
      *
-     * Aufbau von oben nach unten:
+     * Structure from top to bottom:
      *
-     *  1. _url - immer da: record_id, Slug oder URL (RecordService::urlFilter())
-     *  2. Bereichsauswahl - nur ohne eindeutigen Bereich; bei einem Pointer-Aufruf
-     *     auf dessen Zielbereiche eingeschränkt
-     *  3. die Felder mit visibility_search=1, in Schema-Reihenfolge
-     *  4. Frontend-User (user_id) in Bereichen mit Frontend-Eingaben (ugc mit
-     *     Profil-Bereichen); direkt hinter parent_id dessen Tiefe (filter[depth],
-     *     relativ zum gewählten Vaterdatensatz wie bei CMS:SELECT)
-     *  5. die vier Zeitfelder
-     *  6. temporär hinzugefügte Felder (Klasse .warning, siehe unten)
-     *  7. sortieren nach / Richtung, darunter die Auswahl "weitere Felder"
+     *  1. _url - always there: record_id, slug or URL (RecordService::urlFilter())
+     *  2. area selection - only without a unique area; with a pointer call
+     *     restricted to its target areas
+     *  3. the fields with visibility_search=1, in schema order
+     *  4. frontend users (user_id) in areas with frontend input (ugc with
+     *     profile areas); directly after parent_id its depth (filter[depth],
+     *     relative to the selected parent record as with CMS:SELECT)
+     *  5. the four time fields
+     *  6. temporarily added fields (class .warning, see below)
+     *  7. sort by / direction, below it the selection "more fields"
      *
-     * searchField() statt formField(): Suchfelder sind nie Pflichtfelder und schreiben
-     * nach filter[...] statt nach data[...].
+     * searchField() instead of formField(): search fields are never required fields and write
+     * to filter[...] instead of data[...].
      *
-     * WEITERE FELDER
-     * Unter dem Absende-Knopf lassen sich Felder hinzufügen, die sonst nicht in der
-     * Maske stehen: im Bereich die Felder mit visibility_search=0, in der globalen
-     * Suche Metafelder (GLOBAL_EXTRA_FIELDS). "Hinzufügen" schickt die Maske mit
-     * function=add_field an sich selbst; die Liste der hinzugefügten Felder reist als
-     * extra[] mit (auch in die Trefferliste und von dort zurück in die Maske), die
-     * eingegebenen Werte als filter[...].
+     * MORE FIELDS
+     * Below the submit button fields can be added that are otherwise not in the
+     * mask: in the area the fields with visibility_search=0, in the global
+     * search meta fields (GLOBAL_EXTRA_FIELDS). "Add" sends the mask with
+     * function=add_field to itself; the list of added fields travels as
+     * extra[] (also into the result list and from there back into the mask), the
+     * entered values as filter[...].
      *
-     * UPLOAD-FELDER
-     * Ein Upload-Feld sucht im gespeicherten Dateinamen; aufklappbar darunter Breite,
-     * Höhe, Dateigröße (mit k/M/G, Cms::expandSizeUnits()), Mime-Type und Endung
-     * (filter[feld.width] …).
+     * UPLOAD FIELDS
+     * An upload field searches in the stored file name; below it, expandable: width,
+     * height, file size (with k/M/G, Cms::expandSizeUnits()), MIME type and extension
+     * (filter[field.width] …).
      *
-     * Woher die Auswahlmöglichkeiten eines Feldes kommen, hängt vom Feld ab -
-     * status_id, template_id, parent_id und position holen sie sich aus den
-     * Hilfsmethoden der Basisklasse, alle übrigen aus den Zeilen des `default`-Feldes
-     * der Felddefinition (dort stehen bei Auswahlfeldern die möglichen Werte, eine je
-     * Zeile).
+     * Where the selection options of a field come from depends on the field -
+     * status_id, template_id, parent_id and position get them from the
+     * helper methods of the base class, all others from the rows of the `default`
+     * field of the field definition (there, for selection fields, the possible values are
+     * stored, one per row).
      */
     private function _searchForm(): void
     {
         echo $this->backend->template('container_header');
 
-        // Seiten-Parameter
+        // page parameters
         $filter = (array)($_REQUEST['filter'] ?? []);
 
         echo '<form action="Record/record_search.php" method="post" enctype="multipart/form-data">';
 
         // Bread crum navi
         $this->backend->setNaviLabel('#button_search');
-        
+
         // H1
         echo $this->backend->headline('#record.headline_search');
 
         $schemaVirtual = [];
         $visibleFields = [];
 
-        // Immer sichtbare Meta-Felder
+        // meta fields that are always visible
         $visibleMetaFields = [
             'online_at', 'offline_at', 'created_at', 'changed_at'
         ];
 
-        // Virtuelle Felder, die mit visibility_search=1 gekennzeichnet sind
+        // virtual fields marked with visibility_search=1
         $configured = [];
         if ($this->areaId > 0) {
             $schemaVirtual = $this->record->virtualSchema($this->areaId, true);
-            // die im Bereich eingerichteten Felder (ohne die übrigen Metaspalten)
+            // the fields set up in the area (without the other meta columns)
             $configured = $this->record->virtualSchema($this->areaId, false);
 
-            // vom Admin definierte Such-Felder für den Bereich
+            // search fields defined by the admin for the area
             $visibleFields = [];
             foreach($schemaVirtual as $name => $colDef) {
                 if (in_array($name, $visibleMetaFields)) continue;
@@ -187,7 +187,7 @@ class RecordBackendSearch extends RecordBackend {
             }
         }
 
-        // Weitere Felder: wählbar und bereits hinzugefügt (extra[])
+        // more fields: selectable and already added (extra[])
         $extraOptions = $this->_extraFieldOptions($configured, $visibleFields, $visibleMetaFields);
         $extraFields = array_values(array_intersect(
             array_unique(array_map('strval', (array)($_REQUEST['extra'] ?? []))),
@@ -199,11 +199,11 @@ class RecordBackendSearch extends RecordBackend {
             $extraFields[] = $addField;
         }
 
-        // Formular erzeugen
+        // create the form
         // --------------------
         $this->backend->formInit('record.record_search_form');
 
-        // Id, Slug oder URL (RecordService::urlFilter(), aufgelöst in der Liste)
+        // id, slug or URL (RecordService::urlFilter(), resolved in the list)
         $this->backend->searchField($this->record, [
             'name' => '_url',
             'value' => (string)($filter['_url'] ?? $filter['record_id'] ?? ''),
@@ -247,7 +247,7 @@ class RecordBackendSearch extends RecordBackend {
                 'append' => true
             ]);
 
-            // default-Feld (data_dft)
+            // default field (data_dft)
             $this->backend->searchField($this->record, [
                 'name' => '_default',
                 'value' => (string)($filter['_default'] ?? ''),
@@ -256,9 +256,9 @@ class RecordBackendSearch extends RecordBackend {
             ]);
         }
 
-        // Volltext-Standardfeld: in jedem Datensatzbereich, ohne Eingabefeld
-        // (VirtualFieldsTrait::refreshStandardFulltext()); heißt überall gleich, der
-        // Filter greift also auch bereichsübergreifend
+        // standard full-text field: in every record area, without input field
+        // (VirtualFieldsTrait::refreshStandardFulltext()); it has the same name everywhere, so the
+        // filter also applies across areas
         $this->backend->searchField($this->record, [
             'name' => Field::FULLTEXT,
             'value' => (string)($filter[Field::FULLTEXT] ?? ''),
@@ -266,22 +266,22 @@ class RecordBackendSearch extends RecordBackend {
             'append' => true
         ]);
         
-        // Felder für sort-Auswahlliste sammeln
+        // collect fields for the sort selection list
         $sortOptions = [];
 
-        // Eingabefelder (virtuelle Felder)
+        // input fields (virtual fields)
         // --------------------
         foreach ($visibleFields as $name) {
             $this->_searchVirtualField($name, $schemaVirtual[$name] ?? [], $filter, $sortOptions);
         }
 
-        // Frontend-User - in Bereichen mit Frontend-Eingaben
+        // frontend users - in areas with frontend input
         // --------------------
         if ($this->areaId > 0 && !empty($this->_profileAreaIds())) {
             $this->_searchMetaField('user_id', $filter);
         }
 
-        // Metafelder ans Ende anhängen
+        // append meta fields at the end
         // --------------------
         foreach ($visibleMetaFields as $name) {
             $this->backend->searchField($this->record, [
@@ -292,7 +292,7 @@ class RecordBackendSearch extends RecordBackend {
             $sortOptions[$name] = $this->cms->textOrSnippet($this->cms->schema[$name]['label'] ?? $name);
         }
 
-        // Temporär hinzugefügte Felder (weitere Felder)
+        // temporarily added fields (more fields)
         // --------------------
         foreach ($extraFields as $name) {
             if ($this->areaId > 0) {
@@ -311,17 +311,17 @@ class RecordBackendSearch extends RecordBackend {
         // --------------------
         $this->backend->formHidden('function', 'search');
         $this->backend->formHidden('area_id', $this->areaId);
-        // call by lookup field - field_id oder (fremdes Formular) Spaltenname; als
-        // Zahl ginge der Name verloren und die Ergebnisliste wäre kein Lookup mehr
-        // (ohne "Übernehmen")
+        // call by lookup field - field_id or (foreign form) column name; as a
+        // number the name would be lost and the result list would no longer be a lookup
+        // (without "Apply")
         $this->backend->formHidden('src_field', $this->srcFieldName !== '' ? $this->srcFieldName : $this->srcField);
         $this->backend->formHidden('src_id', $this->srcId);
-        // bereits gewählte Ids eines Suchmasken-Lookups (slookupSearch(): checked) -
-        // die Trefferliste hakt sie wieder an
+        // ids already selected from a search-mask lookup (slookupSearch(): checked) -
+        // the result list checks them again
         $checked = preg_replace('/[^0-9,]/', '', (string)($_REQUEST['checked'] ?? ''));
         if ($checked !== '' && $this->hasLookup()) $this->backend->formHidden('checked', $checked);
-        // Verweise von bzw. auf einen Datensatz (RecordBackendList::list()) bleiben
-        // bei der Suche erhalten (src_id steht schon oben)
+        // references from or to a record (RecordBackendList::list()) are kept
+        // during the search (src_id is already above)
         $destId = (int)($_REQUEST['dest_id'] ?? 0);
         $relation = strtolower(trim((string)($_REQUEST['relation'] ?? '')));
         if (preg_match('/^[a-z0-9_]+(,[a-z0-9_]+)*$/', $relation) && ($destId > 0 || $this->srcId > 0)) {
@@ -332,7 +332,7 @@ class RecordBackendSearch extends RecordBackend {
         // Formular rendern
         echo $this->backend->form('form_search_cancel');
 
-        // Weitere Felder: Auswahl unter dem Absende-Knopf
+        // more fields: selection below the submit button
         $addOptions = array_diff_key($extraOptions, array_flip($extraFields));
         if (!empty($addOptions)) {
             $optionsHtml = '';
@@ -343,28 +343,28 @@ class RecordBackendSearch extends RecordBackend {
             echo $this->backend->template('record.search_add_field', ['{options}' => $optionsHtml]);
         }
 
-        // Container footer
+        // container footer
         echo $this->backend->template('container_footer');
 
         echo '</form>';
     }
 
     /**
-     * Ein virtuelles Feld als Suchfeld (Felder mit visibility_search=1 und die über
-     * "weitere Felder" hinzugefügten) - samt Eintrag in die Sortierauswahl.
+     * A virtual field as a search field (fields with visibility_search=1 and those added via
+     * "more fields") - including the entry in the sort selection.
      *
-     * @param array  $sortOptions  wird ergänzt
-     * @param string $blockClass   'warning' für ein temporär hinzugefügtes Feld
+     * @param array  $sortOptions  is supplemented
+     * @param string $blockClass   'warning' for a temporarily added field
      */
     private function _searchVirtualField(string $name, array $colDef, array $filter, array &$sortOptions, string $blockClass = ''): void
     {
         $type = $colDef['type'] ?? 'text';
         $displayType = $colDef['display_type'] ?? 'text';
-        // Fest verknüpfte Inhalte: eingebettet gibt es kein Suchfeld dafür
-        // (als Lookup wie jedes Verknüpfungsfeld)
+        // firmly linked contents: embedded ones have no search field for them
+        // (as a lookup like every link field)
         if (in_array($type, $this->cms->dependentTypes, true) && $displayType !== 'lookup') return;
 
-        // Upload-Feld: Dateiname, aufklappbar die Unterfelder
+        // upload field: file name, subfields expandable
         if ($type === 'file') {
             $this->_searchFileField($name, $colDef, $filter, $blockClass);
             $sortOptions[$name . '.filename'] = $this->cms->textOrSnippet($colDef['label'] ?? $name);
@@ -377,7 +377,7 @@ class RecordBackendSearch extends RecordBackend {
             $options = $this->_statusDropdownItems(icon:false);
         }
         else {
-            // Default-Value Werte, falls display_type 'json'
+            // default value entries, if display_type 'json'
             $list = preg_split('/(\r\n|\r|\n)/', $colDef['default'] ?? '');
             foreach ($list as $item) {
                 $options[$item] = $item;
@@ -400,9 +400,9 @@ class RecordBackendSearch extends RecordBackend {
         }
 
         // position
-        // _previousOptions() listet die Geschwister EINES Vaterdatensatzes. In der
-        // Suchmaske gibt es keinen, deshalb bleibt es bei der Wurzelebene
-        // (Standardwert 0).
+        // _previousOptions() lists the siblings of ONE parent record. There is none
+        // in the search mask, so it stays at the root level
+        // (default value 0).
         elseif ($name == 'position' && $displayType != 'lookup') {
             $options = $this->_previousOptions();
         }
@@ -416,20 +416,20 @@ class RecordBackendSearch extends RecordBackend {
             'blockClass' => $blockClass,
         ];
         if ($name === 'parent_id' && $displayType === 'lookup') {
-            // Kein Verknüpfungsfeld - das Kontextmenü der Verknüpfungen
-            // (Verknüpfung lösen) hätte hier nichts zu tun
+            // not a link field - the context menu of the links
+            // (remove link) would have nothing to do here
             $fieldParams['contextMenu'] = '';
         }
         $this->backend->searchField($this->record, $fieldParams);
 
-        // Lookup-Feld - Tabelle record - nachträgliche Ersetzungen.
+        // lookup field - table record - subsequent replacements.
         //
-        // Auch das Meta-Feld parent_id wird so gesucht. Anders als in der
-        // Eingabemaske braucht es dafür keine Sonderbehandlung: der Filter
-        // parent_id sucht die NACHKOMMEN der angegebenen Datensätze und verträgt
-        // mehrere Werte (docs/developers/05-select-und-filter.md) - genau das, was
-        // das gewöhnliche Such-Lookup liefert. Der Filtername kommt aus der
-        // Felddefinition, die versteckten Felder heißen also filter[parent_id][].
+        // The meta field parent_id is also searched this way. Unlike in the
+        // input mask, no special handling is needed for it: the filter
+        // parent_id searches the DESCENDANTS of the given records and accepts
+        // several values (developer docs, chapter 04 (Select and filter)) - exactly what
+        // the ordinary search lookup delivers. The filter name comes from the
+        // field definition, so the hidden fields are called filter[parent_id][].
         if ($displayType === 'lookup'
             && (in_array($type, $this->cms->relationTypes, true)
                 || ($name === 'parent_id' && $type === 'id'))
@@ -450,13 +450,13 @@ class RecordBackendSearch extends RecordBackend {
             $this->backend->formReplace('{preview}', $this->_sLookupInit($srcField, $ids));
         }
 
-        // Tiefe direkt hinter dem Vaterdatensatz - sie bezieht sich auf ihn
+        // depth directly after the parent record - it refers to it
         if ($name === 'parent_id') {
             $this->_searchMetaField('depth', $filter, $blockClass);
         }
 
         if (in_array($type, ['relation', 'pointer', 'link'], true)) {
-            // nicht sortierbar
+            // not sortable
             return;
         }
         elseif (in_array($type, ['relation1', 'pointer1'], true)) {
@@ -469,10 +469,10 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Upload-Feld als Suchfeld: ein Textfeld für den gespeicherten Dateinamen
-     * (filter[feld]), darunter aufklappbar Breite, Höhe, Dateigröße, Mime-Type und
-     * Endung (filter[feld.width] …, Cms::buildFileExists()). Der Bereich ist offen,
-     * sobald eines der Unterfelder einen Wert hat.
+     * Upload field as a search field: a text field for the stored file name
+     * (filter[field]), below it expandable: width, height, file size, MIME type and
+     * extension (filter[field.width] …, Cms::buildFileExists()). The section is open
+     * as soon as one of the subfields has a value.
      */
     private function _searchFileField(string $name, array $colDef, array $filter, string $blockClass): void
     {
@@ -486,7 +486,7 @@ class RecordBackendSearch extends RecordBackend {
             'blockClass' => $blockClass,
         ]);
 
-        // Unterfelder in einem eigenen Puffer bauen und aufklappbar einsetzen
+        // build the subfields in their own buffer and insert them expandable
         $this->backend->formPush();
         $open = false;
         foreach (self::FILE_SUBFIELDS as $sub) {
@@ -512,10 +512,10 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Metafeld als Suchfeld - die festen Zusatzfelder (Tiefe, Frontend-User) und
-     * die "weiteren Felder" der globalen Suche (GLOBAL_EXTRA_FIELDS).
+     * Meta field as a search field - the fixed additional fields (depth, frontend user) and
+     * the "more fields" of the global search (GLOBAL_EXTRA_FIELDS).
      *
-     * @param string $blockClass  'warning' für ein temporär hinzugefügtes Feld
+     * @param string $blockClass  'warning' for a temporarily added field
      */
     private function _searchMetaField(string $name, array $filter, string $blockClass = ''): void
     {
@@ -524,8 +524,8 @@ class RecordBackendSearch extends RecordBackend {
 
         switch ($name) {
             case 'depth':
-                // Tiefe relativ zum Vaterdatensatz (Modifier von filter[parent_id],
-                // Cms::filter()): leer = alle Nachkommen, 1 = direkte Kinder …
+                // depth relative to the parent record (modifier of filter[parent_id],
+                // Cms::filter()): empty = all descendants, 1 = direct children …
                 $this->backend->searchField($this->record, array_replace($base, [
                     'value' => is_scalar($value) ? (string)$value : '',
                     'colDef' => ['name' => 'depth', 'type' => 'chars', 'label' => '#record.field_search_depth'],
@@ -568,7 +568,7 @@ class RecordBackendSearch extends RecordBackend {
                 return;
 
             case 'user_id':
-                // Lookup auf die Profil-Bereiche (Datensatzliste mit Bereichsfilter)
+                // lookup on the profile areas (record list with area filter)
                 $ids = $this->system->sanitizeIds((array)$value, true);
                 $this->backend->searchField($this->record, array_replace($base, [
                     'value' => $ids,
@@ -582,7 +582,7 @@ class RecordBackendSearch extends RecordBackend {
                 return;
 
             case 'owner_id':
-                // Lookup auf die Benutzerliste (wie in der Eingabemaske)
+                // lookup on the user list (as in the input mask)
                 $ids = $this->system->sanitizeIds((array)$value, true);
                 $this->backend->searchField($this->record, array_replace($base, [
                     'value' => $ids,
@@ -603,19 +603,19 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Auswahl "weitere Felder": im Bereich die eingerichteten Felder, die nicht in
-     * der Suchmaske stehen (visibility_search=0) und sich durchsuchen lassen; in der
-     * globalen Suche die Metafelder GLOBAL_EXTRA_FIELDS.
+     * Selection "more fields": in the area the set-up fields that are not in
+     * the search mask (visibility_search=0) and can be searched; in the global
+     * search the meta fields GLOBAL_EXTRA_FIELDS.
      *
-     * @param array $configured  virtuelle Felder des Bereichs (virtualSchema(…, false))
-     * @return array  Feldname => Beschriftung
+     * @param array $configured  virtual fields of the area (virtualSchema(…, false))
+     * @return array  field name => label
      */
     private function _extraFieldOptions(array $configured, array $visibleFields, array $visibleMetaFields): array
     {
         $options = [];
         if ($this->areaId < 1) {
             foreach (self::GLOBAL_EXTRA_FIELDS as $name) {
-                // Instanz nur, wenn es mehrere gibt
+                // instance only if there are several
                 if ($name === 'instance_id' && !$this->instanceCache->hasMultipleInstances()) continue;
                 $label = $this->cms->schema[$name]['label'] ?? $name;
                 $options[$name] = $this->cms->textOrSnippet($label);
@@ -628,11 +628,11 @@ class RecordBackendSearch extends RecordBackend {
             if ($name === Field::FULLTEXT) continue;
             $type = (string)($colDef['type'] ?? 'text');
             $displayType = (string)($colDef['display_type'] ?? 'text');
-            // nicht durchsuchbar: Passwörter, Felder ohne eigene Spalte, eingebettete Inhalte
+            // not searchable: passwords, fields without their own column, embedded contents
             if ($type === 'password' || $displayType === 'password') continue;
             if (in_array($type, $this->cms->noColumnTypes, true)) continue;
             if (in_array($type, $this->cms->dependentTypes, true) && $displayType !== 'lookup') continue;
-            // Felder ohne Bezeichnung (technische Metaspalten) nicht anbieten
+            // do not offer fields without a label (technical meta columns)
             if (empty($colDef['field_id']) && empty($colDef['label'])) continue;
             $options[$name] = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name));
         }
@@ -641,9 +641,9 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Profil-Bereiche, deren User im Bereich Datensätze anlegen dürfen
-     * (Bereichstyp ugc, details.profile_area_ids) - in der globalen Suche alle
-     * lesbaren Profil-Bereiche (RecordBackend::readableProfileAreaIds()).
+     * Profile areas whose users may create records in the area
+     * (area type ugc, details.profile_area_ids) - in the global search all
+     * readable profile areas (RecordBackend::readableProfileAreaIds()).
      *
      * @return int[]
      */
@@ -659,8 +659,8 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Templates für template_id in der globalen Suche: die wählbaren und die
-     * Standard-Templates der lesbaren Inhaltsbereiche.
+     * Templates for template_id in the global search: the selectable and the
+     * default templates of the readable content areas.
      *
      * @return array  template_id => Beschriftung
      */
@@ -690,28 +690,28 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * function=search: Suche ausführen.
+     * function=search: execute the search.
      *
-     * Rendert keine Trefferliste, sondern schließt den Suchlayer und lädt den
-     * darunterliegenden Listenlayer mit den Suchparametern in der URL neu (siehe
-     * Klassenkommentar).
+     * Renders no result list, but closes the search layer and reloads the
+     * list layer beneath it with the search parameters in the URL (see
+     * class comment).
      *
-     * json_encode maskiert alles, was das Javascript-Literal beenden könnte;
-     * substr(..., 1) entfernt nur das öffnende Anführungszeichen, das schließende
-     * bleibt stehen und beendet unten den String - deshalb steht {$safeUri} dort ohne
-     * eigene Anführungszeichen.
+     * json_encode escapes everything that could end the JavaScript literal;
+     * substr(..., 1) only removes the opening quotation mark, the closing one
+     * remains and ends the string below - which is why {$safeUri} stands there without
+     * its own quotation marks.
      */
     private function _searchAction():void
     {
-        
-        // Parameter (POST)
+
+        // parameters (POST)
         $queryString = http_build_query($_POST);
 
-        // Sicher für Javascript verpacken
+        // wrap safely for JavaScript
         $safeParams = json_encode($queryString, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
         $safeUri = '"Record/record_list.php?' . substr($safeParams, 1);
 
-        // Referer-Layer mit diesen Parametern neu laden
+        // reload the referrer layer with these parameters
         $this->backend->script("
             cApp.layers.close();
             cApp.layers.replace({$safeUri});
@@ -719,18 +719,17 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Vorschau eines Lookup-Suchfeldes beim ERSTEN Aufbau der Maske erzeugen.
+     * Create the preview of a lookup search field when the mask is built for the FIRST time.
      *
-     * Wird aus _searchForm() heraus aufgerufen, wenn die Maske mit einem bereits
-     * gesetzten Filter erneut angezeigt wird - die ausgewählten Datensätze sollen dann
-     * wieder dastehen.
+     * Called from _searchForm() when the mask is displayed again with an already
+     * set filter - the selected records should then be there again.
      *
-     * Die übergebenen $ids werden verworfen und stattdessen aus
-     * $_REQUEST['filter'][{feldname}] geholt: der Aufrufer kennt nur die field_id, der
-     * Filter steht aber unter dem Feldnamen.
+     * The passed $ids are discarded and instead fetched from
+     * $_REQUEST['filter'][{fieldname}]: the caller only knows the field_id, but the
+     * filter is stored under the field name.
      *
-     * @param int $srcField  Id des Relation-Feldes
-     * @param array $ids     wird nicht verwendet (siehe oben)
+     * @param int $srcField  id of the relation field
+     * @param array $ids     not used (see above)
      */
     public function _sLookupInit(int $srcField, array $ids): string
     {
@@ -747,15 +746,15 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Ajax: Vorschau eines Lookup-Suchfeldes aktualisieren.
+     * Ajax: update the preview of a lookup search field.
      *
-     * Aufgerufen von cApp.ui.slookupUpdate(), nachdem in der Auswahlliste ein Häkchen
-     * gesetzt oder entfernt wurde. Antwortet mit dem fertigen Vorschaublock, den das
-     * Javascript an die Stelle des alten setzt.
+     * Called by cApp.ui.slookupUpdate() after a checkmark was set or removed in the
+     * selection list. Responds with the finished preview block, which the
+     * JavaScript puts in place of the old one.
      *
-     * Die Id-Liste wird vor dem Zerlegen auf Ziffern und Kommas gefiltert.
+     * The id list is filtered to digits and commas before it is split.
      *
-     * Request: src_field (field_id), ids (Kommaliste)
+     * Request: src_field (field_id), ids (comma list)
      */
     public function sLookupPreview(): void
     {
@@ -772,23 +771,23 @@ class RecordBackendSearch extends RecordBackend {
     }
 
     /**
-     * Den Vorschaublock eines Lookup-Suchfeldes rendern.
+     * Render the preview block of a lookup search field.
      *
-     * Gemeinsamer Kern von _sLookupInit() und sLookupPreview(). Je ausgewähltem
-     * Datensatz eine Zeile mit seinem Titel, einem Entfernen-Verweis und einem
-     * versteckten Feld, das die Id trägt - der Vorschaublock IST also das Suchfeld;
-     * ein sichtbares Eingabefeld gibt es nicht.
+     * Common core of _sLookupInit() and sLookupPreview(). For each selected
+     * record a row with its title, a remove link and a hidden field that carries the id -
+     * the preview block IS therefore the search field; there is no visible
+     * input field.
      *
-     * Als Titel dient der Inhalt des Default-Feldes. Das wird je ZEILE ermittelt: die
-     * ausgewählten Datensätze können bei einem Pointer-Feld aus verschiedenen
-     * Bereichen stammen und dort verschiedene Default-Felder haben.
+     * The title is the content of the default field. This is determined per ROW: the
+     * selected records can come from different areas with a pointer field and
+     * have different default fields there.
      *
-     * Die Reihenfolge folgt der übergebenen Id-Liste und nicht der Sortierung der
-     * Datenbank - der Redakteur hat sie so ausgewählt. Dafür wird die
-     * Ausgangsreihenfolge mit array_flip() zu einem Rang und uksort() danach sortiert.
+     * The order follows the passed id list and not the sorting of the
+     * database - the editor selected them that way. For this the
+     * original order is turned into a rank with array_flip() and sorted afterwards with uksort().
      *
-     * @param array $fieldData  Relation-Feld Daten
-     * @param array $ids        im Feld gespeicherte Ids
+     * @param array $fieldData  relation field data
+     * @param array $ids        ids stored in the field
      */
     private function _sLookupPreviewCreate(array $fieldData, array $ids): string
     {   
@@ -797,7 +796,7 @@ class RecordBackendSearch extends RecordBackend {
         if (empty($srcField)) return '';
         if (empty($ids)) return '';
 
-        // Lade Datensätze
+        // load records
         $this->cms->select([
             'filter' => [
                 'record_id' => $ids
@@ -808,11 +807,11 @@ class RecordBackendSearch extends RecordBackend {
         
         $records = [];
         while ($row = $this->record->fetch()) {
-            // record_id im Schlüssel
+            // record_id as key
             $records[(int)$row['record_id']] = $row;
         }
 
-        // Ergebnisse nach ursprünglicher Id-Reihenfolge sortieren
+        // sort the results by the original id order
         $flippedOrder = array_flip($ids); 
         uksort($records, function($a, $b) use ($flippedOrder) {
             return (int)$flippedOrder[$a] <=> (int)$flippedOrder[$b];
@@ -833,8 +832,8 @@ class RecordBackendSearch extends RecordBackend {
             $rows[] = $this->backend->template('record.slookup_table_row', [
                 '{text}' => $label,
                 '{data_id}' => $id,
-                // Der Feldname der Vorlage ist inzwischen frei wählbar ({var_name}) -
-                // hier ist es immer ein Suchkriterium, also der 'filter'-Block.
+                // The field name of the template can now be freely chosen ({var_name}) -
+                // here it is always a search criterion, i.e. the 'filter' block.
                 '{var_name}' => "filter[{$relFieldName}][]",
                 '{unlink_url}' => "cApp.ui.slookupUnlink($id);",
             ]);

@@ -1,63 +1,63 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `group` - die Benutzergruppen der Backend-Admins
- * und ihre Rechte (docs/developers/12-group-rights.md).
+ * Dataset subclass for the table `group` - the user groups of the backend admins
+ * and their rights (developer docs, chapter 11 (Permissions)).
  *
- * WAS EINE GRUPPE FESTLEGT
+ * WHAT A GROUP DEFINES
  * --------------------
- *     details.modules      Modulname => gewährte Zusatzrechte (JSON in `details`):
- *                          {"Record": ["import"], "Tools": []} - Schlüssel vorhanden =
- *                          Zugriff auf das Modul; Zusatzrechte sind die Namen aus
+ *     details.modules      module name => granted additional rights (JSON in `details`):
+ *                          {"Record": ["import"], "Tools": []} - key present =
+ *                          access to the module; additional rights are the names from
  *                          {Modul}/install/settings.php 'access'
- *     details.interfaces   Oberflächen, über die sich Admins der Gruppe anmelden
- *                          dürfen: backend, cli, php (Access::INTERFACES); ohne
- *                          Angabe nur das Backend
- *     instance_ids         `rel_group_instance` - Instanzen, deren Bereiche die Gruppe
- *                          im Backend sieht (Feld vom Typ 'reltable')
+ *     details.interfaces   interfaces through which admins of the group may log in:
+ *                          backend, cli, php (Access::INTERFACES); without
+ *                          specification only the backend
+ *     instance_ids         `rel_group_instance` - instances whose areas the group
+ *                          sees in the backend (field of type 'reltable')
  *     languages            `rel_group_language` - language_id => 1 (lesen) | 2 (lesen
- *                          und schreiben); Sprachen ohne Eintrag sind unsichtbar
- *                          ('reltable', instanzübergreifend)
- *     statuses             `rel_group_status` - status_ids, die die Gruppe einem
- *                          Datensatz geben darf (flacher Workflow); lesen darf jede
- *                          Gruppe alle Status. Eine neue Gruppe darf alle setzen.
- *                          Gepflegt auch im Modul Status (Feld group_ids)
- *     (Bereichsrechte)     `rel_group_area` - je Bereich Lesen und die Flags; gepflegt
- *                          über saveAreaRights() (GroupBackend::access(): alle
- *                          Bereiche einer Gruppe) und im Modul Area (Reiter "Zugriff":
- *                          alle Gruppen eines Bereichs); bei Instanzzuweisung
- *                          vorbelegt und abgeräumt, s. u.
+ *                          and write); languages without an entry are invisible
+ *                          ('reltable', across instances)
+ *     statuses             `rel_group_status` - status_ids the group may give to a
+ *                          record (flat workflow); every group may read all statuses.
+ *                          A new group may set all of them.
+ *                          Also maintained in module Status (field group_ids)
+ *     (area rights)        `rel_group_area` - per area: read and the flags; maintained
+ *                          via saveAreaRights() (GroupBackend::access(): all
+ *                          areas of a group) and in module Area (tab "Access":
+ *                          all groups of an area); pre-filled and cleared on instance
+ *                          assignment, see below.
  *
- * INSTANZ ZUWEISEN = ALLE BEREICHE FREIGEBEN
+ * ASSIGNING AN INSTANCE = RELEASE ALL AREAS
  * --------------------
- * Bekommt eine Gruppe eine Instanz neu, legt hookOnSaved() für jeden Bereich der
- * Instanz (außer Ordnern) eine Zeile in `rel_group_area` mit allen Rechten außer
- * set_owner an, und für jede Sprache der Instanz - soweit noch keine Zeile besteht -
- * das Leserecht. Der Superuser nimmt danach im Bereich weg, was die Gruppe nicht
- * darf. Wird eine Instanz entzogen, fallen die Bereichszeilen der Instanz weg;
- * Sprachzeilen bleiben (sie gelten instanzübergreifend).
+ * When a group is newly given an instance, hookOnSaved() adds for each area of the
+ * instance (except folders) a row in `rel_group_area` with all rights except
+ * set_owner, and for each language of the instance - as far as no row exists yet -
+ * the read right. The superuser then removes in the area what the group may not
+ * do. If an instance is withdrawn, the area rows of the instance are dropped;
+ * language rows remain (they apply across instances).
  *
- * DIE SUPERUSER-GRUPPE
+ * THE SUPERUSER GROUP
  * --------------------
- * group_id 1 (InstanceCache::SUPERUSER_GROUP_ID) darf alles, ohne dass dafür Zeilen
- * geführt werden (Camindo\Core\Access). Sie lässt sich weder ändern noch löschen;
- * hookOnSave()/hookOnDelete() weisen das ab. Gelöscht werden kann außerdem keine
- * Gruppe, der noch Admins angehören (der Fremdschlüssel admin.group_id ist RESTRICT,
- * die Meldung hier ist die lesbare Fassung davon).
+ * group_id 1 (InstanceCache::SUPERUSER_GROUP_ID) may do everything, without any rows
+ * being kept for it (Camindo\Core\Access). It can neither be changed nor deleted;
+ * hookOnSave()/hookOnDelete() reject that. Furthermore, no group can be deleted that
+ * still has admins (the foreign key admin.group_id is RESTRICT;
+ * the message here is the readable version of it).
  *
  * SIGNATUREN (Integrity)
  * --------------------
- * `group`.`sig` deckt die details (Module), jede Zeile in rel_group_instance,
- * rel_group_area, rel_group_language und rel_group_status trägt ihre eigene Signatur. Alle Schreibpfade
- * hier und in Area (saveAccess(), grantGroups(), copyAccess()) schreiben sie mit;
- * InstanceCache::readGroups() lässt Zeilen ohne gültige Signatur weg - eine per SQL
- * eingetragene Berechtigung landet damit nie in den Gruppendateien.
+ * `group`.`sig` covers the details (modules); each row in rel_group_instance,
+ * rel_group_area, rel_group_language and rel_group_status carries its own signature. All write paths
+ * here and in Area (saveAccess(), grantGroups(), copyAccess()) write it along;
+ * InstanceCache::readGroups() leaves out rows without a valid signature - a permission
+ * entered via SQL therefore never ends up in the group files.
  *
- * CACHE UND SESSIONS
+ * CACHE AND SESSIONS
  * --------------------
- * Jede Änderung schreibt die Gruppendateien var/cache/group-{id}.php neu
- * (InstanceCache::rebuild()) und die Session-Details der Admins der Gruppe nach
- * (Session::refreshDetails()) - ein angemeldeter Admin arbeitet ab seinem nächsten
- * Request mit den neuen Rechten.
+ * Every change rewrites the group files var/cache/group-{id}.php
+ * (InstanceCache::rebuild()) and updates the session details of the admins of the group
+ * (Session::refreshDetails()) - a logged-in admin works with the new rights from their next
+ * request.
  *
  * @see Camindo\Core\Modules\Admin\GroupBackend
  * @see Camindo\Core\Access
@@ -74,7 +74,7 @@ use Camindo\Core\Integrity;
 
 class Group extends Dataset {
 
-    /** Werte des Feldes 'languages' je Sprache */
+    /** Values of the field 'languages' per language */
     public const LANGUAGE_NONE  = 0;
     public const LANGUAGE_READ  = 1;
     public const LANGUAGE_WRITE = 2;
@@ -95,12 +95,12 @@ class Group extends Dataset {
                 'label' => '#admin.field_group_label',
                 'max'   => 64,
                 'flags' => ['trim', 'not_empty', 'unique'],
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
             ],
-            // Modulrechte und Oberflächen - siehe Klassenkommentar. Das Formular
-            // schickt sie als data[modules][{Modul}][access],
-            // data[modules][{Modul}][rights][] und data[interfaces][]; hookOnSave()
-            // macht daraus details.modules und details.interfaces.
+            // Module rights and interfaces - see class comment. The form
+            // sends them as data[modules][{module}][access],
+            // data[modules][{module}][rights][] and data[interfaces][]; hookOnSave()
+            // turns them into details.modules and details.interfaces.
             'details' => [
                 'type'  => 'json',
                 'label' => '#admin.field_group_details',
@@ -134,13 +134,13 @@ class Group extends Dataset {
         $data['details'] = ['modules' => [], 'interfaces' => Access::DEFAULT_INTERFACES];
         $data['instance_ids'] = [];
         $data['languages'] = [];
-        // Voreinstellung: alle Status setzbar
+        // Default: all statuses settable
         $this->db->query("SELECT `status_id` FROM `status` ORDER BY `position` ASC");
         $data['statuses'] = array_map('intval', $this->db->fetchColumn());
     }
 
     /**
-     * Nach dem Laden: die Relation-Tabellen nachreichen.
+     * After loading: fetch the relation tables.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -165,13 +165,13 @@ class Group extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: Superuser-Gruppe abweisen, Eingaben normalisieren.
+     * Before saving: reject the superuser group, normalize the input.
      *
-     *     modules       aus dem Formular (data[modules]) oder bereits als
-     *                   details.modules - nur bekannte Module, nur definierte Rechte
-     *     instance_ids  nur vorhandene Instanzen
-     *     languages     language_id => LANGUAGE_*, nur vorhandene Sprachen
-     *     statuses      nur vorhandene Status
+     *     modules       from the form (data[modules]) or already as
+     *                   details.modules - only known modules, only defined rights
+     *     instance_ids  only existing instances
+     *     languages     language_id => LANGUAGE_*, only existing languages
+     *     statuses      only existing statuses
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
@@ -182,7 +182,7 @@ class Group extends Dataset {
             throw new \Exception('#' . $errorMsg);
         }
 
-        // Module und Oberflächen
+        // Modules and interfaces
         // --------------------
         if (in_array('details', $fields, true) || array_key_exists('modules', $data) || array_key_exists('interfaces', $data)) {
             $details = is_array($data['details'] ?? null) ? $data['details'] : [];
@@ -193,7 +193,7 @@ class Group extends Dataset {
             if (array_key_exists('interfaces', $data)) {
                 $details['interfaces'] = (array)$data['interfaces'];
             }
-            // bei einem Speichern ohne Angabe: die bisherigen (sonst DEFAULT_INTERFACES)
+            // on a save without specification: the previous ones (otherwise DEFAULT_INTERFACES)
             if (!isset($details['interfaces']) && isset($previousData['details']['interfaces'])) {
                 $details['interfaces'] = (array)$previousData['details']['interfaces'];
             }
@@ -211,40 +211,40 @@ class Group extends Dataset {
 
         // Sprachen
         // --------------------
-        // LANGUAGE_NONE bleibt im Array stehen: hookOnSaved() weiß dann, dass die
-        // Sprache ausdrücklich abgewählt wurde, und belegt sie bei einer neu
-        // zugewiesenen Instanz nicht mit Leserecht vor.
+        // LANGUAGE_NONE stays in the array: hookOnSaved() then knows that the
+        // language was explicitly deselected, and does not pre-fill it with a read right on a newly
+        // assigned instance.
         if (in_array('languages', $fields, true)) {
             $languages = [];
-            // Je Sprache eine Stufe oder - aus dem Formular (Hiddenfeld 0 + Checkboxes
-            // "lesen" 1 / "schreiben" 2) - eine Liste davon: es gilt die höchste
+            // Per language one level or - from the form (hidden field 0 + checkboxes
+            // "read" 1 / "write" 2) - a list of them: the highest applies
             foreach ((array)($data['languages'] ?? []) as $languageId => $level) {
                 $level = is_array($level) ? max(array_map('intval', $level ?: [0])) : (int)$level;
                 $languages[(int)$languageId] = max(self::LANGUAGE_NONE, min($level, self::LANGUAGE_WRITE));
             }
-            // language_id 0 ist eine gültige Sprache - deshalb kein sanitizeIds()
+            // language_id 0 is a valid language - therefore no sanitizeIds()
             $existing = $this->existingIds('language', array_keys($languages));
             $data['languages'] = array_intersect_key($languages, array_flip($existing));
         }
 
         // Status
         // --------------------
-        // status_id 0 ist ein gültiger Status - deshalb kein sanitizeIds()
+        // status_id 0 is a valid status - therefore no sanitizeIds()
         if (in_array('statuses', $fields, true)) {
             $data['statuses'] = $this->existingIds('status', array_map('intval', (array)($data['statuses'] ?? [])));
         }
     }
 
     /**
-     * Nach dem Speichern: Relation-Tabellen schreiben, Bereichs- und Sprachrechte
-     * für neu zugewiesene Instanzen vorbelegen, Cache und Sessions erneuern.
-     * Läuft in der Transaktion von Dataset::save().
+     * After saving: write the relation tables, pre-fill area and language rights
+     * for newly assigned instances, refresh cache and sessions.
+     * Runs in the transaction of Dataset::save().
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
         $groupId = (int)($data['group_id'] ?? 0);
 
-        // Sprachen aus dem Formular (vor der Vorbelegung neuer Instanzen)
+        // Languages from the form (before pre-filling new instances)
         // --------------------
         $submittedLanguageIds = [];
         if (in_array('languages', $fields, true)) {
@@ -293,18 +293,18 @@ class Group extends Dataset {
             }
         }
 
-        // Signatur der Gruppen-Zeile (details = Module) - Integrity
+        // Signature of the group row (details = modules) - Integrity
         $this->integrity()->signGroup($groupId);
 
         $this->afterChange($groupId);
     }
 
     /**
-     * Vor dem Löschen: Superuser-Gruppe und Gruppen mit (aktiven) Benutzern bleiben.
-     * Gelöschte Benutzer verlieren die Zuordnung (group_id NULL) - sie lassen sich
-     * nicht wiederherstellen, ihre Gruppe ist nur noch Historie, und admin.group_id
-     * verweist mit ON DELETE RESTRICT auf die Gruppe. Neu signiert, mit Eintrag im
-     * Audit-Log des Kontos. Die Relation-Tabellen räumen die Fremdschlüssel ab
+     * Before deleting: the superuser group and groups with (active) users remain.
+     * Deleted users lose the assignment (group_id NULL) - they cannot be
+     * restored, their group is only history now, and admin.group_id
+     * refers to the group with ON DELETE RESTRICT. Re-signed, with an entry in the
+     * audit log of the account. The relation tables clear the foreign keys
      * (ON DELETE CASCADE).
      */
     protected function hookOnDelete(array $data): void
@@ -341,13 +341,13 @@ class Group extends Dataset {
     }
 
     /**
-     * Gruppe löschen und ihre (aktiven) Benutzer vorher einer Ersatzgruppe zuweisen;
-     * alles in einer Transaktion. Gelöschte Benutzer verlieren die Zuordnung
-     * (hookOnDelete()). Jede Zuweisung läuft über
-     * Admin::save() (Signatur, Audit-Log). Die Superuser-Gruppe ist als Ersatz
-     * ausgeschlossen - das Löschen einer Gruppe soll niemanden zum Superuser machen.
+     * Delete the group and first assign its (active) users to a replacement group;
+     * everything in one transaction. Deleted users lose the assignment
+     * (hookOnDelete()). Every assignment runs via
+     * Admin::save() (signature, audit log). The superuser group is excluded as a replacement
+     * - deleting a group must not make anyone a superuser.
      *
-     * @param int $replacementId  Ersatzgruppe; 0 = keine (nur ohne Benutzer möglich)
+     * @param int $replacementId  replacement group; 0 = none (only possible without users)
      */
     public function deleteReplacing(int $groupId, int $replacementId): bool
     {
@@ -375,7 +375,7 @@ class Group extends Dataset {
         }, false);
     }
 
-    /** Gibt es die Gruppe? */
+    /** Does the group exist? */
     private function exists(int $groupId): bool
     {
         $this->db->pushResult();
@@ -389,7 +389,7 @@ class Group extends Dataset {
     }
 
     /**
-     * Nach dem Löschen: Gruppendatei entfernen (rebuild() räumt sie ab).
+     * After deleting: remove the group file (rebuild() clears it).
      */
     protected function hookOnDeleted(array $data): void
     {
@@ -397,19 +397,19 @@ class Group extends Dataset {
     }
 
     // ====================
-    // Bereichsrechte (rel_group_area) - Vorbelegung und Abräumen
+    // Area rights (rel_group_area) - pre-filling and clearing
 
     /**
-     * Alle Bereiche einer Instanz (außer Ordnern) mit vollen Rechten (ohne
-     * set_owner) und ihre Sprachen mit Leserecht freigeben - soweit noch keine
-     * Zeile besteht. Sprachen, die das Formular ausdrücklich abgewählt hat
-     * ($skipLanguageIds), bleiben außen vor.
+     * Release all areas of an instance (except folders) with full rights (without
+     * set_owner) and their languages with read right - as far as no
+     * row exists yet. Languages that the form explicitly deselected
+     * ($skipLanguageIds) stay out.
      */
     public function grantInstance(int $groupId, int $instanceId, array $skipLanguageIds = []): void
     {
         if ($groupId <= InstanceCache::SUPERUSER_GROUP_ID || $instanceId < 1) return;
-        // Zeile für Zeile: jede braucht ihre Signatur (Integrity). Die Flags sind
-        // die Spalten-Defaults (alles außer set_owner).
+        // Row by row: each one needs its signature (Integrity). The flags are
+        // the column defaults (everything except set_owner).
         $this->db->pushResult();
         $this->db->query("SELECT `area_id` FROM `area` WHERE `instance_id` = ? AND `type` <> 'folder'", 'i', [$instanceId]);
         $areaIds = array_map('intval', $this->db->fetchColumn());
@@ -447,10 +447,10 @@ class Group extends Dataset {
      * Bereichsrechte einer Gruppe schreiben (GroupBackend::access()).
      *
      * @param int   $groupId
-     * @param array $rows  area_id => ['read' => 1, 'group_write' => 1, ...] aus dem
-     *                     Formular; ohne 'read' fällt die Zeile weg. Nur Bereiche
-     *                     (keine Ordner) zugewiesener Instanzen; Template-Bereiche
-     *                     behalten nur group_write.
+     * @param array $rows  area_id => ['read' => 1, 'group_write' => 1, ...] from the
+     *                     form; without 'read' the row is dropped. Only areas
+     *                     (no folders) of assigned instances; template areas
+     *                     keep only group_write.
      * @return bool  false: Meldung in Cms::errors
      */
     public function saveAreaRights(int $groupId, array $rows): bool
@@ -492,7 +492,7 @@ class Group extends Dataset {
 
     /**
      * Bereichsrechte einer Gruppe: area_id => Flags (Zeile = Leserecht).
-     * Anzeige und Formular in GroupBackend; auch für den Reiter "Zugriff" im Modul Area.
+     * Display and form in GroupBackend; also for the "Access" tab in module Area.
      *
      * @return array  area_id => ['group_write', 'group_delete', 'other_write',
      *                'other_delete', 'set_owner'] (int 0|1)
@@ -517,8 +517,8 @@ class Group extends Dataset {
     }
 
     /**
-     * Cache und Sessions nach einer Änderung an einer Gruppe oder ihren Rechten
-     * erneuern. Auch für das Modul Area (Reiter "Zugriff") gedacht.
+     * Refresh cache and sessions after a change to a group or its rights.
+     * Also intended for module Area (tab "Access").
      */
     public function afterChange(int $groupId): void
     {
@@ -537,7 +537,7 @@ class Group extends Dataset {
     // Hilfsfunktionen
 
     /**
-     * Anzahl der Benutzer einer Gruppe - ohne die gelöschten, mit $withDeleted alle.
+     * Number of users of a group - without the deleted ones; with $withDeleted all.
      */
     public function adminCount(int $groupId, bool $withDeleted = false): int
     {
@@ -549,8 +549,8 @@ class Group extends Dataset {
     }
 
     /**
-     * Module, die eine Gruppe wählen kann: Name => Zusatzrechte (Name => Snippet).
-     * Nur gelistete Module (Start und Messaging stehen jedem offen).
+     * Modules a group can select: name => additional rights (name => snippet).
+     * Only listed modules (Start and Messaging are open to everyone).
      *
      * @return array  Modulname => ['label' => Snippet-Verweis, 'access' => [recht => Snippet]]
      */
@@ -591,7 +591,7 @@ class Group extends Dataset {
     }
 
     /**
-     * Nur bekannte Module und dort definierte Zusatzrechte übrig lassen.
+     * Keep only known modules and the additional rights defined there.
      */
     private function normalizeModules(array $modules): array
     {
@@ -607,8 +607,8 @@ class Group extends Dataset {
     }
 
     /**
-     * Aus einer Id-Liste die Ids heraussuchen, die es in $tableName gibt
-     * (Reihenfolge wie übergeben). $tableName steht fest im Code.
+     * From an id list, pick out the ids that exist in $tableName
+     * (order as passed). $tableName is fixed in the code.
      */
     private function existingIds(string $tableName, array $ids): array
     {

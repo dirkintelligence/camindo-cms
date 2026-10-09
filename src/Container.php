@@ -1,36 +1,36 @@
 <?php
 /**
- * Dependency-Injection-Container mit Autowiring und Shared Services (Singletons).
+ * Dependency injection container with autowiring and shared services (singletons).
  *
- * Wird in Core.php einmal erzeugt und unter $GLOBALS['app'] abgelegt. Jedes Einstiegsscript
- * holt sich seine Klassen darüber:
+ * Created once in Core.php and stored under $GLOBALS['app']. Every entry script
+ * fetches its classes through it:
  *
  *     $adminBackend = $app->get(AdminBackend::class);
  *
- * DREI AUFLÖSUNGSWEGE (in dieser Reihenfolge, siehe get())
+ * THREE RESOLUTION PATHS (in this order, see get())
  * --------------------
- * 1. Bereits erzeugte Instanz -> wird zurückgegeben
- * 2. Manuell registrierte Factory (set()) -> wird einmal aufgerufen, Ergebnis gemerkt
- * 3. Autowiring -> Konstruktor per Reflection analysieren, Abhängigkeiten rekursiv
- *    aus dem Container holen, Klasse instanziieren
+ * 1. Instance already created -> returned
+ * 2. Manually registered factory (set()) -> called once, result kept
+ * 3. Autowiring -> analyze the constructor via reflection, fetch dependencies recursively
+ *    from the container, instantiate the class
  *
  * SHARED SERVICES
  * --------------------
- * Jede Klasse existiert pro Request genau einmal. Das gilt ausdrücklich auch für
- * Dataset-Kindklassen: zwei $app->get(Admin::class) liefern dieselbe Instanz. Wer in einer
- * Methode Zustand am Dataset ablegt, teilt ihn also mit allen anderen Aufrufern.
- * Für mehrere unabhängige Instanzen derselben Klasse ist der Container nicht gedacht.
+ * Every class exists exactly once per request. This explicitly also applies to
+ * dataset subclasses: two $app->get(Admin::class) calls return the same instance. Whoever
+ * stores state on the dataset in a method therefore shares it with all other callers.
+ * The container is not meant for several independent instances of the same class.
  *
- * GRENZEN DES AUTOWIRING
+ * LIMITS OF AUTOWIRING
  * --------------------
- * Aufgelöst werden nur Konstruktor-Parameter, die auf eine Klasse oder ein Interface
- * typisiert sind. Skalare Parameter (string, int, array, ...) und untypisierte Parameter
- * führen zu einer Exception - solche Klassen müssen mit set() registriert werden.
- * Im Bestand betrifft das nur Config (bekommt das Konfigurations-Array aus .camindo.php).
+ * Only constructor parameters typed as a class or an interface are resolved. Scalar
+ * parameters (string, int, array, ...) and untyped parameters
+ * lead to an exception - such classes must be registered with set().
+ * In the codebase this only affects Config (it receives the configuration array from .camindo.php).
  *
- * Ein Interface lässt sich nicht instanziieren; wird es als Abhängigkeit verlangt, muss es
- * entweder per set() auf eine konkrete Klasse gemappt oder - wie ContainerInterface - im
- * Konstruktor direkt in $instances hinterlegt sein.
+ * An interface cannot be instantiated; if it is required as a dependency, it must either
+ * be mapped to a concrete class via set() or - like ContainerInterface - be stored
+ * directly in $instances in the constructor.
  */
 namespace Camindo\Core;
 
@@ -39,34 +39,34 @@ use ReflectionNamedType;
 
 class Container implements ContainerInterface
 {
-    /** Registrierte Factories: id => callable(Container): object - erst bei Bedarf aufgerufen */
+    /** Registered factories: id => callable(Container): object - only called when needed */
     private array $services = [];
 
-    /** Fertige Instanzen: id => object - der eigentliche Singleton-Speicher */
+    /** Finished instances: id => object - the actual singleton store */
     private array $instances = [];
 
     public function __construct()
     {
-        // Registriere den Container selbst für das Interface.
+        // Register the container itself for the interface.
         $this->instances[ContainerInterface::class] = $this;
 
-        // Optional: Auch für den konkreten Klassennamen registrieren,
-        // falls jemand "Container" statt "ContainerInterface" als Typ nutzt.
+        // Optional: also register under the concrete class name,
+        // in case someone uses "Container" instead of "ContainerInterface" as the type.
         $this->instances[self::class] = $this;
     }
 
     /**
-     * Factory für einen Service hinterlegen (überschreibt eine vorhandene Registrierung).
+     * Store a factory for a service (overwrites an existing registration).
      *
-     * Nötig für Klassen, die das Autowiring nicht bauen kann - typischerweise, weil ihr
-     * Konstruktor skalare Werte erwartet. Die Factory wird erst beim ersten get() aufgerufen.
+     * Needed for classes that autowiring cannot build - typically because their
+     * constructor expects scalar values. The factory is only called on the first get().
      *
-     * Achtung: Wurde die Instanz bereits erzeugt, kommt sie weiterhin aus $instances -
-     * ein set() danach bleibt wirkungslos. Also immer vor der ersten Verwendung registrieren
+     * Note: once the instance has been created, it still comes from $instances -
+     * a set() afterwards has no effect. So always register before the first use
      * (in camindo: in Core.php).
      *
-     * @param string   $id       Klassen-/Interface-Name, i. d. R. MeineKlasse::class
-     * @param callable $factory  Erhält den Container als einzigen Parameter
+     * @param string   $id       class/interface name, usually MyClass::class
+     * @param callable $factory  receives the container as its only parameter
      */
     public function set(string $id, callable $factory): void
     {
@@ -74,11 +74,11 @@ class Container implements ContainerInterface
     }
 
     /**
-     * Ist $id auflösbar?
+     * Is $id resolvable?
      *
-     * Liefert auch dann true, wenn nichts registriert ist, die Klasse aber existiert -
-     * dann würde Autowiring greifen. Ob das tatsächlich gelingt (instanziierbar,
-     * auflösbare Konstruktor-Parameter), prüft has() nicht.
+     * Also returns true when nothing is registered but the class exists -
+     * autowiring would then apply. Whether that actually succeeds (instantiable,
+     * resolvable constructor parameters) is not checked by has().
      */
     public function has(string $id): bool
     {
@@ -86,26 +86,26 @@ class Container implements ContainerInterface
     }
 
     /**
-     * Service holen - erzeugt ihn beim ersten Aufruf, danach immer dieselbe Instanz.
+     * Get a service - creates it on the first call, the same instance afterwards.
      *
-     * @param string $id  Klassen-/Interface-Name, i. d. R. MeineKlasse::class
+     * @param string $id  class/interface name, usually MyClass::class
      * @return mixed
-     * @throws \Exception wenn weder Instanz noch Factory noch Klasse existiert
+     * @throws \Exception if neither an instance, a factory nor a class exists
      */
     public function get(string $id)
     {
-        // 1. Wurde die Instanz bereits erstellt (oder im Konstruktor hinterlegt)?
+        // 1. Has the instance already been created (or stored in the constructor)?
         if (isset($this->instances[$id])) {
             return $this->instances[$id];
         }
 
-        // 2. Gibt es eine manuell registrierte Factory?
+        // 2. Is there a manually registered factory?
         if (isset($this->services[$id])) {
             $this->instances[$id] = $this->services[$id]($this);
             return $this->instances[$id];
         }
 
-        // 3. Autowiring: Versuche die Klasse automatisch aufzulösen
+        // 3. Autowiring: try to resolve the class automatically
         if (class_exists($id)) {
             $this->instances[$id] = $this->autowire($id);
             return $this->instances[$id];
@@ -115,29 +115,29 @@ class Container implements ContainerInterface
     }
 
     /**
-     * Autowiring: Konstruktor analysieren und die Klasse mit aufgelösten Abhängigkeiten bauen.
+     * Autowiring: analyze the constructor and build the class with resolved dependencies.
      *
-     * Hinweis zur Rekursion: Da jede Abhängigkeit wieder über get() läuft, landen auch die
-     * Zwischenstufen in $instances. Eine zyklische Abhängigkeit (A braucht B, B braucht A)
-     * wird NICHT erkannt und führt zu einer Endlosrekursion bis zum Stack Overflow -
-     * die Klassen im Bestand sind zyklenfrei aufgebaut.
+     * Note on recursion: since every dependency again goes through get(), the intermediate
+     * steps also end up in $instances. A circular dependency (A needs B, B needs A)
+     * is NOT detected and leads to endless recursion until a stack overflow -
+     * the classes in the codebase are built without cycles.
      *
      * @param string $className
      * @return object
-     * @throws \Exception bei abstrakten Klassen/Interfaces oder nicht auflösbaren Parametern
+     * @throws \Exception for abstract classes/interfaces or unresolvable parameters
      */
     private function autowire(string $className)
     {
         $reflector = new ReflectionClass($className);
 
-        // Prüfen, ob die Klasse instanziiert werden darf (nicht abstrakt, kein Interface)
+        // Check whether the class may be instantiated (not abstract, not an interface)
         if (!$reflector->isInstantiable()) {
             throw new \Exception("Instance of Class '$className' cannot be created.");
         }
 
         $constructor = $reflector->getConstructor();
 
-        // Wenn es keinen Konstruktor gibt, einfach instanziieren
+        // If there is no constructor, simply instantiate
         if (is_null($constructor)) {
             return new $className();
         }
@@ -145,22 +145,22 @@ class Container implements ContainerInterface
         $parameters = $constructor->getParameters();
         $dependencies = [];
 
-        // Gehe alle Parameter des Konstruktors durch
+        // Go through all constructor parameters
         foreach ($parameters as $parameter) {
             $type = $parameter->getType();
 
-            // Wir können nur Typen auflösen, die echte Klassen sind (keine Strings/Ints)
-            // Nicht erfasst: Union-/Intersection-Typen (kein ReflectionNamedType) und
-            // untypisierte Parameter (getType() liefert null) - beides landet hier ebenfalls.
+            // We can only resolve types that are real classes (no strings/ints)
+            // Not covered: union/intersection types (no ReflectionNamedType) and
+            // untyped parameters (getType() returns null) - both also end up here.
             if (!$type instanceof ReflectionNamedType || $type->isBuiltin()) {
                 throw new \Exception("Cannot automatically resolve parameter '{$parameter->getName()}' of class '$className'. Please register it manually.");
             }
 
-            // Rekursiver Aufruf: Hole die Abhängigkeit ebenfalls aus dem Container
+            // Recursive call: fetch the dependency from the container as well
             $dependencies[] = $this->get($type->getName());
         }
 
-        // Erstelle die Klasse mit den gesammelten Abhängigkeiten
+        // Create the class with the collected dependencies
         return $reflector->newInstanceArgs($dependencies);
     }
 }

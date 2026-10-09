@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\cms $this->cms
@@ -18,14 +18,13 @@ $this->backend->formReplace('{processor_fields}', $tplProcessorForm);
 
 $details = (array)($this->data['details'] ?? []);
 
-// Die erlaubten Werte stehen als Konstanten in der Prozessor-Klasse. So bleiben
-// Formular und Engine zwangsläufig beieinander, auch wenn später ein Codec
-// dazukommt oder wegfällt.
+// The allowed values are constants in the processor class. This keeps
+// form and engine necessarily together, even if a codec is added or removed later.
 $proc = \Camindo\Core\Processors\FFmpegAudio\FFmpegAudio::class;
 
 /**
- * Baut aus einer Werteliste die Optionen für ein Auswahlfeld.
- * Die Beschriftung kommt jeweils aus dem Snippet proc.ffmpegaudio.option_{wert}.
+ * Builds the options for a select field from a list of values.
+ * The label comes from the snippet proc.ffmpegaudio.option_{value} in each case.
  */
 $options = function (array $values) use ($prefix): array {
     $result = [];
@@ -44,9 +43,8 @@ $this->backend->formField($this->converter, [
 ]);
 
 // codec
-// Die Liste enthält bewusst alle Codecs. Passt die Auswahl nicht zum
-// Container, biegt der Prozessor sie beim Speichern auf den Standard-Codec
-// des Containers zurecht.
+// The list deliberately contains all codecs. If the selection does not match the
+// container, the processor adjusts it to the default codec of the container when saving.
 $this->backend->formField($this->converter, [
     'name' => 'details.codec',
     'value' => $details['codec'] ?? 'auto',
@@ -138,6 +136,6 @@ $this->backend->formField($this->converter, [
 $this->backend->formField($this->converter, ['name' => 'details.max_time_out', 'value' => $details['max_time_out'] ?? '', 'id' => $this->id]);
 
 
-// Expertenmodus
+// Expert mode
 $this->backend->formField($this->converter, ['name' => 'details.parameter1', 'value' => $details['parameter1'] ?? '', 'id' => $this->id]);
 $this->backend->formField($this->converter, ['name' => 'details.parameter2', 'value' => $details['parameter2'] ?? '', 'id' => $this->id]);

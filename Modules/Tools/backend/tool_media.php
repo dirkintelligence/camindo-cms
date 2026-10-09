@@ -1,7 +1,7 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Sperrdateien des Medienverzeichnisses neu schreiben: .htaccess je
-// Instanz-Verzeichnis (Domain-Sperre) und je Feld mit details.user_auth
+// Rewrite the lock files of the media directory: .htaccess per
+// instance directory (domain lock) and per field with details.user_auth
 use Camindo\Core\MediaAccess;
 
 $mediaAccess = $app->get(MediaAccess::class);

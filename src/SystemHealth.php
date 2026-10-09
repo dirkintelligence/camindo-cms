@@ -1,46 +1,46 @@
 <?php
 /**
- * Betriebsprüfungen für die Startseite des Backends: Was läuft im Hintergrund
- * nicht, wie es soll? Instanzname im Code: $systemHealth.
+ * Operational checks for the start page of the backend: what is not running in the
+ * background as it should? Instance name in the code: $systemHealth.
  *
- * Die Startseite zeigt das Ergebnis unter den Modulkacheln - nur Superusern, denn
- * behoben wird es auf dem Server bzw. im Zeitplaner (StartBackend::_healthWarnings()).
+ * The start page shows the result below the module tiles - only to superusers, because
+ * it is fixed on the server or in the scheduler (StartBackend::_healthWarnings()).
  *
- * WAS GEPRÜFT WIRD
+ * WHAT IS CHECKED
  * --------------------
- *     cron          läuft Core/cron/cron.php? TriggerCron::tick1m() schreibt jede
- *                   Minute var/tmp/cron-heartbeat.stamp; älter als CRON_MAX_AGE:
- *                   Warnung. Ohne Cron laufen weder Zeitplaner noch Thumbnails,
- *                   und var/tmp wird nicht geleert.
- *     tmp           Einträge in var/tmp, die älter sind als admin.tmp_retention_hours
- *                   plus Toleranz - die Aufgabe tmpcleanup des Zeitplaners greift nicht.
- *     maintenance   Wartungsaufgaben (Scheduler::MAINTENANCE_TYPES), für die es keine
- *                   eingeschaltete Aufgabe im Zeitplaner gibt (updatecheck nur mit
- *                   paths.composer, auditverify nur mit eingeschaltetem Audit-Log)
- *     backup        eine eingeschaltete Aufgabe vom Typ dbbackup gibt es; ihr letzter
- *                   Lauf ist nicht fehlgeschlagen; backup-1.sql ist nicht älter als
- *                   BACKUP_MAX_DAYS und brauchbar (Backup::verify(): Mindestgröße,
- *                   Endzeile "-- Dump completed").
- *     scheduler     andere Aufgaben, deren letzter Lauf fehlschlug
- *     logcleanup    eine eingeschaltete Aufgabe vom Typ logcleanup gibt es (Hinweis:
- *                   ohne sie wachsen Logs und gespeicherte IP-Adressen unbegrenzt)
- *     cachecleanup  var/cache/include ist nicht leer (Templates nutzen CMS:INCLUDE
- *                   caching=…), aber keine Aufgabe vom Typ cachecleanup ist
- *                   eingeschaltet (Hinweis: abgelaufene Dateien bleiben liegen)
- *     disk          freier Platz unter var/ (DISK_WARN_BYTES / DISK_DANGER_BYTES)
- *     writable      var/tmp, var/log und das Medienverzeichnis beschreibbar
- *     mail          email.noreply fehlt, aber die Zwei-Faktor-Anmeldung braucht es
- *     development   system.development_version eingeschaltet
- *     https         admin.cookie_secure aus: das Sitzungs-Cookie geht auch über http
- *     securitytxt   public/.well-known/security.txt fehlt (Meldeweg für Lücken)
- *     audit         Ergebnis der täglichen Prüfung des Audit-Logs (HMAC-Kette, Abgleich
- *                   mit der Datenbank, Zeitplaner-Aufgabe auditverify): Befunde = danger
- *     updates       Ergebnis der täglichen Update-Prüfung (UpdateCheck): bekannte
- *                   Sicherheitslücken (danger), neue Version von camindo/cms
- *                   (warning), andere Pakete mit Updates (info); Link zur Info-Seite
+ *     cron          is Core/cron/cron.php running? TriggerCron::tick1m() writes
+ *                   var/tmp/cron-heartbeat.stamp every minute; older than CRON_MAX_AGE:
+ *                   warning. Without cron neither the scheduler nor thumbnails run,
+ *                   and var/tmp is not emptied.
+ *     tmp           entries in var/tmp that are older than admin.tmp_retention_hours
+ *                   plus tolerance - the scheduler task tmpcleanup does not catch them.
+ *     maintenance   maintenance tasks (Scheduler::MAINTENANCE_TYPES) for which there is
+ *                   no enabled task in the scheduler (updatecheck only with
+ *                   paths.composer, auditverify only with the audit log enabled)
+ *     backup        there is an enabled task of type dbbackup; its last run
+ *                   has not failed; backup-1.sql is not older than
+ *                   BACKUP_MAX_DAYS and usable (Backup::verify(): minimum size,
+ *                   final line "-- Dump completed").
+ *     scheduler     other tasks whose last run failed
+ *     logcleanup    there is an enabled task of type logcleanup (note:
+ *                   without it, logs and stored IP addresses grow without limit)
+ *     cachecleanup  var/cache/include is not empty (templates use CMS:INCLUDE
+ *                   caching=…), but no task of type cachecleanup is
+ *                   enabled (note: expired files remain)
+ *     disk          free space under var/ (DISK_WARN_BYTES / DISK_DANGER_BYTES)
+ *     writable      var/tmp, var/log and the media directory are writable
+ *     mail          email.noreply is missing, but two-factor sign-in needs it
+ *     development   system.development_version is enabled
+ *     https         admin.cookie_secure off: the session cookie also travels over http
+ *     securitytxt   public/.well-known/security.txt is missing (reporting route for vulnerabilities)
+ *     audit         result of the daily check of the audit log (HMAC chain, comparison
+ *                   with the database, scheduler task auditverify): findings = danger
+ *     updates       result of the daily update check (UpdateCheck): known
+ *                   security vulnerabilities (danger), new version of camindo/cms
+ *                   (warning), other packages with updates (info); link to the info page
  *
- * Jede Prüfung liefert höchstens eine Meldung. Eine Prüfung, die selbst scheitert
- * (Datenbank weg), fällt still aus - die Startseite darf daran nicht hängen.
+ * Each check yields at most one message. A check that itself fails
+ * (database gone) fails silently - the start page must not hang on it.
  *
  * @see Camindo\Core\Modules\Start\StartBackend::start()
  * @see Camindo\Core\cron\TriggerCron::tick1m()   Herzschlag des Cronjobs
@@ -51,19 +51,19 @@ use Camindo\Core\Modules\Scheduler\Scheduler;
 
 class SystemHealth {
 
-    /** Herzschlag-Datei in var/tmp (TriggerCron::tick1m()) */
+    /** Heartbeat file in var/tmp (TriggerCron::tick1m()) */
     public const CRON_HEARTBEAT = 'cron-heartbeat.stamp';
 
-    /** Herzschlag älter als so viele Sekunden: Cron gilt als ausgefallen */
+    /** Heartbeat older than this many seconds: cron counts as failed */
     public const CRON_MAX_AGE = 900;
 
-    /** Toleranz über admin.tmp_retention_hours hinaus (Stunden) */
+    /** Tolerance beyond admin.tmp_retention_hours (hours) */
     public const TMP_TOLERANCE_HOURS = 2;
 
-    /** backup-1.sql älter als so viele Tage: Warnung */
+    /** backup-1.sql older than this many days: warning */
     public const BACKUP_MAX_DAYS = 2;
 
-    /** Freier Platz unter var/: Warnung bzw. Alarm */
+    /** Free space under var/: warning or alarm */
     public const DISK_WARN_BYTES = 2 * 1024 ** 3;
     public const DISK_DANGER_BYTES = 512 * 1024 ** 2;
 
@@ -79,11 +79,11 @@ class SystemHealth {
     {}
 
     /**
-     * Alle Meldungen, die wichtigste zuerst.
+     * All messages, most important first.
      *
-     * @return array  Liste aus ['check' => string, 'level' => 'danger'|'warning'|'info',
-     *                'text' => string (Klartext, noch nicht maskiert),
-     *                'action' => string (Javascript für den Link, optional)]
+     * @return array  list of ['check' => string, 'level' => 'danger'|'warning'|'info',
+     *                'text' => string (plain text, not yet escaped),
+     *                'action' => string (JavaScript for the link, optional)]
      */
     public function warnings(): array
     {
@@ -106,7 +106,7 @@ class SystemHealth {
         return $warnings;
     }
 
-    // ==== Die Prüfungen ====
+    // ==== The checks ====
 
     private function checkCron(): ?array
     {
@@ -129,7 +129,7 @@ class SystemHealth {
         $limit = time() - $hours * 3600;
         $old = 0;
         foreach (scandir($dir) ?: [] as $entry) {
-            // dieselben Ausnahmen wie SchedulerRunner::cleanupTmp()
+            // same exceptions as SchedulerRunner::cleanupTmp()
             if ($entry === '.' || $entry === '..' || $entry === 'cron.log.txt') continue;
             if (str_ends_with($entry, '.lock') || str_ends_with($entry, '.stamp')) continue;
             if ((int)@filemtime("$dir/$entry") < $limit) $old++;
@@ -212,7 +212,7 @@ class SystemHealth {
 
     private function checkCachecleanup(): ?array
     {
-        // Nur ein Verzeichnislisting bis zum ersten Eintrag - die Startseite zählt nicht
+        // Only a directory listing up to the first entry - the start page does not count
         $dir = rtrim((string)$this->config->get('paths.var_dir'), '/') . '/cache/' . IncludeCache::DIR;
         if (!is_dir($dir) || (new \FilesystemIterator($dir))->valid() === false) return null;
         $this->db->query("SELECT COUNT(*) FROM `scheduler` WHERE `type` = 'cachecleanup' AND `enabled` = 1");
@@ -239,7 +239,7 @@ class SystemHealth {
         $dirs = [
             'var/tmp' => $this->tmpDir(),
             'var/log' => $varDir . '/log',
-            // Audit-Log (AuditStore): nur wenn es das Verzeichnis schon gibt bzw. geben muss
+            // Audit log (AuditStore): only if the directory already exists or must exist
             'var/audit' => $this->config->get('audit.enabled') === false ? '' : $varDir . '/audit',
             'media'   => (string)$this->config->get('paths.media_dir'),
         ];
@@ -247,7 +247,7 @@ class SystemHealth {
         foreach ($dirs as $label => $dir) {
             if ($dir === '') continue;
             if ($label === 'var/audit' && !is_dir($dir)) {
-                // Legt der erste Eintrag an - schreibbar muss dann var/ sein
+                // The first entry creates it - then var/ must be writable
                 if (!is_writable($varDir)) $failed[] = $label;
                 continue;
             }
@@ -257,7 +257,7 @@ class SystemHealth {
         return $this->warning('danger', 'health_not_writable', ['dirs' => implode(', ', $failed)]);
     }
 
-    /** CAMINDO_KEY enthält nicht den aktuellen Schlüssel (nach `key rotate` nicht nachgezogen) */
+    /** CAMINDO_KEY does not contain the current key (not updated after `key rotate`) */
     private function checkKeyenv(): ?array
     {
         if (!in_array($this->crypt->envKeyState(), ['retired', 'other'], true)) return null;
@@ -283,7 +283,7 @@ class SystemHealth {
         return $this->warning('warning', 'health_cookie_insecure');
     }
 
-    /** Keine feste Backend-Domain (admin.backend_domain) - Hinweis, nicht im Entwicklungsmodus */
+    /** No fixed backend domain (admin.backend_domain) - note, not in development mode */
     private function checkBackenddomain(): ?array
     {
         if ((string)$this->config->get('admin.backend_domain') !== '') return null;
@@ -332,11 +332,11 @@ class SystemHealth {
     // ====================
 
     /**
-     * Eine Meldung aus dem Snippet start.{key} bauen.
+     * Build a message from the snippet start.{key}.
      */
     private function warning(string $level, string $key, array $vars = [], string $action = ''): array
     {
-        // Einfache Platzhalter {name} ersetzt Cms::snippet() nicht (nur ICU-Konstrukte)
+        // Simple placeholders {name} are not replaced by Cms::snippet() (only ICU constructs)
         $replace = [];
         foreach ($vars as $name => $value) $replace['{' . $name . '}'] = (string)$value;
         return [

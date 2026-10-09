@@ -1,30 +1,30 @@
 <?php
 /**
- * Zusammenfassung der internen Nachrichten per E-Mail (Zeitplaner-Aufgabe
- * messagedigest, Vorgabe täglich 7:00).
+ * Summary of the internal messages by e-mail (scheduler task
+ * messagedigest, default daily at 7:00).
  *
- * Wer in seinen persönlichen Einstellungen `settings.message_digest` = 1 gewählt hat,
- * bekommt an seine E-Mail-Adresse eine Übersicht - aber nur, wenn seit dem letzten
- * Lauf neue, ungelesene Nachrichten eingegangen sind:
+ * Whoever has selected `settings.message_digest` = 1 in their personal settings
+ * receives an overview at their e-mail address - but only if new, unread messages have
+ * arrived since the last run:
  *
- *     ungelesen nach Absender   Anzahl ALLER ungelesenen Nachrichten je Absender
- *     neue Nachrichten          Datum, Absender und Betreff der seit dem letzten Lauf
- *                               eingegangenen (höchstens MAX_LISTED)
+ *     unread by sender   count of ALL unread messages per sender
+ *     new messages       date, sender and subject of those received since the last run
+ *                        (at most MAX_LISTED)
  *
- * Nie in der E-Mail: Nachrichtentext (body, html), Bezug auf einen Datensatz
- * (record_id) und ein Link ins Backend. Gelesen werden die Nachrichten nur nach der
- * Anmeldung im Backend; eine E-Mail ohne Link lässt sich auch nicht für Phishing
- * nachahmen, ohne aufzufallen.
+ * Never in the e-mail: message text (body, html), reference to a record
+ * (record_id) and a link into the backend. The messages are only read after
+ * logging in to the backend; an e-mail without a link cannot easily be imitated for phishing
+ * without being noticed.
  *
- * "Neu" heißt: created_at nach $since - der Zeitpunkt des vorigen Laufs der Aufgabe
- * (SchedulerRunner). Ein Gelesen-Kennzeichen oder Zustand je Benutzer wird nicht
- * gespeichert; die admin-Zeile bleibt unberührt (sie ist signiert und erschiene
- * sonst täglich im Audit-Log).
+ * "New" means: created_at after $since - the time of the previous run of the task
+ * (SchedulerRunner). A read flag or state per user is not
+ * stored; the admin row remains untouched (it is signed and would otherwise appear
+ * daily in the audit log).
  *
- * Empfänger: aktive, nicht gelöschte Benutzer mit E-Mail-Adresse. Das Modul
- * Messaging steht jeder Gruppe offen (Access::module()), eine Rechteprüfung entfällt.
- * Sprache, Locale und Zeitzone der E-Mail stammen aus den Einstellungen des
- * Empfängers.
+ * Recipients: active, not deleted users with an e-mail address. The module
+ * Messaging is open to every group (Access::module()), so no rights check applies.
+ * Language, locale and time zone of the e-mail come from the settings of the
+ * recipient.
  *
  * @see Camindo\Core\Modules\Messaging\Message
  * @see Camindo\Core\Modules\Scheduler\SchedulerRunner
@@ -41,7 +41,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 
 class MessageDigest {
 
-    /** Höchstzahl der einzeln aufgeführten neuen Nachrichten */
+    /** Maximum number of individually listed new messages */
     public const MAX_LISTED = 50;
 
     public function __construct(
@@ -56,11 +56,11 @@ class MessageDigest {
     }
 
     /**
-     * Zusammenfassungen verschicken.
+     * Send digests.
      *
-     * @param string $since  UTC "Y-m-d H:i:s" - Nachrichten danach gelten als neu
-     * @return array  sent, skipped (keine neuen Nachrichten oder keine E-Mail-Adresse),
-     *                failed (Liste aus "admin_id: Fehler")
+     * @param string $since  UTC "Y-m-d H:i:s" - messages after it count as new
+     * @return array  sent, skipped (no new messages or no e-mail address),
+     *                failed (list of "admin_id: error")
      */
     public function run(string $since): array
     {
@@ -78,7 +78,7 @@ class MessageDigest {
     }
 
     /**
-     * Benutzer mit eingeschalteter Zusammenfassung (aktiv, nicht gelöscht).
+     * Users with the digest switched on (active, not deleted).
      *
      * @return int[]
      */
@@ -100,9 +100,9 @@ class MessageDigest {
     }
 
     /**
-     * Zusammenfassung an einen Benutzer.
+     * Digest to one user.
      *
-     * @return bool  false: nichts Neues oder keine E-Mail-Adresse
+     * @return bool  false: nothing new or no e-mail address
      */
     public function sendTo(int $adminId, string $since): bool
     {
@@ -181,7 +181,7 @@ class MessageDigest {
         return true;
     }
 
-    /** Anzeigename des Absenders; ohne Absender (gelöschtes Konto) "System" */
+    /** Display name of the sender; without sender (deleted account) "System" */
     private function senderName(mixed $adminId, callable $snippet): string
     {
         static $names = [];
@@ -194,7 +194,7 @@ class MessageDigest {
         return $names[$adminId] !== '' ? $names[$adminId] : $snippet('digest_sender_system');
     }
 
-    /** Datum und Uhrzeit in Locale und Zeitzone des Empfängers */
+    /** Date and time in the locale and time zone of the recipient */
     private function dateFormatter(array $settings): \IntlDateFormatter
     {
         $locale = (string)($settings['locale'] ?? '') ?: (string)$this->config->get('system.locale');
@@ -208,7 +208,7 @@ class MessageDigest {
         return new \IntlDateFormatter($locale, \IntlDateFormatter::MEDIUM, \IntlDateFormatter::SHORT, $tz);
     }
 
-    /** Alle Zeilen einer Abfrage (eigener Ergebnisstapel) */
+    /** All rows of a query (own result batch) */
     private function rows(string $sql, string $types, array $params): array
     {
         $this->db->pushResult();

@@ -1,7 +1,7 @@
 <?php
-// Dateicache der Instanzen neu schreiben (var/cache/instances.php, instance-{id}.php)
-// Normalerweise nicht nötig: die Module Instance und Language schreiben ihn bei
-// jeder Änderung selbst, und ein fehlender Cache wird beim ersten Zugriff neu erzeugt.
+// Rewrite the instance cache files (var/cache/instances.php, instance-{id}.php)
+// Normally not needed: the modules Instance and Language write it on
+// every change themselves, and a missing cache is rebuilt on first access.
 use Camindo\Core\InstanceCache;
 
 $cache = $app->get(InstanceCache::class);

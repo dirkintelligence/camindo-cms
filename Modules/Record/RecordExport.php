@@ -1,95 +1,93 @@
 <?php
 /**
- * Export von Datensätzen eines Inhaltsbereichs: XML (Backup), CSV, DOCX (Übersetzung).
+ * Export of records of a content area: XML (backup), CSV, DOCX (translation).
  *
- * Das ist die ARBEIT; die Maske dazu ist RecordBackendExport (record_export.php),
- * erreichbar über das Menü rechts in der Datensatzliste. Der Export läuft im Request.
+ * This is the WORK; the mask for it is RecordBackendExport (record_export.php),
+ * reachable via the menu on the right of the record list. The export runs in the request.
  *
- * DER AUFTRAG (JOB)
+ * THE JOB
  * --------------------
  *     type        'xml' | 'csv' | 'docx'
- *     area_id     Bereich der Datensätze
- *     ids         record_ids (produktiv), von RecordBatch::collectIds() ermittelt
- *     files       xml: Upload-Dateien mit exportieren (bool)
- *     portable    xml (global): Templates für den Import in eine fremde Datenbank
- *                 markieren - Verweise auf Templates, Bereiche und Datensätze in den
- *                 Parametern der CMS-Befehle werden zu <!-- CMS:REPLACE ... -->
- *                 (TemplateParserTrait::mapReferences(), Typen aus commands.php);
- *                 RecordImport löst sie mit den tatsächlichen Ids/Namen auf
+ *     area_id     area of the records
+ *     ids         record_ids (productive), determined by RecordBatch::collectIds()
+ *     files       xml: export upload files (bool)
+ *     portable    xml (global): mark templates for import into a foreign database -
+ *                 references to templates, areas and records in the parameters of the CMS
+ *                 commands become <!-- CMS:REPLACE ... --> (TemplateParserTrait::mapReferences(), types from commands.php);
+ *                 RecordImport resolves them with the actual ids/names
  *     csv         csv: ['header' => bool, 'bom' => bool, 'separator' => ';',
  *                 'enclosure' => '"', 'eol' => "\r\n"]
- *     languages   csv: language_ids der Instanz, die exportiert werden
- *     fields      csv: Schlüssel der angehakten Spalten (siehe csvFields()),
- *                 docx: Namen der angehakten mehrsprachigen Felder
- *     from / to   docx: Quell- und Zielsprache (language_id)
- *     token       Hintergrund: Token des bgproc-Eintrags (start())
- *     admin_id    Hintergrund: auslösender Admin (Empfänger der Nachricht)
+ *     languages   csv: language_ids of the instance that are exported
+ *     fields      csv: keys of the checked columns (see csvFields()),
+ *                 docx: names of the checked multilingual fields
+ *     from / to   docx: source and target language (language_id)
+ *     token       background: token of the bgproc entry (start())
+ *     admin_id    background: triggering admin (recipient of the message)
  *
- * HINTERGRUND
+ * BACKGROUND
  * --------------------
- * Ab admin.export_background_threshold Datensätzen (Standard 1000, 0 = aus) läuft
- * der Export immer als Hintergrundprozess (Core/cron/record_export.php - EXAKT
- * derselbe Code wie im Request), darunter auf Wunsch des Redakteurs. Der
- * Download-Link kommt dann als interne Nachricht (report()).
+ * From admin.export_background_threshold records (default 1000, 0 = off) the export
+ * always runs as a background process (Core/cron/record_export.php - EXACTLY
+ * the same code as in the request), below that at the editor's request. The
+ * download link then comes as an internal message (report()).
  *
- * VERWEILDAUER
+ * RETENTION PERIOD
  * --------------------
- * Eine Zip-Datei wird beim Download sofort gelöscht (RecordBackendExport::download())
- * und sonst nach admin.export_retention_hours (Standard 24) von cleanup() entfernt -
- * von der Zeitplaner-Aufgabe "Temporäre Dateien löschen" (Typ tmpcleanup, Vorgabe stündlich).
+ * A zip file is deleted immediately on download (RecordBackendExport::download())
+ * and otherwise removed by cleanup() after admin.export_retention_hours (default 24) -
+ * by the scheduler task "Delete temporary files" (type tmpcleanup, default hourly).
  *
- * ABLAGE
+ * STORAGE
  * --------------------
- * Jeder Export legt var/export/{Zeitpunkt}/ an, darin die Exportdatei (export.xml,
- * export.csv, export.docx) und - bei Dateien - media/{record_id}_{field_id}_{language_id}-{filename}
- * (bewusst eine andere Reihenfolge der Ids als in public/media: die Datei soll sich
- * ohne Nachschlagen dem Datensatz zuordnen lassen). Am Ende wird das Verzeichnis zu
- * var/export/{Zeitpunkt}_{bereich}_{typ}.zip gepackt und gelöscht; die Zip-Datei liefert
- * RecordBackendExport::download() aus (record_download.php).
+ * Each export creates var/export/{timestamp}/, containing the export file (export.xml,
+ * export.csv, export.docx) and - for files - media/{record_id}_{field_id}_{language_id}-{filename}
+ * (deliberately a different order of the ids than in public/media: the file should be
+ * assignable to the record without lookup). At the end the directory is packed into
+ * var/export/{timestamp}_{area}_{type}.zip and deleted; the zip file is delivered by
+ * RecordBackendExport::download() (record_download.php).
  *
- * DREI FORMATE
+ * THREE FORMATS
  * --------------------
- *     xml   Backup-Format, fest: alle Felder aller Sprachen so, wie sie in den
- *           data_*-Tabellen stehen - verschlüsselte Inhalte als Geheimtext (base64),
- *           Passwörter als Hash, das Fallback-Kennzeichen `empty` je Sprache.
- *           Thumbnails und Volltext werden nicht exportiert (beim Re-Import werden sie
- *           aus den Upload-Dateien bzw. Quellfeldern neu erzeugt). Der Header nennt
- *           Datenbank, CMS-Version, Admin, Zeitpunkt, Bereich, Sprachen und die
- *           Felddefinitionen. Mit der Struktur reisen die Konverter der
- *           Thumbnail-Felder mit (<converters>, siehe _xmlConverters()): ihre
- *           converter_id gilt nur in derselben Datenbank, deshalb trägt jeder einen
- *           Hash seiner Einstellungen (Converter::settingsHash()), über den der
- *           Import in einer fremden Datenbank den passenden Konverter findet oder
- *           ihn neu anlegt.
- *     csv   eine Zeile je Datensatz, Werte aus dem Inhalts-Cache der gewählten
- *           Sprachen (aufgelöst, d. h. mit Fallback aus der Hauptsprache). Mehrsprachige
- *           Felder erhalten bei mehr als einer Sprache eine Spalte je Sprache
- *           ("{name}.{code}"). Verschlüsselte Inhalte im Klartext, Passwörter
- *           als Hash, Datums-/Zeitwerte wie gespeichert (UTC). Mehrwertige Zellen
- *           (Verknüpfungen) mit " | " getrennt.
- *     docx  für die Übersetzung: je Datensatz eine Tabelle, grau hinterlegte Zeilen
- *           tragen die Metadaten für den Re-Import (record_id, language_id, field),
- *           die weißen Zeilen den Inhalt der Quellsprache zum Überschreiben. Alle
- *           Datensätze in export.docx oder (split) je Datensatz eine Datei
- *           "{record_id}-{Default-Feld}.docx" - etwa um sie auf mehrere Übersetzer
- *           zu verteilen; der Re-Import nimmt jede Datei für sich.
+ *     xml   backup format, fixed: all fields of all languages as they are in the
+ *           data_* tables - encrypted contents as ciphertext (base64),
+ *           passwords as hash, the fallback flag `empty` per language.
+ *           Thumbnails and full text are not exported (on re-import they are
+ *           recreated from the upload files or source fields). The header names
+ *           database, CMS version, admin, time, area, languages and the
+ *           field definitions. Along with the structure the converters of the
+ *           thumbnail fields travel (<converters>, see _xmlConverters()): their
+ *           converter_id only applies in the same database, so each carries a
+ *           hash of its settings (Converter::settingsHash()), through which the
+ *           import in a foreign database finds the matching converter or
+ *           creates it anew.
+ *     csv   one row per record, values from the content cache of the chosen
+ *           languages (resolved, i.e. with fallback from the primary language). Multilingual
+ *           fields get one column per language if there is more than one language
+ *           ("{name}.{code}"). Encrypted contents in plain text, passwords
+ *           as hash, date/time values as stored (UTC). Multi-value cells
+ *           (links) separated by " | ".
+ *     docx  for translation: one table per record, gray rows carry the metadata for the
+ *           re-import (record_id, language_id, field), the white rows the content of the
+ *           source language to be overwritten. All records in export.docx or (split) one file
+ *           "{record_id}-{default field}.docx" per record - e.g. to distribute them to several
+ *           translators; the re-import takes each file on its own.
  *
- * EINGEBETTETE INHALTE (Felder vom Typ link)
+ * EMBEDDED CONTENTS (fields of type link)
  * --------------------
- * Die Zieldatensätze eines link-Feldes gehören dem Datensatz (LinkTrait) - im CSV
- * und DOCX erscheinen sie wie Felder des Datensatzes selbst:
+ * The target records of a link field belong to the record (LinkTrait) - in CSV
+ * and DOCX they appear like fields of the record itself:
  *
- *     csv   "{link}.record_id", "{link}.area_id" und JEDES Feld der Zielbereiche
- *           (linkTargetFields(): auch Uploads und Thumbnails - als Pfad der
- *           exportierten Datei; mehrsprachige mit einer Spalte je Sprache). Je
- *           eingebettetem Inhalt ein Wert, in der Reihenfolge des Feldes mit " | "
- *           getrennt. RecordImport liest die Spalten zurück (außer Thumbnails).
- *     docx  die mehrsprachigen Felder der Zielbereiche ("{link}.{feld}" in
- *           docxFields()); je Inhalt und Feld eine Metazeile
- *           "field={link}.{feld} | record_id={id}" unter den Feldern des Datensatzes.
+ *     csv   "{link}.record_id", "{link}.area_id" and EVERY field of the target areas
+ *           (linkTargetFields(): also uploads and thumbnails - as the path of the
+ *           exported file; multilingual ones with one column per language). Per
+ *           embedded content one value, in the order of the field separated by " | ".
+ *           RecordImport reads the columns back (except thumbnails).
+ *     docx  the multilingual fields of the target areas ("{link}.{field}" in
+ *           docxFields()); per content and field one meta row
+ *           "field={link}.{field} | record_id={id}" below the fields of the record.
  *
- * @see Camindo\Core\Modules\Record\RecordBackendExport  die Masken
- * @see Camindo\Core\Modules\Record\RecordBatch          Umfang (filterParams, collectIds)
+ * @see Camindo\Core\Modules\Record\RecordBackendExport  the masks
+ * @see Camindo\Core\Modules\Record\RecordBatch          scope (filterParams, collectIds)
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -110,53 +108,53 @@ class RecordExport {
 
     public const TYPES = ['xml', 'csv', 'docx'];
 
-    /** Typkennung des Hintergrundprozesses (Tabelle `bgproc`) */
+    /** Type identifier of the background process (table `bgproc`) */
     public const BGPROC_TYPE = 'export';
 
-    /** Format-Kennung im XML-Wurzelelement - bei Änderungen am Aufbau erhöhen
-     *  (1: ein Bereich, nur Datensätze; 2: mehrere Bereiche, Struktur, Templates;
-     *  seit 2026-09-15 dazu der optionale Block <converters> - Dateien ohne ihn
-     *  bleiben lesbar, deshalb keine neue Kennung) */
+    /** Format identifier in the XML root element - increase when the structure changes
+     *  (1: one area, records only; 2: several areas, structure, templates;
+     *  since 2026-09-15 also the optional block <converters> - files without it
+     *  remain readable, hence no new identifier) */
     public const XML_FORMAT = 2;
 
-    /** Spalten von `field`, die als Kind-Elemente exportiert werden (lange Texte) */
+    /** Columns of `field` that are exported as child elements (long texts) */
     private const FIELD_TEXT_COLUMNS = ['label', 'note', 'tooltip', 'pattern', 'default', 'details'];
 
-    /** Spalten von `field`, die nicht exportiert werden (Schlüssel bzw. abgeleitet) */
+    /** Columns of `field` that are not exported (keys or derived) */
     private const FIELD_SKIP_COLUMNS = ['field_id', 'area_id', 'rel_field_id', 'rel_area_id', 'parent_field_id'];
 
-    /** Spalten aus `data_fil`, die sich im CSV einzeln wählen lassen */
+    /** Columns from `data_fil` that can be selected individually in the CSV */
     public const FILE_COLUMNS = ['file_language_id', 'extension', 'mime_type', 'filename', 'size', 'width', 'height', 'token', 'version', 'data'];
 
     /**
-     * Meta-Felder, die im CSV nicht angeboten werden: interne Kennzeichen, die
-     * abgeleiteten Baumspalten und die Position - die Reihenfolge steckt in der
-     * Sortierung der Datei (exportSort()), der Import fügt in dieser Reihenfolge ein.
+     * Meta fields that are not offered in the CSV: internal flags, the
+     * derived tree columns and the position - the order is contained in the
+     * sorting of the file (exportSort()), the import inserts in this order.
      */
     private const META_HIDDEN = ['tmp', 'deleted', 'instance_id', 'parent_ids', 'position', 'lft', 'rgt'];
 
-    /** Trennzeichen für mehrwertige CSV-Zellen (Verknüpfungen) */
+    /** Separator for multi-value CSV cells (links) */
     private const MULTI_SEPARATOR = ' | ';
 
-    /** Inhalts-Caches fremder Datensätze (Verknüpfungsziele): "{id}.{lang}" => cache */
+    /** Content caches of foreign records (link targets): "{id}.{lang}" => cache */
     private array $cacheMemo = [];
 
-    /** Bereiche (Backend::areaData-Format ohne Backend): area_id => Zeile */
+    /** Areas (Backend::areaData format without backend): area_id => row */
     private array $areaMemo = [];
 
-    /** Schemata fremder Bereiche: area_id => virtuelles Schema */
+    /** Schemas of foreign areas: area_id => virtual schema */
     private array $schemaMemo = [];
 
-    /** exportierte Dateien: Quellpfad => Zielname (jede Datei nur einmal) */
+    /** exported files: source path => target name (each file only once) */
     private array $copiedFiles = [];
 
-    /** exportierte Datensätze des laufenden Exports */
+    /** exported records of the running export */
     private int $exportedRecords = 0;
 
-    /** converter_ids der exportierten Thumbnail-Felder (_xmlArea() sammelt, _xmlConverters() schreibt) */
+    /** converter_ids of the exported thumbnail fields (_xmlArea() collects, _xmlConverters() writes) */
     private array $converterIds = [];
 
-    /** Custom-Snippets der Beschriftungen: instance_id => [schlüssel => true] (_xmlArea() sammelt, _xmlSnippets() schreibt) */
+    /** Custom snippets of the labels: instance_id => [key => true] (_xmlArea() collects, _xmlSnippets() writes) */
     private array $snippetRefs = [];
 
     public function __construct(
@@ -181,20 +179,20 @@ class RecordExport {
     // Auftrag
 
     /**
-     * Den Auftrag eines Exports zusammenstellen und prüfen - für die Maske
-     * (RecordBackendExport) und die API (record.export). Nur lesbare Sprachen; bei
-     * DOCX müssen beide Sprachen lesbar sein. Die Rechte am Format prüft der Aufrufer
+     * Assemble and check the job of an export - for the mask
+     * (RecordBackendExport) and the API (record.export). Only readable languages; for
+     * DOCX both languages must be readable. The caller checks the rights to the format
      * (RecordService::transferTypes()).
      *
      * @param string $type     xml | csv | docx
-     * @param int    $areaId   Bereich
-     * @param int[]  $ids      record_ids (produktiv), in Exportreihenfolge
+     * @param int    $areaId   area
+     * @param int[]  $ids      record_ids (productive), in export order
      * @param array  $options  xml: files (bool); csv: header, bom (bool), separator,
-     *                         enclosure, eol (Text, '\r\n' …), languages (language_ids),
-     *                         fields (Feldschlüssel aus csvFields()); docx: from, to
+     *                         enclosure, eol (text, '\r\n' …), languages (language_ids),
+     *                         fields (field keys from csvFields()); docx: from, to
      *                         (language_id), fields (docxFields()), split (bool:
-     *                         ein Datensatz je Datei)
-     * @return array|null      Auftrag für run()/start(), null bei Fehlern (Cms::errors)
+     *                         one record per file)
+     * @return array|null      job for run()/start(), null on errors (Cms::errors)
      */
     public function job(string $type, int $areaId, array $ids, array $options = []): ?array
     {
@@ -214,7 +212,7 @@ class RecordExport {
                 'enclosure' => (string)($options['enclosure'] ?? '"'),
                 'eol' => (string)($options['eol'] ?? '\r\n'),
             ];
-            // (nur lesbare Sprachen - ein manipuliertes Formular zählt nicht)
+            // (only readable languages - a manipulated form does not count)
             $areaData = $this->_areaOf($areaId) ?? [];
             $readable = $this->record->readableLanguages($this->instanceCache->languages((int)($areaData['instance_id'] ?? 0)));
             $job['languages'] = array_values(array_filter(
@@ -226,7 +224,7 @@ class RecordExport {
         else {
             $job['from'] = (int)($options['from'] ?? 0);
             $job['to'] = (int)($options['to'] ?? 0);
-            // ein Datensatz je Datei statt aller Datensätze in einer
+            // one record per file instead of all records in one
             $job['split'] = !empty($options['split']);
             if (!$this->access->languageRead($job['from']) || !$this->access->languageRead($job['to'])) {
                 $this->cms->error($this->cms->snippet('error_access_denied'));
@@ -245,8 +243,8 @@ class RecordExport {
     // Schwellwerte
 
     /**
-     * Soll der Export in den Hintergrund? Ab admin.export_background_threshold
-     * Datensätzen (0 = Auslagerung aus).
+     * Should the export go to the background? From admin.export_background_threshold
+     * records on (0 = offloading off).
      */
     public function needsBackground(int $count): bool
     {
@@ -261,7 +259,7 @@ class RecordExport {
     }
 
     /**
-     * Verweildauer einer Exportdatei in Stunden (admin.export_retention_hours).
+     * Retention period of an export file in hours (admin.export_retention_hours).
      */
     public function retentionHours(): int
     {
@@ -269,7 +267,7 @@ class RecordExport {
     }
 
     /**
-     * Zeitpunkt (UTC, ISO), bis zu dem eine jetzt erzeugte Datei abrufbar bleibt.
+     * Point in time (UTC, ISO) until which a file created now remains available.
      */
     public function validUntil(int $time = 0): string
     {
@@ -278,22 +276,22 @@ class RecordExport {
     }
 
     // ====================
-    // Feldlisten für die Masken
+    // Field lists for the masks
 
     /**
-     * Felder eines Bereichs für den CSV-Export: die Eingabefelder in ihrer
-     * Reihenfolge, danach die restlichen Meta-Felder (ohne META_HIDDEN - auch wenn
-     * `position` als Eingabefeld des Bereichs definiert ist).
+     * Fields of an area for the CSV export: the input fields in their
+     * order, then the remaining meta fields (without META_HIDDEN - even if
+     * `position` is defined as an input field of the area).
      *
-     * Je Eintrag: name, label, type, field_id, meta, checked (Vorgabe) und - bei
-     * Verknüpfungs- und Datei-Feldern - 'sub': die aufklappbaren Unterfelder
-     * (key => [label, checked]). Der Schlüssel eines Unterfeldes ist "{name}.{sub}";
-     * bei Verknüpfungen ist 'record_id' die Vorgabe, dahinter die virtuellen Felder
-     * des Zielbereichs (ohne Verknüpfungs- und Datei-Felder), bei Datei-Feldern die
-     * Spalten aus `data_fil`. Bei Datei-Feldern bedeutet der Hauptschlüssel "{name}"
-     * "Datei exportieren" - vorgewählt nur bei Upload-Feldern, nicht bei Thumbnails.
+     * Per entry: name, label, type, field_id, meta, checked (default) and - for
+     * link and file fields - 'sub': the expandable subfields
+     * (key => [label, checked]). The key of a subfield is "{name}.{sub}";
+     * for links 'record_id' is the default, followed by the virtual fields
+     * of the target area (without link and file fields), for file fields the
+     * columns from `data_fil`. For file fields the main key "{name}" means
+     * "export file" - preselected only for upload fields, not for thumbnails.
      *
-     * @return array  name => Eintrag
+     * @return array  name => entry
      */
     public function csvFields(int $areaId): array
     {
@@ -313,9 +311,9 @@ class RecordExport {
                 'sub' => [],
             ];
             if (in_array($type, $this->cms->dependentTypes, true)) {
-                // Feld vom Typ link: die eingebetteten Inhalte gehören zum Datensatz -
-                // alle Felder der Zielbereiche, auch Uploads und Thumbnails
-                // (EINGEBETTETE INHALTE)
+                // field of type link: the embedded contents belong to the record -
+                // all fields of the target areas, also uploads and thumbnails
+                // (EMBEDDED CONTENTS)
                 $targetAreaIds = $this->record->linkTargetAreaIds($colDef);
                 $entry['sub']['record_id'] = ['label' => 'record_id', 'checked' => true];
                 $entry['sub']['area_id'] = ['label' => 'area_id', 'checked' => count($targetAreaIds) > 1];
@@ -342,7 +340,7 @@ class RecordExport {
                         'multilingual' => $this->cms->isMultilingualField($targetDef),
                     ];
                 }
-                // der Hauptschlüssel einer Verknüpfung ist kein eigener Wert
+                // the main key of a link is not a value of its own
                 $entry['checked'] = false;
                 $entry['relation'] = true;
             }
@@ -372,13 +370,13 @@ class RecordExport {
     }
 
     /**
-     * Sortierung der Datensätze in der Exportdatei: Bereiche mit Baum in der
-     * Reihenfolge der Baumstruktur (`lft`), Bereiche mit Handsortierung nach
-     * `position`, sonst nach record_id. Der Import fügt in der Reihenfolge der Datei
-     * ein (RecordImport, EINFÜGEPOSITION) - so überlebt die Reihenfolge den Weg
-     * durch die Datei.
+     * Sorting of the records in the export file: areas with a tree in the
+     * order of the tree structure (`lft`), areas with manual sorting by
+     * `position`, otherwise by record_id. The import inserts in the order of the file
+     * (RecordImport, INSERTION POSITION) - so the order survives the way
+     * through the file.
      *
-     * @return array  [sort, order] für Cms::select() / RecordBatch::collectIds()
+     * @return array  [sort, order] for Cms::select() / RecordBatch::collectIds()
      */
     public function exportSort(int $areaId): array
     {
@@ -389,10 +387,10 @@ class RecordExport {
     }
 
     /**
-     * Mehrsprachige Felder eines Bereichs für den DOCX-Export (ohne Datei-Felder) -
-     * dazu die mehrsprachigen Felder der eingebetteten Inhalte (Felder vom Typ link)
-     * als "{link}.{feld}"; deren colDef trägt 'link' (Name des link-Feldes), 'sub'
-     * (Feldname im Zielbereich) und die zusammengesetzte Beschriftung.
+     * Multilingual fields of an area for the DOCX export (without file fields) -
+     * plus the multilingual fields of the embedded contents (fields of type link)
+     * as "{link}.{field}"; their colDef carries 'link' (name of the link field), 'sub'
+     * (field name in the target area) and the composed label.
      *
      * @return array  name => colDef
      */
@@ -423,11 +421,11 @@ class RecordExport {
     }
 
     /**
-     * Die eingebetteten Inhalte eines Datensatzes in einem link-Feld, in ihrer
-     * Reihenfolge - nur produktive (solange ein Inhalt ausgecheckt ist, hält der
-     * Datensatz auch eine Kante auf dessen Arbeitskopie).
+     * The embedded contents of a record in a link field, in their
+     * order - only productive ones (while a content is checked out, the
+     * record also holds an edge to its working copy).
      *
-     * @return array[]  `record`-Zeilen
+     * @return array[]  `record` rows
      */
     private function _linkDestRows(int $recordId, int $fieldId): array
     {
@@ -440,9 +438,9 @@ class RecordExport {
     }
 
     /**
-     * Virtuelle Felder der Zielbereiche eines Verknüpfungsfeldes - bei einem
-     * Pointer-Feld die Vereinigung über alle Zielbereiche (nach Name). Ohne
-     * Verknüpfungs- und Datei-Felder: keine Verknüpfungen von Verknüpfungen.
+     * Virtual fields of the target areas of a link field - for a pointer field
+     * the union across all target areas (by name). Without link and file fields:
+     * no links of links.
      */
     private function _relationTargetFields(array $colDef): array
     {
@@ -462,13 +460,13 @@ class RecordExport {
     }
 
     // ====================
-    // Ausführen
+    // Run
 
     /**
-     * Export ausführen: Verzeichnis anlegen, Datei(en) schreiben, packen, aufräumen.
+     * Run the export: create the directory, write the file(s), pack, clean up.
      *
-     * @return array  ['zip' => Dateiname in var/export, 'records' => n, 'files' => n,
-     *                 'size' => Bytes der Zip-Datei] bzw. ['error' => Meldung]
+     * @return array  ['zip' => file name in var/export, 'records' => n, 'files' => n,
+     *                 'size' => bytes of the zip file] or ['error' => message]
      */
     public function run(array $job): array
     {
@@ -528,9 +526,9 @@ class RecordExport {
     }
 
     /**
-     * Zip-Dateien in var/export, neueste zuerst.
+     * Zip files in var/export, newest first.
      *
-     * @return array  Dateiname => ['size' => Bytes, 'time' => Unix-Zeit]
+     * @return array  file name => ['size' => bytes, 'time' => Unix time]
      */
     public function zipFiles(): array
     {
@@ -547,7 +545,7 @@ class RecordExport {
     // XML
 
     /**
-     * Backup-Format (XML_FORMAT 2). Aufbau:
+     * Backup format (XML_FORMAT 2). Structure:
      *
      *     <camindo-export format="2">
      *       <header> database, cms-version, admin, exported-at, structure, content,
@@ -556,7 +554,7 @@ class RecordExport {
      *         <area area_id parent_id instance_id type name icon position sort_order
      *               default_field_id sort_field_id default_template_id
      *               login_name_field_id login_password_field_id
-     *               privacy_policy_id (Lösch-Policy; zählt nur in derselben Datenbank)>
+     *               privacy_policy_id (deletion policy; counts only in the same database)>
      *           <label/> <note/> <details/>
      *           <access template_id selectable override/>   (rel_area_template)
      *           <triggers> <trigger template_id/> </triggers> (rel_area_trigger, in Reihenfolge)
@@ -571,7 +569,7 @@ class RecordExport {
      *           <label/> <media_types_incl/> <media_types_excl/> <details/>
      *         </converter>
      *       </converters>
-     *       <snippets>                                     (structure, Custom-Snippets der
+     *       <snippets>                                     (structure, custom snippets of the
      *         <snippet instance_id key>                     Beschriftungen #custom.{id}.{key})
      *           <text lang=".."/>
      *         </snippet>
@@ -590,16 +588,15 @@ class RecordExport {
      *       </templates>
      *     </camindo-export>
      *
-     * Der Export aus einer Datensatzliste (area_id + ids) schreibt seinen Bereich
-     * mit Feldern und die gewählten Datensätze; der globale Export (area_ids) die
-     * gewählten Bereiche aller Typen - Struktur und/oder Inhalte (alle produktiven
-     * Datensätze bzw. Templates).
+     * The export from a record list (area_id + ids) writes its area with fields
+     * and the chosen records; the global export (area_ids) the chosen areas of all
+     * types - structure and/or contents (all productive records or templates).
      *
-     * Skalare Werte stehen je Sprache so, wie sie in der data_*-Tabelle liegen;
-     * `empty="1"` kennzeichnet den Fallback aus der Hauptsprache. Verschlüsselte
-     * Inhalte bleiben Geheimtext (base64, encoding="base64"), Passwörter sind der
-     * Hash. Thumbnail- und Volltextfelder fehlen bei den Datensätzen (siehe
-     * Klassenkommentar) - in der Struktur sind sie enthalten.
+     * Scalar values are stored per language as they lie in the data_* table;
+     * `empty="1"` marks the fallback from the primary language. Encrypted
+     * contents remain ciphertext (base64, encoding="base64"), passwords are the
+     * hash. Thumbnail and full-text fields are missing from the records (see
+     * class comment) - they are included in the structure.
      */
     private function _exportXml(array $job): void
     {
@@ -609,7 +606,7 @@ class RecordExport {
         $withContent = $isGlobal ? !empty($job['content']) : true;
         $areaIds = $isGlobal ? $job['area_ids'] : [(int)$job['area_id']];
 
-        // Bereiche in Baumreihenfolge (Eltern vor Kindern - der Import legt sie so an)
+        // areas in tree order (parents before children - the import creates them this way)
         $areas = [];
         $placeholders = implode(',', array_fill(0, count($areaIds), '?'));
         $this->db->pushResult();
@@ -626,7 +623,7 @@ class RecordExport {
         $xml->startElement('camindo-export');
         $xml->writeAttribute('format', (string)self::XML_FORMAT);
 
-        // Header
+        // header
         // --------------------
         $xml->startElement('header');
         $xml->writeElement('database', (string)($this->config->get('db.name') ?? ''));
@@ -664,7 +661,7 @@ class RecordExport {
             }
         }
         $xml->endElement();
-        // Zählung vorab (für die Analyse beim Import)
+        // count in advance (for the analysis at import)
         $recordCount = 0;
         $recordsByArea = [];
         if ($withContent) {
@@ -680,7 +677,7 @@ class RecordExport {
         $xml->writeElement('files', $withFiles ? '1' : '0');
         $xml->endElement(); // header
 
-        // Bereiche (Struktur)
+        // areas (structure)
         // --------------------
         $this->converterIds = [];
         $this->snippetRefs = [];
@@ -690,16 +687,16 @@ class RecordExport {
         }
         $xml->endElement();
 
-        // Konverter der Thumbnail-Felder
+        // converters of the thumbnail fields
         // --------------------
         $this->_xmlConverters($xml);
 
-        // Custom-Snippets der Beschriftungen und der exportierten Templates
+        // custom snippets of the labels and of the exported templates
         // --------------------
         if ($withContent) $this->_collectTemplateSnippetRefs($areas);
         $this->_xmlSnippets($xml);
 
-        // Datensätze
+        // records
         // --------------------
         $xml->startElement('records');
         foreach ($recordsByArea as $areaId => $ids) {
@@ -714,7 +711,7 @@ class RecordExport {
         }
         $xml->endElement();
 
-        // Templates
+        // templates
         // --------------------
         $xml->startElement('templates');
         if ($withContent) {
@@ -746,16 +743,16 @@ class RecordExport {
     }
 
     /**
-     * Verweise im Template-Code markieren (Option "portable"):
+     * Mark references in the template code (option "portable"):
      *
      *     <!-- CMS:REPLACE template_id=22 -->      <!-- CMS:REPLACE template_name=header -->
      *     <!-- CMS:REPLACE area_id=50 -->          <!-- CMS:REPLACE area_name=artikel -->
-     *     <!-- CMS:REPLACE record_id=1758 slug="impressum" -->   (slug, wenn der Datensatz eins hat -
-     *                                                            als URL-Pfad mit Slug-Prefix, "seiten/impressum")
+     *     <!-- CMS:REPLACE record_id=1758 slug="impressum" -->   (slug, if the record has one -
+     *                                                            as URL path with slug prefix, "seiten/impressum")
      *
-     * Die Markierung ersetzt den Wert an Ort und Stelle; welche Parameter Verweise
-     * tragen, sagt commands.php ('ref'). Ein so markiertes Template ist nur in der
-     * Exportdatei markiert - der Import setzt die aufgelösten Werte wieder ein.
+     * The marker replaces the value in place; which parameters carry references
+     * is stated by commands.php ('ref'). A template marked this way is only marked in the
+     * export file - the import puts the resolved values back in.
      */
     private function _markTemplateReferences(string $code): string
     {
@@ -769,7 +766,7 @@ class RecordExport {
                 return '<!-- CMS:REPLACE record_id=' . (int)$value . ($slug !== '' ? ' slug="' . $slug . '"' : '') . ' -->';
             }
             if ($ref === 'template' || $ref === 'area') {
-                if (preg_match('/[^a-z0-9_\-.]/i', $value)) return null; // kein einfacher Name
+                if (preg_match('/[^a-z0-9_\-.]/i', $value)) return null; // not a simple name
                 return '<!-- CMS:REPLACE ' . $ref . '_' . ($isNumeric ? 'id' : 'name') . '=' . $value . ' -->';
             }
             return null;
@@ -777,9 +774,9 @@ class RecordExport {
     }
 
     /**
-     * URL-Pfad eines Datensatzes in der Hauptsprache: Slug-Prefix des Bereichs +
-     * Feld `slug` ("seiten/impressum", Cms::recordUrl()) - '' ohne Feld oder Wert.
-     * Der Import löst ihn wie ein Aufruf der Seite auf (Cms::recordIdsBySlugPath()).
+     * URL path of a record in the primary language: slug prefix of the area +
+     * field `slug` ("seiten/impressum", Cms::recordUrl()) - '' without field or value.
+     * The import resolves it like a call of the page (Cms::recordIdsBySlugPath()).
      */
     private function _recordPath(int $recordId): string
     {
@@ -796,7 +793,7 @@ class RecordExport {
     }
 
     /**
-     * Ids aller produktiven Datensätze eines Bereichs (globaler Export).
+     * Ids of all productive records of an area (global export).
      */
     private function _productiveIds(int $areaId): array
     {
@@ -808,13 +805,13 @@ class RecordExport {
     }
 
     /**
-     * Einen Bereich als Bauplan-Datei schreiben: dasselbe Format wie die Dateien in
-     * Core/Modules/Area/blueprints/ (ein <area> mit Einstellungen, Zuweisungen und
-     * Feldern, keine Datensätze) - für das Duplizieren eines Bereichs
+     * Write an area as a blueprint file: the same format as the files in
+     * Core/Modules/Area/blueprints/ (one <area> with settings, assignments and
+     * fields, no records) - for duplicating an area
      * (AreaBackend::_duplicateSave() -> RecordImport::importBlueprint()).
      *
-     * @return string  Pfad der Datei in var/tmp (der Aufrufer löscht sie), '' wenn
-     *                 es den Bereich nicht gibt
+     * @return string  path of the file in var/tmp (the caller deletes it), '' if
+     *                 the area does not exist
      */
     public function areaBlueprintFile(int $areaId): string
     {
@@ -842,8 +839,8 @@ class RecordExport {
     }
 
     /**
-     * Ein Bereich mit Template-Zuweisungen und - bei Inhaltsbereichen mit
-     * Struktur - seinen Feldern.
+     * An area with template assignments and - for content areas with
+     * structure - its fields.
      */
     private function _xmlArea(\XMLWriter $xml, array $areaRow, bool $withFields): void
     {
@@ -868,8 +865,8 @@ class RecordExport {
             $xml->writeAttribute('override', (string)(int)$access['override']);
             $xml->endElement();
         }
-        // Trigger-Templates in ihrer Reihenfolge - der Block steht immer da, auch
-        // leer: der Import setzt damit "keins" (ohne Block bliebe der Zielstand)
+        // trigger templates in their order - the block is always there, even
+        // empty: the import thereby sets "none" (without the block the target state would remain)
         $this->db->query("SELECT `template_id` FROM `rel_area_trigger` WHERE `area_id` = ? ORDER BY `position`, `template_id`", 'i', [$areaId]);
         $xml->startElement('triggers');
         foreach ($this->db->fetchAll() as $templateId) {
@@ -943,8 +940,8 @@ class RecordExport {
     }
 
     /**
-     * Verweise auf Custom-Snippets (#custom.{instance_id}.{key}, Snippets::
-     * REFERENCE_PATTERN) in einer Beschriftung vormerken.
+     * Note references to custom snippets (#custom.{instance_id}.{key}, Snippets::
+     * REFERENCE_PATTERN) in a label.
      */
     private function _collectSnippetRefs(string $text): void
     {
@@ -954,9 +951,9 @@ class RecordExport {
     }
 
     /**
-     * Custom-Snippets, die die Templates der exportierten Template-Bereiche ansprechen
-     * (Snippets::templateRefs(): custom.{key} und zusammengesetzte Schlüssel) - sonst
-     * stünden nach dem Import in einer anderen Instanz nur die Schlüssel auf der Seite.
+     * Custom snippets that the templates of the exported template areas address
+     * (Snippets::templateRefs(): custom.{key} and composed keys) - otherwise after the
+     * import in another instance only the keys would stand on the page.
      */
     private function _collectTemplateSnippetRefs(array $areas): void
     {
@@ -979,13 +976,13 @@ class RecordExport {
     }
 
     /**
-     * Die Custom-Snippets, auf die die Beschriftungen der exportierten Bereiche und
-     * Felder verweisen (<snippets>, siehe _exportXml()): je Snippet die Texte aller
-     * Backend-Sprachen aus dem Set der Instanz (Snippets::load()). Der Import legt
-     * fehlende Schlüssel im Set der Zielinstanz an und schreibt die Verweise auf sie
-     * um (RecordImport::_mapSnippetRefs()). Snippets, die es im Set nicht (mehr)
-     * gibt, fehlen - der Verweis bleibt dann, wie er ist. Nichts zu schreiben: ein
-     * leeres Element.
+     * The custom snippets that the labels of the exported areas and
+     * fields refer to (<snippets>, see _exportXml()): per snippet the texts of all
+     * backend languages from the set of the instance (Snippets::load()). The import creates
+     * missing keys in the set of the target instance and rewrites the references to them
+     * (RecordImport::_mapSnippetRefs()). Snippets that no longer exist in the set
+     * are missing - the reference then remains as it is. Nothing to write: an
+     * empty element.
      */
     private function _xmlSnippets(\XMLWriter $xml): void
     {
@@ -1012,13 +1009,13 @@ class RecordExport {
     }
 
     /**
-     * Die Konverter, auf die die exportierten Thumbnail-Felder verweisen
-     * (<converters>, siehe _exportXml()). Nichts zu schreiben: ein leeres Element.
+     * The converters that the exported thumbnail fields refer to
+     * (<converters>, see _exportXml()). Nothing to write: an empty element.
      *
-     * Jeder Konverter trägt neben seiner converter_id den Hash seiner Einstellungen
-     * (Converter::settingsHash()) - der Schlüssel für den Import in eine fremde
-     * Datenbank, in der die Id nichts bedeutet. Die Bezeichnung und die Einstellungen
-     * stehen vollständig dabei, damit der Import den Konverter neu anlegen kann.
+     * Each converter carries, next to its converter_id, the hash of its settings
+     * (Converter::settingsHash()) - the key for the import into a foreign
+     * database in which the id means nothing. The label and the settings
+     * are included in full so that the import can create the converter anew.
      */
     private function _xmlConverters(\XMLWriter $xml): void
     {
@@ -1051,7 +1048,7 @@ class RecordExport {
     }
 
     /**
-     * Ein Datensatz mit allen Feldern (siehe _exportXml()).
+     * A record with all fields (see _exportXml()).
      */
     private function _xmlRecord(\XMLWriter $xml, array $row, array $schemaVirtual, bool $withFiles, string $dir): void
     {
@@ -1066,8 +1063,8 @@ class RecordExport {
             $type = (string)$colDef['type'];
             $fieldId = (int)$colDef['field_id'];
             if (!empty($colDef['meta'])) {
-                // Eingabefeld auf einer Spalte von `record`: der Wert steht
-                // bereits im Attribut
+                // input field on a column of `record`: the value is already
+                // in the attribute
                 continue;
             }
             $xml->startElement('field');
@@ -1124,8 +1121,8 @@ class RecordExport {
     }
 
     /**
-     * Felder, die nicht ins Backup gehören: Thumbnails (Kind eines Upload-Feldes)
-     * und Volltext - beides wird beim Re-Import neu erzeugt.
+     * Fields that do not belong in the backup: thumbnails (child of an upload field)
+     * and full text - both are recreated on re-import.
      */
     private function _xmlSkipField(array $colDef): bool
     {
@@ -1138,11 +1135,11 @@ class RecordExport {
     // CSV
 
     /**
-     * Eine Zeile je Datensatz. Die Spalten ergeben sich aus den angehakten
-     * Schlüsseln (csvFields()) und den gewählten Sprachen: ein mehrsprachiges Feld
-     * bekommt bei mehr als einer Sprache eine Spalte je Sprache ("{key}.{code}"),
-     * sonst eine. Auf Wunsch beginnt die Datei mit der UTF-8-BOM (Excel). Werte kommen aus dem Inhalts-Cache der jeweiligen Sprache
-     * (aufgelöst); Meta-Felder aus der `record`-Zeile.
+     * One row per record. The columns result from the checked
+     * keys (csvFields()) and the chosen languages: a multilingual field
+     * gets one column per language if there is more than one language ("{key}.{code}"),
+     * otherwise one column. On request the file begins with the UTF-8 BOM (Excel). Values come from the content cache of the respective language
+     * (resolved); meta fields from the `record` row.
      */
     private function _exportCsv(array $job): void
     {
@@ -1160,7 +1157,7 @@ class RecordExport {
         $languageIds = array_values(array_intersect(array_map('intval', array_keys($instanceLanguages)), $languageIds));
         if (empty($languageIds)) $languageIds = [$this->instanceCache->primaryLanguageId($instanceId)];
         $multiLanguage = count($languageIds) > 1;
-        // Spaltenzusatz je Sprache: das Kürzel (language.code)
+        // column suffix per language: the code (language.code)
         $codes = [];
         foreach ($languageIds as $languageId) {
             $codes[$languageId] = (string)($instanceLanguages[$languageId]['code'] ?? $languageId);
@@ -1169,15 +1166,15 @@ class RecordExport {
         $fields = $this->csvFields($areaId);
         $selected = array_map('strval', (array)($job['fields'] ?? []));
 
-        // Spalten bestimmen: [key, name, sub, multilingual, language_id|null]
+        // determine columns: [key, name, sub, multilingual, language_id|null]
         $columns = [];
         foreach ($fields as $name => $entry) {
             $keys = [];
             if (in_array($name, $selected, true)) $keys[''] = $entry['multilingual'];
             foreach ($entry['sub'] as $sub => $subEntry) {
                 if (in_array("$name.$sub", $selected, true)) {
-                    // Unterfelder einer Datei folgen der Sprache des Datei-Feldes,
-                    // Zielfelder einer Verknüpfung ihrer eigenen Mehrsprachigkeit
+                    // subfields of a file follow the language of the file field,
+                    // target fields of a link their own multilinguality
                     $keys[$sub] = !empty($entry['file']) ? $entry['multilingual'] : !empty($subEntry['multilingual']);
                 }
             }
@@ -1225,22 +1222,22 @@ class RecordExport {
     }
 
     /**
-     * Ein Zellenwert des CSV.
+     * A cell value of the CSV.
      *
-     * @param array  $row        `record`-Zeile
-     * @param array  $entry      Feldeintrag aus csvFields()
-     * @param string $sub        Unterfeld ('' = das Feld selbst)
-     * @param int    $languageId Sprache der Spalte
-     * @param array  $cache      Inhalts-Cache des Datensatzes in dieser Sprache
-     * @param array  $fileExport Datei-Felder, deren Datei exportiert wird
+     * @param array  $row        `record` row
+     * @param array  $entry      field entry from csvFields()
+     * @param string $sub        subfield ('' = the field itself)
+     * @param int    $languageId language of the column
+     * @param array  $cache      content cache of the record in this language
+     * @param array  $fileExport file fields whose file is exported
      */
     private function _csvValue(array $row, array $entry, string $sub, int $languageId, array $cache, array $fileExport, string $dir): string
     {
         $name = (string)$entry['name'];
         $type = (string)$entry['type'];
 
-        // Eingebettete Inhalte (link): je Inhalt ein Wert, mit " | " getrennt -
-        // Id, Bereich, Feldwert bzw. Pfad der exportierten Datei
+        // embedded contents (link): one value per content, separated by " | " -
+        // id, area, field value or path of the exported file
         if (!empty($entry['link'])) {
             $values = [];
             foreach ($this->_linkDestRows((int)$row['record_id'], (int)$entry['field_id']) as $destRow) {
@@ -1261,7 +1258,7 @@ class RecordExport {
             return implode(self::MULTI_SEPARATOR, $values);
         }
 
-        // Verknüpfungen: Ids bzw. Feld der Zieldatensätze
+        // links: ids or field of the target records
         if (!empty($entry['relation'])) {
             $rels = $this->_relationRows((int)$row['record_id'], (int)$entry['field_id']);
             if ($sub === 'record_id' || $sub === '') {
@@ -1278,7 +1275,7 @@ class RecordExport {
             return implode(self::MULTI_SEPARATOR, $values);
         }
 
-        // Datei-Felder: Pfad der exportierten Datei bzw. Spalte aus data_fil
+        // file fields: path of the exported file or column from data_fil
         if (!empty($entry['file'])) {
             $fileRow = $this->_fileRow((int)$row['record_id'], (int)$entry['field_id'], $languageId);
             if (!$fileRow || (string)$fileRow['extension'] === '') return '';
@@ -1288,7 +1285,7 @@ class RecordExport {
             return (string)($fileRow[$sub] ?? '');
         }
 
-        // Meta-Feld ohne Eingabefeld
+        // meta field without input field
         if (!empty($entry['meta']) && (int)$entry['field_id'] < 1) {
             return $this->_metaValue($row, $name);
         }
@@ -1296,8 +1293,8 @@ class RecordExport {
     }
 
     /**
-     * Skalarer Feldwert aus dem Inhalts-Cache (Klartext, Passwort als Hash); Felder
-     * auf einer Spalte von `record` aus der Zeile.
+     * Scalar field value from the content cache (plain text, password as hash); fields
+     * on a column of `record` from the row.
      */
     private function _scalarValue(string $name, array $cache, array $row, int $recordId, int $languageId): string
     {
@@ -1319,7 +1316,7 @@ class RecordExport {
     }
 
     /**
-     * Wert einer Spalte von `record` als Text.
+     * Value of a column of `record` as text.
      */
     private function _metaValue(array $row, string $name): string
     {
@@ -1329,12 +1326,12 @@ class RecordExport {
     }
 
     /**
-     * Passwort-Hash aus data_pwd - im Inhalts-Cache steht er nie.
+     * Password hash from data_pwd - it is never in the content cache.
      */
     private function _passwordHash(int $recordId, string $name, int $languageId): string
     {
         $fieldId = 0;
-        // field_id über den Bereich des Datensatzes
+        // field_id via the area of the record
         $row = $this->_recordRow($recordId);
         foreach ($this->_schemaOf((int)($row['area_id'] ?? 0)) as $fieldName => $colDef) {
             if ($fieldName === $name) $fieldId = (int)$colDef['field_id'];
@@ -1352,8 +1349,8 @@ class RecordExport {
     }
 
     /**
-     * Eine CSV-Zeile: eingeschlossen wird, was Trennzeichen, Einfassungszeichen oder
-     * Zeilenumbrüche enthält; das Einfassungszeichen wird verdoppelt.
+     * A CSV line: enclosed is whatever contains a separator, enclosure character or
+     * line break; the enclosure character is doubled.
      */
     private function _csvLine(array $values, string $separator, string $enclosure, string $eol): string
     {
@@ -1369,8 +1366,8 @@ class RecordExport {
     }
 
     /**
-     * Eingabe "Trennzeichen"/"Einfassungszeichen" auf ein Zeichen bringen:
-     * "\t" ist der Tabulator, leer = Vorgabe.
+     * Reduce the input "separator"/"enclosure character" to one character:
+     * "\t" is the tab, empty = default.
      */
     public function csvChar(string $input, string $default): string
     {
@@ -1380,7 +1377,7 @@ class RecordExport {
     }
 
     /**
-     * Eingabe "Zeilenumbruch": \r\n, \n, \r als Escape-Folgen.
+     * Input "line break": \r\n, \n, \r as escape sequences.
      */
     public function csvEol(string $input): string
     {
@@ -1392,14 +1389,14 @@ class RecordExport {
     // DOCX
 
     /**
-     * Word-Dokument für die Übersetzung: je Datensatz eine Tabelle. Grau
-     * hinterlegte Zeilen tragen die Metadaten ("record_id=.. | language_id=.."
-     * bzw. "field=.."), weiße Zeilen den Inhalt der Quellsprache - je Zeile des
-     * Inhalts ein Absatz. Die Hinweistexte sind immer englisch (das Dokument geht an
-     * Übersetzer, nicht an den Redakteur).
+     * Word document for translation: one table per record. Gray
+     * shaded rows carry the metadata ("record_id=.. | language_id=.."
+     * or "field=.."), white rows the content of the source language - one paragraph per line of the
+     * content. The note texts are always English (the document goes to
+     * translators, not to the editor).
      *
-     * Die Datei ist ein minimales OOXML-Paket ([Content_Types].xml, _rels/.rels,
-     * word/document.xml) - ohne Bibliothek, Word und LibreOffice öffnen es.
+     * The file is a minimal OOXML package ([Content_Types].xml, _rels/.rels,
+     * word/document.xml) - without a library; Word and LibreOffice open it.
      */
     private function _exportDocx(array $job): void
     {
@@ -1463,9 +1460,9 @@ class RecordExport {
                 $value = $this->_scalarValue($name, $sourceCache, $row, (int)$recordId, $from);
                 $rows .= $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
             }
-            // eingebettete Inhalte (link): je Inhalt seine Felder, die Metazeile nennt
-            // ihn ("field={link}.{feld} | record_id={id}") - der Import schreibt ihn
-            // zusammen mit dem Datensatz (RecordImport, EINGEBETTETE INHALTE)
+            // embedded contents (link): per content its fields, the meta row names
+            // it ("field={link}.{field} | record_id={id}") - the import writes it
+            // together with the record (RecordImport, EMBEDDED CONTENTS)
             $schema = $this->_schemaOf($areaId);
             foreach ($linkSubs as $linkName => $subs) {
                 $number = 0;
@@ -1500,9 +1497,9 @@ class RecordExport {
     }
 
     /**
-     * Dateiname eines Datensatzes beim Export "ein Datensatz je Datei":
-     * "{record_id}-{Bezeichnung}.docx", die Bezeichnung auf Buchstaben, Ziffern
-     * und Bindestriche gekürzt (höchstens 40 Zeichen).
+     * File name of a record in the export "one record per file":
+     * "{record_id}-{label}.docx", the label shortened to letters, digits
+     * and hyphens (at most 40 characters).
      */
     private function _docxFileName(int $recordId, string $label): string
     {
@@ -1512,7 +1509,7 @@ class RecordExport {
     }
 
     /**
-     * Minimales OOXML-Paket schreiben (siehe _exportDocx()).
+     * Write a minimal OOXML package (see _exportDocx()).
      */
     private function _docxWrite(string $path, string $body, string $title): void
     {
@@ -1573,7 +1570,7 @@ class RecordExport {
     }
 
     /**
-     * Tabellenzeile mit einer Zelle; je Eintrag in $lines ein Absatz.
+     * Table row with one cell; one paragraph per entry in $lines.
      */
     private function _docxRow(array $lines, bool $shaded, bool $bold = false): string
     {
@@ -1605,9 +1602,9 @@ class RecordExport {
     }
 
     /**
-     * Zeichen entfernen, die in XML 1.0 nicht erlaubt sind (Steuerzeichen außer
-     * Tab, LF, CR) - sie kämen aus fehlerhaften Eingaben und machten die Datei
-     * unlesbar.
+     * Remove characters that are not allowed in XML 1.0 (control characters except
+     * tab, LF, CR) - they would come from faulty inputs and make the file
+     * unreadable.
      */
     private function _xmlText(string $text): string
     {
@@ -1618,7 +1615,7 @@ class RecordExport {
     // Datenzugriff
 
     /**
-     * `record`-Zeile eines produktiven, nicht gelöschten Datensatzes (gemerkt).
+     * `record` row of a productive, not deleted record (memoized).
      */
     private function _recordRow(int $recordId): ?array
     {
@@ -1628,16 +1625,16 @@ class RecordExport {
         $this->db->query("SELECT * FROM `record` WHERE `record_id` = ? AND `tmp` = 0 AND `deleted` = 0", 'i', [$recordId]);
         $row = $this->db->fetch();
         $this->db->popResult();
-        // nur die Zeilen des laufenden Exports merken - fremde Datensätze
-        // (Verknüpfungsziele) können viele sein
+        // only memoize the rows of the running export - foreign records
+        // (link targets) can be many
         if (count($rows) > 5000) $rows = [];
         $rows[$recordId] = $row;
         return $row;
     }
 
     /**
-     * Die Meta-Spalten eines Datensatzes für das XML-Attribut-Set: alles außer den
-     * abgeleiteten Baumspalten und den Arbeitskopie-Kennzeichen.
+     * The meta columns of a record for the XML attribute set: everything except the
+     * derived tree columns and the working-copy flags.
      */
     private function _metaColumns(array $row): array
     {
@@ -1646,9 +1643,9 @@ class RecordExport {
     }
 
     /**
-     * Inhalts-Cache eines Datensatzes in einer Sprache; fehlt die Zeile, wird der
-     * Cache neu aufgebaut. Führt die Instanz des Datensatzes die Sprache nicht
-     * (Verknüpfungsziel in einer anderen Instanz), gilt dessen Hauptsprache.
+     * Content cache of a record in one language; if the row is missing, the
+     * cache is rebuilt. If the instance of the record does not maintain the language
+     * (link target in another instance), its primary language applies.
      */
     private function _cacheOf(int $recordId, int $languageId, array $row): array
     {
@@ -1668,7 +1665,7 @@ class RecordExport {
     }
 
     /**
-     * Zeilen einer data_*-Tabelle zu einem Feld: language_id, data, empty.
+     * Rows of a data_* table for a field: language_id, data, empty.
      */
     private function _dataRows(int $recordId, int $fieldId, string $type): array
     {
@@ -1691,7 +1688,7 @@ class RecordExport {
     }
 
     /**
-     * Verknüpfungen eines Feldes: dest_id, position (in Reihenfolge).
+     * Links of a field: dest_id, position (in order).
      */
     private function _relationRows(int $recordId, int $fieldId): array
     {
@@ -1703,7 +1700,7 @@ class RecordExport {
     }
 
     /**
-     * data_fil-Zeilen eines Datei-Feldes (alle Sprachen).
+     * data_fil rows of a file field (all languages).
      */
     private function _fileRows(int $recordId, int $fieldId): array
     {
@@ -1715,8 +1712,8 @@ class RecordExport {
     }
 
     /**
-     * data_fil-Zeile einer Sprache; ohne eigene Zeile die erste (einsprachige
-     * Felder führen dieselben Metadaten in allen Sprachen).
+     * data_fil row of a language; without its own row the first one (single-language
+     * fields carry the same metadata in all languages).
      */
     private function _fileRow(int $recordId, int $fieldId, int $languageId): ?array
     {
@@ -1728,11 +1725,11 @@ class RecordExport {
     }
 
     /**
-     * Mediendatei ins Exportverzeichnis kopieren:
-     * media/{record_id}_{field_id}_{language_id}-{filename}. Jede physische Datei
-     * nur einmal (Fallback-Zeilen anderer Sprachen zeigen auf dieselbe Datei).
+     * Copy a media file into the export directory:
+     * media/{record_id}_{field_id}_{language_id}-{filename}. Each physical file
+     * only once (fallback rows of other languages point to the same file).
      *
-     * @return string  relativer Pfad in der Zip-Datei; '' wenn die Datei fehlt
+     * @return string  relative path in the zip file; '' if the file is missing
      */
     private function _copyFile(array $row, int $fieldId, array $fileRow, string $dir): string
     {
@@ -1792,12 +1789,12 @@ class RecordExport {
     // Hintergrund
 
     /**
-     * Auftrag als Hintergrundprozess starten: JSON-Datei nach var/tmp, dann
-     * Core/cron/record_export.php (wie RecordBatch::start()).
+     * Start the job as a background process: JSON file to var/tmp, then
+     * Core/cron/record_export.php (like RecordBatch::start()).
      *
-     * @param array       $job    siehe Klassenkommentar
-     * @param string|null $error  Grund eines Fehlschlags (per Referenz)
-     * @return array|null         ['pid' => int, 'token' => string, 'id' => int] oder null
+     * @param array       $job    see class comment
+     * @param string|null $error  reason for a failure (by reference)
+     * @return array|null         ['pid' => int, 'token' => string, 'id' => int] or null
      */
     public function start(array $job, ?string &$error = null): ?array
     {
@@ -1835,7 +1832,7 @@ class RecordExport {
     }
 
     /**
-     * Auftragsdatei des Hintergrundprozesses lesen (und entfernen).
+     * Read (and remove) the job file of the background process.
      */
     public function loadJob(string $jobFile): ?array
     {
@@ -1848,11 +1845,11 @@ class RecordExport {
     }
 
     /**
-     * Ergebnis des Hintergrundprozesses als interne Nachricht an den auslösenden
-     * Admin: Zusammenfassung, Download-Link (HTML-Teil) und wie lange er gilt.
-     * Bei einem Fehler die Meldung.
+     * Result of the background process as an internal message to the triggering
+     * admin: summary, download link (HTML part) and how long it is valid.
+     * On an error the message.
      *
-     * @return string  Betreff der Nachricht
+     * @return string  subject of the message
      */
     public function report(array $job, array $result): string
     {
@@ -1881,7 +1878,7 @@ class RecordExport {
     }
 
     /**
-     * "Export abgeschlossen: n Datensätze, m Dateien."
+     * "Export finished: n records, m files."
      */
     public function summaryText(array $result): string
     {
@@ -1896,7 +1893,7 @@ class RecordExport {
     }
 
     /**
-     * "Der Link gilt bis {Datum} (n Stunden) - die Datei wird nach dem Download gelöscht."
+     * "The link is valid until {date} (n hours) - the file is deleted after the download."
      */
     public function validityText(string $zip): string
     {
@@ -1916,14 +1913,14 @@ class RecordExport {
     }
 
     // ====================
-    // Aufräumen
+    // Clean up
 
     /**
-     * Exportdateien löschen, die älter sind als admin.export_retention_hours -
-     * Zip-Dateien und liegen gebliebene Verzeichnisse (abgebrochene Exporte).
-     * Aufgerufen von der Zeitplaner-Aufgabe tmpcleanup (SchedulerRunner).
+     * Delete export files older than admin.export_retention_hours -
+     * zip files and left-over directories (aborted exports).
+     * Called by the scheduler task tmpcleanup (SchedulerRunner).
      *
-     * @return int  Anzahl der entfernten Einträge
+     * @return int  number of removed entries
      */
     public function cleanup(): int
     {
@@ -1947,7 +1944,7 @@ class RecordExport {
     }
 
     // ====================
-    // Packen und Aufräumen
+    // Pack and clean up
 
     private function _zipDir(string $dir, string $zipPath): void
     {

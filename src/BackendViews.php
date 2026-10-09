@@ -1,17 +1,17 @@
 <?php
 /**
- * Verzeichnis der Backend-Ansichten, die man öffnen kann - für Werkzeuge, die dem
- * Admin einen Layer öffnen (der Assistent des Moduls Ai, ui__open).
+ * Directory of the backend views that can be opened - for tools that open a layer
+ * for the admin (the assistant of the Ai module, ui__open).
  *
- * KATALOG
+ * CATALOG
  * --------------------
- * Jede Komponente beschreibt ihre Ansichten in install/views.php - nur Scripte, die
- * beim Öffnen nichts ändern (Listen, Detailansichten, Formulare, die erst beim
- * Absenden wirken), keine Aktionen und keine ajax-Scripte:
+ * Each component describes its views in install/views.php - only scripts that
+ * change nothing when opened (lists, detail views, forms that only take effect
+ * on submit), no actions and no ajax scripts:
  *
  *     return [
  *         'field_list.php' => [
- *             'description' => 'Input fields of an area …',     // englisch, für ein LLM
+ *             'description' => 'Input fields of an area …',     // English, for an LLM
  *             'params'      => ['area_id' => 'int'],            // erlaubte Parameter
  *         ],
  *         'field_edit.php' => [
@@ -20,21 +20,21 @@
  *         ],
  *     ];
  *
- * Parametertypen: 'int' (positive Ganzzahl), 'string' (Text bis 200 Zeichen) oder eine
- * Liste erlaubter Werte. Andere Parameter werden verworfen.
+ * Parameter types: 'int' (positive integer), 'string' (text up to 200 characters) or a
+ * list of allowed values. Other parameters are discarded.
  *
- * RECHTE
+ * PERMISSIONS
  * --------------------
- * available() zeigt nur, was der angemeldete Admin öffnen darf - dieselbe Prüfung wie
- * beim Aufruf (Access::script(): Modulzugriff, Zusatzrechte aus 'script_access',
- * persönliche Scripte). Rechte innerhalb einer Ansicht (Bereich, Datensatz) prüft die
- * Ansicht selbst.
+ * available() only shows what the logged-in admin may open - the same check as on
+ * the call (Access::script(): module access, additional rights from 'script_access',
+ * personal scripts). Rights within a view (area, record) are checked by the view
+ * itself.
  */
 namespace Camindo\Core;
 
 class BackendViews
 {
-    /** Datei des Katalogs im Verzeichnis der Komponente */
+    /** Catalog file in the component's directory */
     public const FILE = 'install/views.php';
 
     private ?array $all = null;
@@ -47,7 +47,7 @@ class BackendViews
     }
 
     /**
-     * Alle Ansichten der aktiven Module.
+     * All views of the active modules.
      *
      * @return array  'Modul/script.php' => module, script, label (Modul, Klartext),
      *                description, params
@@ -77,18 +77,18 @@ class BackendViews
         return $this->all = $views;
     }
 
-    /** Die Ansichten, die der angemeldete Admin öffnen darf */
+    /** The views the logged-in admin may open */
     public function available(): array
     {
         return array_filter($this->all(), fn($view) => $this->access->script($view['module'], $view['script']));
     }
 
     /**
-     * Adresse einer Ansicht für cApp.layers.add() - nur mit erlaubten Parametern.
+     * Address of a view for cApp.layers.add() - only with allowed parameters.
      *
      * @param string $view    'Modul/script.php'
-     * @param array  $params  Parameter (unbekannte und ungültige werden verworfen)
-     * @return ?string        null = unbekannt oder nicht erlaubt
+     * @param array  $params  Parameters (unknown and invalid ones are discarded)
+     * @return ?string        null = unknown or not allowed
      */
     public function url(string $view, array $params = []): ?string
     {

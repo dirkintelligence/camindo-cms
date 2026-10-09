@@ -8,21 +8,21 @@ return [
 'description' => '#tools.module_description',
 'icon' => 'build',
 'listed' => true,
-// Zusatzrechte (Backend-Benutzergruppen): interner Name => Snippet der Beschriftung,
-// ein Recht je Reiter (ToolsBackend::$tabs). Siehe docs/developers/12-group-rights.md.
+ // Additional rights (backend user groups): internal name => snippet of the label,
+ // one right per tab (ToolsBackend::$tabs). See developer docs, chapter 11 (Permissions).
 'access' => [
     'server' => 'tools.access_server',
     'database' => 'tools.access_database',
     'data' => 'tools.access_data',
     'developer' => 'tools.access_developer',
-    // Papierkorb eines Frontend-Users sofort endgültig leeren (Datenschutz)
+    // Empty a frontend user's trash immediately and permanently (privacy)
     'trash_user' => 'tools.access_trash_user',
 ],
-// Einstiege des Moduls in Reiter-Reihenfolge: die Modulkachel der Startseite
-// öffnet den ersten, den die Gruppe laut 'script_access' darf (StartBackend)
+ // Entries of the module in tab order: the module tile on the start page
+ // opens the first one that the group may open per 'script_access' (StartBackend)
 'entries' => ['index.php', 'index_database.php', 'index_data.php', 'index_developer.php', 'index_trash_user.php'],
-// Welches Zusatzrecht ein Einstiegsscript verlangt (Access::script(), geprüft in
-// Backend::backendPath())
+ // Which additional right an entry script requires (Access::script(), checked in
+ // Backend::backendPath())
 'script_access' => [
     'index.php' => 'server',
     'index_server.php' => 'server',

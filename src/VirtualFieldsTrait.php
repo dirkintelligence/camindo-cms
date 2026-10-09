@@ -1,37 +1,37 @@
 <?php
 /**
- * Trait für Dataset Kind-Klassen
- * Verarbeitet Daten aus virtuellen Tabellenfeldern in den data-Tabellen
+ * Trait for Dataset subclasses
+ * Processes data from virtual table fields in the data tables
  *
- * Konzept "Einzelschritt-Updates" (Dataset::save() mit $stayTemporary = true):
- * Die temporäre Arbeitskopie sammelt Zwischenstände in ihrem Arbeitsstand
- * (siehe saveTemporaryStep()) - für ALLE Sprachen: mehrsprachige Felder stehen
- * dort als Array language_id => Eingabe, leer heißt "nicht übersetzt".
- * Datei-Uploads werden dabei nur physisch unter der Id der Arbeitskopie abgelegt
- * und im Arbeitsstand mit 'temporary' = true markiert.
- * `data_fil` wird für die Arbeitskopie NICHT beschrieben.
- * Relations werden weiterhin sofort an die Arbeitskopie gebunden (`data_rel`).
- * Erst beim finalen Speichern ($stayTemporary = false) werden die Zwischenstände
- * mit den aktuellen Eingaben zusammengeführt und in die Meta-/data-Felder des
- * produktiven Datensatzes gelegt - je Sprache der Instanz eine data_*-Zeile, mit
- * dem Fallback der Hauptsprache, wo eine Übersetzung fehlt (saveVirtualFields());
- * Dateien ziehen beim checkIn über promoteTmpFiles() um, das dabei die
- * `data_fil`-Einträge aus den Datei-Metadaten des Arbeitsstands erzeugt.
+ * Concept "single-step updates" (Dataset::save() with $stayTemporary = true):
+ * The temporary working copy collects intermediate states in its working state
+ * (see saveTemporaryStep()) - for ALL languages: multilingual fields are stored
+ * there as an array language_id => input, empty means "not translated".
+ * File uploads are then only stored physically under the id of the working copy
+ * and marked in the working state with 'temporary' = true.
+ * `data_fil` is NOT written for the working copy.
+ * Relations continue to be bound immediately to the working copy (`data_rel`).
+ * Only on the final save ($stayTemporary = false) are the intermediate states
+ * merged with the current input and placed into the meta/data fields of the
+ * live record - one data_* row per language of the instance, with the
+ * fallback to the primary language where a translation is missing (saveVirtualFields());
+ * files move over during checkIn via promoteTmpFiles(), which creates the
+ * `data_fil` entries from the file metadata of the working state.
  *
- * Der produktive Datensatz trägt KEIN Arbeitsstand. Sein Inhalts-Cache liegt je Sprache
- * in `record_cache` (_writeRecordCache()), mit Kennzeichnung der Fallback-Werte;
- * eine neue Arbeitskopie holt sich daraus ihr Arbeitsstand (_tmpDataFromRecordCache()).
+ * The live record carries NO working state. Its content cache lies per language
+ * in `record_cache` (_writeRecordCache()), with a marker for the fallback values;
+ * a new working copy takes its working state from it (_tmpDataFromRecordCache()).
  *
- * Konzept "Dateien sofort sichern, Thumbnails später":
- * Eine Datei (Upload aus $_FILES oder ausgewählte Server-Datei aus $data) wird
- * SOFORT auf Typ geprüft und - wenn zulässig - physisch unter der Id der
- * Arbeitskopie abgelegt und in deren Arbeitsstand eingetragen (secureUploads()).
- * Damit übersteht sie eine anschließend scheiternde Eingabeprüfung und erscheint
- * in der erneut angezeigten Eingabemaske.
- * Die Thumbnail-Erzeugung ist davon entkoppelt: der Datei-Eintrag wird mit
- * 'thumbnails_pending' = true markiert und erst beim FINALEN Speichern über
- * writePendingThumbnails() (aus saveVirtualFields()) abgearbeitet - also einmal
- * pro Datensatz statt bei jedem Zwischenschritt. 
+ * Concept "secure files immediately, thumbnails later":
+ * A file (upload from $_FILES or a selected server file from $data) is checked
+ * for type IMMEDIATELY and - if permitted - stored physically under the id of the
+ * working copy and entered in its working state (secureUploads()).
+ * This way it survives a subsequently failing input check and appears in the
+ * re-displayed input form.
+ * Thumbnail generation is decoupled from this: the file entry is marked with
+ * 'thumbnails_pending' = true and only processed on the FINAL save via
+ * writePendingThumbnails() (from saveVirtualFields()) - so once per
+ * record instead of at every intermediate step.
  */
 namespace Camindo\Core;
 use Camindo\Core\DirectoryHelpers;
@@ -40,18 +40,18 @@ use Camindo\Core\MediaAccess;
 
 trait VirtualFieldsTrait {
 
-    // Feldtypen, deren Inhalte in Volltextfelder aufgenommen werden können
-    protected array $fulltextSourceTypes = ['text', 'chars', 'json', 'file'];   // file: der Dateiname
+    // Field types whose content can be included in full-text fields
+    protected array $fulltextSourceTypes = ['text', 'chars', 'json', 'file'];   // file: the file name
     protected array $processedParentFieldIds = [];
     protected array $processedUploadFields = [];
     protected array $recordCache = [];
-    // Upload-Felder [name, language_id], deren Thumbnails erst NACH dem Umzug der
-    // Dateien auf die produktive Id erzeugt werden (siehe saveVirtualFields() /
+    // Upload fields [name, language_id] whose thumbnails are only generated AFTER the
+    // files have been moved to the live id (see saveVirtualFields() /
     // writeDeferredThumbnails())
     protected array $deferredThumbnails = [];
-    // Ids der geänderten Textfelder (Quellen für Volltext-Index):
-    // werden in saveVirtualFields() gesammelt und in refreshAffectedFulltext()
-    // verarbeitet (NACH checkIn(), da die zurückkopierten Relations benötigt werden)
+    // Ids of the changed text fields (sources for the full-text index):
+    // collected in saveVirtualFields() and processed in refreshAffectedFulltext()
+    // (AFTER checkIn(), since the copied-back relations are needed)
     protected array $affectedTextFieldIds = [];
     protected array $mediaTypeGroups = [
         'image' => ['image/*'],
@@ -83,30 +83,30 @@ trait VirtualFieldsTrait {
         ],
     ];
 
-    // Ausnahmen aus einer Gruppe: passt eine Datei nur über die Gruppe, zählen
-    // diese Muster nicht mit. SVG ist ein Bild, kann aber JavaScript enthalten und
-    // läuft beim direkten Aufruf aus /media im Ursprung der Website (gespeichertes
-    // XSS) - wer SVG will, nennt es ausdrücklich in media_types_incl
-    // (developer_docs/16-sicherheit.md §9.3)
+    // Exceptions from a group: if a file only matches via the group, these
+    // patterns do not count. SVG is an image but can contain JavaScript and
+    // runs when called directly from /media in the origin of the website (stored
+    // XSS) - whoever wants SVG must name it explicitly in media_types_incl
+    // (developer docs, chapter 14 (Security: web): security: web)
     protected array $mediaTypeGroupsExcl = [
         'image' => ['image/svg+xml', '.svg', '.svgz'],
     ];
 
-    // Extensions, die aus Sicherheitsgründen NIEMALS gespeichert werden
-    // (ausführbarer Code im Media-Verzeichnis), unabhängig von media_types_incl
+    // Extensions that are NEVER stored for security reasons
+    // (executable code in the media directory), regardless of media_types_incl
     protected array $forbiddenExtensions = [
         'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phar',
         'cgi', 'pl', 'asp', 'aspx', 'jsp', 'sh', 'htaccess'
     ];
 
-    // Uploads stammen von Website-Besuchern (CMS:USER_INPUT / USER_REGISTER, siehe
-    // setUntrustedUploads()): aktiver Inhalt, den der Browser als Dokument bzw.
-    // Skript ausführt (MediaAccess::isActiveContent() - Extension ODER erkannter
-    // Mime-Typ), wird dann unabhängig von den Feldeinstellungen abgelehnt. Im
-    // Backend entscheiden die Felder.
+    // Uploads come from website visitors (CMS:USER_INPUT / USER_REGISTER, see
+    // setUntrustedUploads()): active content that the browser executes as a document or
+    // script (MediaAccess::isActiveContent() - extension OR detected
+    // MIME type) is then rejected regardless of the field settings. In the
+    // backend, the fields decide.
     protected bool $untrustedUploads = false;
 
-    // Fallback Mime-Typ -> Extension (falls der Original-Dateiname keine Extension enthält)
+    // Fallback MIME type -> extension (if the original file name contains no extension)
     protected array $mimeToExtension = [
         'image/jpeg' => 'jpg',  'image/png' => 'png', 'image/gif' => 'gif',
         'image/webp' => 'webp', 'image/bmp' => 'bmp', 'application/pdf' => 'pdf',
@@ -114,14 +114,14 @@ trait VirtualFieldsTrait {
         'text/plain' => 'txt',
     ];
 
-    // Konsistenzprüfung Mime-Typ <-> Extension für die wichtigsten Bildtypen:
-    // Wird der Mime-Typ serverseitig als einer dieser Typen erkannt, MUSS die
-    // Dateiendung dazu passen (verhindert z. B. JPEG-Inhalt mit .zip-Endung).
-    // Andere Mime-Typen: keine Konsistenzprüfung.
+    // Consistency check MIME type <-> extension for the most important image types:
+    // if the MIME type is recognized server-side as one of these types, the
+    // file extension MUST match (prevents e.g. JPEG content with a .zip extension).
+    // Other MIME types: no consistency check.
     //
-    // Die Liste deckt alle Formate ab, die ein Medien-Prozessor öffnet - eine
-    // hochgeladene Datei soll niemals unter einer Endung liegen, die ihren Inhalt
-    // falsch ankündigt (developer_docs/18-imagemagick.md, 2.2.5).
+    // The list covers all formats that a media processor opens - an uploaded
+    // file must never be stored under an extension that misrepresents its content
+    // (developer docs, chapter 14 (Security: web): security: web, ImageMagick section).
     protected array $mimeExtensionMap = [
         'image/jpeg'                => ['jpg', 'jpeg', 'jpe'],
         'image/png'                 => ['png'],
@@ -142,33 +142,33 @@ trait VirtualFieldsTrait {
     ];
 
     /**
-     * Ausführliches Schema mit virtuellen Felder liefern
-     * Hiinweis: Lädt nicht die 'rel_area_ids' aus Tabelle `rel_field_area`, verwende dazu: getRelAreaIds()
-     * 
-     * @param bool $addMetaFields  true: alle Metafelder hinzufügen, false: nur Metafelder auf denen Eingabefeld Feld basiert
-     * @param int $areaId          Id des Inhaltsbereichs
-     * @return array               Schema
+     * Return the extended schema with virtual fields
+     * Note: does not load the 'rel_area_ids' from table `rel_field_area`, for that use: getRelAreaIds()
+     *
+     * @param bool $addMetaFields  true: add all meta fields, false: only meta fields on which the input field is based
+     * @param int $areaId          id of the content area
+     * @return array               schema
      */
     public function virtualSchema(int $areaId, $addMetaFields = true): array
     {
         if ($areaId < 1) {
             throw new \Exception('Error: virtualSchema(): called with areaId < 1.');
         }
-        // Virtuelle Felder laden, sortiert in der richtigen Reihenfolge
+        // load virtual fields, sorted in the correct order
         $schema = [];
         $this->db->pushResult();
         $sql = "SELECT * FROM `field` WHERE `area_id`=? ORDER BY `position` ASC";
         $this->db->query($sql, 'i', [$areaId]);
         if ($this->db->num_rows > 0) {
             while ($row = $this->db->fetch()) {
-                // Beschriftung, Hinweis, details: Lesefilter wie Cms::fetch()
-                // (16-sicherheit.md §6)
+                // label, note, details: read filter as in Cms::fetch()
+                // (developer docs, chapter 14 (Security: web): security: web)
                 $row = $this->cms->_sanitizeValue($row);
                 $name = (string)$row['name'];
-                // Flags als Array bereitstellen
+                // provide flags as an array
                 if (empty($row['flags'])) $row['flags'] = [];
                 else $row['flags'] = json_decode((string)$row['flags'], false) ?? [];
-                // meta = 1 Markierung setzen
+                // set meta = 1 marker
                 if (isset($this->cms->schema[$name])) $row['meta'] = 1;
                 $schema[$name] = $row;
             }
@@ -176,52 +176,52 @@ trait VirtualFieldsTrait {
         $this->db->popResult();
 
         if ($addMetaFields) {
-            // Metafelder anfügen, die nicht ohnehin schon enthalten sind
+            // append meta fields that are not already included
             $schema = $schema + $this->cms->schema;
         }
         return $schema;
     }
 
     /**
-     * Inhalte in virtueller Felder speichern (finaler Speichervorgang)
+     * Save content into virtual fields (final save)
      *
-     * Die Zwischenstände der Arbeitskopie (Einzelschritt-Updates, siehe
-     * saveTemporaryStep()) wurden bereits in Dataset::save() mit den aktuell
-     * übermittelten Daten zusammengeführt ($data / $affectedFields) und werden
-     * hier in die data-Tabellen des produktiven Datensatzes gelegt.
-     * Neue Datei-Uploads aus diesem Request liegen physisch unter der Id der
-     * Arbeitskopie und sind in deren Arbeitsstand mit 'temporary' markiert; der Umzug
-     * auf die produktive Id samt Erzeugen der `data_fil`-Einträge erfolgt beim
-     * Produktivgehen in TemporaryTrait::checkIn() -> promoteTmpFiles().
+     * The intermediate states of the working copy (single-step updates, see
+     * saveTemporaryStep()) have already been merged in Dataset::save() with the
+     * data currently submitted ($data / $affectedFields) and are placed here into the
+     * data tables of the live record.
+     * New file uploads from this request lie physically under the id of the
+     * working copy and are marked with 'temporary' in its working state; the move
+     * to the live id, including creating the `data_fil` entries, takes place when
+     * going live in TemporaryTrait::checkIn() -> promoteTmpFiles().
      *
-     * SPRACHEN
+     * LANGUAGES
      * --------------------
-     * Je Feld entsteht in seiner data_*-Tabelle EINE Zeile je Sprache der Instanz
-     * ($langCtx, Hauptsprache zuerst):
+     * Each field produces ONE row per language of the instance in its data_* table
+     * ($langCtx, primary language first):
      *
-     *     einsprachiges Feld     derselbe Wert in allen Sprachen
-     *     mehrsprachiges Feld    der Wert der Sprache; ist er leer (nicht übersetzt),
-     *                            der Wert der Hauptsprache (Fallback)
+     *     single-language field  the same value in all languages
+     *     multilingual field     the value of the language; if it is empty (not translated),
+     *                            the value of the primary language (fallback)
      *
-     * Dasselbe gilt für `data_dft`. So filtert und sortiert Cms::select() jede
-     * Sprache mit einer einzigen JOIN-Bedingung. Der Inhalts-Cache je Sprache
-     * (`record_cache`) entsteht am Ende aus dem Arbeitsstand $this->recordCache
-     * (Arbeitsstand-Format, siehe _recordCacheFromTmpData()).
+     * The same applies to `data_dft`. In this way Cms::select() filters and sorts
+     * each language with a single JOIN condition. The content cache per language
+     * (`record_cache`) is ultimately built from the working state $this->recordCache
+     * (working-state format, see _recordCacheFromTmpData()).
      *
-     * Hinweise für den Aufrufer (Dataset::save()):
-     * - VOR checkIn() aufrufen (promoteTmpFiles() liest den Arbeitsstand der
-     *   Arbeitskopie - sie muss dazu noch existieren)
-     * - Alle Werte in $data liegen bereits im Datenbankformat vor
-     *   (validateFieldValue(): timestampl in UTC, currency in Cent, json als Array)
-     * - Die Volltext-Erneuerung erfolgt separat über refreshAffectedFulltext()
-     *   NACH checkIn() (benötigt die zurückkopierten Relations)
-     * 
-     * @param array &$affectedFields  Felder, deren Inhalte sich ändern (inkl. Zwischenstände)
-     * @param array &$data            zu schreibende Inhalte (inkl. Zwischenstände)
-     * @param array &$previousData    bei UPDATE: Inhalte des produktiven Datensatzes zuvor
-     * @param array &$schemaVirtual   Schema mit virtuellen Feldern
-     * @param int   $tmpId            Id der temporären Arbeitskopie (0 = keine)
-     * @param array $langCtx          Sprachen der Instanz (Dataset::languageContext())
+     * Notes for the caller (Dataset::save()):
+     * - call BEFORE checkIn() (promoteTmpFiles() reads the working state of the
+     *   working copy - it must still exist for this)
+     * - all values in $data are already in database format
+     *   (validateFieldValue(): timestampl in UTC, currency in cents, json as an array)
+     * - the full-text refresh is done separately via refreshAffectedFulltext()
+     *   AFTER checkIn() (requires the copied-back relations)
+     *
+     * @param array &$affectedFields  fields whose content changes (incl. intermediate states)
+     * @param array &$data            contents to write (incl. intermediate states)
+     * @param array &$previousData    on UPDATE: contents of the live record beforehand
+     * @param array &$schemaVirtual   schema with virtual fields
+     * @param int   $tmpId            id of the temporary working copy (0 = none)
+     * @param array $langCtx          languages of the instance (Dataset::languageContext())
      */
     protected function saveVirtualFields(array &$affectedFields, array &$data, array &$previousData, array &$schemaVirtual, int $tmpId = 0, array $langCtx = []): void
     {
@@ -236,39 +236,39 @@ trait VirtualFieldsTrait {
         }
         $primaryId = (int)($langCtx['primary_id'] ?? $languageIds[0]);
 
-        // Id, unter der neue Dateien physisch ZUNÄCHST abgelegt werden:
-        // die temporäre Arbeitskopie (sofern übergeben), ansonsten der Datensatz selbst.
-        // (Bei neuen Datensätzen geht die Arbeitskopie unter ihrer eigenen Id produktiv,
-        //  dann ist $tmpId === $recordId und es findet kein Umzug statt)
+        // Id under which new files are physically stored FIRST:
+        // the temporary working copy (if passed), otherwise the record itself.
+        // (For new records the working copy goes live under its own id,
+        //  then $tmpId === $recordId and no move takes place)
         $storageId = ($tmpId > 0) ? $tmpId : $recordId;
-        // Arbeitsstand (Arbeitsstand-Format: rohe Eingaben, mehrsprachig als
-        // language_id => Wert): bei Arbeitskopie deren Zwischenstand (enthält
-        // Einzelschritt-Updates inkl. Datei-Infos und Löschmarkierungen), ansonsten
-        // der bisherige produktive Stand aus `record_cache`
+        // Working state (working-state format: raw input, multilingual as
+        // language_id => value): for a working copy its intermediate state (contains
+        // single-step updates incl. file info and delete markers), otherwise
+        // the previous live state from `record_cache`
         if ($tmpId > 0) {
             $this->recordCache = $this->_loadTmpData($tmpId);
         }
         else {
             $this->recordCache = $this->_tmpDataFromRecordCache($recordId, $schemaVirtual, $langCtx);
         }
-        // Verschlüsselte Inhalte: der Geheimtext der data_enc-Zeile (base64) je Sprache
-        // kommt unverändert in den Cache (statt einer zweiten Verschlüsselung)
+        // Encrypted content: the ciphertext of the data_enc row (base64) per language
+        // goes into the cache unchanged (instead of a second encryption)
         $encryptedCache = [];
 
-        // Ids der betroffenen Felder für Volltext-Index sammeln
-        // (Verarbeitung erst in refreshAffectedFulltext(), siehe Methoden-Kommentar)
+        // Collect the ids of the affected fields for the full-text index
+        // (processed only in refreshAffectedFulltext(), see method comment)
         $this->affectedTextFieldIds = [];
-        // Default-Feld: Werte je Sprache für data_dft
+        // default field: values per language for data_dft
         $defaultValues = null;
 
-        // Sammlung bereits verarbeiteter Parent-Fields
+        // collection of already processed parent fields
         $this->processedParentFieldIds = [];
 
-        // Inhalte speichern
+        // save contents
         // --------------------
         foreach ($affectedFields as $name) {
             if (isset($this->cms->schema[$name])) {
-                // Meta-Feld oder virtuelles Feld basierend auf Meta-Feld
+                // meta field or virtual field based on a meta field
                 continue;
             }
 
@@ -284,11 +284,11 @@ trait VirtualFieldsTrait {
             $label = $colDef['label'] ?? $name;
             $isMultilingual = !empty($colDef['multilingual'])
                 && in_array($type, $this->cms->multilingualTypes, true);
-            // Volltext wird anschließend generiert
+            // full text is generated afterwards
             if ($type == 'fulltext') continue;
 
             if (in_array($type, $this->fulltextSourceTypes, true)) {
-                // Indizierbares Textfeld
+                // indexable text field
                 $this->affectedTextFieldIds[] = (int)$fieldId;
             }
 
@@ -297,37 +297,37 @@ trait VirtualFieldsTrait {
             $valueRef = &$data[$name];
 
             if (in_array($type, $this->cms->relationTypes, true)) {
-                // Verknüpfungen
-                // wurden in Dataset::save() vorgezogen, um min / max prüfen zu können
-                // (hängen an der Arbeitskopie, checkIn kopiert sie zurück)
+                // links
+                // were moved forward in Dataset::save() so that min / max can be checked
+                // (they hang on the working copy, checkIn copies them back)
                 continue;
             }
             if ($type === 'file') {
                 if ($displayType === 'upload') {
                     // upload
                     // --------------------
-                    // (Verarbeitung ausgelagert, damit sie auch bei
-                    //  Einzelschritt-Speicherungen genutzt werden kann;
-                    //  schreibt NUR physische Datei + Arbeitsstand mit 'temporary'- und
-                    //  'thumbnails_pending'-Flag, der `data_fil`-Eintrag entsteht
-                    //  erst beim checkIn, die Thumbnails weiter unten)
-                    // $data enthält ggf. eine ausgewählte Server-Datei;
-                    // mehrsprachig: je Sprache ein Upload-Feld
+                    // (processing outsourced, so that it can also be used for
+                    //  single-step saves;
+                    //  writes ONLY the physical file + working state with the 'temporary' and
+                    //  'thumbnails_pending' flags; the `data_fil` entry is only created
+                    //  at checkIn, the thumbnails further below)
+                    // $data may contain a selected server file;
+                    // multilingual: one upload field per language
                     foreach ($this->_uploadLanguages($colDef, $languageIds) as $lang) {
                         $this->_saveUploadField($storageId, $name, $colDef, $schemaVirtual, $data, $lang);
                     }
                 }
-                // display_type 'thumbnail' wird ausschließlich automatisch
-                // über writeThumbnails() befüllt, nie direkt aus $data
+                // display_type 'thumbnail' is filled exclusively automatically
+                // via writeThumbnails(), never directly from $data
                 continue;
             }
 
-            // Sonstige Typen
+            // Other types
             // --------------------
-            // Werte je Sprache ermitteln: rohe Eingabe (Arbeitsstand-Format) und der
-            // Wert, der in die data_*-Zeile geschrieben wird (mit Fallback)
-            $rawValues = [];   // language_id => Eingabe ('' = nicht übersetzt)
-            $rowValues = [];   // language_id => Wert der Zeile
+            // determine values per language: raw input (working-state format) and the
+            // value that is written into the data_* row (with fallback)
+            $rawValues = [];   // language_id => input ('' = not translated)
+            $rowValues = [];   // language_id => value of the row
             if ($isMultilingual) {
                 $input = is_array($valueRef) ? $valueRef : [$primaryId => $valueRef];
                 $primaryValue = $input[$primaryId] ?? ($type === 'json' ? [] : '');
@@ -344,14 +344,14 @@ trait VirtualFieldsTrait {
                 }
             }
 
-            // Passwort leer gelassen: bisheriges behalten (Dataset::validateValue()
-            // lässt das bei einer Änderung zu) - die data_pwd-Zeilen bleiben stehen.
+            // Password left empty: keep the previous one (Dataset::validateValue()
+            // allows this on a change) - the data_pwd rows remain.
             if (($type === 'password' || $displayType === 'password') && $this->_isEmptyInput($valueRef)) {
                 $this->recordCache[$name] = [$type, ''];
                 continue;
             }
 
-            // Vorhandene Werte löschen (alle Sprachen)
+            // delete existing values (all languages)
             $sql = "DELETE FROM `data_{$dataTable}` WHERE `record_id` = ? AND `field_id` = ?";
             $this->db->query($sql, 'ii', [$recordId, $fieldId]);
 
@@ -359,12 +359,12 @@ trait VirtualFieldsTrait {
             $hasEmptyFlag = $this->cms->hasEmptyFlag($type);
             foreach ($languageIds as $lang) {
                 $value = $rowValues[$lang];
-                // Query erstellen
+                // build query
                 $sqlExpressions = ['`language_id` = ?', '`record_id` = ?', '`field_id` = ?', '`fieldname_id` = ?'];
                 $sqlTypes = 'iiii';
                 $sqlValues = [$lang, $recordId, $fieldId, $fieldNameId];
-                // `empty` = 1: die Zeile trägt den Fallback aus der Hauptsprache, weil
-                // in dieser Sprache nichts eingegeben wurde (Cms::hasEmptyFlag())
+                // `empty` = 1: the row carries the fallback from the primary language, because
+                // nothing was entered in this language (Cms::hasEmptyFlag())
                 if ($hasEmptyFlag) {
                     $isFallback = $isMultilingual && $lang !== $primaryId && $this->_isEmptyInput($rawValues[$lang]);
                     $sqlExpressions[] = '`empty` = ?';
@@ -372,11 +372,11 @@ trait VirtualFieldsTrait {
                     $sqlValues[] = $isFallback ? 1 : 0;
                 }
                 if ($type === 'encrypted') {
-                    // Verschlüsselten Text + Hash
+                    // Encrypted text + hash
                     // --------------------
-                    // encrypt(text, salt, binary) - hash(normalisierter Text, binary), KEIN Salt;
-                    // der Hash ist der Suchwert: klein, ohne Leerraum und Satzzeichen
-                    // (Cms::encryptedHash(), dieselbe Normalisierung beim Suchen)
+                    // encrypt(text, salt, binary) - hash(normalized text, binary), NO salt;
+                    // the hash is the search value: lowercase, without whitespace and punctuation
+                    // (Cms::encryptedHash(), the same normalization when searching)
                     $encVal = $this->crypt->encrypt((string)($value ?? ''), '', true); // binary
                     $hashVal = $this->cms->encryptedHash((string)($value ?? '')); // binary, 32 Bytes
                     $sqlExpressions[] = '`data` = ?';
@@ -384,7 +384,7 @@ trait VirtualFieldsTrait {
                     $sqlTypes .= 'ss';
                     $sqlValues[] = $encVal;
                     $sqlValues[] = $hashVal;
-                    // Cache: base64, sonst nicht JSON-fähig (siehe Cms::createRecordCache())
+                    // cache: base64, otherwise not JSON-capable (see Cms::createRecordCache())
                     $encryptedCache[$lang][$name] = [$type, base64_encode($encVal)];
                     if ($isMultilingual && $lang !== $primaryId && $this->_isEmptyInput($rawValues[$lang])) {
                         $encryptedCache[$lang][$name][] = 1;
@@ -392,43 +392,43 @@ trait VirtualFieldsTrait {
                 }
                 else {
                     if ($type === 'json') {
-                        // JSON-enkodieren (Arrays liegen als solche vor)
+                        // JSON-encode (arrays are present as such)
                         $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
                         if ($value == '""') $value = '';
                     }
                     elseif ($displayType === 'password' && !in_array($name, $this->prehashedFields, true)) {
-                        // Passwort hashen - 64 Zeichen mit eingebettetem Salt, passend
-                        // zur Spalte `data_pwd`.`data` varchar(64); den Vergleich beim
-                        // Anmelden macht RecordUser::passwordOk(). Ein Wert aus dem
-                        // Arbeitsstand ($prehashedFields) ist schon der Hash.
+                        // hash the password - 64 characters with an embedded salt, matching
+                        // the column `data_pwd`.`data` varchar(64); the comparison at
+                        // login is done by RecordUser::passwordOk(). A value from the
+                        // working state ($prehashedFields) is already the hash.
                         $value = $this->crypt->passwordHash((string)$value);
                     }
                     if ($isDateType
                         && str_ends_with((string)$value, '()')
                         && in_array(strtoupper((string)$value), $this->cms->funcWhitelist, true)
                     ) {
-                        // Erlaubte SQL-Datumsfunktion aus White-List (z. B. UTC_TIMESTAMP())
+                        // permitted SQL date function from the whitelist (e.g. UTC_TIMESTAMP())
                         $sqlExpressions[] = "`data` = $value";
                     }
                     elseif ($isDateType && preg_match($this->dateExpression, (string)$value, $matches)) {
-                        // CMS-Datumsfunktion (z. B. "(now)", "(today)+3d")
+                        // CMS date function (e.g. "(now)", "(today)+3d")
                         $sqlExpressions[] = "`data` = '" . $this->parseDateExpression($matches) ."'";
                     }
                     else {
-                        // Werte getrennt vom Statement übertragen
-                        // (timestampl liegt bereits in UTC vor - validateFieldValue())
+                        // transfer values separately from the statement
+                        // (timestampl is already in UTC - validateFieldValue())
                         $sqlExpressions[] = '`data` = ?';
                         $sqlTypes .= $this->getBindType($type);
                         $sqlValues[] = $value;
                     }
                 }
-                // Query erstellen
+                // build query
                 $sql = "INSERT INTO `data_{$dataTable}` SET " . implode(', ', $sqlExpressions);
                 $this->db->query($sql, $sqlTypes, $sqlValues);
             }
 
-            // default-field? -> Textinhalt je Sprache auch in Tabelle data_dft schreiben
-            // (keine verschlüsselten Daten, kein Passwort, kein Array)
+            // default field? -> also write the text content per language into table data_dft
+            // (no encrypted data, no password, no array)
             if ((int)$colDef['default_field'] === 1
                 && !in_array($type, ['password', 'encrypted', 'json'], true)
                 && $displayType !== 'password'
@@ -439,8 +439,8 @@ trait VirtualFieldsTrait {
                 }
             }
 
-            // Arbeitsstand fortschreiben (rohe Eingaben; Passwörter nie - weder
-            // Klartext noch Hash gehören in den Cache, siehe _writeRecordCache())
+            // update the working state (raw inputs; passwords never - neither
+            // plain text nor hash belong in the cache, see _writeRecordCache())
             if ($type === 'password' || $displayType === 'password') {
                 $this->recordCache[$name] = [$type, ''];
             }
@@ -449,27 +449,27 @@ trait VirtualFieldsTrait {
             }
         }
 
-        // Zurückgestellte Thumbnails jetzt erzeugen (finaler Speichervorgang)
+        // Generate deferred thumbnails now (final save)
         // --------------------
-        // Uploads wurden bereits beim Sichern (secureUploads() / Einzelschritte)
-        // physisch unter $storageId abgelegt und im Arbeitsstand mit
-        // 'thumbnails_pending' markiert. Die Erzeugung erfolgt einmalig hier -
-        // VOR checkIn()/promoteTmpFiles(), damit die entstehenden Thumbnail-
-        // Metadaten mit umziehen und `data_fil`-Einträge erhalten.
-        // $persist: bei einer Arbeitskopie muss das aktualisierte Arbeitsstand (Maße
-        // der Quelldatei, neue Thumbnail-Einträge) zurückgeschrieben werden, denn
-        // promoteTmpFiles() liest DEREN Arbeitsstand - auch wenn die Kopie unter ihrer
-        // eigenen Id produktiv geht.
+        // Uploads were already stored physically under $storageId when saved
+        // (secureUploads() / single steps) and marked in the working state with
+        // 'thumbnails_pending'. Generation takes place once here -
+        // BEFORE checkIn()/promoteTmpFiles(), so that the resulting thumbnail
+        // metadata moves along and receives `data_fil` entries.
+        // $persist: for a working copy the updated working state (dimensions
+        // of the source file, new thumbnail entries) must be written back, because
+        // promoteTmpFiles() reads THAT working state - even if the copy goes live under its
+        // own id.
         //
-        // AUSNAHME - vorhandener Datensatz ($tmpId != $recordId): die Dateien liegen
-        // jetzt noch unter der Id der Arbeitskopie und werden beim checkIn auf die
-        // produktive Id umbenannt. Ein Hintergrundprozess (ffmpeg), der hier startete,
-        // würde seine Quelle unter der tmp-Id öffnen - oft erst, nachdem sie schon
-        // umbenannt ist ("no such file") - und sein Ziel unter der tmp-Id ablegen, wo
-        // es kein Trigger mehr findet. Deshalb werden die Thumbnails dort erst nach
-        // dem checkIn erzeugt (writeDeferredThumbnails(), aus Dataset::save()), mit
-        // den endgültigen Pfaden. Bei neuen Datensätzen (tmp-Id = record-Id) findet
-        // kein Umzug statt.
+        // EXCEPTION - existing record ($tmpId != $recordId): the files still lie
+        // under the id of the working copy and are renamed to the live id at checkIn.
+        // A background process (ffmpeg) started here
+        // would open its source under the tmp id - often only after it has already been
+        // renamed ("no such file") - and place its target under the tmp id, where
+        // no trigger finds it anymore. Therefore the thumbnails are only generated there
+        // after checkIn (writeDeferredThumbnails(), from Dataset::save()), with
+        // the final paths. For new records (tmp id = record id) there is
+        // no move.
         $this->deferredThumbnails = [];
         if ($tmpId > 0 && $tmpId !== $recordId) {
             foreach ($this->recordCache as $cacheName => $entry) {
@@ -489,9 +489,9 @@ trait VirtualFieldsTrait {
                         
         // data_dft
         // --------------------
-        // Gibt es ein Default-Feld? Wurde es geschrieben? Sonst die Id eintragen.
-        // Ein verschlüsseltes Default-Feld (oder Passwort, Array) zählt nicht - sein
-        // Klartext gehört nicht in data_dft, dort steht dann ebenfalls die Id.
+        // Is there a default field? Was it written? Otherwise enter the id.
+        // An encrypted default field (or password, array) does not count - its
+        // plain text does not belong in data_dft, there the id is then stored as well.
         $flagDefaultAvailable = false;
         foreach ($schemaVirtual as $colDef) {
             if ((int)$colDef['default_field'] === 1
@@ -509,13 +509,13 @@ trait VirtualFieldsTrait {
                 $this->db->query($sql, 'iis', [$lang, $recordId, $defaultData]);
             }
         }
-        // Datei-Löschmarkierungen ('deleted'-Flag aus der Eingabemaske, x-Button)
-        // für den produktiven Cache bereinigen: der Eintrag wird geleert -
-        // die eigentliche Löschung der produktiven Datei erfolgt beim checkIn
-        // in promoteTmpFiles() anhand des (unveränderten) Arbeitsstand der Arbeitskopie
-        // ('temporary'-Flags bleiben hier bewusst erhalten: promoteTmpFiles()
-        //  benötigt sie noch für den Fall, dass die Arbeitskopie unter ihrer
-        //  eigenen Id produktiv geht, und entfernt sie anschließend selbst)
+        // clean up file delete markers ('deleted' flag from the input form, x button)
+        // for the live cache: the entry is emptied -
+        // the actual deletion of the live file takes place at checkIn
+        // in promoteTmpFiles(), based on the (unchanged) working state of the working copy
+        // ('temporary' flags deliberately remain here: promoteTmpFiles()
+        //  still needs them in case the working copy goes live under its
+        //  own id, and removes them afterwards itself)
         foreach ($this->recordCache as $cacheName => $entry) {
             if (($entry[0] ?? '') !== 'file') continue;
             foreach ($this->fileEntries($entry) as $langKey => $fileData) {
@@ -527,29 +527,29 @@ trait VirtualFieldsTrait {
                     ]];
                 }
                 else {
-                    // mehrsprachig: die Sprache hat keine eigene Datei mehr -> Eintrag
-                    // weg, es gilt der Fallback (_writeRecordCache())
+                    // multilingual: the language no longer has its own file -> entry
+                    // removed, the fallback applies (_writeRecordCache())
                     $this->setFileEntry($this->recordCache, (string)$cacheName, (int)$langKey, null);
                 }
             }
         }
-        // Inhalts-Cache je Sprache schreiben (`record_cache`)
+        // write the content cache per language (`record_cache`)
         $this->_writeRecordCache($recordId, $this->recordCache, $schemaVirtual, $langCtx, $encryptedCache);
-        // Hinweise:
-        // - Der Umzug der Dateien auf die produktive Id und das Erzeugen der
-        //   `data_fil`-Einträge (aus den Datei-Metadaten des Arbeitsstands) erfolgt beim
-        //   Produktivgehen der Arbeitskopie in
+        // Notes:
+        // - The move of the files to the live id and the creation of the
+        //   `data_fil` entries (from the file metadata of the working state) takes place when
+        //   the working copy goes live in
         //   TemporaryTrait::checkIn() -> promoteTmpFiles()
-        // - Die Erneuerung der Volltext-Inhalte erfolgt separat über
-        //   refreshAffectedFulltext() und muss NACH checkIn() aufgerufen werden
-        //   (siehe Dataset::save()), da sie die zurückkopierten Relations der
-        //   Arbeitskopie benötigt
+        // - The full-text content is refreshed separately via
+        //   refreshAffectedFulltext() and must be called AFTER checkIn()
+        //   (see Dataset::save()), since it needs the copied-back relations of
+        //   the working copy
     }
 
     /**
-     * Sprachen, für die ein Upload-Feld Dateien entgegennimmt.
+     * Languages for which an upload field accepts files.
      *
-     * @return array  [null] bei einsprachigen Feldern, sonst die language_ids
+     * @return array  [null] for single-language fields, otherwise the language_ids
      */
     protected function _uploadLanguages(array $colDef, array $languageIds): array
     {
@@ -558,8 +558,8 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Ist eine Eingabe leer ("nicht übersetzt")?
-     * Skalare: Leerstring; json: Array ohne nicht-leere Einträge.
+     * Is an input empty ("not translated")?
+     * Scalars: empty string; json: array without non-empty entries.
      */
     protected function _isEmptyInput(mixed $value): bool
     {
@@ -573,86 +573,86 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Einzelschritt-Speicherung (Dataset::save() mit $stayTemporary = true):
-     * Der Datensatz bleibt temporär, die (bereits geprüften und umgewandelten)
-     * Inhalte werden nur im Arbeitsstand-Feld der Arbeitskopie zwischengespeichert -
-     * bei mehrsprachigen Feldern je Sprache (language_id => Wert, leer = nicht
-     * übersetzt; Dataset::save() hat die nicht übermittelten Sprachen zuvor aus dem
-     * bisherigen Zwischenstand ergänzt).
+     * Single-step save (Dataset::save() with $stayTemporary = true):
+     * The record stays temporary; the contents (already checked and converted)
+     * are only cached in the working-state field of the working copy -
+     * for multilingual fields per language (language_id => value, empty = not
+     * translated; Dataset::save() has previously added the languages not submitted
+     * from the existing intermediate state).
      *
-     * Ausnahmen:
-     * - Datei-Uploads werden sofort physisch unter der Id der Arbeitskopie
-     *   abgelegt und im Arbeitsstand mit 'temporary' = true markiert (eine Datei lässt
-     *   sich nicht "cachen"; `data_fil` wird erst beim checkIn beschrieben)
-     * - Relations wurden bereits in Dataset::save() (validateFieldValue ->
-     *   createRelations) an die Arbeitskopie gebunden
-     * - Passwörter werden nicht zwischengespeichert (kein Klartext, kein Hash im
-     *   Cache) - sie können nur im finalen Speichervorgang geschrieben werden;
-     *   verschlüsselte Felder liegen im Cache der Arbeitskopie als Geheimtext
+     * Exceptions:
+     * - file uploads are immediately stored physically under the id of the working copy
+     *   and marked in the working state with 'temporary' = true (a file cannot
+     *   be "cached"; `data_fil` is only written at checkIn)
+     * - relations were already bound to the working copy in Dataset::save() (validateFieldValue ->
+     *   createRelations)
+     * - passwords are not cached (no plain text, no hash in the
+     *   cache) - they can only be written in the final save;
+     *   encrypted fields lie in the cache of the working copy as ciphertext
      *   (_writeRecordCache())
      *
-     * Geschrieben werden nur die Sprachzeilen, die sich ändern: bei einem Reiter-
-     * wechsel die Sprache des Reiters - sobald aber ein einsprachiges Feld oder die
-     * Hauptsprache betroffen ist, alle (Fallbacks der übrigen Sprachen).
+     * Only the language rows that change are written: on a tab
+     * switch the language of the tab - but as soon as a single-language field or the
+     * primary language is affected, all (fallbacks of the other languages).
      *
-     * Beim finalen Speichern führt Dataset::save() die Zwischenstände mit den
-     * aktuellen Eingaben zusammen und schreibt sie produktiv.
+     * On the final save, Dataset::save() merges the intermediate states with the
+     * current inputs and writes them live.
      *
-     * @param array &$affectedFields  Felder, deren Inhalte sich ändern
-     * @param array &$data            zu schreibende Inhalte (bereits umgewandelt)
-     * @param array &$schemaVirtual   Schema mit virtuellen Feldern
-     * @param int $tmpId              Id der temporären Arbeitskopie
-     * @param array $tmpCache         bisheriger Zwischenstand der Arbeitskopie
-     * @param array $langCtx          Sprachen der Instanz (Dataset::languageContext())
+     * @param array &$affectedFields  fields whose contents change
+     * @param array &$data            contents to write (already converted)
+     * @param array &$schemaVirtual   schema with virtual fields
+     * @param int $tmpId              id of the temporary working copy
+     * @param array $tmpCache         previous intermediate state of the working copy
+     * @param array $langCtx          languages of the instance (Dataset::languageContext())
      */
     protected function saveTemporaryStep(array &$affectedFields, array &$data, array &$schemaVirtual, int $tmpId, array $tmpCache, array $langCtx = []): void
     {
         if ($tmpId < 1) {
             throw new \Exception('Error: saveTemporaryStep() called with $tmpId < 1.');
         }
-        // bisherigen Zwischenstand als Basis
+        // previous intermediate state as the basis
         $this->recordCache = $tmpCache;
-        // Sammlung bereits verarbeiteter Parent-Fields (für Thumbnails)
+        // collection of already processed parent fields (for thumbnails)
         $this->processedParentFieldIds = [];
-        // Sprachzeilen, die neu geschrieben werden müssen (null = alle)
+        // language rows that must be rewritten (null = all)
         $primaryId = (int)($langCtx['primary_id'] ?? 0);
         $changedLanguages = [];
         $allLanguages = false;
         foreach ($affectedFields as $name) {
-            // Nur virtuelle Felder werden zwischengespeichert
-            // (inkl. Eingabefelder, die auf Meta-Feldern basieren - deren Werte
-            //  werden erst beim finalen Speichern in die Spalten geschrieben)
+            // Only virtual fields are cached
+            // (incl. input fields based on meta fields - their values
+            //  are only written to the columns on the final save)
             $colDef = $schemaVirtual[$name] ?? [];
             if (empty($colDef)) continue;
             $type = (string)($colDef['type'] ?? 'text');
             $displayType = (string)($colDef['display_type'] ?? '');
-            // Volltext wird erst beim finalen Speichern generiert
+            // full text is only generated on the final save
             if ($type === 'fulltext') continue;
-            // Relations hängen bereits an der Arbeitskopie (data_rel)
+            // relations are already attached to the working copy (data_rel)
             if (in_array($type, $this->cms->relationTypes, true)) continue;
-            // Passwörter nicht zwischenspeichern (siehe Methoden-Kommentar)
+            // do not cache passwords (see method comment)
             if ($type === 'password' || $displayType === 'password') continue;
             if ($type === 'file') {
                 $allLanguages = true;
                 if ($displayType === 'upload') {
-                    // Upload sofort an die Arbeitskopie binden
-                    // (physisch + Arbeitsstand mit 'temporary'- und 'thumbnails_pending'-Flag;
-                    //  Thumbnails werden erst beim finalen Speichern erzeugt;
-                    //  ein evtl. gesetztes 'deleted'-Flag wird dabei überschrieben)
+                    // bind the upload to the working copy immediately
+                    // (physically + working state with the 'temporary' and 'thumbnails_pending' flags;
+                    //  thumbnails are only generated on the final save;
+                    //  any 'deleted' flag that may be set is overwritten in the process)
                     foreach ($this->_uploadLanguages($colDef, (array)($langCtx['language_ids'] ?? [])) as $lang) {
                         $this->_saveUploadField($tmpId, $name, $colDef, $schemaVirtual, $data, $lang);
                     }
                 }
-                // display_type 'thumbnail' wird ausschließlich automatisch
-                // über writeThumbnails() befüllt
+                // display_type 'thumbnail' is filled exclusively automatically
+                // via writeThumbnails()
                 continue;
             }
-            // Wert (bereits umgewandelt, vgl. Dataset::validateFieldValue())
-            // in den Zwischenstand übernehmen
+            // take over the value (already converted, cf. Dataset::validateFieldValue())
+            // into the intermediate state
             $value = $data[$name] ?? '';
             $previous = $this->recordCache[$name][1] ?? null;
             $this->recordCache[$name] = [$type, $value];
-            // Welche Sprachzeilen ändern sich dadurch?
+            // which language rows change as a result?
             $isMultilingual = $this->cms->isMultilingualField($colDef) && is_array($value);
             if (!$isMultilingual) {
                 $allLanguages = true;
@@ -660,69 +660,69 @@ trait VirtualFieldsTrait {
             }
             foreach ($value as $lang => $langValue) {
                 if (is_array($previous) && array_key_exists($lang, $previous) && $previous[$lang] === $langValue) continue;
-                if ((int)$lang === $primaryId) $allLanguages = true;   // Fallbacks der anderen
+                if ((int)$lang === $primaryId) $allLanguages = true;   // fallbacks of the others
                 $changedLanguages[] = (int)$lang;
             }
         }
-        // Zwischenstand in die `record_cache`-Zeilen der Arbeitskopie schreiben
+        // write the intermediate state into the `record_cache` rows of the working copy
         $this->_saveTmpData($tmpId, $this->recordCache, $allLanguages ? null : array_unique($changedLanguages));
     }
 
      /**
-     * Verarbeitet die Datei-Eingabe eines einzelnen Upload-Feldes.
+     * Processes the file input of a single upload field.
      *
-     * Quelle der Datei (in dieser Reihenfolge):
-     * 1. Echter Upload in $_FILES['data'][$name]  -> hat VORRANG
-     * 2. Auf dem Server liegende, ausgewählte Datei: $data[$name]['serverfile']
-     *    (relativ zu paths.upload_dir)
-     * 3. Datei eines Imports: $data[$name]['importfile'] (absoluter Pfad, muss in
-     *    paths.tmp_dir liegen - dort entpackt RecordImport die Importdatei), dazu
-     *    optional $data[$name]['filename'] als ursprünglicher Dateiname
-     * Liegt beides gleichzeitig vor, wird 'serverfile' verworfen.
-     * Der Eintrag wird aus dem übergebenen $data gelesen (nicht aus $_REQUEST),
-     * damit die Methode unabhängig von der Herkunft der Daten funktioniert
-     * (Eingabemaske, Importer, CLI, API, ...).
+     * Source of the file (in this order):
+     * 1. Real upload in $_FILES['data'][$name]  -> takes PRECEDENCE
+     * 2. Selected file lying on the server: $data[$name]['serverfile']
+     *    (relative to paths.upload_dir)
+     * 3. File of an import: $data[$name]['importfile'] (absolute path, must lie in
+     *    paths.tmp_dir - RecordImport unpacks the import file there), plus
+     *    optionally $data[$name]['filename'] as the original file name
+     * If both are present at the same time, 'serverfile' is discarded.
+     * The entry is read from the passed $data (not from $_REQUEST),
+     * so that the method works independently of the origin of the data
+     * (input form, importer, CLI, API, ...).
      *
-     * Ablauf: Mime-Typ / Extension prüfen (ungültige Datei wird sofort verworfen),
-     * Datei physisch unter $storageId ablegen (Id der Arbeitskopie) und
-     * $this->recordCache aktualisieren (Eintrag mit 'temporary' = true).
+     * Procedure: check MIME type / extension (an invalid file is discarded immediately),
+     * store the file physically under $storageId (id of the working copy) and
+     * update $this->recordCache (entry with 'temporary' = true).
      *
-     * NEU: Thumbnails werden hier NICHT mehr erzeugt. Der cache-Eintrag erhält
-     * stattdessen 'thumbnails_pending' = true; die Erzeugung erfolgt erst beim
-     * finalen Speichern über writePendingThumbnails() (siehe saveVirtualFields()).
-     * Deshalb bleiben 'width', 'height' und 'data' hier zunächst leer/0 -
-     * diese Angaben liefert ggf. erst der Prozessor bei der Thumbnail-Erzeugung.
+     * NEW: thumbnails are NO LONGER generated here. Instead, the cache entry receives
+     * 'thumbnails_pending' = true; generation only takes place on the
+     * final save via writePendingThumbnails() (see saveVirtualFields()).
+     * Therefore 'width', 'height' and 'data' initially remain empty/0 here -
+     * these details are only supplied by the processor during thumbnail generation, if at all.
      *
-     * Es wird KEIN `data_fil`-Eintrag geschrieben: dieser entsteht erst beim
-     * Produktivgehen in promoteTmpFiles() aus den cache-Metadaten.
+     * NO `data_fil` entry is written: it is only created when going live in
+     * promoteTmpFiles(), from the cache metadata.
      *
-     * @param int $storageId         Id, unter der die Datei physisch abgelegt wird
-     * @param string $name           Feldname
-     * @param array $colDef          Feld-Definition aus dem virtuellen Schema
-     * @param array &$schemaVirtual  Schema mit virtuellen Feldern
-     * @param array $data            Zu speichernde Inhalte (aus Dataset::save());
-     *                               ungeprüft, daher defensiver Zugriff
-     * @param int|null $languageId   mehrsprachiges Feld: Sprache der Datei
-     *                               (Formularfeld data[name][{language_id}]); null bei
-     *                               einsprachigen Feldern
-     * @return bool                  true: Datei verarbeitet,
-     *                               false: keine (neue) Datei angegeben
+     * @param int $storageId         id under which the file is stored physically
+     * @param string $name           field name
+     * @param array $colDef          field definition from the virtual schema
+     * @param array &$schemaVirtual  schema with virtual fields
+     * @param array $data            contents to save (from Dataset::save());
+     *                               unchecked, therefore defensive access
+     * @param int|null $languageId   multilingual field: language of the file
+     *                               (form field data[name][{language_id}]); null for
+     *                               single-language fields
+     * @return bool                  true: file processed,
+     *                               false: no (new) file specified
      */
     protected function _saveUploadField(int $storageId, string $name, array $colDef, array &$schemaVirtual, array $data = [], ?int $languageId = null): bool
     {
         $fieldId = (int)$colDef['field_id'];
         if (empty($fieldId) || $storageId < 1) return false;
-        // Sicherstellen, dass jedes Upload-Feld pro Request nur einmal verarbeitet wird
+        // ensure that each upload field is processed only once per request
         $processedKey = $name . ($languageId === null ? '' : '.' . $languageId);
         if (isset($this->processedUploadFields[$processedKey])) return false;
         $label = $colDef['label'] ?? $name;
         if ($languageId !== null) $label = $this->cms->textOrSnippet($label) . ' | ' . $languageId;
 
-        // Quelle ermitteln
+        // determine the source
         // --------------------
-        // Upload-Datei hat Vorrang: liegt ein $_FILES-Eintrag vor (auch fehlerhaft,
-        // aber nicht UPLOAD_ERR_NO_FILE), wird eine ausgewählte Server-Datei verworfen.
-        // Mehrsprachig: $_FILES['data'][...][$name][$languageId]
+        // The upload file takes precedence: if a $_FILES entry is present (even erroneous,
+        // but not UPLOAD_ERR_NO_FILE), a selected server file is discarded.
+        // Multilingual: $_FILES['data'][...][$name][$languageId]
         $filesInfo = [];
         foreach (['error', 'size', 'tmp_name', 'name', 'type'] as $key) {
             $item = $_FILES['data'][$key][$name] ?? null;
@@ -731,8 +731,8 @@ trait VirtualFieldsTrait {
         }
         $fileError  = (int)($filesInfo['error'] ?? UPLOAD_ERR_NO_FILE);
         $hasUpload  = ($fileError !== UPLOAD_ERR_NO_FILE);
-        // Server-Datei aus den übergebenen Inhalten
-        // ($data[$name] ist noch ungeprüft und kann jeden Typ haben)
+        // server file from the passed contents
+        // ($data[$name] is still unchecked and may have any type)
         $fieldValue = $data[$name] ?? null;
         if ($languageId !== null) $fieldValue = is_array($fieldValue) ? ($fieldValue[$languageId] ?? null) : null;
         $serverFile = is_array($fieldValue) ? trim((string)($fieldValue['serverfile'] ?? '')) : '';
@@ -741,46 +741,46 @@ trait VirtualFieldsTrait {
         $isUploaded = false;
         $deleteServerFile = '';
         if ($hasUpload) {
-            // ---- 1. Datei aus File-Upload (Vorrang, $serverFile wird verworfen) ----
-            // Übertragungsfehler (z. B. upload_max_filesize überschritten)? Dann Fehler
+            // ---- 1. File from file upload (precedence, $serverFile is discarded) ----
+            // transfer error (e.g. upload_max_filesize exceeded)? Then error
             if ($fileError !== UPLOAD_ERR_OK) {
                 $this->createFieldError('error_file_upload', $name, $label);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            // Hochgeladene Datei leer? Dann Fehler
+            // uploaded file empty? Then error
             if (empty($filesInfo['size'])) {
                 $this->createFieldError('error_file_empty', $name, $label);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
             $tmpFile = (string)($filesInfo['tmp_name'] ?? '');
-            // Upload-Datei bereits verarbeitet oder nicht (mehr) vorhanden? Dann überspringen
-            // (z. B. wenn im selben Request nach einem Fehlversuch erneut gespeichert wird;
-            //  die Server-Datei bleibt auch dann verworfen - der Upload hatte Vorrang)
+            // upload file already processed or no longer present? Then skip
+            // (e.g. when saved again in the same request after a failed attempt;
+            //  the server file also remains discarded in that case - the upload had precedence)
             if ($tmpFile === '' || !is_uploaded_file($tmpFile)) return false;
-            // Ursprünglicher Dateiname, gegen Injections gesäubert
-            // (Pfadanteile und Steuerzeichen entfernen, Länge begrenzen)
+            // original file name, sanitized against injections
+            // (remove path parts and control characters, limit length)
             $fileOriginName = basename(str_replace('\\', '/', (string)($filesInfo['name'] ?? '')));
             $isUploaded = true;
         }
         elseif ($serverFile !== '') {
-            // ---- 2. Datei im Upload-Verzeichnis (Server-Datei) ----
-            // Pfad normalisieren. (Wirft Exception wenn ungültig.)
+            // ---- 2. File in the upload directory (server file) ----
+            // normalize the path. (Throws an exception if invalid.)
             $relativePath = DirectoryHelpers::checkPath($serverFile);
             $tmpFile = $this->config->get('paths.upload_dir') . '/' . $relativePath;
             if (!is_file($tmpFile)) {
-                // Ausgewählte Datei existiert nicht (mehr)
+                // selected file does not exist (any longer)
                 $this->createFieldError('error_file_move_uploaded', $name, $label);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
             $fileOriginName = basename(str_replace('\\', '/', $tmpFile));
-            // Schalter "nach erfolgreichem Übernehmen löschen": gelöscht wird erst,
-            // wenn der Datensatz gespeichert ist (promoteTmpFiles())
+            // switch "delete after successful takeover": deletion only happens once
+            // the record is saved (promoteTmpFiles())
             if (!empty($fieldValue['serverfile_delete'])) $deleteServerFile = $relativePath;
         }
         elseif ($importFile !== '') {
-            // ---- 3. Datei aus einem entpackten Import (RecordImport) ----
-            // Nur innerhalb von paths.tmp_dir - ein anderer Pfad wäre ein Zugriff
-            // auf beliebige Dateien des Servers
+            // ---- 3. File from an unpacked import (RecordImport) ----
+            // only within paths.tmp_dir - any other path would be access
+            // to arbitrary files on the server
             $tmpDir = realpath((string)$this->config->get('paths.tmp_dir'));
             $real = realpath($importFile);
             if ($tmpDir === false || $real === false || !is_file($real)
@@ -794,17 +794,17 @@ trait VirtualFieldsTrait {
             if ($fileOriginName === '') $fileOriginName = basename($real);
         }
         else {
-            // Keine (neue) Datei angegeben? Dann überspringen
-            // (Pflichtfeld wird beim finalen Speichervorgang geprüft)
+            // no (new) file specified? Then skip
+            // (required field is checked during the final save)
             return false;
         }
 
-        // Feld als verarbeitet markieren (siehe oben)
+        // mark the field as processed (see above)
         $this->processedUploadFields[$processedKey] = true;
-        // Dateiname für Speicherung aufbereiten
+        // prepare the file name for storage
         $fileOriginName = DirectoryHelpers::checkPath($fileOriginName);
-        // Mime-Typ serverseitig ermitteln
-        // (die Client-Angabe in $_FILES['data']['type'] ist nicht vertrauenswürdig)
+        // determine the MIME type server-side
+        // (the client value in $_FILES['data']['type'] is not trustworthy)
         $fileMime = '';
         if ($finfo = finfo_open(FILEINFO_MIME_TYPE)) {
             $fileMime = (string)(finfo_file($finfo, $tmpFile) ?: '');
@@ -812,29 +812,29 @@ trait VirtualFieldsTrait {
         if ($fileMime === '') {
             $fileMime = strtolower((string)($filesInfo['type'] ?? ''));
         }
-        // Dateierweiterung muss in Kleinbuchstaben umgewandelt werden
-        // (zusätzlich säubern; Fallback über Mime-Typ, falls keine Extension vorhanden)
+        // the file extension must be converted to lowercase
+        // (additionally sanitize; fallback via MIME type if no extension is present)
         $fileExtension = strtolower((string)pathinfo($fileOriginName, PATHINFO_EXTENSION));
         $fileExtension = (string)preg_replace('/[^a-z0-9]/', '', $fileExtension);
         if ($fileExtension === '') {
             $fileExtension = $this->mimeToExtension[$fileMime] ?? 'bin';
         }
-        // Ausführbare / gefährliche Extensions grundsätzlich ablehnen
+        // always reject executable / dangerous extensions
         if (in_array($fileExtension, $this->forbiddenExtensions, true)) {
             $this->createFieldError('error_file_denied', $name, $label);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
-        // Frontend: kein aktiver Inhalt (HTML, SVG, XML, JavaScript)
+        // frontend: no active content (HTML, SVG, XML, JavaScript)
         if ($this->untrustedUploads && MediaAccess::isActiveContent($fileMime, $fileExtension)) {
             $this->createFieldError('error_file_denied', $name, $label);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
-        // Mime-Typ / Extension-Konsistenz für die wichtigsten Bildtypen prüfen
-        // (siehe $mimeExtensionMap): ein serverseitig als z. B. image/jpeg erkannter
-        // Inhalt darf nicht mit fremder Endung (.zip, .png, ...) gespeichert werden.
-        // Die Datei würde sonst unter irreführendem Namen im Media-Verzeichnis liegen.
-        // (eigene Meldung mit dem erkannten Typ - "nicht erlaubt" führt sonst in die Irre,
-        //  z. B. bei einem als .webp gespeicherten PNG)
+        // check MIME type / extension consistency for the most important image types
+        // (see $mimeExtensionMap): content recognized server-side as e.g. image/jpeg
+        // must not be stored with a foreign extension (.zip, .png, ...).
+        // Otherwise the file would lie in the media directory under a misleading name.
+        // (own message with the recognized type - "not allowed" would otherwise mislead,
+        //  e.g. for a PNG stored as .webp)
         if (isset($this->mimeExtensionMap[$fileMime])
             && !in_array($fileExtension, $this->mimeExtensionMap[$fileMime], true)
         ) {
@@ -842,20 +842,20 @@ trait VirtualFieldsTrait {
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
         $allowed = $this->fileTypeAllowed($colDef, $fileMime, $fileExtension);
-        // wenn kein Treffer dann Fehlermeldung (ungültige Datei wird sofort verworfen)
+        // if no match, then error message (invalid file is discarded immediately)
         if (!$allowed) {
             $this->createFieldError('error_file_denied', $name, $label);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
-        // Ablage {instance_id}/{field_id} (Cms::mediaFolder())
+        // storage {instance_id}/{field_id} (Cms::mediaFolder())
         $fileFolder = $this->cms->mediaFolder($fieldId);
-        // Datei wird zunächst unter der Id der Arbeitskopie abgelegt
-        // (Umzug auf die produktive Id erst beim checkIn, siehe promoteTmpFiles());
-        // bei mehrsprachigen Feldern mit der Sprache im Namen (Cms::mediaBaseName())
+        // the file is first stored under the id of the working copy
+        // (move to the live id only at checkIn, see promoteTmpFiles());
+        // for multilingual fields with the language in the name (Cms::mediaBaseName())
         $fileBaseName = $this->cms->mediaBaseName($storageId, $languageId);
-        // Zieldatei:
+        // target file:
         $filePath = "{$fileFolder}/{$fileBaseName}.{$fileExtension}";
-        // tmp-Datei Datei verschieben und Rechte setzen
+        // move the tmp file and set permissions
         $mediaDir = $this->config->get('paths.media_dir');
 
         if (!$fileSize = $this->_moveUploadedFile($tmpFile, $mediaDir, $filePath, $isUploaded)) {
@@ -863,12 +863,12 @@ trait VirtualFieldsTrait {
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
 
-        // Vorhandene alte Datei mit abweichender Extension löschen
-        // (beim mehrfachen Ersetzen innerhalb der Arbeitskopie kann sich die
-        //  Extension ändern; die bisherige Extension steht im 'temporary'-
-        //  cache-Eintrag der Arbeitskopie. Einträge OHNE 'temporary'-Flag
-        //  beschreiben die Datei des produktiven Originals - diese wird erst
-        //  beim checkIn in promoteTmpFiles() ersetzt)
+        // delete an existing old file with a different extension
+        // (when replacing several times within the working copy the
+        //  extension may change; the previous extension is in the 'temporary'
+        //  cache entry of the working copy. Entries WITHOUT the 'temporary' flag
+        //  describe the file of the live original - this is only
+        //  replaced at checkIn in promoteTmpFiles())
         $previousEntry = $this->fileEntry((array)($this->recordCache[$name] ?? []), $languageId);
         if (!empty($previousEntry['temporary'])) {
             $previousExtension = (string)($previousEntry['extension'] ?? '');
@@ -876,67 +876,67 @@ trait VirtualFieldsTrait {
                 @unlink("{$mediaDir}/{$fileFolder}/{$fileBaseName}.{$previousExtension}");
             }
         }
-        // Metadaten der Datei (im Fehlerfall bleibt vorhandener Eintrag und vorhandene Datei bestehen)
+        // file metadata (on error the existing entry and existing file remain)
         $fileData = [
-            'width' => 0,   // wird ggfs. bei der Thumbnail-Erzeugung nachgetragen
+            'width' => 0,   // filled in later during thumbnail generation, if applicable
             'height' => 0,  // " "
             'data' => '{}', // " "
             'size' => $fileSize,
             'mime_type' => $fileMime,
             'extension' => $fileExtension,
-            'filename'  => $fileOriginName,  // ursprünglicher Dateiname, gegen Injections gesäubert
-            'field_id'  => $fieldId,         // für Datei-Pfad / `data_fil`-Eintrag beim checkIn
-            'file_language_id' => $languageId, // Sprache der Datei (null: einsprachig)
+            'filename'  => $fileOriginName,  // original file name, sanitized against injections
+            'field_id'  => $fieldId,         // for the file path / `data_fil` entry at checkIn
+            'file_language_id' => $languageId, // language of the file (null: single-language)
             'temporary' => true,
-            // Thumbnails werden erst beim finalen Speichern erzeugt
-            // (writePendingThumbnails(), aufgerufen aus saveVirtualFields())
+            // thumbnails are only generated on the final save
+            // (writePendingThumbnails(), called from saveVirtualFields())
             'thumbnails_pending' => true
         ];
-        // Server-Datei nach dem Speichern löschen (Pfad relativ zu paths.upload_dir)
+        // delete the server file after saving (path relative to paths.upload_dir)
         if ($deleteServerFile !== '') $fileData['serverfile_delete'] = $deleteServerFile;
-        // Datei-Eintrag setzen (überschreibt auch ein evtl. 'deleted'-Flag
-        // einer zuvor per x-Button entfernten Datei)
-        // KEIN `data_fil`-Eintrag für die Arbeitskopie: dieser entsteht erst
-        // beim Produktivgehen in promoteTmpFiles() aus diesen Datei-Metadaten des Arbeitsstands
+        // set the file entry (also overwrites any 'deleted' flag
+        // of a file previously removed via the x button)
+        // NO `data_fil` entry for the working copy: it is only created
+        // when going live in promoteTmpFiles() from these file metadata of the working state
         $this->setFileEntry($this->recordCache, $name, $languageId, $fileData);
         return true;
     }
 
     /**
-     * Erzeugt die beim Sichern der Uploads zurückgestellten Thumbnails.
+     * Generates the thumbnails deferred when the uploads were saved.
      *
-     * Aufruf beim FINALEN Speichern (saveVirtualFields()) - also einmal pro
-     * Datensatz, nicht bei jedem Zwischenschritt. Verarbeitet werden alle
-     * Datei-Einträge des cache, die von _saveUploadField() mit
-     * 'thumbnails_pending' = true markiert wurden (auch solche aus früheren
-     * Einzelschritten).
+     * Called on the FINAL save (saveVirtualFields()) - so once per
+     * record, not at every intermediate step. All file entries of the cache
+     * that were marked by _saveUploadField() with
+     * 'thumbnails_pending' = true are processed (including those from earlier
+     * single steps).
      *
-     * Arbeitet auf $this->recordCache:
-     * - erzeugt die Thumbnails rekursiv über writeThumbnails() (deren Einträge
-     *   landen ebenfalls im recordCache, mit 'temporary'-Flag)
-     * - trägt die vom Prozessor gelieferten Infos zur QUELL-Datei nach
+     * Works on $this->recordCache:
+     * - generates the thumbnails recursively via writeThumbnails() (their entries
+     *   also end up in the recordCache, with the 'temporary' flag)
+     * - adds the info about the SOURCE file supplied by the processor
      *   ('width', 'height', 'data')
-     * - entfernt das 'thumbnails_pending'-Flag
+     * - removes the 'thumbnails_pending' flag
      *
-     * Muss VOR checkIn()/promoteTmpFiles() laufen, damit die Thumbnail-Metadaten
-     * mit umziehen und `data_fil`-Einträge erhalten.
+     * Must run BEFORE checkIn()/promoteTmpFiles(), so that the thumbnail metadata
+     * moves along and receives `data_fil` entries.
      *
-     * @param int $storageId         Id, unter der die Dateien physisch liegen
-     *                               (Arbeitskopie bzw. produktiver Datensatz)
-     * @param array &$schemaVirtual  Schema mit virtuellen Feldern
-     * @param bool $persist          true: aktualisierten cache in Datensatz
-     *                               $storageId zurückschreiben. Nötig, wenn die
-     *                               Dateien an einer Arbeitskopie mit produktivem
-     *                               Original hängen: promoteTmpFiles() liest den
-     *                               cache DER ARBEITSKOPIE.
-     * @return bool                  true, wenn Thumbnails verarbeitet wurden
+     * @param int $storageId         id under which the files lie physically
+     *                               (working copy or live record)
+     * @param array &$schemaVirtual  schema with virtual fields
+     * @param bool $persist          true: write the updated cache back to the record
+     *                               $storageId. Necessary if the
+     *                               files hang on a working copy with a live
+     *                               original: promoteTmpFiles() reads the
+     *                               cache OF THE WORKING COPY.
+     * @return bool                  true, if thumbnails were processed
      */
     protected function writePendingThumbnails(int $storageId, array &$schemaVirtual, bool $persist = true): bool
     {
         if ($storageId < 1) return false;
         $mediaDir = $this->config->get('paths.media_dir');
-        // Einträge zuerst sammeln: writeThumbnails() verändert $this->recordCache
-        // (je Sprache ein Eintrag bei mehrsprachigen Datei-Feldern)
+        // collect entries first: writeThumbnails() changes $this->recordCache
+        // (one entry per language for multilingual file fields)
         $pending = [];
         foreach ($this->recordCache as $cacheName => $entry) {
             if (($entry[0] ?? '') !== 'file') continue;
@@ -950,7 +950,7 @@ trait VirtualFieldsTrait {
         $processed = false;
         foreach ($pending as [$cacheName, $languageId]) {
             $fileData = $this->fileEntry((array)($this->recordCache[$cacheName] ?? []), $languageId);
-            // Flag in jedem Fall entfernen (keine Wiederholung im selben Vorgang)
+            // remove the flag in any case (no repetition within the same operation)
             unset($fileData['thumbnails_pending']);
             $this->setFileEntry($this->recordCache, $cacheName, $languageId, $fileData);
 
@@ -959,17 +959,17 @@ trait VirtualFieldsTrait {
             $fieldId   = (int)($fileData['field_id'] ?? ($colDef['field_id'] ?? 0));
             $extension = (string)($fileData['extension'] ?? '');
             if ($fieldId < 1 || $extension === '') continue;
-            // Quell-Datei (unter der storage-Id abgelegt)
+            // source file (stored under the storage id)
             $filePath = $this->cms->mediaPath($fieldId, $storageId, $languageId, $extension);
-            if (!is_file($mediaDir . '/' . $filePath)) continue; // Datei nicht (mehr) vorhanden
+            if (!is_file($mediaDir . '/' . $filePath)) continue; // file no longer present
 
-            // Erzeuge Thumbnails rekursiv, ausgehend von diesem Upload-Feld
+            // generate thumbnails recursively, starting from this upload field
             $info = $this->writeThumbnails($storageId, $fieldId, $filePath, $fileData, $schemaVirtual, false, $languageId);
             $processed = true;
             if (!empty($info)) {
-                // die Thumbnailgenerierung hatte Zugriff auf Tools und liefert ggf
-                // Werte zu den Schlüsseln 'width', 'height', 'data'.
-                // `data` (später in `data_fil`) JSON-Feld - keinen Leerstring speichern!
+                // thumbnail generation had access to the tools and may return
+                // values for the keys 'width', 'height', 'data'.
+                // `data` (later in `data_fil`) is a JSON field - do not store an empty string!
                 if ((string)($info['data'] ?? '') === '') $info['data'] = '{}';
                 $fileData = $this->fileEntry((array)($this->recordCache[$cacheName] ?? []), $languageId);
                 $fileData['width']  = (int)$info['width'];
@@ -980,26 +980,26 @@ trait VirtualFieldsTrait {
         }
 
         if ($persist) {
-            // Arbeitsstand der Arbeitskopie fortschreiben ('temporary'- und 'deleted'-Flags
-            // bleiben erhalten, promoteTmpFiles() benötigt sie noch)
+            // update the working state of the working copy ('temporary' and 'deleted' flags
+            // are kept, promoteTmpFiles() still needs them)
             $this->_saveTmpData($storageId, $this->recordCache);
         }
         return $processed;
     }
 
     /**
-     * Zurückgestellte Thumbnails eines VORHANDENEN Datensatzes erzeugen - nach dem
-     * checkIn, wenn die Quelldateien unter der produktiven Id liegen (siehe
-     * saveVirtualFields()). Aufgerufen aus Dataset::save().
+     * Generate deferred thumbnails of an EXISTING record - after the
+     * checkIn, when the source files lie under the live id (see
+     * saveVirtualFields()). Called from Dataset::save().
      *
-     * Wie promoteBackgroundThumbnails() für den Trigger: es gibt keine Arbeitskopie
-     * mehr, die `data_fil`-Zeilen der Thumbnails werden hier selbst geschrieben.
-     * Bild-Thumbnails entstehen sofort, Videos wie konfiguriert im Hintergrund -
-     * mit Quelle und Ziel unter der produktiven Id. Die Quell-Datei bekommt die vom
-     * Konverter ermittelten Maße (width, height, data) nachgetragen.
+     * Like promoteBackgroundThumbnails() for the trigger: there is no working copy
+     * any more, the `data_fil` rows of the thumbnails are written here directly.
+     * Image thumbnails are created immediately, videos in the background as configured -
+     * with source and target under the live id. The source file receives the dimensions
+     * determined by the converter (width, height, data) afterwards.
      *
-     * @param int   $recordId       produktiver Datensatz
-     * @param array $schemaVirtual  Schema des Bereichs
+     * @param int   $recordId       live record
+     * @param array $schemaVirtual  schema of the area
      */
     public function writeDeferredThumbnails(int $recordId, array &$schemaVirtual): void
     {
@@ -1016,7 +1016,7 @@ trait VirtualFieldsTrait {
             $fn = $this->cms->resolveVirtualField($name);
             $fieldNameId = (int)($fn['fieldname_id'] ?? 0);
 
-            // Quell-Datei: ihre `data_fil`-Zeile hat promoteTmpFiles() gerade geschrieben
+            // source file: its `data_fil` row was just written by promoteTmpFiles()
             $this->db->pushResult();
             $this->db->query(
                 'SELECT * FROM `data_fil` WHERE `record_id` = ? AND `field_id` = ? AND `file_language_id` <=> ? LIMIT 1',
@@ -1029,7 +1029,7 @@ trait VirtualFieldsTrait {
             $parentPath = $this->cms->mediaPath($fieldId, $recordId, $languageId, $extension);
             if (!is_file($mediaDir . '/' . $parentPath)) continue;
 
-            // Thumbnails erzeugen (writeThumbnails() arbeitet auf $this->recordCache)
+            // generate thumbnails (writeThumbnails() works on $this->recordCache)
             $this->clearRecordCache();
             $info = $this->writeThumbnails($recordId, $fieldId, $parentPath, $parentData, $schemaVirtual, false, $languageId);
 
@@ -1040,7 +1040,7 @@ trait VirtualFieldsTrait {
                     $thumbFieldId = (int)($fileData['field_id'] ?? 0);
                     $thumbNameId  = (int)($fileData['fieldname_id'] ?? 0);
                     if ($thumbFieldId < 1 || $thumbNameId < 1) continue;
-                    // Alte Thumbnail-Datei mit anderer Extension nicht liegen lassen
+                    // do not leave an old thumbnail file with a different extension behind
                     $previous = $this->_getStoredExtension($recordId, $thumbNameId, $lang);
                     if ($previous !== '' && $previous !== (string)($fileData['extension'] ?? '')) {
                         @unlink("{$mediaDir}/" . $this->cms->mediaPath($thumbFieldId, $recordId, $lang, $previous));
@@ -1051,7 +1051,7 @@ trait VirtualFieldsTrait {
                 }
             }
 
-            // Maße der Quell-Datei nachtragen (vom Konverter ermittelt)
+            // add the dimensions of the source file (determined by the converter)
             if (!empty($info) && $fieldNameId > 0) {
                 $data = (string)($info['data'] ?? '');
                 if ($data === '') $data = '{}';
@@ -1065,32 +1065,32 @@ trait VirtualFieldsTrait {
         }
 
         if ($written) {
-            // Inhalts-Cache verwerfen: Cms::fetch() baut ihn beim nächsten Zugriff
-            // aus den data_*-Zeilen neu auf (mit den Thumbnails)
+            // discard the content cache: Cms::fetch() rebuilds it on the next access
+            // from the data_* rows (including the thumbnails)
             $this->db->query("DELETE FROM `record_cache` WHERE `record_id` = ?", 'i', [$recordId]);
         }
     }
 
     /**
-     * Alle Thumbnails eines produktiven Datensatzes neu erzeugen - für das Werkzeug
-     * "Thumbnails neu erzeugen" (Tools -> Daten, ToolThumbnails), etwa nach
-     * geänderten Konverter-Einstellungen oder einem neuen Thumbnail-Feld.
+     * Regenerate all thumbnails of a live record - for the tool
+     * "regenerate thumbnails" (Tools -> Data, ToolThumbnails), e.g. after
+     * changed converter settings or a new thumbnail field.
      *
-     * Quelle ist jede Datei des Datensatzes in einem Feld, von dem ein Thumbnail-Feld
-     * abhängt (parent_field_id) und das nicht selbst ein Thumbnail ist - die Kaskade
-     * darunter erledigt writeThumbnails() rekursiv. Je Sprachversion der Datei
-     * (file_language_id) ein Durchlauf. Die Erzeugung selbst ist dieselbe wie nach
-     * dem Speichern (writeDeferredThumbnails()): Bilder sofort, Videos wie
-     * konfiguriert im Hintergrund; der record_cache wird verworfen.
+     * The source is every file of the record in a field on which a thumbnail field
+     * depends (parent_field_id) and which is not itself a thumbnail - the cascade
+     * below it is handled recursively by writeThumbnails(). One pass per language
+     * version of the file (file_language_id). The generation itself is the same as after
+     * saving (writeDeferredThumbnails()): images immediately, videos in the
+     * background as configured; the record_cache is discarded.
      *
-     * @param int   $recordId       produktiver Datensatz
-     * @param array $schemaVirtual  Schema des Bereichs
-     * @return int  Anzahl der Quelldateien, für die Thumbnails erzeugt wurden
+     * @param int   $recordId       live record
+     * @param array $schemaVirtual  schema of the area
+     * @return int  number of source files for which thumbnails were generated
      */
     public function regenerateThumbnails(int $recordId, array &$schemaVirtual): int
     {
         if ($recordId < 1) return 0;
-        // Quellfelder: Datei-Felder, auf die ein Thumbnail-Feld zeigt
+        // source fields: file fields to which a thumbnail field points
         $parentIds = [];
         foreach ($schemaVirtual as $colDef) {
             if ((string)($colDef['type'] ?? '') !== 'file') continue;
@@ -1105,7 +1105,7 @@ trait VirtualFieldsTrait {
         }
         if (empty($sources)) return 0;
 
-        // Dateien des Datensatzes in diesen Feldern (eine je Sprachversion)
+        // files of the record in these fields (one per language version)
         $this->deferredThumbnails = [];
         $this->db->pushResult();
         foreach ($sources as $name => $fieldId) {
@@ -1124,33 +1124,33 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Volltext eines gespeicherten Datensatzes erneuern.
+     * Refresh the full text of a saved record.
      *
-     * 1. Die Volltextfelder SEINES Bereichs, in die eines der geänderten Felder
-     *    eingeht (gesammelt in saveVirtualFields()), und die mit Quellen über ein
-     *    link- oder relation-Feld (die Kanten können sich geändert haben), dazu der
-     *    Standard-Volltext. Ändert sich ein Zieldatensatz einer relation, erfährt
-     *    der Volltext davon nichts (bewusst: ein Schlagwort kann an Tausenden
-     *    Datensätzen hängen) - das holt die Zeitplaner-Aufgabe fulltext nach.
-     * 2. Ist er Inhalt eines link-Feldes (LinkTrait), auch der Volltext seines
-     *    Besitzers: dessen Volltextfelder mit Quellen über dieses link-Feld und
-     *    dessen Standard-Volltext.
+     * 1. The full-text fields of ITS area, into which one of the changed fields
+     *    goes into (collected in saveVirtualFields()), and those with sources via a
+     *    link or relation field (the edges may have changed), plus the
+     *    standard full text. If a target record of a relation changes, the
+     *    full text learns nothing of this (deliberately: a keyword may hang on thousands
+     *    of records) - the scheduler task fulltext catches up on this.
+     * 2. If it is the content of a link field (LinkTrait), also the full text of its
+     *    owner: its full-text fields with sources via this link field and
+     *    its standard full text.
      *
-     * Muss NACH checkIn() aufgerufen werden, da die Relations der Arbeitskopie
-     * erst dort auf den produktiven Datensatz zurückkopiert werden.
+     * Must be called AFTER checkIn(), since the relations of the working copy
+     * are only copied back to the live record there.
      *
-     * @param int $recordId  Id des produktiven Datensatzes
+     * @param int $recordId  id of the live record
      */
     public function refreshAffectedFulltext(int $recordId): void
     {
         $affectedTextFieldIds = array_map('intval', $this->affectedTextFieldIds);
-        // Sammlung zurücksetzen (einmalige Verarbeitung je Speichervorgang)
+        // reset the collection (single processing per save operation)
         $this->affectedTextFieldIds = [];
         $this->db->query("SELECT `area_id` FROM `record` WHERE `record_id` = ?", 'i', [$recordId]);
         $areaId = (int)($this->db->fetchNum()[0] ?? 0);
         if ($areaId < 1) return;
 
-        // 1. eigener Bereich
+        // 1. own area
         $in = $affectedTextFieldIds ? implode(',', $affectedTextFieldIds) : '0';
         $this->db->query(
             "SELECT DISTINCT `r`.`fulltext_field_id` FROM `rel_fulltext_text` `r`"
@@ -1163,7 +1163,7 @@ trait VirtualFieldsTrait {
         }
         $this->refreshStandardFulltext($areaId, $recordId);
 
-        // 2. Besitzer über ein link-Feld
+        // 2. owner via a link field
         $this->db->query(
             "SELECT `d`.`src_id`, `d`.`field_id`, `o`.`area_id` FROM `data_rel` `d`"
             . " INNER JOIN `field` `l` ON `l`.`field_id` = `d`.`field_id` AND `l`.`type` = 'link'"
@@ -1183,21 +1183,21 @@ trait VirtualFieldsTrait {
         }
     }
 
-    // Volltext-Standardfeld `fulltext`
+    // Standard full-text field `fulltext`
     // ====================
-    // Jeder Datensatzbereich (Area::CONTENT_TYPES) hat ihn, ohne Zeile in `field`: Der
-    // Name ist reserviert (Field::FULLTEXT) und steht fest in `fieldname` (Typ
-    // 'fulltext'), die Zeilen in `data_ftx` haben field_id NULL. Quellen sind immer
-    // alle Felder des Bereichs vom Typ text, chars, json und file (Dateiname, ohne
-    // Thumbnails) - standardFulltextSources(). select() filtert über den Feldnamen
-    // und braucht die Felddefinition nicht; die Suchmasken bieten ihn von selbst an.
+    // Every record area (Area::CONTENT_TYPES) has it, without a row in `field`: the
+    // name is reserved (Field::FULLTEXT) and fixed in `fieldname` (type
+    // 'fulltext'), the rows in `data_ftx` have field_id NULL. Sources are always
+    // all fields of the area of type text, chars, json and file (file name, without
+    // thumbnails) - standardFulltextSources(). select() filters by the field name
+    // and does not need the field definition; the search masks offer it automatically.
 
-    /** Name des Volltext-Standardfelds (reserviert) */
+    /** Name of the standard full-text field (reserved) */
     public const STANDARD_FULLTEXT = 'fulltext';
 
     /**
-     * fieldname_id des Standardfelds - legt den Eintrag in `fieldname` an, falls er
-     * fehlt (Field::cleanupFieldname() lässt ihn stehen).
+     * fieldname_id of the standard field - creates the entry in `fieldname` if it
+     * is missing (Field::cleanupFieldname() leaves it in place).
      */
     public function standardFulltextFieldnameId(): int
     {
@@ -1215,9 +1215,9 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Quellfelder des Standardfelds: Text-, Zeichen-, JSON- und Upload-Felder des
-     * Bereichs (keine Thumbnails) und, über seine link-Felder, die der Zielbereiche
-     * (fest verknüpfte Inhalte, eine Ebene) - Format wie `rel_fulltext_text`.
+     * Source fields of the standard field: text, chars, JSON and upload fields of the
+     * area (no thumbnails) and, via its link fields, those of the target areas
+     * (firmly linked content, one level) - format like `rel_fulltext_text`.
      */
     public function standardFulltextSources(int $areaId): array
     {
@@ -1251,9 +1251,8 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Standard-Volltext eines Datensatzes bzw. aller Datensätze eines Bereichs neu
-     * aufbauen - nach dem Speichern, nach geänderten Feldern des Bereichs, per
-     * Stapelverarbeitung.
+     * Rebuild the standard full text of a record or of all records of an area -
+     * after saving, after changed fields of the area, via batch processing.
      */
     public function refreshStandardFulltext(int $areaId, ?int $recordId = null): void
     {
@@ -1276,42 +1275,42 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Überträgt die Dateien einer temporären Arbeitskopie auf den produktiven
-     * Datensatz und erzeugt dabei die `data_fil`-Einträge aus den Metadaten
-     * des cache-Feldes der Arbeitskopie.
+     * Transfers the files of a temporary working copy to the live record and
+     * thereby creates the `data_fil` entries from the metadata
+     * of the cache field of the working copy.
      *
-     * Wird von TemporaryTrait::checkIn() aufgerufen, wenn die Arbeitskopie
-     * produktiv geht (analog zum Zurückkopieren der Relations). Auch beim
-     * Produktivgehen unter der eigenen Id (neuer Datensatz / Kopie:
-     * $tmpId === $recordId) - dann entfällt der physische Umzug.
+     * Called from TemporaryTrait::checkIn() when the working copy
+     * goes live (analogous to copying back the relations). Also when going live
+     * under its own id (new record / copy: $tmpId === $recordId) - then the
+     * physical move is omitted.
      *
-     * Verarbeitung je Datei-Eintrag im cache der Arbeitskopie:
-     * 1. Flag 'deleted' (x-Button in der Eingabemaske): eine ggf. am produktiven
-     *    Datensatz hängende Datei und deren `data_fil`-Eintrag werden gelöscht
-     * 2. Flag 'temporary' (neue / ersetzte Datei der Arbeitskopie): die physische
-     *    Datei wird auf die produktive Id umbenannt (eine alte produktive Datei
-     *    und deren Eintrag werden ersetzt; die alte Extension kann abweichen)
-     *    und der `data_fil`-Eintrag aus den cache-Metadaten erzeugt.
-     *    Erfasst werden ALLE 'temporary'-Einträge - auch solche aus früheren
-     *    Einzelschritten (mehrschrittiges Updaten, bevor der Datensatz final
-     *    produktiv geht).
-     * 3. Einträge ohne Flags beschreiben die unveränderte Datei des produktiven
-     *    Originals - nichts zu tun
+     * Processing per file entry in the cache of the working copy:
+     * 1. Flag 'deleted' (x button in the input form): a file possibly attached to the live
+     *    record and its `data_fil` entry are deleted
+     * 2. Flag 'temporary' (new / replaced file of the working copy): the physical
+     *    file is renamed to the live id (an old live file
+     *    and its entry are replaced; the old extension may differ)
+     *    and the `data_fil` entry is created from the cache metadata.
+     *    ALL 'temporary' entries are captured - including those from earlier
+     *    single steps (multi-step updating before the record finally
+     *    goes live).
+     * 3. Entries without flags describe the unchanged file of the live
+     *    original - nothing to do
      *
-     * Abschließend werden die 'temporary'-Flags im cache des produktiven
-     * Datensatzes entfernt (die Dateien sind nun produktiv).
+     * Finally, the 'temporary' flags are removed from the cache of the live
+     * record (the files are now live).
      *
-     * Vorbereitung für mehrstufiges Speichern: Wenn künftig weitere Feldtypen aus dem cache
-     * heraus umgezogen werden sollen, kann das hier zentral ergänzt werden.
+     * Preparation for multi-step saving: if further field types are to be moved out of the cache
+     * in future, this can be added centrally here.
      *
-     * Hinweise:
-     * - Muss innerhalb von checkIn() VOR dem Löschen der Arbeitskopie erfolgen
-     *   (liest deren cache)
-     * - Datei-Operationen sind nicht transaktional: schlägt der Speichervorgang
-     *   danach noch fehl (Rollback), sind die produktiven Dateien bereits ersetzt
+     * Notes:
+     * - Must take place within checkIn() BEFORE the working copy is deleted
+     *   (it reads the cache of that copy)
+     * - File operations are not transactional: if the save operation fails afterwards
+     *   (rollback), the live files have already been replaced
      *
-     * @param int $tmpId     Id der temporären Arbeitskopie
-     * @param int $recordId  Id des produktiven Datensatzes (kann $tmpId sein)
+     * @param int $tmpId     id of the temporary working copy
+     * @param int $recordId  id of the live record (may be $tmpId)
      */
     protected function promoteTmpFiles(int $tmpId, int $recordId): void
     {
@@ -1320,8 +1319,8 @@ trait VirtualFieldsTrait {
         $this->db->pushResult();
         try {
             $tmpCache = $this->_loadTmpData($tmpId);
-            // Mehrsprachige Datei-Felder, deren `data_fil`-Zeilen am Ende je Sprache
-            // abgeglichen werden (Fallback-Zeilen): fieldname_id => field_id
+            // multilingual file fields whose `data_fil` rows are reconciled per language
+            // at the end (fallback rows): fieldname_id => field_id
             $syncFields = [];
             foreach ($tmpCache as $name => $entry) {
                 if (($entry[0] ?? '') !== 'file') continue;
@@ -1335,14 +1334,14 @@ trait VirtualFieldsTrait {
                     $fieldId = (int)($fileData['field_id'] ?? 0);
                     if ($isMultilingual && $fieldId > 0) $syncFields[$fieldNameId] = $fieldId;
 
-                    // 1. Löschmarkierung ('deleted'-Flag aus der Eingabemaske, x-Button)
+                    // 1. delete marker ('deleted' flag from the input form, x button)
                     // --------------------
                     if (!empty($fileData['deleted'])) {
-                        // neue Kopie / neuer Datensatz: kein produktiver Bestand vorhanden
+                        // new copy / new record: no live stock present
                         if ($tmpId === $recordId) continue;
-                        // produktive Datei DIESER Sprache samt Zeile(n) entfernen
-                        // (bei mehrsprachigen Feldern nur die eigene Datei der Sprache;
-                        //  Fallback-Zeilen anderer Sprachen bereinigt _syncFileRows())
+                        // remove the live file of THIS language together with its row(s)
+                        // (for multilingual fields only the language's own file;
+                        //  fallback rows of other languages are cleaned up by _syncFileRows())
                         $sql = 'SELECT DISTINCT `field_id`, `extension` FROM `data_fil`'
                             . ' WHERE `record_id` = ? AND `fieldname_id` = ? AND `file_language_id` <=> ?';
                         $this->db->query($sql, 'iii', [$recordId, $fieldNameId, $languageId]);
@@ -1356,24 +1355,24 @@ trait VirtualFieldsTrait {
                         continue;
                     }
 
-                    // 2. Nur 'temporary'-Dateien umziehen
+                    // 2. move only 'temporary' files
                     // --------------------
-                    // Einträge ohne Flag beschreiben die unveränderte Datei des
-                    // produktiven Originals
+                    // entries without a flag describe the unchanged file of the
+                    // live original
                     if (empty($fileData['temporary'])) continue;
-                    if ($fieldId < 1) continue; // ohne field_id nicht zuordenbar
+                    if ($fieldId < 1) continue; // cannot be assigned without field_id
                     $fileFolder = $this->cms->mediaFolder($fieldId);
                     $extension  = (string)($fileData['extension'] ?? '');
 
                     if ($tmpId !== $recordId) {
-                        // Vorhandene alte produktive Datei ersetzen
-                        // (ihre Extension kann von der neuen abweichen)
+                        // replace the existing old live file
+                        // (its extension may differ from the new one)
                         $prodExtension = $this->_getStoredExtension($recordId, $fieldNameId, $languageId);
                         if ($prodExtension !== '') {
                             @unlink("{$mediaDir}/{$fileFolder}/" . $this->cms->mediaFileName($recordId, $languageId, $prodExtension));
                         }
-                        // Physische Datei auf die produktive Id umbenennen
-                        // (leere Extension -> keine Datei)
+                        // rename the physical file to the live id
+                        // (empty extension -> no file)
                         if ($extension !== '') {
                             $tmpPath  = "{$mediaDir}/{$fileFolder}/" . $this->cms->mediaFileName($tmpId, $languageId, $extension);
                             $prodPath = "{$mediaDir}/{$fileFolder}/" . $this->cms->mediaFileName($recordId, $languageId, $extension);
@@ -1383,11 +1382,11 @@ trait VirtualFieldsTrait {
                         }
                     }
 
-                    // `data_fil`-Eintrag aus den Datei-Metadaten des Arbeitsstands erzeugen
+                    // create the `data_fil` entry from the file metadata of the working state
                     $this->_writeFileRow($recordId, $fieldNameId, $fieldId, $fileData, $languageId);
 
-                    // Übernommene Server-Datei löschen (Schalter in der Eingabemaske) -
-                    // erst nach dem Commit, ein Rollback ließe sie sonst verloren gehen
+                    // delete the adopted server file (switch in the input form) -
+                    // only after the commit, otherwise a rollback would lose it
                     $serverFile = (string)($fileData['serverfile_delete'] ?? '');
                     if ($serverFile !== '') {
                         $this->db->afterCommit(fn() => $this->_deleteServerFile($serverFile));
@@ -1395,16 +1394,16 @@ trait VirtualFieldsTrait {
                 }
             }
 
-            // Mehrsprachige Datei-Felder: Fallback-Zeilen der Sprachen ohne eigene
-            // Datei nachziehen
+            // multilingual file fields: bring up to date the fallback rows of the languages
+            // without their own file
             foreach ($syncFields as $fieldNameId => $fieldId) {
                 $this->_syncFileRows($recordId, $fieldNameId, $fieldId);
             }
 
-            // 'temporary'-Flags im Inhalts-Cache des produktiven Datensatzes entfernen
-            // (die Dateien sind nun produktiv; saveVirtualFields() hat den Cache
-            //  zuvor inkl. der Flags aus der Arbeitskopie übernommen) und die
-            // `version` der Zeilen nachtragen (Cache-Brecher der Verweise, siehe
+            // remove the 'temporary' flags from the content cache of the live record
+            // (the files are now live; saveVirtualFields() previously took over the cache
+            //  including the flags from the working copy) and update the
+            // `version` of the rows (cache breaker of the references, see
             // Cms::cmsMedia() / Backend::backendValue())
             $versions = [];
             $this->db->query(
@@ -1428,14 +1427,14 @@ trait VirtualFieldsTrait {
                         $prodCache[$cacheName][1]['version'] = $version;
                         $changed = true;
                     }
-                    // Sicherheitsnetz: zurückgestellte Thumbnails wurden in
-                    // writePendingThumbnails() abgearbeitet, das Flag darf nicht
-                    // in den produktiven Cache gelangen
+                    // safety net: deferred thumbnails were processed in
+                    // writePendingThumbnails(), the flag must not
+                    // reach the live cache
                     if (isset($entry[1]['thumbnails_pending'])) {
                         unset($prodCache[$cacheName][1]['thumbnails_pending']);
                         $changed = true;
                     }
-                    // die Server-Datei ist erledigt (siehe oben)
+                    // the server file is done (see above)
                     if (isset($entry[1]['serverfile_delete'])) {
                         unset($prodCache[$cacheName][1]['serverfile_delete']);
                         $changed = true;
@@ -1456,14 +1455,14 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * `data_fil`-Zeilen eines MEHRSPRACHIGEN Datei-Feldes je Sprache abgleichen.
+     * Reconcile the `data_fil` rows of a MULTILINGUAL file field per language.
      *
-     * Eigene Zeilen (file_language_id = language_id) bleiben. Jede Sprache der
-     * Instanz ohne eigene Datei bekommt die Zeile der Hauptsprache mit deren
-     * file_language_id (Fallback) - hat auch die Hauptsprache keine Datei, eine leere
-     * Zeile. Veraltete Fallback-Zeilen werden dabei ersetzt.
+     * Own rows (file_language_id = language_id) remain. Every language of the
+     * instance without its own file receives the row of the primary language with its
+     * file_language_id (fallback) - if the primary language has no file either, an empty
+     * row. Outdated fallback rows are replaced in the process.
      *
-     * Aufzurufen, nachdem eigene Dateien geschrieben oder gelöscht wurden
+     * To be called after own files have been written or deleted
      * (promoteTmpFiles(), promoteBackgroundThumbnails()).
      *
      * @param int $recordId
@@ -1475,7 +1474,7 @@ trait VirtualFieldsTrait {
         $languageIds = $this->recordLanguageIds($recordId);
         $primaryId   = $languageIds[0];
 
-        // eigene Zeilen lesen
+        // read own rows
         $own = [];
         $this->db->query(
             'SELECT * FROM `data_fil` WHERE `record_id` = ? AND `fieldname_id` = ?'
@@ -1486,13 +1485,13 @@ trait VirtualFieldsTrait {
             $own[(int)$row['language_id']] = $row;
         }
 
-        // alle übrigen Zeilen (Fallbacks, Reste) entfernen ...
+        // remove all other rows (fallbacks, remainders) ...
         $this->db->query(
             'DELETE FROM `data_fil` WHERE `record_id` = ? AND `fieldname_id` = ?'
             . ' AND NOT (`file_language_id` IS NOT NULL AND `file_language_id` = `language_id`)',
             'ii', [$recordId, $fieldNameId]
         );
-        // ... und je Sprache ohne eigene Datei neu schreiben
+        // ... and rewrite per language without its own file
         foreach ($languageIds as $lang) {
             if (isset($own[$lang])) continue;
             $source = $own[$primaryId] ?? null;
@@ -1505,9 +1504,9 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Eine in ein Upload-Feld übernommene Datei aus paths.upload_dir löschen
-     * (Schalter "nach erfolgreichem Übernehmen löschen", siehe _saveUploadField()).
-     * Nur innerhalb des Upload-Verzeichnisses; fehlt die Datei schon, nichts tun.
+     * Delete a file adopted into an upload field from paths.upload_dir
+     * (switch "delete after successful takeover", see _saveUploadField()).
+     * Only within the upload directory; if the file is already missing, do nothing.
      *
      * @param string $relativePath  Pfad relativ zu paths.upload_dir
      */
@@ -1522,41 +1521,41 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Eine `data_fil`-Zeile aus den Datei-Metadaten des Arbeitsstands eines file-Eintrags schreiben.
+     * Write a `data_fil` row from the file metadata of the working state of a file entry.
      *
-     * Einzige Stelle im Projekt, an der `data_fil`-Zeilen entstehen - benutzt von
-     * promoteTmpFiles() (Arbeitskopie geht produktiv), _syncFileRows() (Fallback-Zeilen)
-     * und promoteBackgroundThumbnails() (Hintergrundprozess hat eine Quelldatei
-     * geliefert, die Thumbnails darauf entstehen jetzt).
+     * The only place in the project where `data_fil` rows are created - used by
+     * promoteTmpFiles() (working copy goes live), _syncFileRows() (fallback rows)
+     * and promoteBackgroundThumbnails() (a background process has delivered a source
+     * file, the thumbnails are now created on it).
      *
-     * `version` zählt bei jedem Schreiben hoch. Zwei Zwecke:
-     *   1. Anti-Caching beim Ausliefern der Datei (?v=...)
-     *   2. eindeutiger Name im Papierkorb, siehe trashFileName()
-     * Nur die jeweils aktuelle Version wird aufbewahrt - der Zähler beschreibt den
-     * Stand der Datei, nicht eine Historie.
+     * `version` counts up on every write. Two purposes:
+     *   1. anti-caching when delivering the file (?v=...)
+     *   2. unique name in the trash, see trashFileName()
+     * Only the respective current version is kept - the counter describes the
+     * state of the file, not a history.
      *
-     * Ein Eintrag OHNE Datei (leere Extension, size 0) wird bewusst ebenfalls
-     * geschrieben: erst er macht den Datensatz für die Filter von Cms::select()
-     * auffindbar, siehe Klassenkommentar von Cms.
+     * An entry WITHOUT a file (empty extension, size 0) is deliberately written as well:
+     * only it makes the record findable for the filters of Cms::select(),
+     * see the class comment of Cms.
      *
-     * SPRACHEN
-     *     einsprachiges Feld ($languageId null): dieselbe Zeile für JEDE Sprache der
-     *         Instanz, file_language_id NULL - so greift die Sprachbedingung der
-     *         Filter auch bei Datei-Feldern
-     *     mehrsprachiges Feld: EINE Zeile für $languageId; file_language_id ist die
-     *         Sprache der physischen Datei ($fileLanguageId, sonst $languageId)
+     * LANGUAGES
+     *     single-language field ($languageId null): the same row for EVERY language of the
+     *         instance, file_language_id NULL - this way the language condition of the
+     *         filters also applies to file fields
+     *     multilingual field: ONE row for $languageId; file_language_id is the
+     *         language of the physical file ($fileLanguageId, otherwise $languageId)
      *
-     * @param int      $recordId        Id des produktiven Datensatzes
-     * @param int      $fieldNameId     fieldname_id (zusammen mit language_id, record_id der PK)
-     * @param int      $fieldId         field_id des Feldes (bestimmt das Medienverzeichnis)
-     * @param array    $fileData        Metadaten: extension, mime_type, data, filename,
+     * @param int      $recordId        id of the live record
+     * @param int      $fieldNameId     fieldname_id (together with language_id, record_id is the PK)
+     * @param int      $fieldId         field_id of the field (determines the media directory)
+     * @param array    $fileData        metadata: extension, mime_type, data, filename,
      *                                  size, width, height, token
-     * @param int|null $languageId      Sprache der Zeile (null: alle Sprachen, einsprachig)
-     * @param int|null $fileLanguageId  Sprache der Datei (null: = $languageId)
+     * @param int|null $languageId      language of the row (null: all languages, single-language)
+     * @param int|null $fileLanguageId  language of the file (null: = $languageId)
      */
     private function _writeFileRow(int $recordId, int $fieldNameId, int $fieldId, array $fileData, ?int $languageId = null, ?int $fileLanguageId = null): void
     {
-        // weil `data` ein JSON-Feld ist - keinen Leerstring speichern!
+        // because `data` is a JSON field - do not store an empty string!
         $jsonData = (string)($fileData['data'] ?? '');
         if ($jsonData === '') $jsonData = '{}';
 
@@ -1566,7 +1565,7 @@ trait VirtualFieldsTrait {
             . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) AS new_data'
             . ' ON DUPLICATE KEY UPDATE'
             // PK: language_id, record_id, fieldname_id
-            // field_id kann sich nicht ändern
+            // field_id cannot change
             . ' `file_language_id` = new_data.`file_language_id`,'
             . ' `extension` = new_data.`extension`,'
             . ' `mime_type` = new_data.`mime_type`,'
@@ -1601,26 +1600,26 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Thumbnails erzeugen, die auf einer im HINTERGRUND fertiggestellten Datei aufbauen,
-     * und ihre `data_fil`-Einträge anlegen.
+     * Generate thumbnails that build on a file completed in the BACKGROUND,
+     * and create their `data_fil` entries.
      *
-     * Gegenstück zu writePendingThumbnails() für den Hintergrundpfad, aufgerufen von
-     * TriggerMedia, sobald ein Prozess durch ist. Der Unterschied zum Speichervorgang:
-     * hier gibt es keine Arbeitskopie und kein anschließendes checkIn(), das die
-     * cache-Metadaten in `data_fil` überführen würde - das muss hier selbst passieren.
+     * Counterpart to writePendingThumbnails() for the background path, called by
+     * TriggerMedia as soon as a process has finished. The difference from the save operation:
+     * here there is no working copy and no subsequent checkIn() that would transfer the
+     * cache metadata into `data_fil` - this has to be done here directly.
      *
-     * writeThumbnails() läuft mit forceBgproc: true, die erzeugten Dateien entstehen
-     * also ihrerseits im Hintergrund. Ihre Zeilen bekommen deshalb size/width/height 0
-     * und das Token ihres Prozesses; die endgültigen Werte trägt TriggerMedia nach,
-     * wenn AUCH dieser Prozess fertig ist. So arbeitet sich eine mehrstufige
-     * Thumbnail-Kette Cron-Lauf für Cron-Lauf vor.
+     * writeThumbnails() runs with forceBgproc: true, so the files it creates are
+     * themselves generated in the background. Their rows therefore receive size/width/height 0
+     * and the token of their process; TriggerMedia supplies the final values
+     * once THAT process has finished as well. This is how a multi-stage
+     * thumbnail chain advances cron run by cron run.
      *
-     * @param int    $recordId        Id des produktiven Datensatzes
-     * @param int    $parentFieldId   field_id der fertiggestellten Datei
-     * @param string $parentPath      Pfad zu ihr ab paths.media_dir
-     * @param array  $parentData      Ihre Metadaten (mime_type, extension, filename, ...)
-     * @param array &$schemaVirtual   Schema des Bereichs
-     * @return array                  Namen der Felder, für die eine Zeile geschrieben wurde
+     * @param int    $recordId        id of the live record
+     * @param int    $parentFieldId   field_id of the completed file
+     * @param string $parentPath      path to it from paths.media_dir
+     * @param array  $parentData      its metadata (mime_type, extension, filename, ...)
+     * @param array &$schemaVirtual   schema of the area
+     * @return array                  names of the fields for which a row was written
      */
     public function promoteBackgroundThumbnails(
         int $recordId,
@@ -1632,15 +1631,15 @@ trait VirtualFieldsTrait {
     {
         if ($recordId < 1 || $parentFieldId < 1) return [];
 
-        // writeThumbnails() schreibt ausschließlich in $this->recordCache und hält in
-        // $this->processedParentFieldIds fest, welche Felder schon dran waren. Beides
-        // muss je Datensatz frisch sein - der Trigger arbeitet mehrere Prozesse in
-        // einem Lauf ab, sonst würde der zweite Datensatz übersprungen.
+        // writeThumbnails() writes exclusively to $this->recordCache and records in
+        // $this->processedParentFieldIds which fields were already processed. Both
+        // must be fresh for each record - the trigger works through several processes in
+        // one run, otherwise the second record would be skipped.
         $this->clearRecordCache();
 
-        // Sprache der Quell-Datei (mehrsprachiges Feld) - die Thumbnails gehören
-        // derselben Sprache; Fallback-Zeilen der übrigen Sprachen zieht
-        // _syncFileRows() nach
+        // language of the source file (multilingual field) - the thumbnails belong to
+        // the same language; fallback rows of the other languages are brought along by
+        // _syncFileRows()
         $languageId = $this->cms->fileLanguageId($parentData);
 
         $this->writeThumbnails(
@@ -1653,9 +1652,9 @@ trait VirtualFieldsTrait {
             foreach ($this->fileEntries($entry) as $langKey => $fileData) {
                 $lang = ($langKey === '') ? null : (int)$langKey;
                 $fieldId     = (int)($fileData['field_id'] ?? 0);
-                // fieldname_id trägt writeThumbnails() in den Eintrag ein
+                // writeThumbnails() enters the fieldname_id in the entry
                 $fieldNameId = (int)($fileData['fieldname_id'] ?? 0);
-                // Ohne beide Ids ist der Eintrag nicht zuordenbar (PK: language_id + record_id + fieldname_id)
+                // without both ids the entry cannot be assigned (PK: language_id + record_id + fieldname_id)
                 if ($fieldId < 1 || $fieldNameId < 1) continue;
 
                 $this->_writeFileRow($recordId, $fieldNameId, $fieldId, $fileData, $lang);
@@ -1665,8 +1664,8 @@ trait VirtualFieldsTrait {
         }
 
         if ($written !== []) {
-            // Inhalts-Cache verwerfen: Cms::fetch() baut ihn beim nächsten Zugriff
-            // aus den data_*-Zeilen neu auf
+            // discard the content cache: Cms::fetch() rebuilds it on the next access
+            // from the data_* rows
             $this->db->query("DELETE FROM `record_cache` WHERE `record_id` = ?", 'i', [$recordId]);
         }
 
@@ -1674,18 +1673,18 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Löscht die physischen Dateien eines Datensatzes, z. B.
-     * - einer temporären Arbeitskopie beim Abbrechen (TemporaryTrait::cancel())
-     *   oder beim Entwerten alter Arbeitskopien (TemporaryTrait::checkOut())
-     * - eines produktiven Datensatzes beim endgültigen Löschen (hookOnDelete)
-     * Produktive Datensätze: anhand der `data_fil`-Einträge (diese werden beim
-     * Löschen der Datensatz-Zeile per FK-Cascade mit entfernt).
-     * Arbeitskopien: anhand der 'temporary'-Einträge in ihrem cache
-     * (Arbeitskopien besitzen keine `data_fil`-Einträge; Einträge ohne
-     *  'temporary'-Flag beschreiben Dateien des produktiven Originals und
-     *  werden bewusst NICHT angefasst).
+     * Deletes the physical files of a record, e.g.
+     * - of a temporary working copy when cancelling (TemporaryTrait::cancel())
+     *   or when invalidating old working copies (TemporaryTrait::checkOut())
+     * - of a live record on permanent deletion (hookOnDelete)
+     * Live records: based on the `data_fil` entries (these are removed along with
+     * the deletion of the record row via FK cascade).
+     * Working copies: based on the 'temporary' entries in their cache
+     * (working copies have no `data_fil` entries; entries without the
+     *  'temporary' flag describe files of the live original and
+     *  are deliberately NOT touched).
      *
-     * @param int $recordId  Id des Datensatzes (temporär oder produktiv)
+     * @param int $recordId  id of the record (temporary or live)
      */
     public function deleteRecordFiles(int $recordId): void
     {
@@ -1697,7 +1696,7 @@ trait VirtualFieldsTrait {
         }
         $this->db->popResult();
 
-        // 'temporary'-Dateien einer Arbeitskopie anhand ihres Arbeitsstand
+        // 'temporary' files of a working copy based on its working state
         $cache = $this->_loadTmpData($recordId);
         foreach ($cache as $entry) {
             if (($entry[0] ?? '') !== 'file') continue;
@@ -1713,36 +1712,35 @@ trait VirtualFieldsTrait {
     }
 
     // ====================
-    // Mediendateien beim Löschen / Wiederherstellen
+    // Media files on delete / restore
     //
-    // Ein Datensatz durchläuft drei Zustände, und seine Dateien wandern mit:
+    // A record passes through three states, and its files move along with it:
     //
-    //     produktiv    {media_dir}/{instanceId}/{fieldId}/{recordId}.{ext}
+    //     live         {media_dir}/{instanceId}/{fieldId}/{recordId}.{ext}
     //        |  softDelete()  -> trashRecordFiles()
     //        v
-    //     Papierkorb   {var_dir}/deleted/{fieldId}_{recordId}_{version}.{ext}
-    //        |  restoreOne()  -> untrashRecordFiles()   zurück nach oben
-    //        |  finalDelete() -> purgeRecordFiles()     endgültig weg
+    //     trash        {var_dir}/deleted/{fieldId}_{recordId}_{version}.{ext}
+    //        |  restoreOne()  -> untrashRecordFiles()   back up again
+    //        |  finalDelete() -> purgeRecordFiles()     gone for good
     //
-    // Die `data_fil`-Zeilen bleiben beim Soft-Delete unangetastet - nur über sie ist
-    // später wiederauffindbar, welche Datei zu welchem Feld gehört und welche
-    // Extension und Version sie hat. Erst beim endgültigen Löschen fallen sie per
-    // FK-Cascade mit der record-Zeile weg.
+    // The `data_fil` rows remain untouched on soft delete - only through them can it
+    // later be found which file belongs to which field and which
+    // extension and version it has. Only on permanent deletion do they disappear
+    // along with the record row via FK cascade.
     //
-    // Warum die Version im Dateinamen: `data_fil`.`version` zählt bei jedem Upload
-    // hoch (siehe promoteTmpFiles()). Der Name im Papierkorb bleibt dadurch auch dann
-    // eindeutig, wenn derselbe Datensatz nach einer Wiederherstellung eine neue Datei
-    // bekommt und erneut gelöscht wird.
+    // Why the version is in the file name: `data_fil`.`version` counts up on every upload
+    // (see promoteTmpFiles()). The name in the trash thus stays unique even when
+    // the same record receives a new file after a restore and is deleted again.
     // ====================
 
     /**
-     * Dateiname einer Datei im Papierkorb-Verzeichnis.
+     * File name of a file in the trash directory.
      *
      * @param int    $fieldId    `data_fil`.`field_id`
      * @param int    $recordId   `data_fil`.`record_id`
      * @param int    $version    `data_fil`.`version`
-     * @param string $extension  ohne führenden Punkt
-     * @return string            Dateiname ohne Verzeichnis
+     * @param string $extension  without leading dot
+     * @return string            file name without directory
      */
     protected function trashFileName(int $fieldId, int $recordId, int $version, string $extension, ?int $fileLanguageId = null): string
     {
@@ -1750,23 +1748,23 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Datei-Metadaten eines Datensatzes aus `data_fil` holen.
+     * Get the file metadata of a record from `data_fil`.
      *
-     * Gemeinsame Grundlage der drei Datei-Operationen unten. Einträge ohne Extension
-     * (Thumbnail-Feld ohne greifenden Konverter) werden übersprungen - zu ihnen gibt
-     * es keine physische Datei.
+     * Common basis of the three file operations below. Entries without an extension
+     * (thumbnail field without an effective converter) are skipped - they have
+     * no physical file.
      *
      * @param int $recordId
-     * @return array  Zeilen mit field_id, extension, version
+     * @return array  rows with field_id, extension, version
      */
     protected function recordFileRows(int $recordId): array
     {
         if ($recordId < 1) return [];
         $this->db->pushResult();
-        // Nur die Zeilen der physischen Dateien: einsprachige Felder führen je
-        // Sprache dieselbe Zeile (file_language_id NULL -> DISTINCT), mehrsprachige
-        // je Sprache eine eigene Datei (file_language_id = language_id); Fallback-
-        // Zeilen anderer Sprachen zeigen auf eine dieser Dateien und zählen nicht.
+        // only the rows of the physical files: single-language fields carry the same
+        // row per language (file_language_id NULL -> DISTINCT), multilingual ones
+        // one file per language (file_language_id = language_id); fallback
+        // rows of other languages point to one of these files and do not count.
         $sql = 'SELECT DISTINCT `field_id`, `extension`, `version`, `file_language_id` FROM `data_fil`'
              . ' WHERE `record_id` = ? AND (`file_language_id` IS NULL OR `file_language_id` = `language_id`)';
         $this->db->query($sql, 'i', [$recordId]);
@@ -1787,16 +1785,16 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * SOFT-DELETE: Mediendateien eines Datensatzes in den Papierkorb verschieben.
+     * SOFT DELETE: move the media files of a record into the trash.
      *
-     * Aufgerufen aus Record::hookOnSoftDelete(). Fehlt eine Datei bereits (z. B. weil
-     * ein früherer Vorgang abgebrochen wurde), wird sie stillschweigend übersprungen -
-     * das Löschen des Datensatzes soll daran nicht scheitern.
+     * Called from Record::hookOnSoftDelete(). If a file is already missing (e.g. because
+     * an earlier operation was aborted), it is silently skipped -
+     * deleting the record should not fail because of it.
      *
-     * Arbeitskopien bleiben unberührt: ihre Dateien sind Zwischenstände ohne
-     * `data_fil`-Eintrag und werden erst beim endgültigen Löschen entfernt.
+     * Working copies remain untouched: their files are intermediate states without a
+     * `data_fil` entry and are only removed on permanent deletion.
      *
-     * @param int $recordId  Id des produktiven Datensatzes
+     * @param int $recordId  id of the live record
      */
     public function trashRecordFiles(int $recordId): void
     {
@@ -1807,7 +1805,7 @@ trait VirtualFieldsTrait {
         $deletedDir = $varDir .'/deleted';
         $mediaDir   = $this->config->get('paths.media_dir');
 
-        // Zielverzeichnis sicherstellen (Rechte aus permissions.dir)
+        // ensure the target directory exists (permissions from permissions.dir)
         if (!is_dir($deletedDir) && !$this->system->createDir(dirname($deletedDir), basename($deletedDir))) {
             throw new \Exception("Error: trashRecordFiles(): could not create \"{$deletedDir}\".");
         }
@@ -1818,21 +1816,21 @@ trait VirtualFieldsTrait {
             $target = $deletedDir . '/' . $this->trashFileName(
                 $row['field_id'], $recordId, $row['version'], $row['extension'], $row['file_language_id']
             );
-            // Eine Datei gleichen Namens kann nur ein Rest eines abgebrochenen
-            // Vorgangs sein - der aktuelle Stand hat Vorrang.
+            // A file with the same name can only be a remainder of an aborted
+            // operation - the current state takes precedence.
             if (is_file($target)) @unlink($target);
             @rename($source, $target);
         }
     }
 
     /**
-     * RESTORE: Mediendateien eines Datensatzes aus dem Papierkorb zurückholen.
+     * RESTORE: fetch the media files of a record back from the trash.
      *
-     * Gegenstück zu trashRecordFiles(), aufgerufen aus Record::hookOnRestore().
-     * Das Zielverzeichnis {media_dir}/{instanceId}/{fieldId} wird bei Bedarf neu
-     * angelegt - es kann zwischenzeitlich leer geräumt worden sein.
+     * Counterpart to trashRecordFiles(), called from Record::hookOnRestore().
+     * The target directory {media_dir}/{instanceId}/{fieldId} is recreated if
+     * necessary - it may have been cleared in the meantime.
      *
-     * @param int $recordId  Id des produktiven Datensatzes
+     * @param int $recordId  id of the live record
      */
     public function untrashRecordFiles(int $recordId): void
     {
@@ -1857,17 +1855,17 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * ENDGÜLTIGE LÖSCHUNG: alle Mediendateien eines Datensatzes entfernen.
+     * PERMANENT DELETION: remove all media files of a record.
      *
-     * Aufgerufen aus Record::hookOnDelete(), also bevor die record-Zeile (und mit ihr
-     * per FK-Cascade die `data_fil`-Zeilen) verschwindet - danach wären Extension und
-     * Version nicht mehr zu ermitteln.
+     * Called from Record::hookOnDelete(), i.e. before the record row (and with it
+     * the `data_fil` rows via FK cascade) disappears - afterwards extension and
+     * version could no longer be determined.
      *
-     * Aufgeräumt wird an BEIDEN Orten: im Papierkorb (der Normalfall, der Datensatz war
-     * ja soft-gelöscht) und im Medienverzeichnis (falls das Verschieben beim Soft-Delete
-     * fehlgeschlagen ist oder ein Aufrufer direkt endgültig löscht).
+     * Cleanup takes place in BOTH locations: in the trash (the normal case, the record was
+     * after all soft-deleted) and in the media directory (in case the move during the soft delete
+     * failed or a caller deletes permanently directly).
      *
-     * @param int $recordId  Id des produktiven Datensatzes
+     * @param int $recordId  id of the live record
      */
     public function purgeRecordFiles(int $recordId): void
     {
@@ -1884,8 +1882,8 @@ trait VirtualFieldsTrait {
             @unlink("{$mediaDir}/" . $this->cms->mediaPath((int)$row['field_id'], $recordId, $row['file_language_id'], $row['extension']));
         }
 
-        // Dateien noch vorhandener Arbeitskopien mit aufräumen
-        // (sie liegen unter der tmp-Id und haben keine `data_fil`-Einträge)
+        // also clean up the files of working copies still present
+        // (they lie under the tmp id and have no `data_fil` entries)
         $this->db->pushResult();
         $this->db->query("SELECT `record_id` FROM `record` WHERE `tmp` = 1 AND `origin_id` = ?", 'i', [$recordId]);
         $tmpIds = $this->db->fetchAll();
@@ -1896,26 +1894,26 @@ trait VirtualFieldsTrait {
     }
 
     // ====================
-    // Datei-Einträge im Arbeitsstand-Format
+    // File entries in working-state format
     //
-    //     einsprachig      ['file', {extension, mime_type, size, ..., file_language_id: null}]
-    //     mehrsprachig     ['file', {language_id: {...}, language_id: {...}}]
-    //                      - nur die Sprachen mit EIGENER Datei; eine Sprache ohne
-    //                      Eintrag nutzt die Datei der Hauptsprache (Fallback), das
-    //                      steht im Cache und in `data_fil` (file_language_id)
+    //     single-language  ['file', {extension, mime_type, size, ..., file_language_id: null}]
+    //     multilingual     ['file', {language_id: {...}, language_id: {...}}]
+    //                      - only the languages with THEIR OWN file; a language without
+    //                      an entry uses the file of the primary language (fallback), which
+    //                      is stored in the cache and in `data_fil` (file_language_id)
     //
-    // Die physische Datei heißt media/{field_id}/{record_id}[_{language_id}].{ext}
-    // (Cms::mediaFileName()). Thumbnails eines mehrsprachigen Upload-Feldes sind
-    // selbst mehrsprachig (Field::hookOnSave()) und entstehen je Sprache aus deren
-    // Datei.
+    // The physical file is called media/{field_id}/{record_id}[_{language_id}].{ext}
+    // (Cms::mediaFileName()). Thumbnails of a multilingual upload field are
+    // themselves multilingual (Field::hookOnSave()) and are generated per language from
+    // their file.
     // ====================
 
     /**
-     * Datei-Einträge eines Datei-Eintrags als Liste je Sprache.
+     * File entries of a file entry as a list per language.
      *
      * @param array $entry  ['file', ...]
-     * @return array        file_language_id|null => Metadaten
-     *                      (null-Schlüssel steht als '' im Array)
+     * @return array        file_language_id|null => metadata
+     *                      (the null key appears as '' in the array)
      */
     public function fileEntries(array $entry): array
     {
@@ -1929,25 +1927,25 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Datei-Eintrag EINER Sprache (null = einsprachig).
+     * File entry of ONE language (null = single-language).
      */
     public function fileEntry(array $entry, ?int $languageId): array
     {
         $entries = $this->fileEntries($entry);
         if ($languageId === null) {
-            // einsprachig - liegt trotzdem eine Sprachliste vor, die Hauptsprache
+            // single-language - if a language list is nevertheless present, the primary language
             return (array)($entries[''] ?? (reset($entries) ?: []));
         }
         return (array)($entries[$languageId] ?? []);
     }
 
     /**
-     * Datei-Eintrag einer Sprache setzen (null = einsprachig) bzw. mit null entfernen.
+     * Set the file entry of a language (null = single-language), or remove it with null.
      *
-     * @param array      &$tmpData    Arbeitsstand-Format (feldname => [typ, wert])
-     * @param string     $name        Feldname
-     * @param int|null   $languageId  Sprache der Datei, null bei einsprachigen Feldern
-     * @param array|null $fileData    Metadaten; null entfernt den Eintrag der Sprache
+     * @param array      &$tmpData    working-state format (field name => [type, value])
+     * @param string     $name        field name
+     * @param int|null   $languageId  language of the file, null for single-language fields
+     * @param array|null $fileData    metadata; null removes the entry of the language
      */
     public function setFileEntry(array &$tmpData, string $name, ?int $languageId, ?array $fileData): void
     {
@@ -1963,18 +1961,18 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Gespeicherte Inhalte eines verschlüsselten Feldes je Sprache (entschlüsselt).
+     * Stored contents of an encrypted field per language (decrypted).
      *
-     * Verschlüsselte Inhalte stehen nicht im Arbeitsstand der Arbeitskopie (data_enc-
-     * Prinzip, siehe Crypt) - beim finalen Speichern holt Dataset::save() sie
-     * hierüber vom produktiven Datensatz nach, wenn der Request sie nicht (für alle
-     * Sprachen) mitbringt. Fallback-Zeilen (`empty` = 1, Inhalt aus der Hauptsprache)
-     * kommen als '' zurück, damit saveVirtualFields() den Fallback neu setzt.
+     * Encrypted contents are not in the working state of the working copy (data_enc
+     * principle, see Crypt) - on the final save, Dataset::save() fetches them
+     * from the live record via this method if the request does not supply them (for all
+     * languages). Fallback rows (`empty` = 1, content from the primary language)
+     * come back as '', so that saveVirtualFields() sets the fallback again.
      *
-     * @param int   $recordId  produktiver Datensatz
-     * @param int   $fieldId   Feld vom Typ 'encrypted'
-     * @param array $langCtx   languageContext() des Bereichs
-     * @return array           language_id => Klartext; leer, wenn nichts gespeichert ist
+     * @param int   $recordId  live record
+     * @param int   $fieldId   field of type 'encrypted'
+     * @param array $langCtx   languageContext() of the area
+     * @return array           language_id => plain text; empty if nothing is stored
      */
     public function encryptedValues(int $recordId, int $fieldId, array $langCtx): array
     {
@@ -1996,19 +1994,19 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Arbeitsstand (Zwischenstand) einer Arbeitskopie laden.
+     * Load the working state (intermediate state) of a working copy.
      *
-     * Der Zwischenstand liegt - wie der produktive Stand - je Sprache in
-     * `record_cache`, unter der Id der Arbeitskopie (siehe Klassenkommentar von
-     * TemporaryTrait). Hier kommt er ins Arbeitsstand-Format: feldname => [typ, wert];
-     * bei mehrsprachigen Feldern ist der Wert ein Array language_id => Eingabe
-     * (leer = nicht übersetzt), bei Datei-Feldern die Metadaten samt Flags
-     * 'temporary' / 'deleted' / 'thumbnails_pending', verschlüsselte Inhalte
-     * entschlüsselt. Fehlende Sprachzeilen werden NICHT nachgebaut - eine
-     * Arbeitskopie hat keine data_*-Zeilen (Neuanlage: leerer Stand).
+     * The intermediate state lies - like the live state - per language in
+     * `record_cache`, under the id of the working copy (see class comment of
+     * TemporaryTrait). Here it comes into working-state format: field name => [type, value];
+     * for multilingual fields the value is an array language_id => input
+     * (empty = not translated), for file fields the metadata including the flags
+     * 'temporary' / 'deleted' / 'thumbnails_pending', encrypted contents
+     * decrypted. Missing language rows are NOT rebuilt - a
+     * working copy has no data_* rows (new record: empty state).
      *
-     * @param int $recordId  Id der Arbeitskopie
-     * @return array         Arbeitsstand, ggf. []
+     * @param int $recordId  id of the working copy
+     * @return array         working state, possibly []
      */
     protected function _loadTmpData(int $recordId): array
     {
@@ -2018,14 +2016,14 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Arbeitsstand einer Arbeitskopie schreiben - in ihre `record_cache`-Zeilen,
-     * abgeleitet je Sprache wie beim produktiven Stand (_writeRecordCache()).
+     * Write the working state of a working copy - into its `record_cache` rows,
+     * derived per language as for the live state (_writeRecordCache()).
      *
-     * @param int        $recordId     Id der Arbeitskopie
-     * @param array      $tmpData      Arbeitsstand (Format siehe _loadTmpData())
-     * @param int[]|null $languageIds  nur diese Sprachzeilen erneuern (null = alle);
-     *                                 siehe saveTemporaryStep()
-     * @param bool       $touch        Bearbeitungssperre auffrischen (changed_at/by)
+     * @param int        $recordId     id of the working copy
+     * @param array      $tmpData      working state (format see _loadTmpData())
+     * @param int[]|null $languageIds  only renew these language rows (null = all);
+     *                                 see saveTemporaryStep()
+     * @param bool       $touch        refresh the edit lock (changed_at/by)
      */
     protected function _saveTmpData(int $recordId, array $tmpData, ?array $languageIds = null, bool $touch = false): void
     {
@@ -2041,21 +2039,21 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Arbeitsstand aller Arbeitskopien eines Bereichs nach einer Feldumwandlung
-     * (Field::convert()) nachziehen: der Eintrag des Feldes bekommt den neuen Typ,
-     * die Werte rechnet $convert um (Klartext rein, Datenbankformat raus;
-     * _writeRecordCache() verschlüsselt bei Bedarf). Leere Eingaben bleiben leer.
+     * Carry over the working state of all working copies of an area after a field conversion
+     * (Field::convert()): the field's entry receives the new type,
+     * $convert recalculates the values (plain text in, database format out;
+     * _writeRecordCache() encrypts if necessary). Empty inputs remain empty.
      *
-     * Aufzurufen, nachdem `field` Typ und Mehrsprachigkeit des Ziels trägt: welche
-     * Form der Wert hat (Array je Sprache oder einzeln), liest
-     * _tmpDataFromRecordCache() aus dem Schema; dazwischen wird nur umgeformt -
-     * mehrsprachig -> einsprachig behält die Hauptsprache.
+     * To be called after `field` carries the type and multilingualism of the target: which
+     * form the value has (array per language or single), is read by
+     * _tmpDataFromRecordCache() from the schema; in between only reshaping takes place -
+     * multilingual -> single-language keeps the primary language.
      *
      * @param int      $areaId
-     * @param string   $name     Feldname
-     * @param string   $toType   neuer Typ
+     * @param string   $name     field name
+     * @param string   $toType   new type
      * @param callable $convert  fn(string $value): int|float|string
-     * @return int               Anzahl der angepassten Arbeitskopien
+     * @return int               number of adjusted working copies
      */
     public function retypeWorkingCopies(int $areaId, string $name, string $toType, callable $convert): int
     {
@@ -2092,16 +2090,16 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Arbeitsstand der Arbeitskopien nach dem Umstellen eines Datei-Feldes zwischen
-     * ein- und mehrsprachig (Field::migrateFileLanguage()) nachziehen - direkt in den
-     * `record_cache`-Zeilen, unabhängig vom Schema:
+     * Carry over the working state of the working copies after switching a file field between
+     * single- and multilingual (Field::migrateFileLanguage()) - directly in the
+     * `record_cache` rows, independent of the schema:
      *
-     *     -> mehrsprachig   der Eintrag wird die Datei der Hauptsprache, die übrigen
-     *                       Sprachen bekommen ihn als Fallback; eine neu hochgeladene
-     *                       Datei ('temporary') heißt danach {tmpId}_{hauptsprache}
-     *     -> einsprachig    der Eintrag der Hauptsprache gilt für alle Sprachen (ohne
-     *                       file_language_id); neue Dateien anderer Sprachen werden
-     *                       gelöscht, die der Hauptsprache heißt danach {tmpId}
+     *     -> multilingual   the entry becomes the file of the primary language; the other
+     *                       languages receive it as fallback; a newly uploaded
+     *                       file ('temporary') is then called {tmpId}_{primary language}
+     *     -> single-language  the entry of the primary language applies to all languages (without
+     *                       file_language_id); new files of other languages are
+     *                       deleted, that of the primary language is then called {tmpId}
      *
      * @param int  $fieldId
      * @param bool $toMultilingual
@@ -2137,7 +2135,7 @@ trait VirtualFieldsTrait {
                     }
                 }
                 else {
-                    // neue Dateien anderer Sprachen fallen weg
+                    // new files of other languages are dropped
                     foreach ($rows as $lang => $cache) {
                         $entry = (array)($cache[$name][1] ?? []);
                         $ext = (string)($entry['extension'] ?? '');
@@ -2168,10 +2166,10 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Schema und Sprachen einer Arbeitskopie (aus ihrer eigenen `record`-Zeile:
-     * area_id - beim Verschieben bereits der Zielbereich).
+     * Schema and languages of a working copy (from its own `record` row:
+     * area_id - already the target area when moved).
      *
-     * @return array  [schemaVirtual, langCtx]; [[], []] wenn es den Datensatz nicht gibt
+     * @return array  [schemaVirtual, langCtx]; [[], []] if the record does not exist
      */
     private function _tmpContext(int $recordId): array
     {
@@ -2184,10 +2182,10 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Sprachen der Instanz eines Datensatzes (Hauptsprache zuerst).
+     * Languages of the instance of a record (primary language first).
      *
      * @param int $recordId
-     * @return int[]  language_ids; mindestens ein Eintrag
+     * @return int[]  language_ids; at least one entry
      */
     protected function recordLanguageIds(int $recordId): array
     {
@@ -2201,25 +2199,25 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Den produktiven Stand eines Datensatzes aus `record_cache` ins Arbeitsstand-Format
-     * bringen - die Grundlage jeder Arbeitskopie (TemporaryTrait::checkOut()).
+     * Bring the live state of a record from `record_cache` into working-state format -
+     * the basis of every working copy (TemporaryTrait::checkOut()).
      *
-     * Der Cache trägt je Sprache die Werte MIT Fallback; das dritte Element 1 an
-     * einem Eintrag sagt, dass der Wert aus der Hauptsprache stammt. Daraus wird
-     * hier wieder die Eingabe: bei mehrsprachigen Feldern ein Array language_id =>
-     * Wert, Fallbacks als leere Eingabe. json-Werte werden dekodiert, verschlüsselte
-     * Inhalte entschlüsselt (im Cache base64-kodierter Geheimtext); Passwörter
-     * stehen nicht im Cache (leer).
+     * The cache carries the values per language WITH fallback; the third element 1 on
+     * an entry says that the value comes from the primary language. From this the
+     * input is recovered here: for multilingual fields an array language_id =>
+     * value, fallbacks as empty input. json values are decoded, encrypted
+     * contents decrypted (base64-encoded ciphertext in the cache); passwords
+     * are not in the cache (empty).
      *
-     * Fehlt eine Sprachzeile, wird der Cache über Cms::createRecordCache() aus den
-     * data_*-Zeilen neu aufgebaut - nur bei produktiven Datensätzen ($rebuild); der
-     * Arbeitsstand einer Arbeitskopie (_loadTmpData()) hat keine andere Quelle.
+     * If a language row is missing, the cache is rebuilt from the
+     * data_* rows via Cms::createRecordCache() - only for live records ($rebuild); the
+     * working state of a working copy (_loadTmpData()) has no other source.
      *
-     * @param int   $recordId       Datensatz (produktiv oder Arbeitskopie)
-     * @param array $schemaVirtual  Schema des Bereichs (multilingual je Feld)
-     * @param array $langCtx        Sprachen der Instanz (Dataset::languageContext())
-     * @param bool  $rebuild        fehlende Sprachzeilen aus data_* nachbauen
-     * @return array                Arbeitsstand-Format
+     * @param int   $recordId       record (live or working copy)
+     * @param array $schemaVirtual  schema of the area (multilingual per field)
+     * @param array $langCtx        languages of the instance (Dataset::languageContext())
+     * @param bool  $rebuild        rebuild missing language rows from data_*
+     * @return array                working-state format
      */
     protected function _tmpDataFromRecordCache(int $recordId, array $schemaVirtual, array $langCtx, bool $rebuild = true): array
     {
@@ -2227,7 +2225,7 @@ trait VirtualFieldsTrait {
         if (empty($languageIds)) return [];
         $primaryId = (int)($langCtx['primary_id'] ?? $languageIds[0]);
 
-        // Alle Sprachzeilen laden - fehlende nachbauen
+        // load all language rows - rebuild the missing ones
         $rows = $this->_loadRecordCacheRows($recordId);
         foreach ($languageIds as $lang) {
             if (isset($rows[$lang]) || !$rebuild) continue;
@@ -2248,7 +2246,7 @@ trait VirtualFieldsTrait {
             $isMultilingual = !empty($schemaVirtual[$name]['multilingual'])
                 && in_array($type, $this->cms->multilingualTypes, true);
             if ($type === 'encrypted') {
-                // Geheimtext (base64) -> Klartext; Fallbacks als leere Eingabe
+                // ciphertext (base64) -> plain text; fallbacks as empty input
                 $decrypt = fn($e) => $this->crypt->decrypt((string)($e[1] ?? ''), '', false);
                 if ($isMultilingual) {
                     $values = [];
@@ -2264,8 +2262,8 @@ trait VirtualFieldsTrait {
                 continue;
             }
             if ($type === 'file' && $this->cms->isMultilingualField((array)($schemaVirtual[$name] ?? []))) {
-                // mehrsprachiges Datei-Feld: nur die Sprachen mit EIGENER Datei
-                // (Fallback-Einträge zeigen auf die Datei einer anderen Sprache)
+                // multilingual file field: only the languages with THEIR OWN file
+                // (fallback entries point to the file of another language)
                 $files = [];
                 foreach ($languageIds as $lang) {
                     $langEntry = $rows[$lang][$name] ?? null;
@@ -2282,7 +2280,7 @@ trait VirtualFieldsTrait {
                 foreach ($languageIds as $lang) {
                     $langEntry = $rows[$lang][$name] ?? null;
                     if ($langEntry === null || !empty($langEntry[2])) {
-                        // fehlt bzw. Fallback -> leere Eingabe
+                        // missing or fallback -> empty input
                         $values[$lang] = ($type === 'json') ? [] : '';
                         continue;
                     }
@@ -2301,9 +2299,9 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Alle `record_cache`-Zeilen eines Datensatzes laden.
+     * Load all `record_cache` rows of a record.
      *
-     * @return array  language_id => dekodierter Cache
+     * @return array  language_id => decoded cache
      */
     protected function _loadRecordCacheRows(int $recordId): array
     {
@@ -2318,25 +2316,25 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Inhalts-Cache je Sprache aus dem Arbeitsstand (Arbeitsstand-Format) ableiten und
-     * in `record_cache` schreiben - das Gegenstück zu _tmpDataFromRecordCache().
+     * Derive the content cache per language from the working state (working-state format) and
+     * write it to `record_cache` - the counterpart to _tmpDataFromRecordCache().
      *
-     *     einsprachig     [typ, wert] in jeder Sprache
-     *     mehrsprachig    [typ, wert] mit dem Wert der Sprache; ist die Eingabe leer,
-     *                     [typ, wert der Hauptsprache, 1]
-     *     json            als JSON-String (so liest Cms::fetch() ihn)
-     *     file            unverändert in jeder Sprache
+     *     single-language [type, value] in every language
+     *     multilingual    [type, value] with the value of the language; if the input is empty,
+     *                     [type, value of the primary language, 1]
+     *     json            as JSON string (this is how Cms::fetch() reads it)
+     *     file            unchanged in every language
      *
      * @param int   $recordId
-     * @param array $tmpData         Arbeitsstand
-     * @param array $schemaVirtual   Schema des Bereichs (multilingual je Feld)
-     * @param array $langCtx         Sprachen der Instanz
-     * @param array $extraEntries    language_id => [name => eintrag] - fertige Einträge,
-     *                               die den abgeleiteten überlagern (verschlüsselte Felder
-     *                               beim finalen Speichern: Geheimtext der data_enc-Zeile)
-     * @param int[]|null $onlyLanguages  nur diese Sprachzeilen ersetzen (null = alle)
-     * @param bool $keepPasswordHash  Arbeitskopie: den Passwort-Hash des Arbeitsstands
-     *                               behalten (securePasswords()); produktiv nie
+     * @param array $tmpData         working state
+     * @param array $schemaVirtual   schema of the area (multilingual per field)
+     * @param array $langCtx         languages of the instance
+     * @param array $extraEntries    language_id => [name => entry] - finished entries
+     *                               that overlay the derived ones (encrypted fields
+     *                               on the final save: ciphertext of the data_enc row)
+     * @param int[]|null $onlyLanguages  only replace these language rows (null = all)
+     * @param bool $keepPasswordHash  working copy: keep the password hash of the working state
+     *                               (securePasswords()); never for the live record
      */
     protected function _writeRecordCache(int $recordId, array $tmpData, array $schemaVirtual, array $langCtx, array $extraEntries = [], ?array $onlyLanguages = null, bool $keepPasswordHash = false): void
     {
@@ -2358,8 +2356,8 @@ trait VirtualFieldsTrait {
                 if (in_array($type, $this->cms->relationTypes, true)) continue;
                 if ($type === 'file') {
                     if (is_array($raw) && $this->cms->isLanguageKeyedFiles($raw)) {
-                        // mehrsprachig: eigene Datei der Sprache, sonst die der
-                        // Hauptsprache (Fallback, Kennzeichen 1), sonst leer
+                        // multilingual: the language's own file, otherwise that of the
+                        // primary language (fallback, marker 1), otherwise empty
                         if (isset($raw[$lang])) {
                             $cache[$name] = [$type, $raw[$lang]];
                         }
@@ -2375,8 +2373,8 @@ trait VirtualFieldsTrait {
                     $cache[$name] = [$type, $raw];
                     continue;
                 }
-                // Mehrsprachig: Wert ist ein Array language_id => Eingabe. Bei json ist
-                // auch der Wert selbst ein Array - dort entscheidet die Indizierung.
+                // Multilingual: the value is an array language_id => input. For json
+                // the value itself is also an array - there the indexing decides.
                 $isMultilingual = !empty($schemaVirtual[$name]['multilingual'])
                     && in_array($type, $this->cms->multilingualTypes, true)
                     && is_array($raw)
@@ -2397,13 +2395,13 @@ trait VirtualFieldsTrait {
                     if ($value == '""') $value = '';
                 }
                 elseif ($type === 'encrypted') {
-                    // Klartext des Arbeitsstands -> Geheimtext, base64 (JSON-fähig)
+                    // plain text of the working state -> ciphertext, base64 (JSON-capable)
                     $value = base64_encode($this->crypt->encrypt((string)$value, '', true));
                 }
                 elseif ($type === 'password' || ($schemaVirtual[$name]['display_type'] ?? '') === 'password') {
-                    // Passwörter gehören nicht in den produktiven Cache (siehe
-                    // Cms::createRecordCache()); im Arbeitsstand einer Arbeitskopie
-                    // darf der Hash stehen - er ist derselbe Wert wie in data_pwd
+                    // passwords do not belong in the live cache (see
+                    // Cms::createRecordCache()); in the working state of a working copy
+                    // the hash may remain - it is the same value as in data_pwd
                     if (!$keepPasswordHash) $value = '';
                 }
                 $cache[$name] = $fallback ? [$type, $value, 1] : [$type, $value];
@@ -2420,7 +2418,7 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Ist ein Array nach Sprachen indiziert (language_id => Wert)?
+     * Is an array indexed by languages (language_id => value)?
      */
     private function _isLanguageKeyedArray(array $values, array $languageIds): bool
     {
@@ -2432,16 +2430,16 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Hilfsfunktion: bisher gespeicherte Extension eines `data_fil`-Eintrags ermitteln
-     * (Primary Key ist language_id + record_id + fieldname_id; gesucht wird die Zeile
-     * der Datei mit file_language_id - NULL bei einsprachigen Feldern)
+     * Helper: determine the previously stored extension of a `data_fil` entry
+     * (the primary key is language_id + record_id + fieldname_id; the row of the
+     * file with file_language_id is searched for - NULL for single-language fields)
      *
-     * @param int      $recordId        record_id des Eintrags (produktiver Datensatz;
-     *                                  Arbeitskopien besitzen keine `data_fil`-Einträge,
-     *                                  deren Extension steht im Arbeitsstand)
-     * @param int      $fieldNameId     fieldname_id des Eintrags
-     * @param int|null $fileLanguageId  Sprache der Datei (null: einsprachig)
-     * @return string                   Extension oder '' wenn kein Eintrag / keine Datei vorhanden
+     * @param int      $recordId        record_id of the entry (live record;
+     *                                  working copies have no `data_fil` entries,
+     *                                  their extension is in the working state)
+     * @param int      $fieldNameId     fieldname_id of the entry
+     * @param int|null $fileLanguageId  language of the file (null: single-language)
+     * @return string                   extension, or '' if there is no entry / no file
      */
     protected function _getStoredExtension(int $recordId, int $fieldNameId, ?int $fileLanguageId = null): string
     {
@@ -2455,40 +2453,39 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Arbeitet rekursiv Thumbnails für ein file-Feld ab.
-     * Wird auf die temporäre Arbeitskopie eines Datensatzes angewendet, über
-     * promoteBackgroundThumbnails() aber auch nach Beendigung eines Hintergrundprozesses
-     * auf einen produktiven Datensatz.
-     * 
-     * @param int $storageId         Id, unter der die Dateien physisch abgelegt werden
-     *                               (beim Speichervorgang: Id der temporären Arbeitskopie,
-     *                               vgl. _saveUploadField() / promoteTmpFiles())
-     * @param int $parentFieldId     Id des Quell-Feldes (Upload/Thumbnail)
-     * @param string $parentPath     Relativer Pfad zur Quell-Datei inkl. Extension, ab paths.media_dir
-     * @param array $parentData      Daten der Quell-Datei
-     * @param array &$schemaVirtual  Zeiger auf virtuelles Schema
-     * @param bool $forceBgproc      true: erzwingt, dass das Thumbnail als Hintergrundprozess erzeugt wird
-     *                               (wird erzwungen wenn bereits parent-Thumnail als Hintergrund erzeugt wurde)
-     * @param int|null $languageId   Sprache der Quell-Datei bei mehrsprachigen Feldern:
-     *                               die Thumbnails entstehen für dieselbe Sprache
-     *                               (Dateiname mit Sprache, Datei-Eintrag je Sprache)
-     * @return ?array                ggf. Array mit Infos zur Quell-Datei ('width', 'height', 'data')
+     * Recursively processes thumbnails for a file field.
+     * Applied to the temporary working copy of a record, but via
+     * promoteBackgroundThumbnails() also to a live record after a background process has finished.
+     *
+     * @param int $storageId         id under which the files are stored physically
+     *                               (during the save operation: id of the temporary working copy,
+     *                               cf. _saveUploadField() / promoteTmpFiles())
+     * @param int $parentFieldId     id of the source field (upload/thumbnail)
+     * @param string $parentPath     relative path to the source file incl. extension, from paths.media_dir
+     * @param array $parentData      data of the source file
+     * @param array &$schemaVirtual  reference to the virtual schema
+     * @param bool $forceBgproc      true: forces the thumbnail to be generated as a background process
+     *                               (forced if the parent thumbnail was already generated in the background)
+     * @param int|null $languageId   language of the source file for multilingual fields:
+     *                               the thumbnails are created for the same language
+     *                               (file name with language, file entry per language)
+     * @return ?array                possibly an array with info about the source file ('width', 'height', 'data')
      */
     public function writeThumbnails(int $storageId, int $parentFieldId, string $parentPath, array $parentData, array &$schemaVirtual, bool $forceBgproc = false, ?int $languageId = null): ?array
     {
         $parentMime = (string)($parentData['mime_type'] ?? '');
         $parentExtension = (string)($parentData['extension'] ?? '');
 
-        // Infos zur Quell-Datei, die ein Prozessor ggf. mitliefert (Rückgabewert)
+        // info about the source file that a processor may supply (return value)
         $srcInfo = null;
 
         foreach ($schemaVirtual as $name => $colDef) {
-            // Suche nach allen Thumbnail-Feldern, die auf $parentFieldId basieren
+            // search for all thumbnail fields that are based on $parentFieldId
             $type = (string)($colDef['type'] ?? '');
             $displayType = (string)($colDef['display_type'] ?? '');
             $fieldId = (int)($colDef['field_id'] ?? 0);
-            // Verhindere Endlos-Rekursion durch gegenseitige Zuweisung über parent_field_id:
-            // jedes Thumbnail-Feld wird pro Speichervorgang (und Sprache) nur einmal verarbeitet
+            // prevent endless recursion through mutual assignment via parent_field_id:
+            // each thumbnail field is processed only once per save operation (and language)
             $processedKey = $fieldId . ':' . ($languageId ?? '');
             if ($type !== 'file'
                 || $displayType !== 'thumbnail'
@@ -2511,28 +2508,28 @@ trait VirtualFieldsTrait {
             ];
             $filePath = '';
 
-            // Verarbeite die Media Converter, die dem Thumbnail-Feld zugewiesen sind
-            // (`rel_field_converter`, in der dort gespeicherten Reihenfolge):
-            // den ersten nehmen, der auf den Medientyp passt UND dessen Prozessor den
-            // Typ verarbeiten kann (MediaProcessor::supports(); stellt sich das erst in
-            // convert() heraus, meldet der Prozessor 'unsupported'). Beispiel: GD ohne
-            // WebP-Unterstützung, dahinter ImageMagick - das WebP nimmt ImageMagick.
-            // Kann KEIN Konverter die Datei verarbeiten, ist das ein Fehler (unten).
+            // Process the media converters assigned to the thumbnail field
+            // (`rel_field_converter`, in the order stored there):
+            // take the first one that matches the media type AND whose processor can
+            // handle the type (MediaProcessor::supports(); if this only turns out in
+            // convert(), the processor reports 'unsupported'). Example: GD without
+            // WebP support, followed by ImageMagick - ImageMagick takes the WebP.
+            // If NO converter can process the file, that is an error (below).
             $converterIds = $this->getConverterIds($fieldId);
-            $converterFound = false;      // ein Konverter hat die Datei übernommen
-            $unsupportedErrors = [];      // Snippet-Ids der übergangenen Konverter (für die Meldung)
+            $converterFound = false;      // a converter has taken over the file
+            $unsupportedErrors = [];      // snippet ids of the skipped converters (for the message)
             foreach ($converterIds as $converterId) {
-                // Daten des Converters laden
+                // load the converter's data
                 $converter = $this->loadConverter($converterId);
-                // Mime-Typen oder Extensions, auf die der Konverter anspringen / nicht anspringen soll
-                // z. B. image/p-jpeg, oder audio/* oder .pdf (Punkt vor Extension)
+                // MIME types or extensions that the converter should / should not apply to
+                // e.g. image/p-jpeg, or audio/* or .pdf (dot before extension)
                 $mediaTypeIncl = !empty($converter['media_types_incl'])
                     ? explode("\n", (string)$converter['media_types_incl']) : [];
                 $mediaTypeExcl = !empty($converter['media_types_excl'])
                     ? explode("\n", (string)$converter['media_types_excl']) : [];
 
-                // wenn kein Treffer, dann nächsten Converter prüfen...
-                // (leere Incl-Liste = Converter akzeptiert alles, Excl-Liste hat Vorrang)
+                // if no match, check the next converter...
+                // (empty incl list = converter accepts everything, excl list takes precedence)
                 $matched = empty($mediaTypeIncl)
                     || $this->_matchMediaType($parentMime, $parentExtension, $mediaTypeIncl);
                 if ($matched && !empty($mediaTypeExcl)
@@ -2542,34 +2539,34 @@ trait VirtualFieldsTrait {
                 }
                 if (!$matched) { continue; }
 
-                // Bei Treffer:
+                // on a match:
                 $fileFolder = $this->cms->mediaFolder($fieldId);
-                // Thumbnail wird ebenfalls unter der storage-Id (Arbeitskopie) abgelegt,
-                // bei mehrsprachigen Feldern mit der Sprache der Quell-Datei im Namen
+                // the thumbnail is likewise stored under the storage id (working copy),
+                // for multilingual fields with the language of the source file in the name
                 $fileBaseName = $this->cms->mediaBaseName($storageId, $languageId);
 
-                // Dateierweiterung der erzeugten Datei:
-                // wenn keine Extension explizit vorgegeben wird, dann die der Quelldatei
+                // file extension of the generated file:
+                // if no extension is explicitly given, then that of the source file
                 $parentExtension = pathinfo($parentPath, PATHINFO_EXTENSION);
                 $fileExtension = $converter['extension'] ?: $parentExtension;
-                // Lade die Prozessor-Klasse
+                // load the processor class
                 $this->processor = $this->factory->create($converter['processor']);
-                // Prozessor beherrscht Quell- oder Zielformat nicht -> nächster Konverter
+                // processor does not support the source or target format -> next converter
                 if (!$this->processor->supports($parentMime, $parentExtension, $fileExtension)) {
                     $unsupportedErrors[] = 'proc.' . strtolower($converter['processor']) . '.error_file_not_supported';
                     continue;
                 }
-                // Zieldatei
+                // target file
                 $filePath = "{$fileFolder}/{$fileBaseName}.{$fileExtension}";
-                // Wenn Verzeichnis noch nicht existiert, dann jetzt erstellen
+                // if the directory does not exist yet, create it now
                 $this->system->createDir($this->config->get('paths.media_dir'), $fileFolder);
-                // Umwandlung der Datei
+                // convert the file
                 $converterDetails = json_decode((string)($converter['details'] ?? ''), true) ?? [];
                 $converterDetails['extension'] = $fileExtension;
                 $fileData = $this->processor->convert(
                     $parentPath, $parentData, $filePath, $converterDetails, $forceBgproc
                 );
-                // Erst beim Lesen festgestellt, dass das Format nicht geht -> nächster Konverter
+                // only found out while reading that the format does not work -> next converter
                 if (!empty($fileData['unsupported'])) {
                     $unsupportedErrors[] = (string)($fileData['errors'] ?? 'error_file_conversion');
                     $filePath = '';
@@ -2577,32 +2574,32 @@ trait VirtualFieldsTrait {
                 }
                 $converterFound = true;
                 /**
-                 * Folgende Daten liefert der Prozessor im Erfolgsfall zurück:
+                 * On success the processor returns the following data:
                  *     'width',
                  *     'height',
                  *     'mime_type',
                  *     'size',
                  *     'filename',
                  *     'extension',
-                 *     'data',          (fertiger JSON-String)
-                 * optional zusätzlich Infos zur QUELL-Datei:
+                 *     'data',          (finished JSON string)
+                 * optionally additionally info about the SOURCE file:
                  *     'source_width',
                  *     'source_height',
-                 *     'source_data'    (fertiger JSON-String)
-                 * Hintergrundprozess gestartet?
-                 *     'token'          Token des Hintergrundprozesses, der die Datei gerade erzeugt
-                 * im Fehlerfall:
-                 * alle Werte leer/0 und:
-                 *     'errors'         Snippet-ID
-                 *     'errors_defails' "Zusätzliche Fehlermeldung, z. B. aus der CLI"
+                 *     'source_data'    (finished JSON string)
+                 * Background process started?
+                 *     'token'          token of the background process that is currently creating the file
+                 * in case of error:
+                 * all values empty/0 and:
+                 *     'errors'         snippet ID
+                 *     'errors_defails' "additional error message, e.g. from the CLI"
                  */
                 if ((int)$fileData['size'] === 0) {
                     if (!empty($fileData['token'])) {
-                        // Hintergrundprozess laufend
-                        // Speichern erlauben, auch wenn size und dimensions 0 sind.
+                        // background process running
+                        // allow saving, even if size and dimensions are 0.
                     }
                     else {
-                        // Datei leer UND kein Hintergrundprozess erstellt -> Fehler
+                        // file empty AND no background process created -> error
                         if (empty($fileData['errors'])) $fileData['errors'] = 'error_file_conversion';
                         $this->createFieldError($fileData['errors'], $name, $label);
                         if (!empty($fileData['error_details'])) {
@@ -2611,28 +2608,28 @@ trait VirtualFieldsTrait {
                         throw new \Exception('#' . $this->cms->errorMsgLast());
                     }
                 }
-                // Es kann je Thumbnail-Feld nur eine Datei erzeugt werden
+                // only one file can be created per thumbnail field
                 break;
             }
 
-            // Konverter zugewiesen, aber keiner kann diesen Dateityp verarbeiten
-            // (Medientyp passt nirgends oder alle Prozessoren haben abgelehnt) -> Fehler.
-            // Ohne zugewiesenen Konverter bleibt das Feld einfach leer.
+            // converter assigned, but none can process this file type
+            // (media type matches nowhere or all processors have rejected it) -> error.
+            // Without an assigned converter the field simply remains empty.
             if (!$converterFound && !empty($converterIds)) {
                 $fileData = [
                     'width' => 0, 'height' => 0, 'mime_type' => '',
                     'size' => 0, 'filename' => '', 'extension' => ''
                 ];
                 $this->createFieldError('error_file_no_converter', $name, $label, $parentMime ?: $parentExtension);
-                // Gründe der übergangenen Konverter (ohne Dubletten) als Zusatz
+                // reasons of the skipped converters (without duplicates) as an addition
                 foreach (array_unique($unsupportedErrors) as $snippetId) {
                     $this->cms->error($this->cms->snippet($snippetId), $name, $label);
                 }
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
 
-            // Infos zur Quell-Datei übernehmen
-            // (vom ersten Converter, der sie liefert; Reihenfolge: width, height, data)
+            // take over info about the source file
+            // (from the first converter that supplies it; order: width, height, data)
             if ($srcInfo === null
                 && (!empty($fileData['source_width'])
                     || !empty($fileData['source_height'])
@@ -2644,11 +2641,11 @@ trait VirtualFieldsTrait {
                     'data'   => (string)($fileData['source_data'] ?? '')
                 ];
             }
-            // Vorhandene alte Thumbnail-Datei mit abweichender Extension löschen
-            // (je nach greifendem Converter kann sich die Ziel-Extension ändern;
-            //  bisherige Extension steht im 'temporary'-cache-Eintrag der
-            //  Arbeitskopie. Einträge ohne Flag beschreiben die produktive Datei
-            //  und werden erst beim checkIn in promoteTmpFiles() ersetzt)
+            // delete an existing old thumbnail file with a different extension
+            // (depending on the converter that applies, the target extension may change;
+            //  the previous extension is in the 'temporary' cache entry of the
+            //  working copy. Entries without the flag describe the live file
+            //  and are only replaced at checkIn in promoteTmpFiles())
             $previousEntry = $this->fileEntry((array)($this->recordCache[$name] ?? []), $languageId);
             if (!empty($previousEntry['temporary'])) {
                 $previousExtension = (string)($previousEntry['extension'] ?? '');
@@ -2657,50 +2654,50 @@ trait VirtualFieldsTrait {
                     @unlink("{$mediaDir}/" . $this->cms->mediaPath($fieldId, $storageId, $languageId, $previousExtension));
                 }
             }
-            // Werte in cache aufnehmen, auch wenn kein Converter gematcht hat
-            // ('temporary': der `data_fil`-Eintrag entsteht erst beim checkIn
-            //  in promoteTmpFiles() aus diesen Metadaten;
-            //  leere Extension = Thumbnail-Feld ohne greifenden Converter, keine Datei)
+            // take the values into the cache, even if no converter matched
+            // ('temporary': the `data_fil` entry is only created at checkIn
+            //  in promoteTmpFiles() from this metadata;
+            //  empty extension = thumbnail field without an effective converter, no file)
             unset($fileData['errors'], $fileData['source_width'], $fileData['source_height'], $fileData['source_data']);
 
             $fileData['field_id']  = $fieldId;
-            // fieldname_id mitschreiben: promoteTmpFiles() löst sie zwar selbst über den
-            // cache-Schlüssel auf, promoteBackgroundThumbnails() legt seine
-            // `data_fil`-Einträge aber direkt aus diesen Metadaten an
+            // also write fieldname_id: promoteTmpFiles() resolves it itself via the
+            // cache key, but promoteBackgroundThumbnails() creates its
+            // `data_fil` entries directly from this metadata
             $fileData['fieldname_id'] = (int)($this->cms->resolveVirtualField($name)['fieldname_id'] ?? 0);
             $fileData['data'] = (string)($fileData['data'] ?? '{}');
             $fileData['file_language_id'] = $languageId;
             $fileData['temporary'] = true;
             $this->setFileEntry($this->recordCache, $name, $languageId, $fileData);
 
-            // Rekursion: Thumbnails erzeugen, die auf diesem Thumbnail basieren
-            // Bei Backgroundprozess: Verschachtelte Thumbnails werden erst erfasst, wenn
-            // der Backgroundprozess fertig ist - siehe promoteBackgroundThumbnails()
+            // recursion: generate thumbnails that are based on this thumbnail
+            // With a background process: nested thumbnails are only recorded once
+            // the background process has finished - see promoteBackgroundThumbnails()
             if ((int)$fileData['size'] > 0 && $filePath !== '' && empty($fileData['token'])) {
                 $this->writeThumbnails($storageId, $fieldId, $filePath, $fileData, $schemaVirtual, false, $languageId);
-                // (Rückgabewert nicht mehr beachten weil Infos bei verschachtelten Thumbnails sofort bekannt sind)
+                // (return value no longer considered, because info on nested thumbnails is known immediately)
             }
         }
-        // Rückgabewert
+        // return value
         return $srcInfo;
     }
 
     /**
-     * Erlaubt ein Upload-Feld Dateien dieses Typs? Medien-Typ-Gruppen
-     * (details.media_types, ohne die Ausnahmen der Gruppe), media_types_incl,
-     * media_types_excl - wie die Eingabeprüfung in _saveUploadField(). Endungen, die
-     * nie gespeichert werden (forbiddenExtensions()), prüft der Aufrufer.
+     * Does an upload field allow files of this type? Media type groups
+     * (details.media_types, without the exceptions of the group), media_types_incl,
+     * media_types_excl - like the input check in _saveUploadField(). Extensions that
+     * are never stored (forbiddenExtensions()) are checked by the caller.
      *
-     * @param array  $colDef     Felddefinition (virtuelles Schema)
-     * @param string $fileMime   erkannter Mime-Typ
-     * @param string $fileExtension  Endung, kleingeschrieben, ohne Punkt
+     * @param array  $colDef     field definition (virtual schema)
+     * @param string $fileMime   recognized MIME type
+     * @param string $fileExtension  extension, lowercase, without dot
      */
     public function fileTypeAllowed(array $colDef, string $fileMime, string $fileExtension): bool
     {
         $fieldDetails = json_decode((string)($colDef['details'] ?? ''), true) ?? [];
-        // Prüfe den Mime Types bzw. Dateiendungen der hochgeladenen Datei
-        // 1. Medien-Typ-Gruppen (siehe $mediaTypeGroups), mehrere möglich
-        //    (ohne die Ausnahmen der Gruppe, siehe $mediaTypeGroupsExcl)
+        // check the MIME types or file extensions of the uploaded file
+        // 1. media type groups (see $mediaTypeGroups), several possible
+        //    (without the exceptions of the group, see $mediaTypeGroupsExcl)
         $mediaTypeGroup = (array)($fieldDetails['media_types'] ?? []);
         $hasPatterns = false;
         $allowed = false;
@@ -2714,18 +2711,18 @@ trait VirtualFieldsTrait {
                 $allowed = true;
             }
         }
-        // 2. Explizit angegbene Mime-Typen oder Extensions, die übereinstimmen dürfen
-        // z. B. image/p-jpeg, oder audio/* oder .pdf (Punkt vor Extension)
-        // (Groß-Kleinschreibung nicht unterscheiden)
+        // 2. explicitly specified MIME types or extensions that may match
+        // e.g. image/p-jpeg, or audio/* or .pdf (dot before extension)
+        // (case-insensitive)
         $mediaTypeIncl = !empty($fieldDetails['media_types_incl'])
             ? array_filter(array_map('trim', explode("\n", (string)$fieldDetails['media_types_incl']))) : [];
         if (!empty($mediaTypeIncl)) {
             $hasPatterns = true;
             if ($this->_matchMediaType($fileMime, $fileExtension, $mediaTypeIncl)) $allowed = true;
         }
-        // Weder Gruppen noch Incl-Liste angegeben -> alle Typen erlaubt (bis auf Excl-Liste)
+        // neither groups nor incl list specified -> all types allowed (except the excl list)
         if (!$hasPatterns) $allowed = true;
-        // 3. Explizit angegbene Mime-Typen oder Extensions, die NICHT übereinstimmen dürfen
+        // 3. explicitly specified MIME types or extensions that must NOT match
         $mediaTypeExcl = !empty($fieldDetails['media_types_excl'])
             ? explode("\n", (string)$fieldDetails['media_types_excl']) : [];
         if ($allowed && !empty($mediaTypeExcl)
@@ -2737,7 +2734,7 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Endungen, die aus Sicherheitsgründen nie gespeichert werden.
+     * Extensions that are never stored for security reasons.
      * @return string[]
      */
     public function forbiddenExtensions(): array
@@ -2746,8 +2743,8 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Passt die Endung nicht zum erkannten Inhalt ($mimeExtensionMap)? Eine solche
-     * Datei lehnt _saveUploadField() mit error_file_mismatch ab.
+     * Does the extension not match the recognized content ($mimeExtensionMap)? Such a
+     * file is rejected by _saveUploadField() with error_file_mismatch.
      */
     public function mimeExtensionMismatch(string $fileMime, string $fileExtension): bool
     {
@@ -2756,14 +2753,14 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Prüft Mime-Typ / Extension einer Datei gegen eine Liste von Mustern
-     * Muster: exakter Mime-Typ (image/jpeg), Wildcard-Mime (image/*), Extension mit Punkt (.pdf)
-     * Groß-/Kleinschreibung wird nicht unterschieden
+     * Checks the MIME type / extension of a file against a list of patterns
+     * Patterns: exact MIME type (image/jpeg), wildcard MIME (image/*), extension with dot (.pdf)
+     * Case is not distinguished
      *
-     * @param string $mime       Mime-Typ der Datei
-     * @param string $extension  Extension der Datei (ohne Punkt)
-     * @param array $patterns    Muster-Liste
-     * @return bool              true bei Treffer
+     * @param string $mime       MIME type of the file
+     * @param string $extension  extension of the file (without dot)
+     * @param array $patterns    list of patterns
+     * @return bool              true on a match
      */
     protected function _matchMediaType(string $mime, string $extension, array $patterns): bool
     {
@@ -2773,11 +2770,11 @@ trait VirtualFieldsTrait {
             $pattern = strtolower(trim((string)$pattern));
             if ($pattern === '') continue;
             if ($pattern[0] === '.') {
-                // Extension-Vergleich
+                // extension comparison
                 if (ltrim($pattern, '.') === $extension) return true;
             }
             elseif (str_ends_with($pattern, '/*')) {
-                // Wildcard-Mime, z. B. image/*
+                // wildcard MIME, e.g. image/*
                 if (str_starts_with($mime, substr($pattern, 0, -1))) return true;
             }
             elseif ($pattern === $mime) {
@@ -2788,10 +2785,10 @@ trait VirtualFieldsTrait {
     }
     
     /**
-     * Prüfe, ob Verknüpfung besteht (für lookup-Feld Handhabung)
-     * @param int $srcFieldId  Id des Relation-Feldes
-     * @param int $srcId       Id des Quell-Datensatzes
-     * @param int $destId      Id des Ziel-Datensatzes
+     * Check whether a link exists (for lookup field handling)
+     * @param int $srcFieldId  id of the relation field
+     * @param int $srcId       id of the source record
+     * @param int $destId      id of the target record
      */
     public function checkRelation(int $srcFieldId, int $srcId, int $destId): bool
     {
@@ -2807,33 +2804,33 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Relation zwischen Quell- und Ziel-Datensätzen herstellen
-     * Abhängig vom Feldtyp: unidirektional oder bidirektional
-     * * Format der Ids für die Ziel-Datensätze:
-     * 1. Einzelne Id
-     * 2. Kommaseparierte Ids
-     * 3. Array mit Ids
+     * Establish a link between source and target records
+     * Depending on the field type: unidirectional or bidirectional
+     * * format of the ids for the target records:
+     * 1. single id
+     * 2. comma-separated ids
+     * 3. array with ids
      *
-     * HÖCHSTENS EIN ZIEL (relation1 / pointer1, max = 1)
+     * AT MOST ONE TARGET (relation1 / pointer1, max = 1)
      * --------------------
-     * Die Regel wird HIER durchgesetzt - alle Wege (Lookup, select-Felder in save(),
-     * Stapelverarbeitung, Import, CMS:USER_INPUT) laufen durch diese Methode:
-     *   - eigene Seite: mehr als eine dest_id ist ein Feldfehler; eine bestehende
-     *     Verknüpfung wird auch bei $replace = false ersetzt (es gibt kein "dazu")
-     *   - Gegenseite: erlaubt das Gegenfeld eines 'relation'-Feldes nur ein Ziel,
-     *     verliert der Zieldatensatz beim CHECK-IN seine bisherige Verknüpfung dort
-     *     (TemporaryTrait::_enforceSingleRelations()) - "ein Artikel hat genau eine
-     *     Rubrik: wer ihn einer neuen zuordnet, nimmt ihn aus der alten". Nicht schon
-     *     hier: die Verknüpfung hängt an der Arbeitskopie und muss mit ihr verworfen
-     *     werden können (cancel), ohne dass fremde Datensätze etwas verlieren.
-     *     Cms::select() joint …1-Felder als n:1 ohne DISTINCT und verlässt sich
-     *     auf genau eine Zeile je src_id.
+     * The rule is enforced HERE - all paths (lookup, select fields in save(),
+     * batch processing, import, CMS:USER_INPUT) run through this method:
+     *   - own side: more than one dest_id is a field error; an existing
+     *     link is also replaced with $replace = false (there is no "add to")
+     *   - opposite side: if the counter field of a 'relation' field allows only one target,
+     *     the target record loses its previous link there at CHECK-IN
+     *     (TemporaryTrait::_enforceSingleRelations()) - "an article has exactly one
+     *     category: whoever assigns it to a new one takes it out of the old one". Not already
+     *     here: the link hangs on the working copy and must be discardable with it
+     *     (cancel), without foreign records losing anything.
+     *     Cms::select() joins …1 fields as n:1 without DISTINCT and relies
+     *     on exactly one row per src_id.
      *
-     * @param array  $colDef   Quell-Feld-Eigenschaften
-     * @param int    $srcId    Id des Quell-Datensatzes
-     * @param array  $destIds  Ids der Ziel-Datensätze
-     * @param bool   $replace  true: lösche vorhande Verknüpfungen in diesem Feld
-     * @param bool   $checkTmp true: prüfe ob der Datensatz srcId temporär ist und Session-Admin gehört
+     * @param array  $colDef   source field properties
+     * @param int    $srcId    id of the source record
+     * @param array  $destIds  ids of the target records
+     * @param bool   $replace  true: delete existing links in this field
+     * @param bool   $checkTmp true: check whether the record srcId is temporary and belongs to the session admin
      */
     public function createRelations(array &$colDef, int $srcId, int|array|string $destIds, bool $replace = true, bool $checkTmp = true): void
     {
@@ -2857,22 +2854,22 @@ trait VirtualFieldsTrait {
             $destIds = [$destIds];
         }
 
-        // nur echte Ids behalten und Duplikate direkt entfernen
+        // keep only real ids and remove duplicates directly
         $destIds = array_unique(array_filter($destIds, fn($value) => (int)$value > 0 && is_numeric($value)));
         $destCount = count($destIds);
         if ($destCount === 0 && !$replace) {
-            // nichts zum Hinzufügen
+            // nothing to add
             return;
         }
 
-        // Sicherheitslimit: Maximal 5000 Datensätze auf einmal
+        // safety limit: at most 5000 records at once
         if ($destCount > 5000) {
             $this->createFieldError('record.error_too_many_relations', $name, $label);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
 
-        // Höchstens ein Ziel (siehe Methodenkommentar): mehrere Ids sind ein Fehler,
-        // eine vorhandene Verknüpfung wird immer ersetzt
+        // at most one target (see method comment): several ids are an error,
+        // an existing link is always replaced
         $isSingle = in_array($type, $this->cms->singleRelationTypes, true) || (int)($colDef['max'] ?? 0) === 1;
         if ($isSingle) {
             if ($destCount > 1) {
@@ -2883,14 +2880,14 @@ trait VirtualFieldsTrait {
         }
 
         if ($checkTmp) {
-            // prüfe ob Datensatz temporär ist und Session-Admin gehört
+            // check whether the record is temporary and belongs to the session admin
 
             if (!$prodData = $this->getProdData($srcId)) {
                 throw new \Exception('not temporary or access denied');
             }
             $areaId = $prodData[1];
 
-            // Vergleiche area_id des Feldes mit Area-Id des Quelldatensatzes
+            // compare the area_id of the field with the area id of the source record
             if ((int)$colDef['area_id'] !== $areaId) {
                 throw new \Exception('wrong area_id');
             }
@@ -2909,13 +2906,13 @@ trait VirtualFieldsTrait {
             $destFieldId = (int)$colDef['rel_field_id'];
             $destAreaId = (int)$colDef['rel_area_id'];
 
-            // Auch die fieldname_id Gegenfeldes wird benötigt
+            // the fieldname_id of the counter field is also needed
             $sql = 'SELECT `fn`.`fieldname_id` FROM `field`'
                 .' LEFT JOIN `fieldname` `fn` ON `field`.`name` = `fn`.`name`'
                 .' WHERE `field`.`field_id`=?';
             $this->db->query($sql, 'i', [$destFieldId]);
             if ($this->db->num_rows < 1) {
-                // Gegen-Feld nicht gefunden
+                // counter field not found
                 $this->createFieldError('record.error_dest_relationfield', $name, $label);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
@@ -2931,23 +2928,23 @@ trait VirtualFieldsTrait {
 
         try {
             if ($replace) {
-                // Die neuen Verknüpfungen ersetzen alle vorhandenen Verknüpfungen
-                // zw. Quell-Datensatz und Zielbereich
+                // The new links replace all existing links
+                // between the source record and the target area
                 $sql = "DELETE FROM `data_rel` WHERE `field_id`=? AND `src_id`=?";
                 $this->db->query($sql, 'ii', [$fieldId, $srcId]);
                 if (str_starts_with($type, 'relation')) {
-                    // Bidirektionalität beachten
+                    // observe bidirectionality
                     $sql = "DELETE FROM `data_rel` WHERE `field_id`=? AND `dest_id`=?";
                     $this->db->query($sql, 'ii', [$destFieldId, $srcId]);
                 }
-                // position-Wert auf 0 setzen
+                // set the position value to 0
                 $position = 0;
                 $destPosition = 0;
 
             } else {
-                // Die neuen Verknüpfungen werden zu den vorhandenen hinzugefügt
-                // Der Reihe nach ans Ende setzen (position-Wert max + 1)
-                // Schon bestehende Verknüpfungen werden durch unique key ignoriert
+                // The new links are added to the existing ones
+                // placed at the end in sequence (position value max + 1)
+                // Links that already exist are ignored by the unique key
                 $sql = "SELECT COALESCE(MAX(`position`) + 1, 0) FROM `data_rel` WHERE `field_id`=? AND `src_id`=?";
                 $this->db->query($sql, 'ii', [$fieldId, $srcId], true);
                 $position = $this->db->fetchNum()[0];
@@ -2959,12 +2956,12 @@ trait VirtualFieldsTrait {
             }
 
             if ($destCount === 0) {
-                // $replace war true, aber es gibt nichts zum Hinzufügen
+                // $replace was true, but there is nothing to add
                 $this->db->commit();
                 return;
             }
 
-            // area_id der zu verknüpfenden Datensätze gebündelt ermitteln
+            // determine the area_id of the records to be linked, in bulk
             $placeholders = implode(',', array_fill(0, $destCount, '?'));
             $types = str_repeat('i', $destCount);
             $sql = "SELECT `record_id`, `area_id` FROM `record` WHERE `record_id` IN ($placeholders)";
@@ -2975,24 +2972,24 @@ trait VirtualFieldsTrait {
                 $areaMap[(int)$row['record_id']] = (int)$row['area_id'];
             }
 
-            // stmt-Vorlage fürs Einfügen
+            // statement template for the insert
             $sqlInsert = "INSERT INTO `data_rel`"
                 ." (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`) "
                 ." VALUES (?, ?, ?, ?, ?)";
 
-            // Ids abarbeiten
+            // process the ids
             foreach ($destIds as $destId) {
                 $destId = (int)$destId;
 
                 if (!isset($areaMap[$destId])) {
-                    // Zu verknüpfender Datensatz nicht gefunden
+                    // record to be linked not found
                     $this->createFieldError('record.error_dest_record_not_found', $name, $label, $destId);
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
                 $areaId = $areaMap[$destId];
 
                 if (str_starts_with($type, 'relation')) {
-                    // relation: Ziel-Datensatz im Ziel-Bereich?
+                    // relation: target record in the target area?
                     if ($areaId != $destAreaId) {
                         $this->createFieldError('record.error_dest_record_area', $name, $label, $destId);
                         throw new \Exception('#' . $this->cms->errorMsgLast());
@@ -3000,15 +2997,15 @@ trait VirtualFieldsTrait {
                 }
                 else {
                     // pointer, pointer1, link
-                    // Ziel-Datensatz in einem der Ziel-Bereiche?
+                    // target record in one of the target areas?
                     if (!in_array($areaId, $destAreaIds, false)) {
-                        // (leicht andere Fehlermeldung als bei Typ 'relation')
+                        // (slightly different error message than for type 'relation')
                         $this->createFieldError('record.error_dest_record_areas', $name, $label, $destId);
                         throw new \Exception('#' . $this->cms->errorMsgLast());
                     }
-                    // link: der Zieldatensatz gehört höchstens EINEM Quelldatensatz -
-                    // gehört er schon einem anderen (nicht dem Original der Arbeitskopie
-                    // $srcId), ist er nicht verknüpfbar (LinkTrait::linkOwner())
+                    // link: the target record belongs to at most ONE source record -
+                    // if it already belongs to another one (not to the original of the working copy
+                    // $srcId), it cannot be linked (LinkTrait::linkOwner())
                     if (in_array($type, $this->cms->dependentTypes, true) && method_exists($this, 'linkOwner')) {
                         $owner = $this->linkOwner($destId, $srcId);
                         if ($owner !== null) {
@@ -3018,19 +3015,19 @@ trait VirtualFieldsTrait {
                     }
                 }
 
-                // Abfangen von Duplicate-Keys bei bestehenden Einträgen
-                // (spart Abfrage)
+                // catch duplicate keys for existing entries
+                // (saves a query)
                 try {
                     $this->db->query($sqlInsert, 'iiiii', [$fieldId, $fieldNameId, $srcId, $destId, $position], true);
                     $position++;
 
-                    // Bidirektionalität beachten
+                    // observe bidirectionality
                     if (str_starts_with($type, 'relation')) {
                         $this->db->query($sqlInsert, 'iiiii', [$destFieldId, (int)$destFieldnameId, $destId, $srcId, $destPosition], true);
                         $destPosition++;
                     }
                 } catch (\mysqli_sql_exception $e) {
-                    // ANSI-SQL-Standard für Integrity Constraint Violation prüfen
+                    // check for the ANSI SQL standard for integrity constraint violation
                     if ($e->getSqlState() === '23000') {
                         continue;
                     }
@@ -3051,12 +3048,12 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Hebt Verknüpfung(en) im angegebenen Relation-Feld eines temporären Datensatzes auf
-     * 
-     * @param array &$colDef     Daten Des Relation-Feldes
-     * @param int $srcId        Id des Quell-Datensatzes
-     * @param int|null $destId  Id des Ziel-Datensatzes (wenn nicht angegeben: alle Verknüpfiungen)
-     * @return bool             true im Erfolgsfall, false bei Fehler (keine Meldungen)
+     * Removes link(s) in the given relation field of a temporary record
+     *
+     * @param array &$colDef     data of the relation field
+     * @param int $srcId        id of the source record
+     * @param int|null $destId  id of the target record (if not specified: all links)
+     * @return bool             true on success, false on error (no messages)
      */
     public function removeRelations(array &$colDef, int $srcId, ?int $destId = null): bool
     {
@@ -3078,7 +3075,7 @@ trait VirtualFieldsTrait {
         }
         $areaId = $prodData[1];
 
-        // Vergleiche area_id des Feldes mit Area-Id des Quelldatensatzes
+        // compare the area_id of the field with the area id of the source record
         if ((int)$colDef['area_id'] !== $areaId) {
             throw new \Exception('wrong area_id');
         }
@@ -3093,7 +3090,7 @@ trait VirtualFieldsTrait {
         }
         $this->db->query($sql, $sqlParams, $sqlValues);
 
-        // Bidirektionalität beachten
+        // observe bidirectionality
         if (str_starts_with($type, 'relation')) {
             $relFieldId = (int)($colDef['rel_field_id'] ?? 0);
             $sql = "DELETE FROM `data_rel` WHERE `field_id` = ? AND `dest_id`= ?";
@@ -3111,14 +3108,14 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Sortierung von Datensätzen innerhalb Relation:
-     * vertausche Position der Datensätze mit Id $destId1 und $destId2
-     * Quelldatensatz muss temporär sein und dem Session-Admin gehören
-     * 
-     * @param array &$colDef  Relationfeld
-     * @param int $srcId      Id des Quell-Datensatzes
-     * @param int $destId1    Id des Zieldatensatzes 1
-     * @param int $destId2    Id des Zieldatensatzes 2
+     * Sorting of records within a relation:
+     * swap the position of the records with ids $destId1 and $destId2
+     * The source record must be temporary and belong to the session admin
+     *
+     * @param array &$colDef  relation field
+     * @param int $srcId      id of the source record
+     * @param int $destId1    id of target record 1
+     * @param int $destId2    id of target record 2
      */
     public function swapRelationPosition(array &$colDef, int $srcId, int $destId1, int $destId2): void
     {
@@ -3140,7 +3137,7 @@ trait VirtualFieldsTrait {
         }
         $areaId = $prodData[1];
 
-        // Vergleiche area_id des Feldes mit Area-Id des Quelldatensatzes
+        // compare the area_id of the field with the area id of the source record
         if ((int)$colDef['area_id'] !== $areaId) {
             throw new \Exception('wrong area_id');
         }
@@ -3148,8 +3145,8 @@ trait VirtualFieldsTrait {
         try {
             $this->db->beginTransaction();
 
-            // Validiere Zieldatensätze, indem bestehende Verknüpfung geprüft wird,
-            // ermittle ihre Position
+            // validate the target records by checking the existing link,
+            // determine its position
             $sql = "SELECT `position` FROM `data_rel` WHERE `field_id` = ? AND `src_id` = ? AND `dest_id` = ? FOR UPDATE";
             $this->db->query($sql, 'iii', [$fieldId, $srcId, $destId1], true);
             if ($this->db->num_rows < 1) {
@@ -3157,18 +3154,18 @@ trait VirtualFieldsTrait {
             }
             $position1 = (int)$this->db->fetchNum()[0];
 
-            // Statement 2: $sql bleibt gleich
+            // statement 2: $sql stays the same
             $this->db->query($sql, 'iii', [$fieldId, $srcId, $destId2], true);
             if ($this->db->num_rows < 1) {
                 throw new \Exception('records are not linked');
             }
             $position2 = (int)$this->db->fetchNum()[0];
 
-            // Positionen kann innerhalb der Transaktion überkreuz getauscht werden
+            // positions can be swapped crosswise within the transaction
             $sql = "UPDATE `data_rel` SET `position` = ? WHERE `field_id` = ? AND `src_id` = ? AND `dest_id` = ?";
             $this->db->query($sql, 'iiii', [$position2, $fieldId, $srcId, $destId1], true);
 
-            // Statement 2: $sql bleibt gleich
+            // statement 2: $sql stays the same
             $this->db->query($sql, 'iiii', [$position1, $fieldId, $srcId, $destId2], true);
 
             $this->db->commit();
@@ -3180,26 +3177,26 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Inhalt von Volltext-Feldern erneuern
-     * 
-     * Wenn keine Datensatz-ID angegeben wird, betrifft die Erneuerung des Volltextfeldinhaltes
-     * alle Datensätze seines Bereichs (bei Änderung der Quellfeld-Auswahl).
-     * 
-     * @param int $fulltextFieldId  Id des Volltextfeldes, deren Inhalte erneuert werden sollen
-     * @param ?int $recordId        Id eines Datensatzes, dessen Inhalte geändert wurden (optional).
+     * Refresh the content of full-text fields
+     *
+     * If no record id is given, the refresh of the full-text field content affects
+     * all records of its area (when the choice of source fields changes).
+     *
+     * @param int $fulltextFieldId  id of the full-text field whose contents are to be refreshed
+     * @param ?int $recordId        id of a record whose contents were changed (optional).
      */
     public function refreshFulltext(int $fulltextFieldId, ?int $recordId = null): void
     {
-        // Ids der Quell-Felder (und ggf Relation-Felder über die Textfeld und Volltext zusammenhängen)
+        // ids of the source fields (and possibly relation fields via which text field and full text are connected)
         $this->db->query("SELECT `rel_field_id`, `text_field_id` FROM `rel_fulltext_text` WHERE `fulltext_field_id`=?", 'i', [$fulltextFieldId]);
         $sources = $this->db->fetchAll();
         if (empty($sources)) {
-            // keine Quell-Felder
+            // no source fields
             if (!empty($recordId)) {
-                // Einzelner Datensatz wird gespeichert: Es kann auch schon vorher kein Inhalt enthalten gewesen sein
+                // single record is saved: it may already have contained no content before
                 return;
             }
-            // Alle Datensätze: Dieser Fall tritt ein, wenn letztes Quellfeld vom Volltext entfernt wird
+            // all records: this case occurs when the last source field is removed from the full text
             if (!$fieldData = $this->fieldData($fulltextFieldId)) {
                 return;
             }
@@ -3210,15 +3207,15 @@ trait VirtualFieldsTrait {
 
         if (!empty($recordId)) $this->_refreshFulltext($fulltextFieldId, $recordId, $sources);
         else {
-            // Für jeden Datensatz des Inhaltsbereichs Volltext neu erzeugen
+            // regenerate the full text for each record of the content area
             if (!$fieldData = $this->fieldData($fulltextFieldId)) {
                 return;
             }
             $areaId = (int)$fieldData['area_id'];
             $sql = "SELECT `record_id` FROM `record` WHERE `area_id` = ? AND `tmp` = 0";
             $this->db->query($sql, 'i', [$areaId]);
-            // Ids vorab holen: _refreshFulltext() setzt eigene Queries ab
-            // (einspaltiges fetchAll() liefert die Werte direkt).
+            // fetch the ids in advance: _refreshFulltext() issues its own queries
+            // (single-column fetchAll() returns the values directly).
             foreach ($this->db->fetchAll() as $recordId) {
                 set_time_limit(300);
                 $this->_refreshFulltext($fulltextFieldId, (int)$recordId, $sources);
@@ -3227,22 +3224,22 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Helper function für refreshFulltext()
+     * Helper function for refreshFulltext()
      *
-     * Der Volltext entsteht JE SPRACHE der Instanz des Datensatzes: aus den
-     * data_*-Zeilen der Quellfelder in dieser Sprache (die bei nicht übersetzten
-     * mehrsprachigen Feldern den Fallback der Hauptsprache tragen). So findet die
-     * Volltextsuche in jeder Sprache das, was dort auch angezeigt wird - gefaltet nach
-     * den Regeln dieser Sprache (Cms::indexText(), Collation::fold()).
+     * The full text is built PER LANGUAGE of the instance of the record: from the
+     * data_* rows of the source fields in this language (which carry the fallback of the
+     * primary language for untranslated multilingual fields). This way the full-text
+     * search finds in each language what is also displayed there - folded according to the
+     * rules of that language (Cms::indexText(), Collation::fold()).
      */
     private function _refreshFulltext(?int $fulltextFieldId, int $recordId, array $sources, int $fieldNameId = 0): void
     {
-        // $fulltextFieldId null: Volltext-Standardfeld (ohne `field`-Zeile, $fieldNameId)
+        // $fulltextFieldId null: standard full-text field (without `field` row, $fieldNameId)
         if ($fulltextFieldId !== null && empty($fulltextFieldId)) return;
         if (empty($recordId)) return;
         if (empty($sources)) return;
 
-        // Typ je Quellfeld einmal ermitteln
+        // determine the type of each source field once
         $sourceTables = [];
         foreach ($sources as $source) {
             $textFieldId = (int)$source['text_field_id'];
@@ -3254,7 +3251,7 @@ trait VirtualFieldsTrait {
                 'text_field_id' => $textFieldId,
                 'rel_field_id'  => (int)($source['rel_field_id'] ?? 0),
                 'table'         => 'data_' . $this->cms->dataSuffix[$type],
-                // Upload-Feld: sein Beitrag ist der ursprüngliche Dateiname
+                // upload field: its contribution is the original file name
                 'column'        => $type === 'file' ? 'filename' : 'data',
             ];
         }
@@ -3263,7 +3260,7 @@ trait VirtualFieldsTrait {
         }
         if ($fieldNameId < 1) return;
 
-        // Volltext je Sprache sammeln und schreiben
+        // collect and write the full text per language
         $sql = "DELETE FROM `data_ftx` WHERE `record_id` = ? AND `fieldname_id` = ?";
         $this->db->query($sql, 'ii', [$recordId, $fieldNameId]);
 
@@ -3274,8 +3271,8 @@ trait VirtualFieldsTrait {
                 $tableName   = $source['table'];
                 $column      = $source['column'];
                 if (empty($source['rel_field_id'])) {
-                    // Fall 1: kein Relation-Feld angegeben
-                    // Volltextfeld und Textfeld liegen zusammen in einem Inhaltsbereich
+                    // case 1: no relation field specified
+                    // full-text field and text field lie together in one content area
                     $sql = "SELECT `$column` FROM `$tableName`"
                          . " WHERE `record_id` = ? AND `field_id` = ? AND `language_id` = ?";
                     $this->db->query($sql, 'iii', [$recordId, $textFieldId, $languageId]);
@@ -3284,12 +3281,12 @@ trait VirtualFieldsTrait {
                     }
                 }
                 else {
-                    // Fall 2: Relation-Feld angegeben
-                    // Textfeld liegt in einem anderen Bereich. Dort gilt dieselbe
-                    // Sprache; führt die Instanz des Ziels sie nicht, bleibt der
-                    // Beitrag leer.
+                    // case 2: relation field specified
+                    // text field lies in another area. The same language applies there;
+                    // if the instance of the target does not have it, the contribution stays
+                    // empty.
                     $relFieldId = $source['rel_field_id'];
-                    // Suche (über das Relationfeld) verknüpfte Inhalte aus dem Zielbereich
+                    // search for linked content from the target area (via the relation field)
                     $sql = "SELECT `t`.`$column` FROM `data_rel` `r`"
                         ." LEFT JOIN `$tableName` `t` ON `r`.`dest_id` = `t`.`record_id`"
                         ." AND `t`.`field_id` = ? AND `t`.`language_id` = ?"
@@ -3312,10 +3309,9 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Uploads als nicht vertrauenswürdig kennzeichnen (Frontend): Dateien mit
-     * aktivem Inhalt (MediaAccess::isActiveContent()) werden dann
-     * unabhängig von den Feldeinstellungen abgelehnt. RecordUser schaltet das für
-     * die Dauer eines Speicherns ein und danach wieder aus.
+     * Mark uploads as untrusted (frontend): files with active content
+     * (MediaAccess::isActiveContent()) are then rejected regardless of the
+     * field settings. RecordUser switches this on for the duration of a save and off again afterwards.
      */
     public function setUntrustedUploads(bool $untrusted): void
     {
@@ -3323,22 +3319,22 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Helper function: Daten eines Feldes ermitteln
+     * Helper function: determine the data of a field
      */
     /**
-     * Entfernt eine hochgeladene Datei aus einer temporären Arbeitskopie
-     * (x-Button neben dem Preview-Link in der Eingabemaske, Parameter 'removefiles'
-     * von CMS:USER_INPUT).
-     * - löscht Datei und `data_fil`-Eintrag der Arbeitskopie
-     *   (inklusive aller rekursiv abhängigen Thumbnail-Felder)
-     * - setzt im Zwischenstand (Arbeitsstand) der Arbeitskopie das Flag 'deleted':
-     *   beim checkIn löscht promoteTmpFiles() dann auch die ggf. am produktiven
-     *   Datensatz hängende Datei
+     * Removes an uploaded file from a temporary working copy
+     * (x button next to the preview link in the input form, parameter 'removefiles'
+     * of CMS:USER_INPUT).
+     * - deletes the file and the `data_fil` entry of the working copy
+     *   (including all recursively dependent thumbnail fields)
+     * - sets the flag 'deleted' in the working state of the working copy:
+     *   at checkIn promoteTmpFiles() then also deletes the file that may be attached to the live
+     *   record
      *
-     * @param int $tmpId            Id der temporären Arbeitskopie
-     * @param int $fieldId          Id des Upload-Feldes
-     * @param int|null $languageId  Sprache der Datei bei mehrsprachigen Upload-Feldern
-     * @return bool                 true im Erfolgsfall
+     * @param int $tmpId            id of the temporary working copy
+     * @param int $fieldId          id of the upload field
+     * @param int|null $languageId  language of the file for multilingual upload fields
+     * @return bool                 true on success
      */
     public function markFileDeleted(int $tmpId, int $fieldId, ?int $languageId = null): bool
     {
@@ -3347,8 +3343,8 @@ trait VirtualFieldsTrait {
             return false;
         }
         $areaId = $prodData[1];
-        // Feld muss existieren, ein Upload-Feld sein UND zur Area der Arbeitskopie
-        // gehören (sonst ließe sich fremde Datei über field_id löschen)
+        // field must exist, be an upload field AND belong to the area of the working copy
+        // (otherwise a foreign file could be deleted via field_id)
         if (!$fieldData = $this->fieldData($fieldId)) {
             $this->cms->error('_markFileDeleted() Exception: Field not found.');
             return false;
@@ -3369,30 +3365,30 @@ trait VirtualFieldsTrait {
         $this->db->pushResult();
         try {
             $this->db->beginTransaction();
-            // Zwischenstand laden (Zeilensperre gegen parallele Änderungen)
+            // load the working state (row lock against parallel changes)
             $this->db->query('SELECT `record_id` FROM `record` WHERE `record_id` = ? FOR UPDATE', 'i', [$tmpId]);
             if ($this->db->num_rows < 1) {
                 throw new \Exception('removeUpload() Exception: working copy not found.');
             }
             $cache = $this->_loadTmpData($tmpId);
-            // Mehrsprachiges Feld ohne Sprachangabe bzw. einsprachiges mit: die
-            // Sprache richtet sich nach dem Feld
+            // multilingual field without a language given, or single-language with one: the
+            // language depends on the field
             if (!$this->cms->isMultilingualField($fieldData)) $languageId = null;
             elseif ($languageId === null) $languageId = $this->languageIdsOf($tmpId)[0] ?? 0;
 
-            // Ausgangs-Feld + rekursiv abhängige Thumbnails abräumen.
-            // $handled schützt vor Endlos-Rekursion durch gegenseitige
-            // parent_field_id-Zuweisung (jedes Feld wird nur einmal verarbeitet).
+            // clear the source field + recursively dependent thumbnails.
+            // $handled protects against endless recursion through mutual
+            // parent_field_id assignment (each field is processed only once).
             $current = $this->fileEntry((array)($cache[$fieldName] ?? []), $languageId);
             if (empty($current['extension'])) {
-                // Keine Datei gespeichert
+                // no file stored
                 $this->db->commit();
-                return true; // finally wird trotzdem aufgerufen
+                return true; // finally is called anyway
             }
             $handled = [];
             $this->_removeFileEntries($tmpId, $cache, $fieldName, $schemaVirtual, $handled, $languageId);
 
-            // Aktualisierten Arbeitsstand schreiben, Edit-Lock auffrischen
+            // write the updated working state, refresh the edit lock
             $this->_saveTmpData($tmpId, $cache, null, touch: true);
             $this->db->commit();
 
@@ -3408,13 +3404,13 @@ trait VirtualFieldsTrait {
 
 
     /**
-     * Helper für markFileDeleted(), rekursiver Aufruf
+     * Helper for markFileDeleted(), recursive call
      *
-     * @param array &$handled  bereits verarbeitete Feldnamen (Endlos-Schutz)
+     * @param array &$handled  field names already processed (endless-loop protection)
      */
     private function _removeFileEntries(int $tmpId, array &$cache, string $fieldName, array $schemaVirtual, array &$handled, ?int $languageId = null): void
     {
-        // Endlos-Rekursion durch gegenseitige parent_field_id-Zuweisung verhindern
+        // prevent endless recursion through mutual parent_field_id assignment
         if (in_array($fieldName, $handled, true)) return;
         $handled[] = $fieldName;
 
@@ -3422,13 +3418,13 @@ trait VirtualFieldsTrait {
         if (empty($fieldData)) return;
         $fieldId = (int)$fieldData['field_id'];
 
-        // Eintrag hat das Format [$type, $fileData] - bei mehrsprachigen
-        // Feldern je Sprache (VirtualFieldsTrait::fileEntry())
+        // entry has the format [$type, $fileData] - for multilingual
+        // fields per language (VirtualFieldsTrait::fileEntry())
         $fileData = $this->fileEntry((array)($cache[$fieldName] ?? []), $languageId);
         $extension = (string)($fileData['extension'] ?? '');
 
         $mediaDir = $this->config->get('paths.media_dir');
-        // Ablageschema: {field_id}/{record_id}[_{language_id}].{extension}
+        // storage scheme: {field_id}/{record_id}[_{language_id}].{extension}
         if ($extension !== '' && !empty($fileData['temporary'])
             && file_exists($tmpFile = "$mediaDir/" . $this->cms->mediaPath($fieldId, $tmpId, $languageId, $extension))
         ) {
@@ -3437,17 +3433,17 @@ trait VirtualFieldsTrait {
             }
         }
 
-        // `data_fil`-Eintrag der Arbeitskopie entfernen, sonst würde ihn
-        // promoteTmpFiles() beim checkIn auf den produktiven Datensatz umschreiben
-        // (Eintrag ohne zugehörige Datei -> kaputter Preview-Link)
+        // remove the `data_fil` entry of the working copy, otherwise
+        // promoteTmpFiles() would rewrite it to the live record at checkIn
+        // (entry without associated file -> broken preview link)
         if ($fn = $this->cms->resolveVirtualField($fieldName)) {
             $sql = 'DELETE FROM `data_fil` WHERE `record_id` = ? AND `fieldname_id` = ?';
             $this->db->query($sql, 'ii', [$tmpId, (int)$fn['fieldname_id']]);
         }
 
-        // Löschmarkierung im Zwischenstand setzen - Format [$type, $fileData]
-        // beibehalten: promoteTmpFiles() prüft $entry[0] === 'file' und löscht nur
-        // dann die ggf. am produktiven Datensatz hängende Datei (dieser Sprache)
+        // set the delete marker in the working state - keep the format [$type, $fileData]:
+        // promoteTmpFiles() checks $entry[0] === 'file' and only then deletes the
+        // file that may be attached to the live record (of this language)
         $this->setFileEntry($cache, $fieldName, $languageId, [
             'extension' => '', 'mime_type' => '', 'width' => 0,
             'height' => 0, 'size' => 0, 'filename' => '',
@@ -3455,8 +3451,8 @@ trait VirtualFieldsTrait {
             'deleted' => true
         ]);
 
-        // Abhängige Thumbnails ebenfalls löschen
-        // (Thumbnail-Felder haben type 'file' und display_type 'thumbnail')
+        // also delete dependent thumbnails
+        // (thumbnail fields have type 'file' and display_type 'thumbnail')
         foreach ($schemaVirtual as $name => $colDef) {
             if ((string)($colDef['type'] ?? '') !== 'file') continue;
             if ((string)($colDef['display_type'] ?? '') !== 'thumbnail') continue;
@@ -3474,39 +3470,39 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Hilfsfunktion: 'rel_area_ids' eines Pointer-Feldes ermitteln
+     * Helper function: determine the 'rel_area_ids' of a pointer field
      */
     public function getRelAreaIds(int $fieldId): array
     {
         $sql = 'SELECT `area_id` FROM `rel_field_area` WHERE `field_id`=?';
         $this->db->query($sql, 'i', [$fieldId]);
-        return $this->db->fetchAll(); // flaches Array, ggf []
+        return $this->db->fetchAll(); // flat array, possibly []
     }
 
     /**
-     * Hilfsfunktion: 'converter_ids' eines Thumbnail-Feldes in ihrer Reihenfolge
-     * (`rel_field_converter`, position) - die Thumbnail-Erzeugung nimmt den ersten
-     * passenden. Dasselbe liefert Field::getConverterIds().
+     * Helper function: 'converter_ids' of a thumbnail field in their order
+     * (`rel_field_converter`, position) - thumbnail generation takes the first
+     * matching one. Field::getConverterIds() returns the same.
      */
     public function getConverterIds(int $fieldId): array
     {
         $this->db->pushResult();
         $sql = 'SELECT `converter_id` FROM `rel_field_converter` WHERE `field_id`=? ORDER BY `position` ASC, `converter_id` ASC';
         $this->db->query($sql, 'i', [$fieldId]);
-        $ids = array_map('intval', $this->db->fetchAll()); // flaches Array, ggf []
+        $ids = array_map('intval', $this->db->fetchAll()); // flat array, possibly []
         $this->db->popResult();
         return $ids;
     }
 
      /**
-     * Ziel-Datensatz innerhalb Relation nach oben oder unten schieben
-     * Datensatz muss tempoär sein (check-out)
-     * 
-     * @param int $srcField     Relationfeld-Id (relation/pointer)
-     * @param int $srcId        Datensatz von dem aus die Verknüpfungen stattfinden
-     * @param int $destId       Verknüpfter Zieldatensatz der verschoben werden soll
+     * Move a target record within a relation up or down
+     * The record must be temporary (check-out)
+     *
+     * @param int $srcField     relation field id (relation/pointer)
+     * @param int $srcId        record from which the links take place
+     * @param int $destId       linked target record to be moved
      * @param string $function  'up' / 'down'
-     * @return bool             true Im Ergolgsfall
+     * @return bool             true on success
      */
     /*
     public function moveRelationDestId(int $srcField, int $srcId, int $destId, string $function): bool 
@@ -3517,40 +3513,40 @@ trait VirtualFieldsTrait {
         
         // srcId
         if (!$prodData = $this->getProdData($srcId)) {
-            // Datensatz ist nicht temporär oder gehört nicht dem Session-Admin
+            // record is not temporary or does not belong to the session admin
             return false;
         }
         $areaId = $prodData[1];
 
         // srcField
         if (!$fieldData = $this->fieldData($srcField)) {
-            // nicht gefunden
+            // not found
             return false;
         }
 
-        // Vergleiche area_id des Feldes mit Area-Id des Quelldatensatzes
+        // compare the area_id of the field with the area id of the source record
         if ((int)$fieldData['area_id'] !== $areaId) {
-            // nicht gefunden
+            // not found
             return false;
         }
 
         if (!in_array($fieldData['type'], $this->cms->relationTypes, true)) {
-            // kein Relationfeld
+            // not a relation field
             return false;
         }
 
         // destId
-        // Aktuelle Position des Datensatzes ermitteln
+        // determine the current position of the record
         $sql = "SELECT `position` FROM `data_rel` WHERE `field_id` = ? AND `src_id` = ? AND `dest_id` = ?";
         $this->db->query($sql, 'iii', [$srcField, $srcId, $destId]);
         if ($this->db->num_rows < 1) {
-            // Ausgangsverknüpfung nicht gefunden
+            // initial link not found
             return false;
         }
         $currentPos = $this->db->fetchNum()[0];
 
-        // Den direkten Tauschpartner (nächstkleinere oder nächstgrößere Position) finden
-        // (nur produktive Datensätze beachten)
+        // find the direct swap partner (next smaller or next larger position)
+        // (consider only live records)
         if ($function === 'up') {
             $sign = '<';
             $order = 'DESC';
@@ -3566,20 +3562,20 @@ trait VirtualFieldsTrait {
             ." ORDER BY `d`.`position` $order LIMIT 1";
         $this->db->query($sql, 'iii', [$srcField, $srcId, (int)$currentPos]);
         if ($this->db->num_rows < 1) {
-            // Tauschpartner nicht gefunden
+            // swap partner not found
             return false;
         }
         [$swapDestId, $swapPos] = $this->db->fetchNum();
-        
-        // Positionen innerhalb einer Transaktion überkreuz tauschen
+
+        // swap the positions crosswise within a transaction
         try {
             $this->db->beginTransaction();
 
-            // Aktuellen Eintrag auf die Position des Tauschpartners setzen
+            // set the current entry to the position of the swap partner
             $sql = "UPDATE `data_rel` SET `position` = ? WHERE `field_id` = ? AND `src_id` = ? AND `dest_id` = ?";
             $this->db->query($sql, 'iiii', [(int)$swapPos, $srcField, $srcId, $destId]);
 
-            // Tauschpartner auf die alte Position des aktuellen Eintrags setzen
+            // set the swap partner to the old position of the current entry
             $sql = "UPDATE `data_rel` SET `position` = ? WHERE `field_id` = ? AND `src_id` = ? AND `dest_id` = ?";
             $this->db->query($sql, 'iiii', [(int)$currentPos, $srcField, $srcId, (int)$swapDestId]);
 
@@ -3595,17 +3591,17 @@ trait VirtualFieldsTrait {
     */
 
     /**
-     * Verschiebt eine hochgeladene temporäre Datei ins Zielverzeichnis.
-     * 
-     * @param string $tmpFile        Pfad zur temporären hochgeladenen Datei (z. B. $_FILES['file']['tmp_name'])
-     * @param string $baseDir        Grundverzeichnis
-     * @param string $relativePath   relativer Pfad zum Grundverzeichnis inkl. Dateiname
-     * @param bool   $isUploaded     true: Datei kommt per File-Upload, false: Datei liegt im FTP-Upload-Verzeichnis
-     * @return int                   Dateigröße in Bytes oder 0 Bytes im Fehlerfall (auch bei 0-Byte-Datei)
+     * Moves an uploaded temporary file to the target directory.
+     *
+     * @param string $tmpFile        path to the temporary uploaded file (e.g. $_FILES['file']['tmp_name'])
+     * @param string $baseDir        base directory
+     * @param string $relativePath   relative path to the base directory incl. file name
+     * @param bool   $isUploaded     true: file comes via file upload, false: file lies in the FTP upload directory
+     * @return int                   file size in bytes, or 0 bytes in case of error (also for a 0-byte file)
      */
     protected function _moveUploadedFile(string $tmpFile, string $baseDir, string $relativePath, bool $isUploaded = true): ?int
     {
-        // Prüfen, ob die temporäre Datei überhaupt existiert
+        // check whether the temporary file exists at all
         if ($isUploaded) {
             if (!is_uploaded_file($tmpFile)) {
                 return null;
@@ -3616,14 +3612,14 @@ trait VirtualFieldsTrait {
             }
         }
 
-        // Pfade bereinigen und normalisieren
+        // clean up and normalize the paths
         $baseDir = rtrim($baseDir, '/\\');
         $relativePath = trim(str_replace('\\', '/', $relativePath), '/');
 
-        // Den relativen Verzeichnispfad von der eigentlichen Datei trennen
+        // separate the relative directory path from the actual file
         $relativeDir = dirname($relativePath);
 
-        // Sicherstellen, dass die Verzeichnisstruktur existiert
+        // ensure that the directory structure exists
         if ($relativeDir !== '.' && $relativeDir !== '') {
             if (!$this->system->createDir($baseDir, $relativeDir)) {
                 return null;
@@ -3631,24 +3627,24 @@ trait VirtualFieldsTrait {
         }
         $fullPath = $baseDir . '/' . $relativePath;
 
-        // Datei aus dem Temp-Ordner an das Ziel verschieben
+        // move the file from the temp folder to the target
         if ($isUploaded) {
-            // aus File-Upload
+            // from file upload
             if (!move_uploaded_file($tmpFile, $fullPath)) {
                 return null;
             }
         }
         else {
-            // aus dem Upload-Verzeichnis
+            // from the upload directory
             if (!copy($tmpFile, $fullPath)) {
                 return null;
             }
         }
 
-        // Berechtigungen ermitteln
+        // determine the permissions
         $filePermissions = $this->config->get('permissions.file') ?? 0664;
 
-        // Dateirechte explizit setzen, um umask-Einschränkungen zu umgehen.
+        // set the file permissions explicitly, to bypass umask restrictions.
         chmod($fullPath, $filePermissions);
 
         $fileSize = @filesize($fullPath);
@@ -3656,55 +3652,55 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Sichert Datei-Eingaben VOR der Eingabeprüfung des Haupt-Speichervorgangs.
-     * Jede akzeptierte Datei (Upload aus $_FILES bzw. ausgewählte Server-Datei aus
-     * $data) wird sofort auf Typ geprüft und an die Arbeitskopie gebunden
-     * (physisch unter deren Id + cache-Eintrag mit 'temporary'-Flag) und in einer
-     * EIGENEN Transaktion committet.
-     * Dadurch überstehen bereits akzeptierte Dateien eine anschließende, an anderen
-     * Feldern (z. B. leerer Pflicht-Titel) scheiternde Prüfung - die Datei muss nicht
-     * erneut hochgeladen werden und erscheint in der wieder angezeigten Eingabemaske.
+     * Secures file inputs BEFORE the input check of the main save operation.
+     * Every accepted file (upload from $_FILES or selected server file from
+     * $data) is immediately checked for type and bound to the working copy
+     * (physically under its id + cache entry with the 'temporary' flag) and committed in its
+     * OWN transaction.
+     * This way already accepted files survive a subsequent check that fails on other
+     * fields (e.g. an empty required title) - the file does not have to be
+     * uploaded again and appears in the re-displayed input form.
      *
-     * Thumbnails werden hier NICHT erzeugt: die cache-Einträge werden mit
-     * 'thumbnails_pending' markiert und erst beim finalen Speichern über
-     * writePendingThumbnails() abgearbeitet.
+     * Thumbnails are NOT generated here: the cache entries are marked with
+     * 'thumbnails_pending' and only processed on the final save via
+     * writePendingThumbnails().
      *
-     * Doppel-Verarbeitung im finalen saveVirtualFields() ist ausgeschlossen:
-     * _saveUploadField() bricht dort über $this->processedUploadFields ab
-     * (zusätzlich bei Uploads über is_uploaded_file() == false, da die Datei hier
-     * bereits mit move_uploaded_file() verschoben wurde).
+     * Double processing in the final saveVirtualFields() is excluded:
+     * _saveUploadField() aborts there via $this->processedUploadFields
+     * (additionally for uploads via is_uploaded_file() == false, since the file has
+     * already been moved here with move_uploaded_file()).
      *
-     * @param int   $tmpId           Id der temporären Arbeitskopie
-     * @param array &$schemaVirtual  Schema mit virtuellen Feldern
-     * @param array $data            Zu speichernde Inhalte aus Dataset::save()
-     *                               (enthält ggf. $data[$name]['serverfile'])
-     * @return bool                  true: alle (ggf. keine) Dateien ok
-     *                               false: eine Datei wurde abgelehnt (Mime/Größe/
-     *                                      verbotene Extension) - Meldung in Cms::errors
+     * @param int   $tmpId           id of the temporary working copy
+     * @param array &$schemaVirtual  schema with virtual fields
+     * @param array $data            contents to save from Dataset::save()
+     *                               (may contain $data[$name]['serverfile'])
+     * @return bool                  true: all (possibly no) files ok
+     *                               false: a file was rejected (MIME/size/
+     *                                      forbidden extension) - message in Cms::errors
      */
     protected function secureUploads(int $tmpId, array &$schemaVirtual, array $data = []): bool
     {
         if ($tmpId < 1) return true;
-        // Je Speichervorgang von vorn: die Liste verhindert nur die doppelte
-        // Verarbeitung INNERHALB eines save() (hier und noch einmal in
-        // saveVirtualFields()). Ohne den Neustart bliebe beim zweiten Datensatz eines
-        // Laufs (Import, Stapelverarbeitung) jede Datei liegen, deren Feld der erste
-        // Datensatz schon verarbeitet hat.
+        // start afresh for each save operation: the list only prevents double
+        // processing WITHIN one save() (here and once more in
+        // saveVirtualFields()). Without the restart, for the second record of a
+        // run (import, batch processing) every file would remain whose field the first
+        // record has already processed.
         $this->processedUploadFields = [];
         $this->db->pushResult();
         try {
             $this->db->beginTransaction();
-            // Arbeitsstand der Arbeitskopie als Basis (wird von _saveUploadField fortgeschrieben)
+            // working state of the working copy as the basis (updated by _saveUploadField)
             $this->recordCache = $this->_loadTmpData($tmpId);
             $languageIds = $this->recordLanguageIds($tmpId);
             $processed = false;
             foreach ($schemaVirtual as $name => $colDef) {
                 if ((string)($colDef['type'] ?? '') !== 'file') continue;
                 if ((string)($colDef['display_type'] ?? '') !== 'upload') continue;
-                // bindet die Datei an $tmpId (physisch + Arbeitsstand mit 'temporary'- und
-                // 'thumbnails_pending'-Flag; kein `data_fil`-Eintrag, siehe
-                // promoteTmpFiles()), wirft bei Ablehnung;
-                // liefert false wenn keine (neue) Datei angegeben ist
+                // binds the file to $tmpId (physically + working state with the 'temporary' and
+                // 'thumbnails_pending' flags; no `data_fil` entry, see
+                // promoteTmpFiles()), throws on rejection;
+                // returns false if no (new) file is specified
                 foreach ($this->_uploadLanguages($colDef, $languageIds) as $lang) {
                     if ($this->_saveUploadField($tmpId, $name, $colDef, $schemaVirtual, $data, $lang)) {
                         $processed = true;
@@ -3712,7 +3708,7 @@ trait VirtualFieldsTrait {
                 }
             }
             if ($processed) {
-                // angepassten Arbeitsstand zurückschreiben, Edit-Lock auffrischen
+                // write the adjusted working state back, refresh the edit lock
                 $this->_saveTmpData($tmpId, $this->recordCache, null, touch: true);
             }
             $this->db->commit();
@@ -3728,22 +3724,22 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Eingegebene Passwörter VOR der Eingabeprüfung in der Arbeitskopie sichern -
-     * das Gegenstück zu secureUploads() für Passwort-Felder.
+     * Secure password inputs in the working copy BEFORE the input check -
+     * the counterpart to secureUploads() for password fields.
      *
-     * Ein Passwortfeld wird in der Maske nie vorbelegt: scheitert die Prüfung an
-     * einem anderen Feld oder wechselt der Redakteur den Reiter, wäre die Eingabe
-     * verloren. Deshalb wandert sie hier - gehasht, wie sie später in `data_pwd`
-     * steht - in den Arbeitsstand der Arbeitskopie (eigene Transaktion, bleibt
-     * auch bei einer scheiternden Prüfung bestehen). Dataset::save() nimmt den Hash
-     * als Eingabe, wenn das Feld beim nächsten Mal leer bleibt; die Maske zeigt
-     * dann den Hinweis "Passwort ist gesetzt" statt eines Pflichtfelds.
+     * A password field is never pre-filled in the form: if the check fails on
+     * another field or the editor switches tabs, the input would be lost. It therefore
+     * moves here - hashed, as it will later be stored in `data_pwd` -
+     * into the working state of the working copy (own transaction, persists
+     * even if the check fails). Dataset::save() takes the hash
+     * as input if the field remains empty next time; the form then shows
+     * the note "Password is set" instead of a required field.
      *
-     * Geprüft (Mindestlänge usw.) wird weiterhin die Roheingabe in $data.
+     * The raw input in $data is still checked (minimum length etc.).
      *
-     * @param int   $tmpId          Arbeitskopie
-     * @param array $schemaVirtual  Schema des Bereichs
-     * @param array $data           Eingaben (Roheingabe der Passwort-Felder)
+     * @param int   $tmpId          working copy
+     * @param array $schemaVirtual  schema of the area
+     * @param array $data           inputs (raw input of the password fields)
      */
     protected function securePasswords(int $tmpId, array $schemaVirtual, array $data): void
     {
@@ -3753,7 +3749,7 @@ trait VirtualFieldsTrait {
             if (($colDef['type'] ?? '') !== 'password' && ($colDef['display_type'] ?? '') !== 'password') continue;
             $value = $data[$name] ?? '';
             if (is_array($value) || trim((string)$value) === '') continue;
-            // Ein Wert aus einer Exportdatei ist bereits der Hash (Record::importSave())
+            // a value from an export file is already the hash (Record::importSave())
             $hashes[$name] = in_array($name, $this->prehashedFields, true)
                 ? (string)$value
                 : $this->crypt->passwordHash((string)$value);
@@ -3777,31 +3773,31 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Pflichtprüfung eines Upload-Feldes (Flag 'not_empty' bzw. min >= 1).
+     * Mandatory check of an upload field (flag 'not_empty' or min >= 1).
      *
-     * Für Dateien greift die Zählung in Dataset::validateValue() nicht: der Wert eines
-     * Upload-Feldes steht nicht in $data, sondern - nach secureUploads() - im
-     * Zwischenstand (Arbeitsstand) der Arbeitskopie, beim Speichern ohne Arbeitskopie in
-     * `data_fil` bzw. im Request. Eine Datei gilt als vorhanden, wenn
-     *     1. der Zwischenstand einen nicht gelöschten Eintrag mit Dateiendung führt, oder
-     *     2. der Request eine Datei bringt (Upload oder 'serverfile'), oder
-     *     3. `data_fil` des produktiven Datensatzes eine Datei kennt.
-     * 2. und 3. nur ohne Arbeitskopie - mit Arbeitskopie hat secureUploads() den
-     * Request bereits in den Zwischenstand übernommen.
+     * The counting in Dataset::validateValue() does not apply to files: the value of an upload
+     * field is not in $data but - after secureUploads() - in the
+     * working state of the working copy; when saving without a working copy in
+     * `data_fil` or in the request. A file counts as present if
+     *     1. the working state has a non-deleted entry with a file extension, or
+     *     2. the request carries a file (upload or 'serverfile'), or
+     *     3. `data_fil` of the live record knows a file.
+     * 2. and 3. only without a working copy - with a working copy secureUploads() has
+     * already taken the request into the working state.
      *
-     * Bei mehrsprachigen Upload-Feldern zählt allein die Hauptsprache der Instanz:
-     * eine weitere Sprache ohne eigene Datei bekommt den Fallback (so wie die
-     * Eingabemaske dort auch keinen Stern zeigt). Thumbnail-Felder werden
-     * automatisch befüllt und übergangen.
+     * For multilingual upload fields only the primary language of the instance counts:
+     * a further language without its own file gets the fallback (just as the
+     * input form there shows no asterisk). Thumbnail fields are
+     * filled automatically and skipped.
      *
-     * @param string $name      Feldname
-     * @param array  $colDef    Felddefinition aus virtualSchema()
-     * @param array  $data      zu speichernde Inhalte (ggf. $data[$name]['serverfile'])
-     * @param array  $tmpCache  Arbeitsstand der Arbeitskopie ([] ohne Arbeitskopie)
-     * @param array  $langCtx   Sprachen der Instanz (Dataset::languageContext())
-     * @param int    $recordId  produktiver Datensatz beim Speichern OHNE Arbeitskopie,
-     *                          sonst 0
-     * @return bool  true: ok; false: Fehler (Meldung in Cms::errors)
+     * @param string $name      field name
+     * @param array  $colDef    field definition from virtualSchema()
+     * @param array  $data      contents to save (possibly $data[$name]['serverfile'])
+     * @param array  $tmpCache  working state of the working copy ([] without a working copy)
+     * @param array  $langCtx   languages of the instance (Dataset::languageContext())
+     * @param int    $recordId  live record when saving WITHOUT a working copy,
+     *                          otherwise 0
+     * @return bool  true: ok; false: error (message in Cms::errors)
      * @see Camindo\Core\Dataset::save()
      */
     protected function validateFileRequired(string $name, array $colDef, array $data, array $tmpCache, array $langCtx, int $recordId = 0): bool
@@ -3813,7 +3809,7 @@ trait VirtualFieldsTrait {
         $isMultilingual = $this->cms->isMultilingualField($colDef) && !empty($langCtx['language_ids']);
         $languageId = $isMultilingual ? (int)($langCtx['primary_id'] ?? 0) : null;
 
-        // 1. Zwischenstand der Arbeitskopie
+        // 1. working state of the working copy
         if (isset($tmpCache[$name])) {
             $entry = $this->fileEntry((array)$tmpCache[$name], $languageId);
             if (!empty($entry) && empty($entry['deleted']) && (string)($entry['extension'] ?? '') !== '') {
@@ -3821,7 +3817,7 @@ trait VirtualFieldsTrait {
             }
         }
         elseif (empty($tmpCache)) {
-            // 2. Ohne Arbeitskopie: Datei im Request?
+            // 2. without a working copy: file in the request?
             $fileError = $_FILES['data']['error'][$name] ?? null;
             if ($languageId !== null) $fileError = is_array($fileError) ? ($fileError[$languageId] ?? null) : null;
             if ((int)($fileError ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) return true;
@@ -3829,7 +3825,7 @@ trait VirtualFieldsTrait {
             if ($languageId !== null) $fieldValue = is_array($fieldValue) ? ($fieldValue[$languageId] ?? null) : null;
             if (is_array($fieldValue) && trim((string)($fieldValue['serverfile'] ?? '')) !== '') return true;
 
-            // 3. Datei des produktiven Datensatzes
+            // 3. file of the live record
             if ($recordId > 0) {
                 $sql = "SELECT 1 FROM `data_fil` WHERE `record_id` = ? AND `field_id` = ? AND `extension` != ''";
                 $sqlTypes = 'ii';
@@ -3847,7 +3843,7 @@ trait VirtualFieldsTrait {
             }
         }
 
-        // Fehler - bei mehrsprachigen Feldern am Eingabefeld der Hauptsprache
+        // error - for multilingual fields on the input field of the primary language
         $label = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name));
         $errName = $name;
         if ($languageId !== null) {
@@ -3859,7 +3855,7 @@ trait VirtualFieldsTrait {
     }
 
     /**
-     * Lade Media Converter
+     * Load media converter
      */
     private function loadConverter(int $converterId): ?array
     {
@@ -3868,15 +3864,15 @@ trait VirtualFieldsTrait {
         return $this->db->fetch();
     }
 
-    // Öffentlicher Zugriff auf den Arbeitsstand
+    // Public access to the working state
     // ====================
 
     /**
-     * Arbeitsstand zurücksetzen, bevor ein Datensatz bearbeitet wird, der nicht aus
-     * einem Speichervorgang kommt (promoteBackgroundThumbnails()). Beide Listen sind
-     * je Datensatz zu führen: $processedParentFieldIds merkt sich field_ids, nicht
-     * Datensatz-Ids, und würde sonst beim zweiten Datensatz eines Laufs alle
-     * Thumbnail-Felder als "schon erledigt" ansehen.
+     * Reset the working state before a record is processed that does not come from a save operation
+     * (promoteBackgroundThumbnails()). Both lists must be kept
+     * per record: $processedParentFieldIds stores field_ids, not
+     * record ids, and would otherwise regard all thumbnail fields of the second record
+     * of a run as "already done".
      */
     public function clearRecordCache(): void
     {
@@ -3885,7 +3881,7 @@ trait VirtualFieldsTrait {
         $this->processedUploadFields = [];
     }
 
-    /** Aktueller Arbeitsstand, z. B. zur Kontrolle nach writeThumbnails() */
+    /** Current working state, e.g. for checking after writeThumbnails() */
     public function getRecordCache(): array
     {
         return $this->recordCache ?? [];

@@ -1,74 +1,74 @@
 <?php
 /**
- * Backend-Oberfläche für die Frontend-Templates (Tabelle `template`).
+ * Backend interface for the frontend templates (table `template`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     index.php                 -> folderList()       Baum der Template-Bereiche
- *     template_list.php         -> list()             Templates eines Bereichs
- *     template_info.php         -> info()             Quelltext ansehen (Reiter 1)
- *     template_access.php       -> infoAccess()       Zuweisungen (Reiter 2)
- *     template_edit.php         -> edit()             anlegen / ändern / löschen
- *     template_move.php         -> move()             in anderen Bereich verschieben
- *     template_sync.php         -> TemplateFiles::sync()  Refresh-Knopf der Listen
- *     template_search.php       -> search()           Suchmaske und Suchausführung
- *     template_global_search.php-> searchCrossArea()  Zwischen-Layer der globalen Suche
- *     ajax_lookup_preview.php   -> lookupPreview()    Lookup-Feld aktualisieren
- *     ajax_slookup_preview.php  -> sLookupPreview()   dito in der Suchmaske
+ *     index.php                 -> folderList()       tree of the template areas
+ *     template_list.php         -> list()             templates of an area
+ *     template_info.php         -> info()             view the source code (tab 1)
+ *     template_access.php       -> infoAccess()       assignments (tab 2)
+ *     template_edit.php         -> edit()             create / change / delete
+ *     template_move.php         -> move()             move to another area
+ *     template_sync.php         -> TemplateFiles::sync()  refresh button of the lists
+ *     template_search.php       -> search()           search mask and search execution
+ *     template_global_search.php-> searchCrossArea()  intermediate layer of the global search
+ *     ajax_lookup_preview.php   -> lookupPreview()    update lookup field
+ *     ajax_slookup_preview.php  -> sLookupPreview()   likewise in the search mask
  *
- * ZWEI EBENEN: BEREICHE, DANN TEMPLATES
+ * TWO LEVELS: AREAS, THEN TEMPLATES
  * --------------------
- * Templates liegen in Inhaltsbereichen vom Typ 'template'. Der Einstieg ist deshalb
- * nicht die Template-Liste, sondern der Bereichsbaum (folderList()); ein Klick darauf
- * legt die Template-Liste als weiteren Layer darüber. "Neu" im Baum legt entsprechend
- * keinen Datensatz an, sondern öffnet das Formular des Moduls Area.
+ * Templates lie in content areas of type 'template'. The entry point is therefore
+ * not the template list, but the area tree (folderList()); a click on it
+ * opens the template list as a further layer on top. "New" in the tree accordingly
+ * creates no record, but opens the form of the module Area.
  *
- * Welche Ordner aufgeklappt sind, merkt sich die SESSION (expanded_folder_ids) - der
- * Baum steht nach dem Neuladen also so da, wie man ihn verlassen hat. Zugeklappte
- * Zweige werden über das Nested Set übersprungen: ab dem geschlossenen Ordner gilt
- * alles mit lft < dessen rgt als Kind (siehe $skipUntilRgt in printTree()).
+ * The session (expanded_folder_ids) remembers which folders are expanded - the
+ * tree therefore looks after reloading just as it was left. Collapsed
+ * branches are skipped via the nested set: from the collapsed folder on, everything
+ * with lft < its rgt counts as a child (see $skipUntilRgt in printTree()).
  *
- * Sind Mandanten eingerichtet, bekommt der Baum wie im Modul Record je Instanz einen
- * Hauptordner (expanded_instance_ids) - siehe RecordBackendFolderList, dessen
- * folderList() hier wortgleich nachgebaut ist; beide Module teilen sich die
- * Session-Spalten, ein hier geöffneter Mandant ist auch dort geöffnet.
+ * If tenants are set up, the tree gets a main folder per instance as in the module Record
+ * (expanded_instance_ids) - see RecordBackendFolderList, whose
+ * folderList() is rebuilt here verbatim; both modules share the
+ * session columns, a tenant opened here is also open there.
  *
- * DER EDITOR FÄRBT NICHT SELBST EIN
+ * THE EDITOR DOES NOT COLOR ITSELF
  * --------------------
- * info() zeigt nicht `code`, sondern `styled_code` - das ist der beim SPEICHERN vom
- * Parser erzeugte, bereits eingefärbte HTML-Quelltext samt Zeilennummern. Ebenso
- * kommen die Fehlermeldungen aus `error_text` und nicht aus einem erneuten Parserlauf.
- * Bearbeitet wird dagegen im Formular der Quelltext als schlichte Textarea - er
- * kommt aus der Datei var/templates/{instance_id}/{bereich}/{name}.cms.php
- * (Template::hookOnLoaded()) und wird beim Speichern dorthin zurückgeschrieben; die
- * Datei führt, die Spalte `code` dient nur der Suche (siehe TemplateFiles).
+ * info() shows not `code`, but `styled_code` - that is the already colored HTML source
+ * including line numbers, created by the parser when SAVING. Likewise
+ * the error messages come from `error_text` and not from a new parser run.
+ * In the form, the source code is edited in a plain textarea instead - it
+ * comes from the file var/templates/{instance_id}/{bereich}/{name}.cms.php
+ * (Template::hookOnLoaded()) and is written back there on saving; the
+ * file leads, the column `code` serves only for searching (see TemplateFiles).
  *
- * ZUWEISUNGEN (Reiter "Zugriff")
+ * ASSIGNMENTS (tab "Access")
  * --------------------
- * infoAccess() pflegt, in welchen Inhaltsbereichen das Template benutzt werden darf -
- * je Bereich drei Häkchen (default / selectable / override) plus das standalone-Flag.
- * Die Methode ist ein kleiner Zustandsautomat für sich:
+ * infoAccess() maintains in which content areas the template may be used -
+ * per area three check boxes (default / selectable / override) plus the standalone flag.
+ * The method is a small state machine of its own:
  *
- *     ''        Stand aus der Datenbank laden
- *     update    Formularstand übernehmen und eine Bereichszeile hinzufügen
- *     save      über Template::saveAccess() schreiben
- * Alle drei enden in 'form', das die Tabelle rendert.
+ *     ''        load the state from the database
+ *     update    take over the form state and add an area row
+ *     save      write via Template::saveAccess()
+ * All three end in 'form', which renders the table.
  *
- * LOOKUP-BETRIEB
+ * LOOKUP MODE
  * --------------------
- * list() dient doppelt: als normale Trefferliste und - wenn src_field im Request steht -
- * als Auswahlfenster eines Lookup-Feldes in einem anderen Formular (z. B.
- * "Default-Template" im Bereichsformular). Dann bekommt jede Zeile eine Checkbox, die
- * per Javascript die Verknüpfung im aufrufenden Formular setzt. Bleibt genau ein noch
- * nicht verknüpfter Treffer übrig, wird er direkt übernommen und der Layer schließt
- * sich - das erspart bei eindeutiger Suche den zusätzlichen Klick.
+ * list() serves a double purpose: as a normal hit list and - if src_field is in the request -
+ * as the selection window of a lookup field in another form (e.g.
+ * "Default template" in the area form). Then each row gets a check box which
+ * sets the link in the calling form via JavaScript. If exactly one not yet
+ * linked hit remains, it is taken over directly and the layer closes
+ * itself - this saves the additional click on an unambiguous search.
  *
- *     src_field   Name des Lookup-Feldes im aufrufenden Formular
- *     checked     Bereits verknüpfte Ids
+ *     src_field   name of the lookup field in the calling form
+ *     checked     already linked ids
  *
- * @see Camindo\Core\Modules\Template\Template            Dataset/Model, kompiliert beim Speichern
- * @see Camindo\Core\Modules\Template\TemplateParserTrait  Parser und Einfärbung
- * @see Camindo\Core\Modules\Area\AreaBackend              nutzt die Lookup-Methoden hier
+ * @see Camindo\Core\Modules\Template\Template            dataset/model, compiled when saving
+ * @see Camindo\Core\Modules\Template\TemplateParserTrait  parser and coloring
+ * @see Camindo\Core\Modules\Area\AreaBackend              uses the lookup methods here
  */
 namespace Camindo\Core\Modules\Template;
 
@@ -84,14 +84,14 @@ use Camindo\Core\Modules\Area\Area;
 use Camindo\Core\Modules\Template\Template;
 
 class TemplateBackend {
-    // Refresh-Knopf der Listen: erst die Quelltext-Dateien in var/templates in die
-    // Datenbank übernehmen (backend/template_sync.php -> TemplateFiles::sync()),
-    // dann die Ansicht neu laden
-    // POST, weil sync() schreibt (17-csrf.md §2.7); das CSRF-Token kommt aus
-    // cApp.system.csrfHeaders()
+    // Refresh button of the lists: first take over the source files in var/templates into the
+    // database (backend/template_sync.php -> TemplateFiles::sync()),
+    // then reload the view
+    // POST, because sync() writes; the CSRF token comes from
+    // cApp.system.csrfHeaders() (developer docs, chapter 14 (Security: web))
     /**
-     * Parser-Meldungen (`error_text`, durch <br> getrennt) in Fehler und Hinweise
-     * ("Line n: Note: …", TemplateParserTrait::inlineHandlerWarnings()) teilen.
+     * Split the parser messages (`error_text`, separated by <br>) into errors and notes
+     * ("Line n: Note: …", TemplateParserTrait::inlineHandlerWarnings()).
      *
      * @return array{0:string[],1:string[]}
      */
@@ -102,7 +102,7 @@ class TemplateBackend {
         return [array_values(array_diff($messages, $notes)), $notes];
     }
 
-    /** Höchstzahl Templates im Widget */
+    /** Maximum number of templates in the widget */
     private const WIDGET_MAX = 20;
 
     private const REFRESH_SCRIPT = "cApp.system.addSpinner();"
@@ -113,8 +113,8 @@ class TemplateBackend {
 
     protected string $iconTemplate = '';
 
-    // Kann Zahl ODER Name sein: info() erlaubt den Aufruf über den Templatenamen,
-    // damit ein Verweis aus einem anderen Template direkt anspringbar ist.
+    // Can be a number OR a name: info() allows the call via the template name,
+    // so that a reference from another template can jump there directly.
     protected string|int $id = 0;
     protected int $areaId = 0;
     protected string $srcField = '';  // lookup call
@@ -141,11 +141,11 @@ class TemplateBackend {
     }
 
     /**
-     * Widget für die Startseite (settings.php 'widget'): Parser-Meldungen der
-     * Templates (`template`.`error_text`) - wichtig, wenn Templates im Dateisystem
-     * (var/templates) bearbeitet werden und niemand den Editor sieht. Fehler und
-     * Hinweise (Script ohne CMS:NONCE, Inline-Handler) je Template, nur Bereiche,
-     * die die Gruppe lesen darf; dazu immer der Hinweis auf CMS:NONCE.
+     * Widget for the start page (settings.php 'widget'): parser messages of the
+     * templates (`template`.`error_text`) - important when templates are edited in the file system
+     * (var/templates) and nobody sees the editor. Errors and
+     * notes (script without CMS:NONCE, inline handler) per template, only areas
+     * that the group may read; always with the note on CMS:NONCE.
      */
     public function widget(): string
     {
@@ -188,39 +188,39 @@ class TemplateBackend {
     }
 
     /**
-     * Baum der Template-Bereiche (backend/index.php) - der Einstieg ins Modul.
+     * Tree of the template areas (backend/index.php) - the entry point into the module.
      *
-     * Zeigt Ordner und Bereiche vom Typ 'template' als flache Tabelle mit
-     * Pixel-Einrückung nach `depth`; die Reihenfolge liefert das Nested Set (lft).
+     * Shows folders and areas of type 'template' as a flat table with
+     * pixel indentation by `depth`; the order is given by the nested set (lft).
      *
-     * AUF- UND ZUKLAPPEN
-     * Der Zustand steht in der Session (expanded_folder_ids, als JSON). Ein Klick ruft
-     * dieselbe Methode mit folder_id und toggle auf: die Id wird erst in jedem Fall aus
-     * der Liste entfernt und beim Öffnen wieder hinzugefügt - so bleibt sie eindeutig,
-     * ohne dass vorher geprüft werden muss, ob sie schon drin ist.
+     * EXPAND AND COLLAPSE
+     * The state is in the session (expanded_folder_ids, as JSON). A click calls
+     * the same method with folder_id and toggle: the id is first removed from
+     * the list in any case and added back when opening - this keeps it unique
+     * without having to check beforehand whether it is already in there.
      *
-     * Zugeklappte Zweige werden nicht etwa aus der Abfrage ausgeschlossen, sondern beim
-     * Durchlaufen übersprungen: $skipUntilRgt merkt sich den rechten Grenzwert des
-     * geschlossenen Ordners, und alles mit kleinerem lft liegt in seinem Teilbaum.
-     * Eine einzige Abfrage genügt damit für den ganzen Baum.
+     * Collapsed branches are not excluded from the query, but skipped
+     * while iterating: $skipUntilRgt remembers the right limit of the
+     * collapsed folder, and everything with a smaller lft lies in its subtree.
+     * A single query is therefore enough for the whole tree.
      *
-     * "Neu" legt hier kein Template an, sondern einen Bereich - der Knopf öffnet das
-     * Formular des Moduls Area mit vorbelegtem Typ.
+     * "New" does not create a template here, but an area - the button opens the
+     * form of the module Area with the type preset.
      *
-     * Request: folder_id, toggle (0|1) - beide optional; bei Mandanten-Hauptordnern
-     *          instance_id statt folder_id (siehe Klassenkommentar)
+     * Request: folder_id, toggle (0|1) - both optional; for tenant main folders
+     *          instance_id instead of folder_id (see class comment)
      */
     public function folderList()
     {
-        // Hole die Ids der geöffneten Ordner aus der Session
+        // Get the ids of the open folders from the session
         $expandedFolderIds = $this->toggleExpanded('expanded_folder_ids', 'folder_id');
-        // dito für die Mandanten-Hauptordner
+        // likewise for the tenant main folders
         $expandedInstanceIds = $this->toggleExpanded('expanded_instance_ids', 'instance_id');
 
         // Seitenelemente
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#template.module_label');
         
         // Container header
@@ -238,18 +238,18 @@ class TemplateBackend {
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_create_primary', "cApp.layers.add('Area/area_edit.php?function=create&data[type]=template&data[icon]=extension');");
         $this->backend->buttonAdd('button_search', "cApp.layers.add('Template/template_global_search.php');cApp.layers.add('Template/template_search.php?' + cApp.layers.queryString());");
-        // Refresh: erst var/templates abgleichen (TemplateFiles::sync()), dann neu laden
+        // Refresh: first reconcile var/templates (TemplateFiles::sync()), then reload
         $this->backend->buttonAdd('button_refresh', self::REFRESH_SCRIPT);
         echo $this->backend->buttonBar();
 
         // Folders and Areas
         // --------------------
-        // Nur die Instanzen und lesbaren Template-Bereiche der Benutzergruppe (null = alle)
+        // Only the instances and readable template areas of the user group (null = all)
         $access = $this->backend->access();
         $instanceFilter = $access->instanceFilter();
         $areaFilter = $access->areaFilter(['template']);
         if ($this->instanceCache->hasMultipleInstances()) {
-            // Mandanten als Hauptordner, darunter je Instanz ihr Baum
+            // Tenants as main folders, below each the instance's tree
             foreach ($this->instanceCache->instanceLabels() as $instanceId => $label) {
                 if ($instanceFilter !== null && !in_array((int)$instanceId, $instanceFilter, true)) continue;
                 $open = in_array($instanceId, $expandedInstanceIds, true);
@@ -285,8 +285,8 @@ class TemplateBackend {
     }
 
     /**
-     * Auf- bzw. zuklappen (Request $requestKey + toggle) in der Session vermerken und
-     * die Liste der geöffneten Ids liefern (wie RecordBackendFolderList).
+     * Note expanding resp. collapsing (request $requestKey + toggle) in the session and
+     * return the list of open ids (as RecordBackendFolderList does).
      *
      * @param string $sessionKey  expanded_folder_ids | expanded_instance_ids (JSON)
      * @param string $requestKey  folder_id | instance_id
@@ -299,8 +299,8 @@ class TemplateBackend {
         if (isset($_REQUEST[$requestKey])) {
             $id = (int)($_REQUEST[$requestKey] ?? 0);
             $toggle = (bool)(int)($_REQUEST['toggle'] ?? 0); // 1: open, 0: close
-            // erst in jedem Fall entfernen, beim Öffnen wieder anhängen - so bleibt
-            // die Id eindeutig, ohne vorher nachsehen zu müssen
+            // always remove first, append again when opening - this keeps
+            // the id unique without having to check beforehand
             $ids = array_values(array_diff($ids, [$id]));
             if ($toggle) $ids[] = $id;
             $this->session->set($sessionKey, json_encode($ids, JSON_UNESCAPED_UNICODE) ?? '');
@@ -309,25 +309,25 @@ class TemplateBackend {
     }
 
     /**
-     * Das geladene Ergebnis von Area::loadAreas() als Baumzeilen ausgeben.
+     * Output the loaded result of Area::loadAreas() as tree rows.
      *
-     * @param int[] $expandedFolderIds  geöffnete Ordner
-     * @param int   $depthOffset        Einrückung: 1 unter einem Mandanten-Hauptordner
+     * @param int[] $expandedFolderIds  open folders
+     * @param int   $depthOffset        indentation: 1 under a tenant main folder
      */
     private function printTree(array $expandedFolderIds, int $depthOffset): void
     {
-        $skipUntilRgt = null; // Speichert den rechten Grenzwert des aktuell geschlossenen Ordners
+        $skipUntilRgt = null; // stores the right limit of the currently collapsed folder
 
         for ($i=0; $i < $this->db->num_rows; $i++) {
             $data = $this->db->fetch();
             
-            // Prüfen, ob wir uns im Zweig eines geschlossenen Ordners befinden
+            // Check whether we are in the branch of a collapsed folder
             if ($skipUntilRgt !== null) {
                 if ($data['lft'] < $skipUntilRgt) {
-                    // Element ist ein Kind/Kindeskind des geschlossenen Ordners -> überspringen
+                    // Element is a child/descendant of the collapsed folder -> skip
                     continue;
                 } else {
-                    // Der Zweig des geschlossenen Ordners wurde verlassen
+                    // The branch of the collapsed folder has been left
                     $skipUntilRgt = null;
                 }
             }
@@ -337,13 +337,13 @@ class TemplateBackend {
                 $icon = 'folder';
                 $folderId = (int)($data['area_id']);
                 if (in_array($folderId, $expandedFolderIds, true)) {
-                    // offener Ordner
+                    // open folder
                     $tpl = 'template.row_folder_open';
                 }
                 else {
-                    // geschlossener Ordner
+                    // collapsed folder
                     $tpl = 'template.row_folder';
-                    // Rgt-Wert des Ordners setzen, um alle folgenden Kinder zu überspringen
+                    // set the rgt value of the folder to skip all following children
                     $skipUntilRgt = $data['rgt'];
                 }
             }
@@ -361,26 +361,26 @@ class TemplateBackend {
     }
 
     /**
-     * Template-Liste (backend/template_list.php).
+     * Template list (backend/template_list.php).
      *
-     * Zwei Betriebsarten (siehe Klassenkommentar):
-     *   - normal: Liste der Templates eines Bereichs
-     *   - Lookup: mit src_field im Request wird daraus ein Auswahlfenster für ein
-     *     Lookup-Feld in einem anderen Formular; jede Zeile bekommt dann eine
-     *     Checkbox, deren onclick die Verknüpfung dort setzt.
+     * Two modes of operation (see class comment):
+     *   - normal: list of the templates of an area
+     *   - lookup: with src_field in the request it becomes a selection window for a
+     *     lookup field in another form; each row then gets a
+     *     check box whose onclick sets the link there.
      *
-     * Der Bereichsfilter geht als fertiges SQL-Fragment ('sql') in select() und nicht
-     * als normaler Filter - er soll nicht im Filtertext über der Liste auftauchen, den
-     * der Redakteur als seine Sucheingabe liest. Die area_id ist vorher zu int
-     * gecastet.
+     * The area filter goes as a finished SQL fragment ('sql') into select() and not
+     * as a normal filter - it should not appear in the filter text above the list, which
+     * the editor reads as their search input. The area_id is cast to int
+     * beforehand.
      *
-     * Request: area_id | filter | src_field (mindestens eines - sonst schließt sich
-     *          der Layer, statt sämtliche Templates zu listen), checked
+     * Request: area_id | filter | src_field (at least one - otherwise the layer
+     *          closes, instead of listing all templates), checked
      */
     public function list()
     {
-        // Wenn keine filter, kein area_id und kein Lookup-Feld angegeben ist,
-        // dann Layer schließen - anstatt ALLE Datensätze zu listen
+        // If no filter, no area_id and no lookup field is given,
+        // close the layer - instead of listing ALL records
         if (empty($_REQUEST['area_id']) && empty($_REQUEST['filter']) && empty($_REQUEST['src_field'])) {
             $this->backend->script('cApp.layers.close();');
             return;
@@ -391,7 +391,7 @@ class TemplateBackend {
 
         $this->_resolveParams();
 
-        // Rechte der Benutzergruppe: Leserecht auf den Template-Bereich (12-group-rights.md)
+        // Rights of the user group: read right on the template area (developer docs, chapter 11 (Permissions))
         $access = $this->backend->access();
         if ($this->areaId > 0 && !$access->templateRead($this->areaId)) {
             echo $access->deniedHtml();
@@ -400,7 +400,7 @@ class TemplateBackend {
         }
         $canWrite = ($this->areaId < 1) || $access->templateWrite($this->areaId);
 
-        // Bread crum navi
+        // Breadcrumb navigation
         if (!empty($this->areaId)) {
             $naviLabel = $this->cms->_strip_tags($this->cms->textOrSnippet($this->areaData['label']));
         }
@@ -426,12 +426,12 @@ class TemplateBackend {
             $this->backend->buttonAdd('button_refresh', self::REFRESH_SCRIPT);
         }
         if (!empty($this->areaId) && $this->backend->access()->module('Area')) {
-            // Settings des Areas (nur mit Zugriff auf das Modul Area)
+            // Settings of the area (only with access to the module Area)
             $this->backend->buttonAdd('button_settings', "cApp.layers.replace('Area/area_info.php?id={$this->areaId}&back=true');", alignRight:true);
         }
         echo $this->backend->buttonBar();
 
-        // area-Filer (nicht im Filtertext)
+        // area filter (not in the filter text)
         // --------------------
         $sql = '';
         if (!empty($this->areaId)) {
@@ -448,11 +448,11 @@ class TemplateBackend {
             'sql' => $sql,
         ], $this->template);
 
-        // Suchbegriffe oder geänderte Sortierung als lesbarer Text
+        // Search terms or changed sorting as readable text
         echo $this->backend->filterText($f);
 
         if ($this->db->num_rows < 1) {
-            // Keine Ergebnisse keine Tabelle
+            // No results, no table
             echo $this->backend->template('container_footer');
             return;
         }
@@ -484,13 +484,13 @@ class TemplateBackend {
         $tplTableRow = $this->backend->template('template.template_table_row');
         $tableRows = '';
         
-        // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
+        // Fetch results (Dataset::fetch: with post-processing)
         $isLinked = false;
         while ($row = $this->template->fetch()) {
             // Neue Zeile
             $destId = (int)$row['template_id'];
 
-            // Wenn lookup call, dann zusätzliche erste Spalte
+            // If lookup call, then an additional first column
             if (!empty($this->srcField)) {
 
                 $isLinked = in_array($destId, $this->checked, false);
@@ -510,7 +510,7 @@ class TemplateBackend {
                 $checkboxColumn = '';
             }
 
-            // Zeile (Kontextmenü ohne Schreibrecht auf den Bereich der Zeile leer)
+            // Row (context menu empty without write right on the area of the row)
             $rowWritable = $access->templateWrite((int)$row['area_id']);
             $tableRow = strtr($tplTableRow, [
                 '{data_id}' => $row['template_id'],
@@ -530,8 +530,8 @@ class TemplateBackend {
             '{params}' => $this->params ? "&{$this->params}" : ''
         ]);
 
-        // Context menu - Bearbeiten/Kopieren/Löschen nur mit Schreibrecht auf den
-        // Bereich der Zeile (data-ctx-hide, backend-ctx-menu.js)
+        // Context menu - edit/copy/delete only with write right on the
+        // area of the row (data-ctx-hide, backend-ctx-menu.js)
         echo $this->backend->template('template.template_context_menu');
 
         // Pagination bottom
@@ -539,9 +539,9 @@ class TemplateBackend {
 
         // link immediately
         // --------------------
-        // Von Lookup geöffnete Liste:
-        // Wenn genau ein Datensatz gefunden wurde, der noch nicht verknüpft ist,
-        // dann diesen direkt verknüpfen und Layer schließen
+        // List opened from a lookup:
+        // If exactly one record was found that is not yet linked,
+        // then link it directly and close the layer
 
         if (!empty($this->srcField)
             && $this->db->num_rows_unlimited === 1
@@ -560,32 +560,32 @@ class TemplateBackend {
     }
 
     /**
-     * Die wiederkehrenden Seitenparameter einlesen und aufbereiten.
+     * Read in and prepare the recurring page parameters.
      *
-     * Wird von list(), info(), edit() und search() gleich zu Beginn aufgerufen und füllt
-     * $id, $areaId, $srcField, $checked, $areaFilter, $areaData und $params.
+     * Called right at the start by list(), info(), edit() and search() and fills
+     * $id, $areaId, $srcField, $checked, $areaFilter, $areaData and $params.
      *
-     * Zwei Dinge sind hier bemerkenswert:
+     * Two things are noteworthy here:
      *
-     *  - $id wird nur auf [a-z0-9_.] gefiltert, nicht zu int gecastet: info() erlaubt
-     *    auch die Referenz "[bereich.]name" statt der Id.
-     *  - $params ist die Sammlung der Parameter, die an jeden weiterführenden Link
-     *    angehängt werden müssen (Bereich und Lookup-Zusammenhang), damit der nächste
-     *    Layer weiß, woher er kommt.
+     *  - $id is filtered only to [a-z0-9_.], not cast to int: info() also allows
+     *    the reference "[area.]name" instead of the id.
+     *  - $params is the collection of parameters that must be appended to every onward link
+     *    (area and lookup context), so that the next
+     *    layer knows where it comes from.
      *
-     * Kann der Bereich nicht geladen werden, wird $this->function auf 'errors' gesetzt -
-     * der Aufrufer muss das prüfen (siehe info()).
+     * If the area cannot be loaded, $this->function is set to 'errors' -
+     * the caller must check this (see info()).
      */
     private function _resolveParams(): void
     {
         // Seitenparameter
         // --------------------
-        // Id oder Referenz "[bereich.]name" (siehe info())
+        // Id or reference "[area.]name" (see info())
         $this->id = preg_replace('/[^a-z0-9_.]+/i', '', (string)($_REQUEST['id'] ?? ''));
         $this->areaId = (int)($_REQUEST['data']['area_id'] ?? $_REQUEST['area_id'] ?? 0);
 
         // lookup calls:
-        // Steht in Javascript-Aufrufen (lookupFocus/slookupUpdate) - nur Feldnamen
+        // Appears in JavaScript calls (lookupFocus/slookupUpdate) - field names only
         $this->srcField = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_REQUEST['src_field'] ?? '')));
         $this->checked = $this->system->sanitizeIds(
             explode(',', (string)($_REQUEST['checked'] ?? ''))
@@ -602,7 +602,7 @@ class TemplateBackend {
         // --------------------
         $this->areaData = [];
         if ($this->areaId > 0) {
-            // Ein Bereich -> Daten laden
+            // One area -> load data
             if (!$this->areaData = $this->area->load($this->areaId)) {
                 // (Fehlermeldungen in $this->cms->errors)
                 $this->function = 'errors';
@@ -632,34 +632,34 @@ class TemplateBackend {
     /**
      * Quelltext eines Templates ansehen (backend/template_info.php, Reiter "Inhalt").
      *
-     * Aufrufbar über die Id ODER eine Referenz "[bereich.]name" (Cms::findTemplates())
-     * - is_numeric() entscheidet. Ein bloßer Name, den es in mehreren Bereichen gibt,
-     * wird zuerst im Bereich des verweisenden Templates gesucht (area_id aus dem Link
-     * im styled_code, siehe TemplateParserTrait::styleCommandInner()); bleibt er
-     * mehrdeutig, gibt es eine Fehlermeldung. Ist unter dem Namen nichts zu finden,
-     * wird nicht einfach ein Fehler gezeigt, sondern die Rückfrage, ob das Template
-     * jetzt angelegt werden soll: der Normalfall ist ein Verweis aus einem anderen
-     * Template auf ein noch nicht existierendes.
+     * Callable via the id OR a reference "[area.]name" (Cms::findTemplates())
+     * - is_numeric() decides. A bare name that exists in several areas,
+     * is searched first in the area of the referencing template (area_id from the link
+     * in the styled_code, see TemplateParserTrait::styleCommandInner()); if it stays
+     * ambiguous, there is an error message. If nothing is found under the name,
+     * an error is not simply shown, but the query whether the template
+     * should now be created: the normal case is a reference from another
+     * template to a not yet existing one.
      *
-     * Gezeigt wird `styled_code`, nicht `code` - die Einfärbung entstand beim
-     * Speichern (siehe Klassenkommentar). Davor stehen die gespeicherten
-     * Parser-Meldungen aus `error_text`.
+     * `styled_code` is shown, not `code` - the coloring was created during
+     * saving (see class comment). Before it stand the saved
+     * parser messages from `error_text`.
      *
-     * Die Aufbereitung des styled_code ist reine Darstellung: Tabulatoren zu vier
-     * Leerzeichen, jedes zweite Leerzeichen zu einem geschützten (damit HTML die
-     * Einrückung nicht zusammenzieht), Zeilenumbrüche zu <br>. Die Zeilennummern
-     * daneben sind eine schlichte Aufzählung - sie stimmen, weil der Parser die
-     * Zeilenzahl erhält.
+     * Preparing the styled_code is pure display: tabs to four
+     * spaces, every second space to a non-breaking one (so that HTML does not
+     * collapse the indentation), line breaks to <br>. The line numbers
+     * next to it are a simple list - they match because the parser
+     * keeps the line count.
      *
-     * "Vorschau" erscheint nur bei standalone-Templates: nur die lassen sich ohne
+     * "Preview" only appears for standalone templates: only those can be called without
      * Datensatz aufrufen (/0,{name}).
      */
     public function info()
     {
         echo $this->backend->template('container_header');
 
-        // Vorbelegen und danach prüfen: _resolveParams() setzt bei einem nicht
-        // ladbaren Bereich 'errors' - der Vergleich unten fängt genau das ab.
+        // Prefill and check afterwards: _resolveParams() sets 'errors' for an area that cannot be
+        // loaded - the comparison below catches exactly that.
         $this->function = 'info';
         $this->_resolveParams();
         if ($this->function !== 'info') {
@@ -671,7 +671,7 @@ class TemplateBackend {
         // Seitenelemente
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
 
         // Container header
@@ -682,7 +682,7 @@ class TemplateBackend {
             // Referenz "[bereich.]name" -> template_id
             $templates = $this->cms->findTemplates((string)$this->id);
             if (count($templates) > 1 && $this->areaId > 0) {
-                // Bereich des verweisenden Templates bevorzugen
+                // Prefer the area of the referencing template
                 $inContext = array_values(array_filter(
                     $templates, fn($row) => (int)$row['area_id'] === $this->areaId
                 ));
@@ -696,8 +696,8 @@ class TemplateBackend {
                 return;
             }
             if (count($templates) < 1) {
-                // Template nicht gefunden.
-                // -> Rückfrage: Soll es jetzt erstellt werden?
+                // Template not found.
+                // -> query: should it be created now?
                 $refParts = explode('.', (string)$this->id);
                 $name = end($refParts);
                 echo $this->backend->template('template.message_with_create_link', [
@@ -717,7 +717,7 @@ class TemplateBackend {
         $this->id = (int)$this->data['template_id'];
         $this->areaId = (int)$this->data['area_id'];
 
-        // Rechte der Benutzergruppe: Leserecht auf den Template-Bereich
+        // Rights of the user group: read right on the template area
         $access = $this->backend->access();
         if (!$access->templateRead($this->areaId)) {
             echo $access->deniedHtml();
@@ -729,7 +729,7 @@ class TemplateBackend {
         // H1
         echo $this->backend->headline("{$this->iconTemplate} {$this->data['name']}");
         
-        // Tabs ("Änderungen" = Audit-Log, Backend::auditTabAdd())
+        // Tabs ("Changes" = audit log, Backend::auditTabAdd())
         $auditActive = empty($this->srcField) && $this->backend->auditTabActive();
         if (empty($this->srcField)) {
             $this->backend->tabBarReset();
@@ -739,7 +739,7 @@ class TemplateBackend {
             echo $this->backend->tabBar();
         }
 
-        // buttons (Ändern nur mit Schreibrecht)
+        // buttons (change only with write right)
         $this->backend->buttonBarReset();
         if (empty($this->srcField)) {
             if ($canWrite) {
@@ -789,7 +789,7 @@ class TemplateBackend {
 
         // parsing errors
         // --------------------
-        // Fehler rot, Hinweise (Script-Policy, "Note:") gelb; maskiert - die
+        // errors red, notes (script policy, "Note:") yellow; escaped - the
         // Meldungen zitieren Quelltext (<script …>)
         if (!empty($this->data['error_text'])) {
             [$errors, $notes] = $this->_splitParserMessages((string)$this->data['error_text']);
@@ -820,26 +820,26 @@ class TemplateBackend {
     /**
      * Zuweisungen pflegen (backend/template_access.php, Reiter "Zugriff").
      *
-     * Legt fest, in welchen Inhaltsbereichen das Template benutzt werden darf. Je
-     * Bereich eine Zeile mit drei Häkchen:
+     * Defines in which content areas the template may be used. Per
+     * area one row with three check boxes:
      *
-     *     default      Standard-Template des Bereichs (höchstens eines je Bereich;
+     *     default      default template of the area (at most one per area;
      *                  landet in area.default_template_id)
-     *     selectable   im Datensatz wählbar
+     *     selectable   selectable in the record
      *     override     per URL erzwingbar (/{id},{template})
      *
-     * Dazu das Feld `standalone`: das Template darf ohne Datensatz aufgerufen werden.
+     * Plus the field `standalone`: the template may be called without a record.
      *
-     * Kleiner Zustandsautomat über function (siehe Klassenkommentar): '' lädt den
-     * gespeicherten Stand, 'update' übernimmt den Formularstand und fügt eine Zeile
-     * hinzu, 'save' schreibt. Das Hinzufügen läuft ohne eigenen Knopf - die
-     * Auswahlliste schickt das Formular per onchange mit function=update ab.
+     * Small state machine via function (see class comment): '' loads the
+     * saved state, 'update' takes over the form state and adds a row.
+     * 'save' writes. Adding runs without its own button - the
+     * selection list sends the form via onchange with function=update.
      *
-     * Zu jeder Zeile gehört ein verstecktes Feld [nop]: eine Zeile, in der ALLE
-     * Häkchen abgewählt sind, würde sonst gar nicht mitgeschickt und beim Speichern
-     * verschwinden, statt als "nichts erlaubt" erhalten zu bleiben.
+     * Each row has a hidden field [nop]: a row in which ALL
+     * check boxes are unticked would otherwise not be sent at all and would vanish on saving
+     * instead of being kept as "nothing allowed".
      *
-     * Geschrieben wird beides zusammen in Template::saveAccess().
+     * Both are written together in Template::saveAccess().
      */
     public function infoAccess()
     {
@@ -852,7 +852,7 @@ class TemplateBackend {
         // Seitenelemente
         // --------------------
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
 
         // Container header
@@ -860,7 +860,7 @@ class TemplateBackend {
 
         // Load data
         if (!$templateData = $this->template->load($this->id)) {
-            // Template nicht gefunden.
+            // Template not found.
             echo $this->backend->template('alert_danger', [
                 '{text}' => '{#template.error_template_not_found}'
             ]);
@@ -870,8 +870,8 @@ class TemplateBackend {
 
         $this->areaId = (int)$templateData['area_id'];
 
-        // Rechte der Benutzergruppe: Lesen des Bereichs; Ändern der Zuweisungen
-        // nur mit Schreibrecht (Anzeige bleibt lesend)
+        // Rights of the user group: read the area; changing the assignments
+        // only with write right (display stays read-only)
         $access = $this->backend->access();
         if (!$access->templateRead($this->areaId) || ($this->function !== '' && !$access->templateWrite($this->areaId))) {
             echo $access->deniedHtml();
@@ -915,7 +915,7 @@ class TemplateBackend {
             'id' => $this->id
         ]);
 
-        // Verwendung: zeitgesteuert (Scheduler) - dann nie per URL aufrufbar
+        // Usage: time-controlled (scheduler) - then never callable via URL
         // --------------------
         $this->backend->formField($this->template, [
             'name' => 'type',
@@ -927,10 +927,10 @@ class TemplateBackend {
             ],
         ]);
 
-        // Template-Zuweisung zu Content-Bereichen
+        // Template assignment to content areas
         // --------------------
         if ($this->function === '') {
-            // Aktuellen Stand der Zuweisungen laden
+            // Load the current state of the assignments
             $rows = $this->loadAreaAssignment($this->id);
     
             // Zuweisungen in $data umwandeln
@@ -947,9 +947,9 @@ class TemplateBackend {
             $this->function = 'form';
         }
         elseif ($this->function === 'update') {
-            // Zuweisungen aus Formualar empfangen
+            // Receive the assignments from the form
             $this->data['access'] = (array)($this->data['access'] ?? []);
-            // Zeile hinzufügen
+            // Add row
             $addAreaId = (int)($this->data['add_area_id'] ?? 0);
             if (!empty($addAreaId)) {
                 $this->data['access'][$addAreaId] = [
@@ -976,11 +976,11 @@ class TemplateBackend {
         }
 
 
-        // Leerer if-Rumpf - ohne Wirkung. Alle drei Zweige oben enden in 'form',
-        // die Tabelle wird also ohnehin immer gebaut. Kann entfallen.
+        // Empty if body - without effect. All three branches above end in 'form',
+        // so the table is built anyway in every case. Can be removed.
         if ($this->function === 'form') {}
-        // Tabelle mit Checkboxen aufbauen - ohne Zuweisungen (typisch für Standalone- und
-        // zeitgesteuerte Templates) schickt das Formular kein data[access]
+        // Build the table with check boxes - without assignments (typical for standalone and
+        // time-controlled templates) the form sends no data[access]
         $this->data['access'] = (array)($this->data['access'] ?? []);
         $tableRows = [];
         if (count($this->data['access']) > 0) {
@@ -996,7 +996,7 @@ class TemplateBackend {
                     '{override}' => $overrideCheckbox,
                 ]);
 
-                // Hiddenfeld, sichert, dass area_id registriert bleibt, auch bei fehlenden Checkboxen
+                // Hidden field, ensures that area_id stays registered, even with missing check boxes
                 $this->backend->formHidden("data[access][{$rowAreaId}][nop]", 1);
             }
             $table = $this->backend->template('template.access_table', [
@@ -1017,13 +1017,13 @@ class TemplateBackend {
             'label' => '#template.button_add_area'
         ];
         $areaOptions = [];
-        // Ids der bereits verwendeten Contentbereiche ausschließen
+        // Exclude the ids of the content areas already in use
         $excludedAreaIds = implode(',', $this->system->sanitizeIds(
             array_keys($this->data['access']), true
         ));
         if (!empty($excludedAreaIds)) $areaFilter = " AND `area_id` NOT IN ($excludedAreaIds)";
         else $areaFilter = '';
-        // Inhaltsbereiche nur die lesbaren der Gruppe; Ordner (nicht wählbar) bleiben
+        // content areas only the readable ones of the group; folders (not selectable) remain
         $accessSql = $this->backend->areaAccessSql();
         if ($accessSql !== '') $areaFilter .= " AND (`type` = 'folder' OR (1=1" . $accessSql . "))";
         $this->db->query("SELECT `area_id`,`depth`,`label`,`type` FROM `area`"
@@ -1062,11 +1062,11 @@ class TemplateBackend {
     }
 
     /**
-     * Eine Häkchen-Zelle der Zuweisungstabelle rendern.
+     * Render a check box cell of the assignment table.
      *
-     * Der Feldname trägt Bereich und Spalte im Namen
-     * (data[access][{area_id}][{spalte}]) - so kommt die ganze Tabelle als
-     * verschachteltes Array zurück und lässt sich unverändert an
+     * The field name carries area and column in its name
+     * (data[access][{area_id}][{column}]) - so the whole table comes back as
+     * a nested array and can be passed unchanged to
      * Template::saveAccess() weitergeben.
      */
     private function _accessCheckbox(int $rowAreaId, string $column, bool $isChecked): string
@@ -1080,8 +1080,8 @@ class TemplateBackend {
     }
 
     /**
-     * Hilfsfunction: Geänderte Bereich-Template-Zuweisungen aktualisieren
-     * sowie das Standalone-Flag
+     * Helper function: update changed area-template assignments
+     * as well as the standalone flag
      */
     private function _saveAccess(): bool
     {
@@ -1089,19 +1089,19 @@ class TemplateBackend {
     }
 
     /**
-     * Template in einen anderen Template-Bereich verschieben (backend/template_move.php).
+     * Move a template to another template area (backend/template_move.php).
      *
-     * Erreichbar über den Button "Verschieben" der Detailansicht - wie bei einem
-     * Datensatz (RecordBackendMove), nur ohne Feldzuordnung: ein Template hat keine
-     * bereichsabhängigen Felder. Ein Schritt: Zielbereich wählen und abschicken;
-     * function=move verschiebt über Template::moveToArea(). Scheitert das (etwa weil der Name im Zielbereich
-     * schon vergeben ist - unique_in_area), erscheint die Maske mit den Fehlern erneut.
+     * Reachable via the button "Move" of the detail view - as with a
+     * record (RecordBackendMove), only without field mapping: a template has no
+     * area-dependent fields. One step: choose the target area and submit;
+     * function=move moves via Template::moveToArea(). If that fails (e.g. because the name in the targetlbereich
+     * is already taken - unique_in_area), the mask appears again with the errors.
      *
-     * Verweise anderer Templates über den bloßen Namen bleiben gültig, solange der
-     * Name danach nicht in mehreren Bereichen vorkommt; sonst müssen sie den
-     * Bereich mit angeben ("bereich.name", siehe Cms::templateFile()).
+     * References of other templates via the bare name remain valid as long as the
+     * name afterwards does not occur in several areas; otherwise they must also name the
+     * area ("area.name", see Cms::templateFile()).
      *
-     * Request: id, target_area_id (auch als data[target_area_id]), function ('move')
+     * Request: id, target_area_id (also as data[target_area_id]), function ('move')
      */
     public function move(): void
     {
@@ -1125,7 +1125,7 @@ class TemplateBackend {
         $this->areaId = (int)$this->data['area_id'];
         $this->params = 'area_id=' . $this->areaId;
 
-        // Rechte der Benutzergruppe: Schreibrecht im Quellbereich (Ziel: Template::moveToArea())
+        // Rights of the user group: write right in the source area (target: Template::moveToArea())
         if (!$this->backend->access()->templateWrite($this->areaId)) {
             echo $this->backend->access()->deniedHtml();
             echo $this->backend->template('container_footer');
@@ -1155,7 +1155,7 @@ class TemplateBackend {
             $this->_editErrors();
         }
 
-        // Zielbereich wählen: alle Template-Bereiche außer dem eigenen
+        // Choose the target area: all template areas except its own
         $areaOptions = $this->_areaOptions();
         unset($areaOptions[(string)$this->areaId]);
 
@@ -1185,13 +1185,12 @@ class TemplateBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/template_edit.php).
+     * Create / copy / change / delete (backend/template_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md). Anders als dort ist der Standardwert direkt im
-     * Zugriff hinterlegt ('edit'), und die Seitenparameter kommen aus
-     * _resolveParams() - unter anderem der Lookup-Zusammenhang, der über das Formular
-     * hinweg erhalten bleiben muss.
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)). Unlike there, the default value is set directly in the
+     * access ('edit'), and the page parameters come from
+     * _resolveParams() - among others the lookup context, which must be kept across the form.
      */
     public function edit(): void
     {
@@ -1201,7 +1200,7 @@ class TemplateBackend {
 
         $this->data = (array) ($_REQUEST['data'] ?? []);
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_' . $this->function);
 
         // Container header
@@ -1217,8 +1216,8 @@ class TemplateBackend {
             $this->_editLoad();
         }
 
-        // Rechte der Benutzergruppe: Schreibrecht auf den Template-Bereich (beim
-        // Speichern zählt der Bereich des Formulars; Dataset::save() prüft erneut)
+        // Rights of the user group: write right on the template area (when
+        // saving, the area of the form counts; Dataset::save() checks again)
         $accessAreaId = (int)($this->data['area_id'] ?? $this->areaId);
         if ($this->function !== 'skip' && $accessAreaId > 0 && !$this->backend->access()->templateWrite($accessAreaId)) {
             echo $this->backend->access()->deniedHtml();
@@ -1262,17 +1261,17 @@ class TemplateBackend {
     // edit() Hilfsfunktionen
 
     /**
-     * function=create: leeres Formular mit den Schema-Defaults.
+     * function=create: empty form with the schema defaults.
      *
-     * $this->id kann hier ausnahmsweise ein NAME sein: kommt der Aufruf aus der
-     * Rückfrage "Template existiert nicht - jetzt anlegen?" (siehe info()), steht dort
-     * der gesuchte Name. Er wird als Vorbelegung übernommen, danach ist die Id 0.
+     * $this->id may exceptionally be a NAME here: if the call comes from the
+     * query "Template does not exist - create it now?" (see info()), the
+     * searched name stands there. It is taken over as the prefill, after which the id is 0.
      */
     private function _editCreate(): void
     {
         $this->data = $this->template->init();
-        // Name in der URL angeben?
-        // siehe html snippet "template.message_with_create_link"
+        // Specify the name in the URL?
+        // see html snippet "template.message_with_create_link"
         $this->data['name'] = $this->id;
         $this->id = 0;
     }
@@ -1280,32 +1279,32 @@ class TemplateBackend {
     /**
      * function=edit|copy|delete: Template laden.
      *
-     * Beim Kopieren wird nur die Id verworfen; der Name bleibt zunächst gleich und
-     * läuft beim Speichern in die unique_in_area-Prüfung - der Redakteur muss ihn
-     * also bewusst ändern.
+     * When copying only the id is discarded; the name initially stays the same and
+     * runs into the unique_in_area check when saving - the editor must therefore
+     * change it deliberately.
      */
     private function _editLoad(): void
     {
         $this->data = $this->template->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
         }
         else {
             $this->areaId = (int)$this->data['area_id'];
         }
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the id now
         if ($this->function == 'copy') {
             $this->id = 0;
         }
     }
 
     /**
-     * Überschrift des Formulars. Beim Löschen der Templatename, sonst die allgemeine
-     * Überschrift.
+     * Heading of the form. When deleting the template name, otherwise the general
+     * heading.
      *
-     * (Als einzige der edit()-Hilfsmethoden public - abweichend von der Konvention,
-     * wie in AdminBackend.)
+     * (The only one of the edit() helper methods that is public - deviating from the convention,
+     * as in AdminBackend.)
      */
     private function _editHeadline() {
         if ($this->function == 'delete') {
@@ -1322,17 +1321,17 @@ class TemplateBackend {
     /**
      * function=save: speichern.
      *
-     * Geschrieben wird nur, was in der Liste steht. `styled_code` und `error_text`
-     * stehen mit drin, obwohl sie kein Eingabefeld haben - Template::hookOnSave()
-     * befüllt sie aus dem Quelltext, und ohne Eintrag in der Liste käme das Ergebnis
-     * nicht in die Tabelle. Den Quelltext selbst schreibt Template::hookOnSaved()
-     * in die Datei var/templates/... - sie wird überschrieben, auch wenn sie
-     * zwischenzeitlich von Hand geändert wurde (das Formular zeigte den Stand beim
-     * Öffnen).
+     * Only what is in the list is written. `styled_code` and `error_text`
+     * are included, although they have no input field - Template::hookOnSave()
+     * fills them from the source code, and without an entry in the list the result would
+     * not get into the table. The source code itself is written by Template::hookOnSaved()
+     * into the file var/templates/... - it is overwritten, even if it was
+     * changed by hand in the meantime (the form showed the state at the time of
+     * opening).
      */
     private function _editSave(): void
     {
-        // Prüfe Daten und speichere
+        // Check data and save
         $fields= [
             'area_id',
             'name',
@@ -1344,20 +1343,20 @@ class TemplateBackend {
         $this->data['template_id'] = $this->id;
         if ($this->template->save($fields, $this->data)) {
             $this->id = (int)$this->data['template_id'];
-            // Liste "Zuletzt geändert" (folderList())
+            // List "Last changed" (folderList())
             $GLOBALS['app']->get(History::class)->touch('template', $this->id);
             // Balloon Message
             $msg = $this->cms->snippet('template.message_template_saved');
             $this->backend->balloon('success', $msg);
             if (!empty($this->srcField)) {
-                // Referrer ist Verknüpfungsliste
+                // Referrer is a link list
                 $this->backend->script("
                     cApp.layers.close();
                     cApp.ui.slookupUpdate('{$this->srcField}','link',$this->id);
                 ");
             }
             else {
-                // Referer (Liste) aktualisieren und Weiterleiten auf Info-Seite
+                // Update the referer (list) and redirect to the info page
                 $this->backend->script("
                     cApp.layers.invalidate();
                     cApp.layers.replace('Template/template_info.php?id={$this->id}');
@@ -1370,9 +1369,9 @@ class TemplateBackend {
     }
 
     /**
-     * function=delete_confirm: löschen.
+     * function=delete_confirm: delete.
      *
-     * Die kompilierte Datei var/php/{area_id}/{name}.php entfernt
+     * The compiled file var/php/{area_id}/{name}.php is removed
      * Template::hookOnDelete().
      */
     private function _editDeleteConfirm(): void
@@ -1382,7 +1381,7 @@ class TemplateBackend {
             $msg = $this->cms->snippet('template.message_template_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -1394,7 +1393,7 @@ class TemplateBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -1404,18 +1403,18 @@ class TemplateBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Vier Felder: Bereich (Auswahl unter den Template-Bereichen), Name, Beschriftung
-     * und der Quelltext als mitwachsende Textarea - der Quelltext stammt aus der
-     * Datei in var/templates (Template::hookOnLoaded()), nicht aus der Spalte `code`.
-     * Kompiliert wird beim Speichern in Template::hookOnSave() - hier passiert nichts
+     * Four fields: area (selection among the template areas), name, label
+     * and the source code as a growing textarea - the source code comes from the
+     * file in var/templates (Template::hookOnLoaded()), not from the column `code`.
+     * It is compiled when saving in Template::hookOnSave() - nothing happens here
      * dergleichen.
      *
-     * src_field und checked reisen als versteckte Felder mit, damit ein aus einem
-     * Lookup-Feld heraus angelegtes Template anschließend dort verknüpft werden kann.
+     * src_field and checked travel along as hidden fields, so that a template created from a
+     * lookup field can then be linked there afterwards.
      *
-     * (Der Aufruf von _initTextareaGrow() steht zweimal da - einmal genügt.)
+     * (The call to _initTextareaGrow() appears twice here - once is enough.)
      */
     private function _editForm(): void
     {
@@ -1458,7 +1457,7 @@ class TemplateBackend {
             'fullWidth' => true
         ]);
         
-        // JavaScript Anweisung für growing textarea, nach Ajax-Load
+        // JavaScript statement for growing textarea, after Ajax load
         $this->backend->script("cApp.ui._initTextareaGrow(\$('.c9-layer:last'));");
 
         // hidden fields
@@ -1479,7 +1478,7 @@ class TemplateBackend {
     }
 
     /**
-     * Wirklich löschen? Formular
+     * Really delete? Form
      */
     private function _editDeleteForm(): void
     {
@@ -1522,24 +1521,24 @@ class TemplateBackend {
     }
 
     /**
-     * function=search: Suche ausführen.
+     * function=search: run the search.
      *
-     * Wie in den anderen Modulen: keine eigene Trefferliste, sondern Suchlayer
-     * schließen und den Listenlayer mit den Suchparametern in der URL neu laden.
-     * json_encode maskiert alles, was das Javascript-Literal beenden könnte;
-     * substr(..., 1) entfernt nur das öffnende Anführungszeichen, das schließende
-     * beendet unten den String.
+     * As in the other modules: no own hit list, but close the search layer
+     * and reload the list layer with the search parameters in the URL.
+     * json_encode escapes everything that could terminate the JavaScript literal;
+     * substr(..., 1) only removes the opening quotation mark, the closing one
+     * ends the string below.
      */
     private function _search(): void
     {
-        // Parameter aus Post
+        // Parameters from POST
         $queryString = http_build_query($_POST);
 
-        // Sicher für Javascript verpacken
+        // Wrap safely for JavaScript
         $safeParams = json_encode($queryString, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
         $safeUri = '"Template/template_list.php?' . substr($safeParams, 1);
 
-        // Referer-Layer mit diesen Parametern neu laden
+        // Reload the referer layer with these parameters
         $this->backend->script("
             cApp.layers.close();
             cApp.layers.replace({$safeUri});
@@ -1547,13 +1546,13 @@ class TemplateBackend {
     }
 
     /**
-     * Leerer Zwischen-Layer für die bereichsübergreifende Suche.
+     * Empty intermediate layer for the cross-area search.
      *
-     * Die Layer stapeln sich: Bereichsbaum, darüber die Trefferliste. Eine Suche über
-     * alle Bereiche hat aber keinen Bereich, aus dem heraus sie geöffnet wäre - ohne
-     * diesen Platzhalter läge die Trefferliste direkt auf dem Baum und würde ihn beim
-     * Schließen mitnehmen. Der Layer enthält deshalb nichts außer einem
-     * Schließen-Knopf.
+     * The layers stack up: area tree, with the hit list above it. A search across
+     * all areas, however, has no area from which it would be opened - without
+     * this placeholder the hit list would lie directly on the tree and would take it along
+     * when closing. The layer therefore contains nothing except a
+     * close button.
      */
     public function searchCrossArea():void
     {
@@ -1576,7 +1575,7 @@ class TemplateBackend {
 
         echo '<form action="Template/template_search.php" method="post">';
 
-        // Bread crum navi
+        // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_search');
         
         // Container header
@@ -1649,14 +1648,14 @@ class TemplateBackend {
     }
 
     /**
-     * Wählbare Template-Areas für Optionsliste zusammentragen
+     * Collect selectable template areas for the option list
      */
     /**
-     * Auswahlliste der Template-Bereiche.
+     * selection list of the template areas.
      *
-     * Nur Bereiche vom Typ 'template' - in andere lassen sich keine Templates legen.
-     * Die Einrückung entsteht aus `depth`, die Reihenfolge aus `lft`; anders als in
-     * FieldBackend sind Ordner hier gar nicht erst enthalten.
+     * Only areas of type 'template' - no templates can be placed in other ones.
+     * The indentation comes from `depth`, the order from `lft`; unlike in
+     * FieldBackend, folders are not included here at all.
      */
     private function _areaOptions(): array
     {
@@ -1673,24 +1672,24 @@ class TemplateBackend {
     }
 
     // ====================
-    // LookupField mit Template-Inhalten
+    // LookupField with template contents
 
     /**
-     * Ajax: Vorschau eines Lookup-Feldes im EINGABEFORMULAR aktualisieren.
+     * Ajax: update the preview of a lookup field in the INPUT FORM.
      *
-     * Aufgerufen von cApp.ui.lookupRUpdate(), nachdem der Redakteur in der
-     * Auswahlliste ein Häkchen gesetzt oder entfernt hat. Antwortet mit dem fertigen
-     * Vorschaublock, den das Javascript an die Stelle des alten setzt.
+     * Called by cApp.ui.lookupRUpdate() after the editor has set or removed a check mark in the
+     * selection list. Responds with the finished
+     * preview block, which the JavaScript places in the position of the old one.
      *
-     * Der Unterschied zu sLookupPreview() ist allein das Formularpräfix: hier 'data'
-     * (Eingabeformular), dort 'filter' (Suchmaske). Danach richten sich die Namen der
+     * The only difference to sLookupPreview() is the form prefix: here 'data'
+     * (input form), there 'filter' (search mask). The names of the
      * erzeugten versteckten Felder.
      *
-     * Request: src_field (Pflicht), ids (Kommaliste), max, function, ordered (Hoch/Runter-Schaltflächen)
+     * Request: src_field (required), ids (comma list), max, function, ordered (up/down buttons)
      */
     public function lookupPreview(): void
     {
-        // durchgereichte Parameter aus cApp.ui.slookupUpdate()
+        // parameters passed through from cApp.ui.slookupUpdate()
         $function = (string)($_REQUEST['function'] ?? '');
         $srcField = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_REQUEST['src_field'] ?? '')));
         $max = (int)($_REQUEST['max'] ?? 0);
@@ -1711,11 +1710,11 @@ class TemplateBackend {
     }
 
     /**
-     * Ajax: Vorschau eines Lookup-Feldes in der SUCHMASKE aktualisieren.
+     * Ajax: update the preview of a lookup field in the SEARCH MASK.
      *
-     * Wie lookupPreview(), nur mit dem Formularpräfix 'filter' - die Auswahl ist hier
-     * ein Suchkriterium und keine zu speichernde Verknüpfung. Entsprechend gibt es
-     * auch kein Zurücksetzen des Eingabefokus.
+     * Like lookupPreview(), only with the form prefix 'filter' - the selection here is
+     * a search criterion and not a link to be saved. Accordingly there is
+     * also no resetting of the input focus.
      *
      * Request: src_field (Pflicht), ids (Kommaliste), max
      */
@@ -1734,30 +1733,30 @@ class TemplateBackend {
     }
 
     /**
-     * Den Vorschaublock eines Lookup-Feldes rendern.
+     * Render the preview block of a lookup field.
      *
-     * Gemeinsamer Kern von lookupPreview() und sLookupPreview(); wird außerdem direkt
-     * aufgerufen, wenn ein Formular zum ersten Mal aufgebaut wird (z. B. aus
+     * Common core of lookupPreview() and sLookupPreview(); additionally called directly
+     * when a form is built for the first time (e.g. from
      * AreaBackend::_editForm()).
      *
-     * Je ausgewähltem Template entsteht eine Zeile mit Namen, Entfernen-Verweis und
-     * einem versteckten Feld, das die Id trägt - der Vorschaublock IST also das
-     * Eingabefeld; ein sichtbares Textfeld gibt es nicht.
+     * Each selected template produces a row with its name, a remove link and
+     * a hidden field that carries the id - the preview block IS therefore the
+     * input field; there is no visible text field.
      *
-     * Die Reihenfolge der Zeilen folgt der übergebenen Id-Liste, nicht der
-     * Sortierung der Datenbank: der Redakteur hat sie so angelegt. Dafür wird die
-     * Ausgangsreihenfolge mit array_flip() zu einem Rang und uksort() danach sortiert.
-     * Bei max == 1 entfällt das - dort gibt es nur eine Zeile.
+     * The order of the rows follows the passed id list, not the
+     * sorting of the database: the editor set it up that way. For this the
+     * original order is turned into a rank with array_flip() and then sorted with uksort().
+     * With max == 1 this is skipped - there is only one row there.
      *
-     * $ordered: die Reihenfolge hat eine Bedeutung (Trigger-Templates eines Bereichs
-     * laufen nacheinander) - jede Zeile bekommt Hoch/Runter-Schaltflächen, die zwei
-     * Ids in der Liste tauschen (cApp.ui.slookupSwap()).
+     * $ordered: the order has a meaning (trigger templates of an area
+     * run one after another) - each row gets up/down buttons that swap two
+     * ids in the list (cApp.ui.slookupSwap()).
      *
-     * @param string $srcField  Name des Lookup-Feldes
-     * @param array $ids        Im Feld gespeicherte Ids
-     * @param string $prefix    Name des Formularfeldes ('data'/'filter')
-     * @param int $max          Weitergereichter Parameter $max aus JavaScript (nicht verbindlich!)
-     * @param bool $ordered     Hoch/Runter-Schaltflächen
+     * @param string $srcField  name of the lookup field
+     * @param array $ids        ids stored in the field
+     * @param string $prefix    name of the form field ('data'/'filter')
+     * @param int $max          parameter $max passed through from JavaScript (not binding!)
+     * @param bool $ordered     up/down buttons
      */
     public function lookupPreviewCreate(string $srcField, array $ids, string $prefix, int $max, bool $ordered = false): string
     {
@@ -1765,8 +1764,8 @@ class TemplateBackend {
         $ids = $this->system->sanitizeIds($ids, true);
         if (empty($ids)) return '';
 
-        // Lade Datensätze - alle gewählten: was hier fehlt, fehlt nach dem
-        // Speichern auch in der Zuweisung (die Vorschau trägt die Hiddenfelder)
+        // Load records - all selected: what is missing here is missing after the
+        // saving in the assignment as well (the preview carries the hidden fields)
         $this->template->select([
             'filter' => [
                 'template_id' => $ids
@@ -1777,21 +1776,21 @@ class TemplateBackend {
         
         $records = [];
         while ($row = $this->template->fetch()) {
-            // Id im Schlüssel
+            // Id in the key
             $records[(int)$row['template_id']] = $row;
 
             if ($max == 1) break;
         }
 
         if ($max != 1) {
-            // Ergebnisse nach ursprünglicher Id-Reihenfolge sortieren
+            // Sort results by original id order
             $flippedOrder = array_flip($ids); 
             uksort($records, function($a, $b) use ($flippedOrder) {
                 return (int)$flippedOrder[$a] <=> (int)$flippedOrder[$b];
             });
         }
         
-        // Hidden-Feld mit gespeicherter Id
+        // Hidden field with the stored id
         $varName = "{$prefix}[$srcField]";
         // Mehrfachauswahl
         if ($max != 1) $varName .= '[]';
@@ -1802,7 +1801,7 @@ class TemplateBackend {
             $data = $records[$id];
             $buttons = '';
             if ($ordered) {
-                // Tauschpartner unten / oben; am Rand unsichtbar (Spalten bleiben bündig)
+                // swap partners below / above; invisible at the edge (columns stay aligned)
                 $nextId = (int)($orderedIds[$index + 1] ?? 0);
                 $previousId = (int)($orderedIds[$index - 1] ?? 0);
                 $buttons = $this->backend->template('record.lookup_button_down', [
@@ -1821,10 +1820,10 @@ class TemplateBackend {
                 '{unlink_url}' => "cApp.ui.slookupUnlink($id);",
                 '{var_name}' => $varName
             ]);
-            // (Hier stand ein popResult() ohne zugehöriges pushResult(): es holte den
-            //  Ergebnis-Zustand des AUFRUFERS vom Stapel und ließ ihn dort verschwinden.
-            //  Die Schleife läuft über das bereits eingesammelte $records-Array und
-            //  setzt selbst keine Abfrage ab - es gibt hier nichts wiederherzustellen.)
+            // (There stood a popResult() without a matching pushResult(): it fetched the
+            //  result state of the CALLER from the stack and made it disappear there.
+            //  The loop runs over the already collected $records array and
+            //  itself issues no query - there is nothing to restore here.)
         }
 
         // render table
@@ -1841,11 +1840,11 @@ class TemplateBackend {
     }
 
     /**
-     * Zuweisungen aus Sicht EINES BEREICHS laden - welche Templates gehören dazu.
+     * Load the assignments from the view of ONE AREA - which templates belong to it.
      *
-     * Für die Übersichtstabelle in AreaBackend::info(). LEFT JOIN, damit eine
-     * verwaiste Zeile in rel_area_template nicht unter den Tisch fällt (dort blieben
-     * name und label dann leer).
+     * For the overview table in AreaBackend::info(). LEFT JOIN, so that an
+     * orphaned row in rel_area_template does not fall through (there
+     * name and label would then stay empty).
      */
     public function loadTemplateAssignment(int $areaId):array
     {
@@ -1858,12 +1857,12 @@ class TemplateBackend {
     }
 
     /**
-     * Zuweisungen aus Sicht EINES TEMPLATES laden - in welchen Bereichen ist es
+     * Load the assignments from the view of ONE TEMPLATE - in which areas it is
      * benutzbar.
      *
-     * Die Gegenrichtung zu loadTemplateAssignment(), gebraucht von infoAccess().
-     * `default_template_id` des Bereichs kommt mit, weil sich "ist Standard-Template"
-     * nur daraus ablesen lässt - in rel_area_template gibt es dafür keine Spalte.
+     * The reverse direction of loadTemplateAssignment(), needed by infoAccess().
+     * `default_template_id` of the area comes along, because "is default template"
+     * can only be read from it - rel_area_template has no column for it.
      */
     public function loadAreaAssignment(int $templateId):array
     {
@@ -1876,14 +1875,14 @@ class TemplateBackend {
     }
 
     /**
-     * Vom Session-Admin zuletzt geänderte Templates listen (rechte Spalte von
+     * List the templates last changed by the session admin (right column of
      * folderList()).
      *
-     * Die Ids kommen aus `history` (Camindo\Core\History), jüngste zuerst; je
-     * Template untereinander Name, Beschriftung und Bereich - die Spalten der
-     * Template-Liste plus der Bereich, weil die Einträge aus verschiedenen Bereichen
-     * stammen. Templates, deren Bereich die Benutzergruppe nicht (mehr) lesen darf,
-     * fallen weg. Ein Klick öffnet die Detailansicht.
+     * The ids come from `history` (Camindo\Core\History), newest first; per
+     * template name, label and area one below the other - the columns of the
+     * template list plus the area, because the entries come from different areas.
+     * Templates whose area the user group may no longer read
+     * are dropped. A click opens the detail view.
      */
     private function _lastChangedTemplates(): void
     {

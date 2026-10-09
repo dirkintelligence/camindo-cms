@@ -1,24 +1,24 @@
 <?php
 /**
- * Verstöße gegen die Script-Policy des Frontends protokollieren (19-csp.md §9).
+ * Log violations of the frontend script policy (developer docs, chapter 14 (Security: web)).
  *
- *     POST /csp_report.php   (report-uri der Frontend-Policy, SecurityHeaders)
+ *     POST /csp_report.php   (report-uri of the frontend policy, SecurityHeaders)
  *
- * Der Browser schickt die Meldung selbst - ohne Sitzung, ohne Token, von jedem
- * Besucher. Deshalb: höchstens MAX_BYTES, gedrosselt je Herkunft (RateLimiter,
- * user.throttle.csp_report), jedes Feld auf eine Zeile und eine Länge gekürzt. Die
- * Antwort ist immer 204 - ein Absender erfährt nichts.
+ * The browser sends the report itself - without session, without token, from every
+ * visitor. Therefore: at most MAX_BYTES, throttled per origin (RateLimiter,
+ * user.throttle.csp_report), every field cut to one line and one length. The
+ * response is always 204 - a sender learns nothing.
  *
- * Formate: application/csp-report ({"csp-report": {…}}, report-uri) und
- * application/reports+json ([{"type": "csp-violation", "body": {…}}], Reporting-API).
+ * Formats: application/csp-report ({"csp-report": {…}}, report-uri) and
+ * application/reports+json ([{"type": "csp-violation", "body": {…}}], Reporting API).
  *
- * Log: var/log/{Y-m-d}_csp.log wie im Backend, mit "frontend" und der Instanz.
+ * Log: var/log/{Y-m-d}_csp.log as in the backend, with "frontend" and the instance.
  */
 namespace Camindo\Core;
 
 class CspReport
 {
-    /** Größte angenommene Meldung in Bytes */
+    /** Largest accepted report in bytes */
     public const MAX_BYTES = 8192;
 
     public function __construct(
@@ -65,7 +65,7 @@ class CspReport
         }
     }
 
-    /** Erster vorhandener Schlüssel, eine Zeile, höchstens 300 Zeichen */
+    /** First existing key, one line, at most 300 characters */
     private function field(array $report, array $keys): string
     {
         foreach ($keys as $key) {

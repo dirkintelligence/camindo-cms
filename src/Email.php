@@ -2,18 +2,18 @@
 /**
  * class Email
  *
- * E-Mail-Versand vom CMS. Nutzt als Klasse selbst PHPMailer
- * Ist unter email.smtp ein Postfach konfiguriert, wird darüber gemailt;
- * Fallback ist mail() - das aber nur, wenn auch ein MTA vorhanden ist.
- * Logged Fehler mit System::log('mail',...)
- * 
- * GEPLANT:
- * Logging von E-Mails, wenn log.emails aktiviert ist, beispielsweise für Debugging-Zwecke
- * 
- * VERWENDUNG
+ * Sending email from the CMS. The class itself uses PHPMailer.
+ * If a mailbox is configured under email.smtp, mail is sent through it;
+ * the fallback is mail() - but only if an MTA is present.
+ * Logs errors with System::log('mail',...)
+ *
+ * PLANNED:
+ * Logging of emails if log.emails is enabled, for example for debugging purposes
+ *
+ * USAGE
  * --------------------
- * Die Klasse wird nicht im Konstruktor eingesammelt, sondern erst beim ersten Zugriff
- * nachgeladen (siehe LazyServicesTrait, Beispiel: Modules/Admin/Admin.php):
+ * The class is not collected in the constructor, but only loaded on first access
+ * (see LazyServicesTrait, example: Modules/Admin/Admin.php):
  *
  * $mail = new PHPMailer(true);
  * $mail->setFrom($emailNoreply ?: $emailReply, 'camindo CMS');
@@ -23,11 +23,11 @@
  *
  * CMS:EMAIL
  * --------------------
- * cmsEmail() ist die Methode des Template-Befehls (Modules/Template/commands.php,
- * Eintrag 'email'): Pflichtfelder prüfen, Mail aus Parametern bzw. Templates bauen,
- * über send() verschicken. Die Klasse wird dafür im Frontend über Page::$lazyServices
- * nachgeladen; Cms und Page holt sie erst beim Aufruf aus dem Container, weil
- * send() allein (2FA-Code im Backend) beides nicht braucht.
+ * cmsEmail() is the method of the template command (Modules/Template/commands.php,
+ * entry 'email'): check required fields, build the mail from parameters or templates,
+ * send it via send(). For this the class is loaded in the frontend via Page::$lazyServices;
+ * Cms and Page only fetch it from the container when called, because
+ * send() alone (2FA code in the backend) needs neither.
  */
 
 namespace Camindo\Core;
@@ -35,13 +35,13 @@ use PHPMailer\PHPMailer\PHPMailer;
 
 class Email {
     /**
-     * CMS:EMAIL attachment: nur Dateien aus diesen Verzeichnissen unter var/ -
-     * config, log, dbbackup & Co. sollen nicht per Template-Parameter an eine
-     * beliebige Adresse gehen können.
+     * CMS:EMAIL attachment: only files from these directories under var/ -
+     * config, log, dbbackup & Co. must not be sendable to an arbitrary
+     * address via a template parameter.
      */
     private const ATTACHMENT_DIRS = ['download', 'upload', 'modules'];
 
-    /** CMS:EMAIL: Obergrenze der Empfänger je Befehl */
+    /** CMS:EMAIL: upper limit of recipients per command */
     private const MAX_RECIPIENTS = 20;
 
     public function __construct(
@@ -60,7 +60,7 @@ class Email {
         if (!class_exists(PHPMailer::class)) {
             throw new \Exception('PHPMailer is not installed. Use composer to install.');
         }
-        // Mindestens eine der zwei Absendeadressen muss konfiguriert sein
+        // At least one of the two sender addresses must be configured
         $emailNoreply = $this->config->get('email.noreply');
         $emailReply = $this->config->get('email.reply');
         if (empty($emailNoreply) && empty($emailReply)) {
@@ -69,37 +69,37 @@ class Email {
 
         $smtp = $this->config->get('email.smtp');
         if (!empty($smtp['host'])) {
-            // SMTP-Postfach konfiguriert
+            // SMTP mailbox configured
             try {
                 $this->configureSmtp($mail, $smtp);
                 $mail->send();
                 return;
 
             } catch (\Throwable $e) {
-                // SMTP-Versand fehlgeschlagen: erst protokollieren, dann mail() versuchen.
-                // Ohne diese Zeile bliebe der eigentliche Grund (falsches Passwort,
-                // Zertifikatsfehler, gesperrter Port) unsichtbar, weil gleich darauf
-                // der Fallback mit einer ganz anderen Meldung scheitert.
+                // SMTP send failed: log first, then try mail().
+                // Without this line the actual reason (wrong password,
+                // certificate error, blocked port) would stay invisible, because
+                // the fallback right after fails with a completely different message.
                 $this->system->log('mail', 'SMTP send failed, falling back to mail(). To: '
                     . $this->recipients($mail) . ', Subject: ' . $mail->Subject
                     . ', Error: ' . ($mail->ErrorInfo ?: $e->getMessage()));
             }
         }
 
-        // Kein SMTP-Postfach konfiguriert oder der SMTP-Versand ist gescheitert
+        // No SMTP mailbox configured or the SMTP send has failed
         $this->sendByMailFunction($mail);
     }
 
     /**
-     * PHPMailer auf SMTP-Versand umstellen.
+     * Switch PHPMailer to SMTP sending.
      *
-     * 'enc' entscheidet über den Transportweg:
-     *     'starttls'  unverschlüsselt verbinden, dann per STARTTLS hochstufen (Port 587)
-     *     'smtps'     von Anfang an TLS (Port 465)
-     * Ohne 'user' wird nicht authentifiziert - das deckt Relays ab, die ohne
-     * Anmeldung annehmen.
+     * 'enc' decides the transport route:
+     *     'starttls'  connect unencrypted, then upgrade via STARTTLS (port 587)
+     *     'smtps'     TLS from the start (port 465)
+     * Without 'user' no authentication is done - this covers relays that
+     * accept without sign-in.
      *
-     * @param array $smtp  Teilarray email.smtp aus .camindo.php
+     * @param array $smtp  sub-array email.smtp from .camindo.php
      */
     private function configureSmtp($mail, array $smtp): void
     {
@@ -113,26 +113,25 @@ class Email {
             : PHPMailer::ENCRYPTION_SMTPS;
         $mail->Port       = (int)($smtp['port'] ?? 587);
 
-        // Zeitlimit je Verbindungsschritt. PHPMailers Standard von 300 s würde einen
-        // Web-Request bei einem nicht erreichbaren Postfach minutenlang blockieren.
+        // Time limit per connection step. PHPMailer's default of 300 s would block a
+        // web request for minutes if the mailbox is unreachable.
         $mail->Timeout    = 15;
 
-        // Den SMTP-Dialog ins Log schreiben, solange system.development_version gesetzt
-        // ist - sonst ist bei Anmeldeproblemen (falsches Passwort, Zertifikat, Port)
-        // nichts zu sehen.
+        // Write the SMTP dialog to the log while system.development_version is set
+        // - otherwise nothing can be seen when there are sign-in problems (wrong password,
+        // certificate, port).
         //
-        // Die Nachricht selbst bleibt dabei draussen: zwischen dem DATA-Kommando und
-        // der abschliessenden Zeile "." laeuft der komplette Body ueber die Leitung,
-        // bei der Zwei-Faktor-Anmeldung also der Login-Code im Klartext. Der hat in
-        // einer Logdatei nichts verloren, die Kopfzeilen des Dialogs genuegen zur
-        // Fehlersuche. Zugangsdaten maskiert PHPMailer selbst ([credentials hidden]).
+        // The message itself stays out: between the DATA command and the closing line
+        // "." the complete body runs over the line, so with two-factor sign-in that is the
+        // login code in plain text. That has no place in a log file; the header lines of the
+        // dialog are enough for troubleshooting. PHPMailer itself masks credentials ([credentials hidden]).
         if ($this->config->get('system.development_version')) {
-            $mail->SMTPDebug   = 2;   // Client- und Server-Zeilen
+            $mail->SMTPDebug   = 2;   // client and server lines
             $inData = false;
             $mail->Debugoutput = function ($str, $level) use (&$inData) {
                 $line = rtrim($str);
                 if ($inData) {
-                    // Ende des Bodys ist die Zeile mit dem einzelnen Punkt
+                    // The end of the body is the line with the single dot
                     if ($line === 'CLIENT -> SERVER: .') {
                         $inData = false;
                         $this->system->log('mail', 'SMTP: CLIENT -> SERVER: [message body omitted]');
@@ -148,15 +147,15 @@ class Email {
     }
 
     /**
-     * Fallback-Versand über die PHP-Funktion mail().
+     * Fallback sending via the PHP function mail().
      *
-     * @throws \Exception wenn auch das fehlschlägt (z. B. Server ohne Sendmail/MTA)
+     * @throws \Exception if this fails too (e.g. server without sendmail/MTA)
      */
     private function sendByMailFunction($mail): void
     {
-        // In Containern ohne MTA existiert mail() zwar, hat aber kein sendmail dahinter.
-        // Dann gar nicht erst senden, sondern mit einer Meldung abbrechen, die den
-        // wirklichen Grund nennt.
+        // In containers without an MTA, mail() exists but has no sendmail behind it.
+        // Then do not even try to send, but abort with a message that names
+        // the real reason.
         if (!function_exists('mail') || !$this->hasLocalMta()) {
             $this->system->log('mail', 'No local MTA available and SMTP not usable. To: '
                 . $this->recipients($mail) . ', Subject: ' . $mail->Subject);
@@ -174,11 +173,11 @@ class Email {
     }
 
     /**
-     * Gibt es überhaupt ein sendmail-Binary, das mail() aufrufen könnte?
+     * Is there any sendmail binary that mail() could call?
      *
-     * PHP meldet den Versand über mail() auch dann als erfolgreich, wenn gar kein MTA
-     * installiert ist - die Nachricht verschwindet dann spurlos. Der Blick auf
-     * sendmail_path erspart diesen Fall.
+     * PHP reports sending via mail() as successful even if no MTA
+     * is installed at all - the message then vanishes without a trace. A look at
+     * sendmail_path avoids this case.
      */
     private function hasLocalMta(): bool
     {
@@ -186,13 +185,13 @@ class Email {
         if ($sendmailPath === '') {
             return false;
         }
-        // sendmail_path enthält Binary und Argumente, z. B. "/usr/sbin/sendmail -t -i"
+        // sendmail_path contains the binary and arguments, e.g. "/usr/sbin/sendmail -t -i"
         $binary = strtok(trim($sendmailPath), ' ');
         return $binary !== false && is_executable($binary);
     }
 
     /**
-     * Empfängeradressen des Mails als kommaseparierte Liste - nur für die Logzeile.
+     * Recipient addresses of the mail as a comma-separated list - only for the log line.
      */
     private function recipients($mail): string
     {
@@ -207,35 +206,35 @@ class Email {
     // CMS:EMAIL
 
     /**
-     * CMS:EMAIL - E-Mail aus einem Formular versenden.
+     * CMS:EMAIL - send an email from a form.
      *
-     * Ablauf:
-     *   1. 'submit' leer -> der Befehl tut nichts (erster Aufruf des Formulars)
-     *   2. 'requiredfields': jedes genannte Feld aus dem Request-Array 'data'
-     *      (Standard data[...]) muss einen Wert haben
-     *   3. Empfänger 'to' (ein Wert, Kommaliste oder to[]=…), Absender 'from' -
-     *      ohne Angabe email.noreply bzw. email.reply aus der Konfiguration
-     *   4. Betreff und Text: 'subjecttemplate'/'bodytemplate' vor 'subject'/'body';
-     *      Templates laufen im laufenden Request (Page::renderTemplateFile()) und
-     *      sehen $cms, $set und $_POST
-     *   5. contenttype="text/html": Klartext-Alternative wird erzeugt,
-     *      paths_absolute=true macht serverrelative Pfade absolut ('sender_url',
-     *      sonst Protokoll und Domain der Instanz)
-     *   6. 'attachment': Dateien relativ zu var/, nur aus ATTACHMENT_DIRS
-     *   7. debug=true: nur ins Log (var/log/{Y-m-d}_mail-debug.log), kein Versand
+     * Process:
+     *   1. 'submit' empty -> the command does nothing (first call of the form)
+     *   2. 'requiredfields': every named field from the request array 'data'
+     *      (default data[...]) must have a value
+     *   3. recipient 'to' (a value, comma list or to[]=…), sender 'from' -
+     *      if not given, email.noreply or email.reply from the configuration
+     *   4. subject and text: 'subjecttemplate'/'bodytemplate' before 'subject'/'body';
+     *      templates run in the current request (Page::renderTemplateFile()) and
+     *      see $cms, $set and $_POST
+     *   5. contenttype="text/html": a plain-text alternative is generated,
+     *      paths_absolute=true makes server-relative paths absolute ('sender_url',
+     *      otherwise protocol and domain of the instance)
+     *   6. 'attachment': files relative to var/, only from ATTACHMENT_DIRS
+     *   7. debug=true: only to the log (var/log/{Y-m-d}_mail-debug.log), no sending
      *
-     * Fehler landen in Cms::error() (CMS:MESSAGE); der Text kommt aus
-     * message[required|throttled|to|from|content|attachment|send], sonst aus dem Snippet
-     * error_email_{index}. Das Template läuft dann weiter (Formular erneut zeigen).
+     * Errors end up in Cms::error() (CMS:MESSAGE); the text comes from
+     * message[required|throttled|to|from|content|attachment|send], otherwise from the snippet
+     * error_email_{index}. The template then continues (show the form again).
      *
-     * Hinterlässt $set['email_sent'] (bool) und $set['email_missing'] (Namen der
-     * fehlenden Pflichtfelder).
+     * Leaves $set['email_sent'] (bool) and $set['email_missing'] (names of the
+     * missing required fields).
      *
-     * Aufrufkonvention wie bei den cms*-Methoden in Cms: ein Parameter, das Array $_a
-     * mit den Befehlsparametern.
+     * Calling convention as with the cms* methods in Cms: one parameter, the array $_a
+     * with the command parameters.
      *
-     * @return string  successtemplate nach erfolgreichem Versand, sonst '' -
-     *                 php_suffix include_and_stop bindet es ein und beendet die Seite
+     * @return string  successtemplate after successful sending, otherwise '' -
+     *                 php_suffix include_and_stop includes it and ends the page
      * @see Camindo\Core\Modules\Template\commands.php  Eintrag 'email'
      */
     public function cmsEmail($p): string
@@ -247,7 +246,7 @@ class Email {
 
         $cms = $this->container->get(Cms::class);
 
-        // Pflichtfelder
+        // Required fields
         // --------------------
         $missing = $this->missingFields($p);
         if ($missing) {
@@ -256,19 +255,19 @@ class Email {
             return '';
         }
 
-        // Formularschutz und Drosselung (developer_docs/20-frontend-schutz.md A):
-        // formguard=true verlangt Zeitstempel + leeres Köderfeld aus
-        // (CMS:USER_TOKEN formguard=true); throttle=true bzw. throttle=bucket zählt
-        // je Herkunft in user.throttle.email_ip bzw. user.throttle.{bucket}.
-        // Beides antwortet gleich ('throttled') - ein Robot soll nicht lernen,
-        // woran es lag.
+        // Form protection and throttling (developer docs, chapter 14 (Security: web)):
+        // formguard=true requires a timestamp + empty decoy field
+        // (CMS:USER_TOKEN formguard=true); throttle=true or throttle=bucket counts
+        // per origin in user.throttle.email_ip or user.throttle.{bucket}.
+        // Both answer the same way ('throttled') - a robot should not learn
+        // what the reason was.
         if (!$this->throttleOk($p)) {
             $GLOBALS['set']['throttled'] = 1;
             $this->fail($cms, $p, 'throttled');
             return '';
         }
 
-        // Empfänger und Absender
+        // Recipient and sender
         // --------------------
         $to = $this->addressList($p['to'] ?? '');
         if (!$to) {
@@ -284,7 +283,7 @@ class Email {
             return '';
         }
 
-        // Inhalt
+        // Content
         // --------------------
         $isHtml = strtolower(trim((string)($p['contenttype'] ?? ''))) === 'text/html';
         try {
@@ -306,14 +305,14 @@ class Email {
             return '';
         }
 
-        // Mail bauen
+        // Build the mail
         // --------------------
         try {
             $mail = new PHPMailer(true);
             $mail->CharSet = PHPMailer::CHARSET_UTF8;
             $mail->setFrom($from, $this->headerText((string)($p['fromname'] ?? '')));
-            // 'toname' nur bei genau einem Empfänger - ein Name für mehrere Adressen
-            // wäre bei allen außer einem falsch
+            // 'toname' only with exactly one recipient - one name for several addresses
+            // would be wrong for all but one
             $toName = count($to) === 1 ? $this->headerText((string)($p['toname'] ?? '')) : '';
             foreach ($to as $address) {
                 $mail->addAddress($address, $toName);
@@ -337,11 +336,11 @@ class Email {
             return '';
         }
 
-        // Versand (oder nur Log)
+        // Sending (or only log)
         // --------------------
         if ($this->isTrue($p['debug'] ?? false)) {
-            // Eigenes Log: kein Fehler, darf nicht unter "nicht versendete E-Mails"
-            // (Modul Logfiles, Kategorie mail) auftauchen
+            // Own log: not an error, must not appear under "unsent emails"
+            // (Logfiles module, category mail)
             $this->system->log('mail-debug', 'CMS:EMAIL debug (not sent). From: ' . $from
                 . ', To: ' . implode(', ', $to) . ', Subject: ' . $subject
                 . ($attachments ? ', Attachments: ' . implode(', ', array_map('basename', $attachments)) : '')
@@ -352,7 +351,7 @@ class Email {
                 $this->send($mail);
             }
             catch (\Throwable $e) {
-                // send() hat die Ursache bereits geloggt
+                // send() has already logged the cause
                 $this->fail($cms, $p, 'send');
                 return '';
             }
@@ -363,9 +362,9 @@ class Email {
     }
 
     /**
-     * Namen der Pflichtfelder ('requiredfields'), die im Request-Array 'data' leer
-     * sind. Ein Feld mit Unterwerten (Checkbox-Gruppe) gilt als gefüllt, wenn
-     * mindestens ein Wert nicht leer ist.
+     * Names of the required fields ('requiredfields') that are empty in the request array
+     * 'data'. A field with sub-values (checkbox group) counts as filled if
+     * at least one value is not empty.
      *
      * @return string[]
      */
@@ -399,11 +398,11 @@ class Email {
     }
 
     /**
-     * 'to' als Liste gültiger Adressen: ein Wert, eine Komma-/Semikolonliste oder
-     * ein Array (to[]=…). Ist eine Adresse ungültig, gilt der ganze Parameter als
-     * ungültig - lieber gar nicht senden als an einen Teil der Empfänger.
+     * 'to' as a list of valid addresses: one value, a comma/semicolon list or
+     * an array (to[]=…). If one address is invalid, the whole parameter counts as
+     * invalid - better not to send at all than to only some of the recipients.
      *
-     * @return string[]  leer bei fehlender oder ungültiger Angabe
+     * @return string[]  empty if the entry is missing or invalid
      */
     private function addressList(mixed $value): array
     {
@@ -423,9 +422,9 @@ class Email {
     }
 
     /**
-     * Betreff: 'subjecttemplate' vor 'subject', Standard "(no subject)". Ein
-     * Betreff ist eine Zeile Text - Tags, Entities und Zeilenumbrüche aus dem
-     * Template fallen weg.
+     * Subject: 'subjecttemplate' before 'subject', default "(no subject)". A
+     * subject is one line of text - tags, entities and line breaks from the
+     * template are removed.
      */
     private function emailSubject(Cms $cms, array $p): string
     {
@@ -442,7 +441,7 @@ class Email {
     }
 
     /**
-     * Nachrichtentext: 'bodytemplate' vor 'body'.
+     * Message text: 'bodytemplate' before 'body'.
      */
     private function emailBody(Cms $cms, array $p): string
     {
@@ -454,9 +453,9 @@ class Email {
     }
 
     /**
-     * Template (Name oder "bereich.name") im laufenden Request ausführen.
+     * Run a template (name or "area.name") in the current request.
      *
-     * @throws \RuntimeException  Template unbekannt/mehrdeutig, Laufzeitfehler
+     * @throws \RuntimeException  template unknown/ambiguous, runtime error
      */
     private function renderTemplate(Cms $cms, string $ref): string
     {
@@ -465,9 +464,9 @@ class Email {
     }
 
     /**
-     * Serverrelative Pfade in src/href/action/background sowie url(...) in einem
-     * HTML-Text absolut machen: "/media/1.jpg" -> "https://www.example.com/media/1.jpg".
-     * Protokollrelative Adressen ("//cdn…") und alles Absolute bleiben unberührt.
+     * Make server-relative paths in src/href/action/background as well as url(...) in an
+     * HTML text absolute: "/media/1.jpg" -> "https://www.example.com/media/1.jpg".
+     * Protocol-relative addresses ("//cdn…") and everything absolute remain unchanged.
      */
     private function absolutePaths(string $html, string $baseUrl): string
     {
@@ -485,9 +484,9 @@ class Email {
     }
 
     /**
-     * Basis für absolutePaths(): 'sender_url' (mit oder ohne Protokoll), sonst
-     * Protokoll und Hauptdomain der Instanz (wie Cms::recordUrl()), sonst der Host
-     * des Requests. Ohne abschließenden Schrägstrich.
+     * Base for absolutePaths(): 'sender_url' (with or without protocol), otherwise
+     * protocol and main domain of the instance (as Cms::recordUrl()), otherwise the host
+     * of the request. Without a trailing slash.
      */
     private function senderUrl(Cms $cms, string $senderUrl): string
     {
@@ -508,11 +507,11 @@ class Email {
     }
 
     /**
-     * Anhänge ('attachment', ein Wert oder attachment[]=…) auf Dateien unter
-     * var/{ATTACHMENT_DIRS} abbilden. Pfade mit "..", versteckte Dateien und
-     * Symlinks aus dem Bereich heraus fallen über realpath() durch.
+     * Map attachments ('attachment', one value or attachment[]=…) to files under
+     * var/{ATTACHMENT_DIRS}. Paths with "..", hidden files and
+     * symlinks leading out of the area are rejected via realpath().
      *
-     * @return ?array  absolute Pfade; null, wenn eine Datei fehlt oder nicht erlaubt ist
+     * @return ?array  absolute paths; null if a file is missing or not allowed
      */
     private function attachmentFiles(mixed $value): ?array
     {
@@ -544,13 +543,13 @@ class Email {
     }
 
     /**
-     * Fehler für CMS:MESSAGE ablegen: message[$index] des Befehls, sonst das
-     * Snippet error_email_{$index}.
+     * Store an error for CMS:MESSAGE: message[$index] of the command, otherwise the
+     * snippet error_email_{$index}.
      */
     /**
-     * formguard / throttle (siehe cmsEmail()). Ohne beide Parameter immer true -
-     * CMS:EMAIL läuft auch in Bestellbestätigungen, dort setzt niemand eine
-     * fremde Adresse ein.
+     * formguard / throttle (see cmsEmail()). Without both parameters always true -
+     * CMS:EMAIL also runs in order confirmations, where nobody enters
+     * a foreign address.
      */
     private function throttleOk(array $p): bool
     {
@@ -576,8 +575,8 @@ class Email {
     }
 
     /**
-     * Text für eine Kopfzeile: Zeilenumbrüche (Header-Injection) und doppelte
-     * Leerzeichen weg.
+     * Text for a header line: line breaks (header injection) and double
+     * spaces removed.
      */
     private function headerText(string $text): string
     {
@@ -585,7 +584,7 @@ class Email {
     }
 
     /**
-     * Template-Parameter als Wahrheitswert ("true"/"false" aus dem Template).
+     * Template parameter as a truth value ("true"/"false" from the template).
      */
     private function isTrue(mixed $value): bool
     {

@@ -9,9 +9,9 @@ return [
 'icon' => 'person',
 'listed' => false,
 /*
-   Das Modul zeigt sich nur als Widget
-   'listed' bleibt gesetzt, damit es weiter der Rechteverwaltung unterliegt
-   nur wer das Modul darf, bekommt das Widget.
+   The module only shows up as a widget
+   'listed' stays set so that it remains subject to permission management
+   only whoever may use the module gets the widget.
 */
 'widget' => [
     'class'  => 'UserBackend',
@@ -19,8 +19,8 @@ return [
     'label'  => '#user.headline_unreviewed',
     'icon'   => 'emergency',
 ],
-// Zusätzliche Modulrechte:
-// keine
+// Additional module permissions:
+// none
 'access' => [
 ]
 

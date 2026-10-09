@@ -1,57 +1,57 @@
 <?php
 /**
- * Signaturen über sicherheitsrelevante Zeilen der Datenbank.
+ * Signatures over security-relevant rows of the database.
  *
- * WOGEGEN
+ * AGAINST WHAT
  * --------------------
- * Gegen jemanden, der in die Datenbank schreiben kann, aber nicht auf den Server
- * (kein Zugriff auf .camindo.key): eine offene phpMyAdmin-Instanz, ein geleaktes
- * Datenbank-Passwort, eine SQL-Injection in fremdem Code auf demselben Server. Ohne
- * Signaturen genügt dort ein UPDATE, um sich zum Superuser zu machen:
+ * Against someone who can write to the database but not to the server
+ * (no access to .camindo.key): an open phpMyAdmin instance, a leaked
+ * database password, an SQL injection in foreign code on the same server. Without
+ * signatures a single UPDATE is enough there to make oneself a superuser:
  *
- *     admin.group_id       auf 1 setzen
- *     admin.name/password  mit einer anderen Zeile tauschen
- *     admin.status_id      ein gesperrtes Konto wieder öffnen
- *     admin_session        eine Session für einen fremden Admin einfügen
- *     rel_group_*          der eigenen Gruppe Rechte geben
- *     group.details        der eigenen Gruppe Module freischalten
+ *     admin.group_id       set to 1
+ *     admin.name/password  swap with another row
+ *     admin.status_id      reopen a locked account
+ *     admin_session        insert a session for a foreign admin
+ *     rel_group_*          give one's own group rights
+ *     group.details        unlock modules for one's own group
  *
- * WIE
+ * HOW
  * --------------------
- * Jede geschützte Zeile trägt in `sig` einen HMAC (Crypt::hash(), Schlüssel aus
- * .camindo.key) über ihre entscheidenden Spalten. Wer die Datei nicht hat, kann keine
- * gültige Signatur erzeugen; eine Zeile ohne oder mit falscher Signatur wird behandelt,
- * als gäbe es sie nicht. Verifiziert wird dort, wo die Zeile Rechte verleiht:
+ * Every protected row carries an HMAC in `sig` (Crypt::hash(), key from
+ * .camindo.key) over its decisive columns. Whoever does not have the file cannot
+ * produce a valid signature; a row without or with a wrong signature is treated
+ * as if it did not exist. It is verified wherever the row grants rights:
  *
- *     admin          Anmeldung (Admin::loginByName/ByCode) und jeder Request
- *                    (Session::load): Name, Passwort-Hash, Gruppe, Status und der
- *                    zweite Faktor (second_factor - sonst ließe sich TOTP per
- *                    UPDATE auf die schwächere E-Mail zurückstellen)
- *     admin_session  jeder Request (Session::load): Session-Id, admin_id
- *     group          beim Bau der Gruppendateien (InstanceCache::readGroups): details
- *     rel_group_*    ebenda, je Zeile: Gruppe, Ziel, Flags
+ *     admin          sign-in (Admin::loginByName/ByCode) and every request
+ *                    (Session::load): name, password hash, group, status and the
+ *                    second factor (second_factor - otherwise TOTP could be switched
+ *                    down to the weaker email by a plain UPDATE)
+ *     admin_session  every request (Session::load): session id, admin_id
+ *     group          when building the group files (InstanceCache::readGroups): details
+ *     rel_group_*    there too, per row: group, target, flags
  *
- * Die Signatur der Gruppenrechte ist je ZEILE, nicht je Gruppe: Bereiche, Instanzen
- * und Sprachen verschwinden per ON DELETE CASCADE aus den Relation-Tabellen, ohne
- * dass eine Gruppe gespeichert wird. Eine Signatur über die ganze Rechtemenge wäre
- * danach ungültig. Zeilen löschen kann der Angreifer so zwar - das nimmt aber nur
- * Rechte, es gibt keine.
+ * The signature of the group rights is per ROW, not per group: areas, instances
+ * and languages disappear from the relation tables via ON DELETE CASCADE without
+ * a group being saved. A signature over the whole set of rights would be
+ * invalid afterwards. An attacker can delete rows that way - but that only removes
+ * rights, it grants none.
  *
- * Nicht signiert ist `admin`.`deleted` (Dataset::markDeleted() läuft ohne Hooks):
- * ein wiederbelebtes Konto nützt ohne sein Passwort nichts.
+ * `admin`.`deleted` is not signed (Dataset::markDeleted() runs without hooks):
+ * a revived account is useless without its password.
  *
- * WER SIGNIERT
+ * WHO SIGNS
  * --------------------
- * Jeder Schreibpfad, den der Core kennt - Admin::hookOnSaved(), Group::hookOnSaved(),
+ * Every write path the core knows - Admin::hookOnSaved(), Group::hookOnSaved(),
  * Group::grantInstance()/saveAreaRights(), Area::saveAccess()/grantGroups()/
- * copyAccess(), Session::create(). Neue Schreibpfade müssen die Signatur mitschreiben,
- * sonst gelten ihre Zeilen als manipuliert. Ein direktes UPDATE per SQL auf eine
- * signierte Spalte macht die Zeile ungültig - absichtlich.
+ * copyAccess(), Session::create(). New write paths must write the signature along,
+ * otherwise their rows count as tampered with. A direct UPDATE via SQL on a
+ * signed column invalidates the row - deliberately.
  *
- * Ein Fehlschlag landet im Log 'security' (System::log()).
+ * A failure ends up in the log 'security' (System::log()).
  *
  * @see Camindo\Core\Crypt   hash()
- * @see docs 16-sicherheit.md
+ * @see developer docs, chapter 13 (Security: authentication)
  */
 namespace Camindo\Core;
 
@@ -69,12 +69,12 @@ class Integrity {
     // admin
 
     /**
-     * Signatur einer Admin-Zeile.
+     * Signature of an admin row.
      *
-     * second_factor geht nur ein, wenn es gesetzt ist: Zeilen ohne eigenen Faktor
-     * behalten damit die Signatur, die sie vor dessen Einführung hatten.
+     * second_factor is only included if it is set: rows without their own factor
+     * thus keep the signature they had before it was introduced.
      *
-     * @param array $row  admin_id, name, password (Hash), group_id, status_id, second_factor
+     * @param array $row  admin_id, name, password (hash), group_id, status_id, second_factor
      */
     public function adminSignature(array $row): string
     {
@@ -92,7 +92,7 @@ class Integrity {
     }
 
     /**
-     * Admin-Zeile (neu) signieren - nach jedem Speichern (Admin::hookOnSaved()).
+     * Sign the admin row (again) - after every save (Admin::hookOnSaved()).
      */
     public function signAdmin(int $adminId): void
     {
@@ -116,10 +116,10 @@ class Integrity {
     }
 
     /**
-     * Admin-Zeile lesen und ihre Signatur prüfen.
+     * Read the admin row and check its signature.
      *
-     * @return array|null  admin_id, name, group_id, status_id, second_factor, deleted - oder null,
-     *                     wenn es die Zeile nicht gibt oder die Signatur nicht stimmt
+     * @return array|null  admin_id, name, group_id, status_id, second_factor, deleted - or null
+     *                     if the row does not exist or the signature does not match
      */
     public function verifyAdmin(int $adminId): ?array
     {
@@ -152,8 +152,8 @@ class Integrity {
     // admin_session
 
     /**
-     * Signatur einer Session-Zeile: Id, Admin und Oberfläche (backend, cli, php) -
-     * eine per SQL umgestellte Oberfläche macht die Session ungültig.
+     * Signature of a session row: id, admin and interface (backend, cli, php) -
+     * an interface changed via SQL invalidates the session.
      */
     public function sessionSignature(string $sessionId, int $adminId, string $interface = 'backend'): string
     {
@@ -168,16 +168,16 @@ class Integrity {
     }
 
     /**
-     * CSRF-Token einer Session (17-csrf.md §2.4).
+     * CSRF token of a session (developer docs, chapter 14 (Security: web)).
      *
-     * Abgeleitet, nicht gespeichert: derselbe HMAC-Schlüssel wie bei den Signaturen
-     * (Crypt::hash(), .camindo.key). Wer die Session-Id nicht kennt, kann das Token
-     * nicht erzeugen - und wer sie kennt, hat ohnehin die Session. Das Cookie ist
-     * HttpOnly, das Token steht dafür im DOM (cConfig): gegen XSS schützt es nicht,
-     * gegen fremde Origins schon (die kommen nicht an cConfig).
+     * Derived, not stored: the same HMAC key as for the signatures
+     * (Crypt::hash(), .camindo.key). Whoever does not know the session id cannot
+     * produce the token - and whoever knows it has the session anyway. The cookie is
+     * HttpOnly, the token is in the DOM for this (cConfig): it does not protect against
+     * XSS, but it does against foreign origins (they do not get to cConfig).
      *
-     * Bewusst mit eigenem Präfix gegen sessionSignature() abgegrenzt - dieselbe
-     * Eingabe darf nicht zwei Bedeutungen haben.
+     * Deliberately separated from sessionSignature() by its own prefix - the same
+     * input must not have two meanings.
      */
     public function csrfToken(string $sessionId): string
     {
@@ -203,7 +203,7 @@ class Integrity {
     }
 
     /**
-     * Gruppen-Zeile (neu) signieren - nach jedem Speichern (Group::hookOnSaved()).
+     * Sign the group row (again) - after every save (Group::hookOnSaved()).
      */
     public function signGroup(int $groupId): void
     {
@@ -234,15 +234,14 @@ class Integrity {
     // Alles neu signieren
 
     /**
-     * Alle signierten Zeilen neu signieren - `camindo.php admin sign`.
+     * Re-sign all signed rows - `camindo.php admin sign`.
      *
-     * Für den Wechsel von .camindo.key und für Entwicklungsdaten (dev.sql), die mit
-     * einem anderen Schlüssel signiert wurden. Signiert wird, was in der Datenbank
-     * steht - der Aufruf ist ein Vertrauensakt dessen, der die Kommandozeile hat, und
-     * gehört nicht in einen Web-Request. Sessions werden gelöscht (neue Anmeldung),
-     * nicht neu signiert.
+     * For changing .camindo.key and for development data (dev.sql) that was signed
+     * with a different key. What is in the database is signed - the call is an act of trust
+     * by whoever has the command line, and does not belong in a web request. Sessions are
+     * deleted (new sign-in), not re-signed.
      *
-     * @return array  Tabelle => Anzahl signierter Zeilen
+     * @return array  table => number of signed rows
      */
     public function signAll(): array
     {
@@ -254,8 +253,8 @@ class Integrity {
             foreach ($ids as $id) $this->signAdmin($id);
             $counts['admin'] = count($ids);
 
-            // Superuser-Gruppe ohne Signatur: ihre Rechte stehen nicht in der Datenbank
-            // (InstanceCache::buildGroups()), und seed.sql bleibt schlüsselunabhängig
+            // Superuser group without a signature: its rights are not in the database
+            // (InstanceCache::buildGroups()), and seed.sql stays key-independent
             $this->db->query("SELECT `group_id` FROM `group` WHERE `group_id` <> ?", 'i', [InstanceCache::SUPERUSER_GROUP_ID]);
             $ids = array_map('intval', $this->db->fetchColumn());
             foreach ($ids as $id) $this->signGroup($id);
@@ -320,15 +319,15 @@ class Integrity {
     }
 
     // ====================
-    // admin_passkey (developer_docs/22-webauthn.md)
+    // admin_passkey (developer docs, chapter 13 (Security: authentication))
 
     /**
-     * Signatur einer Passkey-Zeile: Konto, Credential (Hash der Id), öffentlicher
-     * Schlüssel und Verfahren. Wer die Datenbank schreibt, kann so keinen eigenen
-     * Schlüssel für ein fremdes Konto hinterlegen. Der Signaturzähler steht nicht
-     * darin - er ändert sich bei jeder Anmeldung.
+     * Signature of a passkey row: account, credential (hash of the id), public
+     * key and algorithm. Whoever writes the database cannot store their own
+     * key for a foreign account that way. The signature counter is not part of it -
+     * it changes at every sign-in.
      *
-     * @param array $row  admin_id, credential_hash (binär), public_key, alg
+     * @param array $row  admin_id, credential_hash (binary), public_key, alg
      */
     public function passkeySignature(array $row): string
     {
@@ -341,7 +340,7 @@ class Integrity {
         ]));
     }
 
-    /** Passt die gespeicherte Signatur einer Passkey-Zeile? */
+    /** Does the stored signature of a passkey row match? */
     public function verifyPasskey(array $row): bool
     {
         $sig = (string)($row['sig'] ?? '');
@@ -352,10 +351,10 @@ class Integrity {
     // rel_group_area, rel_group_instance, rel_group_language, rel_group_status
 
     /**
-     * Signatur einer Zeile aus rel_group_area: Gruppe, Bereich und die fünf Flags.
+     * Signature of a row from rel_group_area: group, area and the five flags.
      *
      * @param array $flags  group_write, group_delete, other_write, other_delete,
-     *                      set_owner (0|1; fehlende Schlüssel = Spalten-Default)
+     *                      set_owner (0|1; missing keys = column default)
      */
     public function areaRightSignature(int $groupId, int $areaId, array $flags): string
     {
@@ -379,18 +378,18 @@ class Integrity {
         return $this->crypt->hash('rel_group_language|' . $groupId . '|' . $languageId . '|' . (int)$canWrite);
     }
 
-    /** Zeile in rel_group_status: die Gruppe darf diesen Status setzen */
+    /** Row in rel_group_status: the group may set this status */
     public function statusRightSignature(int $groupId, int $statusId): string
     {
         return $this->crypt->hash('rel_group_status|' . $groupId . '|' . $statusId);
     }
 
     /**
-     * Zeile einer Relation-Tabelle prüfen (InstanceCache::readGroups()).
+     * Check a row of a relation table (InstanceCache::readGroups()).
      *
      * @param string $table  rel_group_area | rel_group_instance | rel_group_language |
      *                       rel_group_status
-     * @param array  $row    die Zeile wie gelesen (mit `sig`)
+     * @param array  $row    the row as read (with `sig`)
      */
     public function verifyRight(string $table, array $row): bool
     {

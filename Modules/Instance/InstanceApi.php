@@ -1,8 +1,8 @@
 <?php
 /**
- * API-Methoden der Instanzen (Websites): auflisten, lesen, ändern - Domains,
- * Sprachen, Startseite, Content-Security-Policy. Neue Instanzen legt nur die
- * Oberfläche an.
+ * API methods of the instances (websites): list, read, change - domains,
+ * languages, start page, Content Security Policy. Only the UI creates new instances.
+ * UI.
  *
  * @see Camindo\Core\Api\DatasetApi
  */
@@ -27,9 +27,9 @@ class InstanceApi extends DatasetApi
     }
 
     /**
-     * Alle Instanzen.
+     * All instances.
      *
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param bool $withSchema  plus the description of the fields
      */
     #[ApiMethod('instance.list', '#instance.api_list')]
     public function list(bool $withSchema = false): array
@@ -38,10 +38,10 @@ class InstanceApi extends DatasetApi
     }
 
     /**
-     * Eine Instanz mit allen Einstellungen.
+     * An instance with all settings.
      *
      * @param int  $id          instance_id
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param bool $withSchema  plus the description of the fields
      */
     #[ApiMethod('instance.info', '#instance.api_info')]
     public function info(int $id, bool $withSchema = false): array
@@ -50,11 +50,11 @@ class InstanceApi extends DatasetApi
     }
 
     /**
-     * Eine Instanz ändern.
+     * Change an instance.
      *
      * @param int   $id        instance_id
-     * @param array $data      Feld => Wert, nur die zu ändernden (Sprachen und Domains als Liste)
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param array $data      Field => value, only the ones to change (languages and domains as list)
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('instance.update', '#instance.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $id, array $data, bool $simulate = false): array

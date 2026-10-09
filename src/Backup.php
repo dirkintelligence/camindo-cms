@@ -1,31 +1,31 @@
 <?php
 /**
- * Datenbank-Sicherung mit mysqldump nach var/dbbackup.
+ * Database backup with mysqldump to var/dbbackup.
  *
- * Zwei Aufrufer, ein Kommando:
+ * Two callers, one command:
  *
- *     SchedulerRunner (Aufgabentyp dbbackup)   rotierend: backup-1.sql ist das jüngste,
- *                                              rotate() rückt ältere um eins weiter
- *     camindo.php upgrade / component …        vor jedem Schritt, der das Schema ändert:
- *                                              {grund}-{zeitstempel}.sql, prune() räumt auf
+ *     SchedulerRunner (task type dbbackup)     rotating: backup-1.sql is the newest,
+ *                                              rotate() shifts older ones up by one
+ *     camindo.php upgrade / component …        before each step that changes the schema:
+ *                                              {reason}-{timestamp}.sql, prune() cleans up
  *
- * Das Passwort kommt aus paths.sqlpwd_file (--defaults-extra-file), nie auf die
- * Kommandozeile. Kommt db.pass aus der Umgebung (CAMINDO_DB_PASS, Config::fromEnv())
- * oder fehlt die Datei, schreibt mysqldump() für den einen Aufruf eine eigene
- * Optionsdatei (0600) unter paths.tmp_dir und löscht sie danach. mysqldump läuft über Execute mit Timeout; das Ergebnis wird erst
- * unter .tmp geschrieben, geprüft (verify()) und dann umbenannt, damit kein halber
- * oder unbrauchbarer Dump als Sicherung liegen bleibt.
+ * The password comes from paths.sqlpwd_file (--defaults-extra-file), never from the
+ * command line. If db.pass comes from the environment (CAMINDO_DB_PASS, Config::fromEnv())
+ * or the file is missing, mysqldump() writes its own option file (0600) for this one call
+ * under paths.tmp_dir and deletes it afterwards. mysqldump runs via Execute with a timeout; the result is first
+ * written under .tmp, checked (verify()) and then renamed, so that no half-written
+ * or unusable dump is left behind as a backup.
  *
- * @see docs/developers/14-installation-und-update.md, 6.6
+ * @see developer docs, chapter 09 (Installation and update)
  */
 namespace Camindo\Core;
 
 class Backup {
 
-    /** Kleinste brauchbare Sicherung in Bytes (siehe verify()) */
+    /** Smallest usable backup in bytes (see verify()) */
     public const MIN_DUMP_BYTES = 10240;
 
-    /** Letzte Zeile jedes vollständigen Dumps (mysqldump und mariadb-dump) */
+    /** Last line of every complete dump (mysqldump and mariadb-dump) */
     public const DUMP_COMPLETED = '-- Dump completed';
 
     public function __construct(
@@ -37,7 +37,7 @@ class Backup {
     }
 
     /**
-     * Sicherungsverzeichnis var/dbbackup, wird bei Bedarf angelegt.
+     * Backup directory var/dbbackup, created if needed.
      */
     public function dir(): string
     {
@@ -50,11 +50,11 @@ class Backup {
     }
 
     /**
-     * Dump nach var/dbbackup/{name}.sql schreiben.
+     * Write the dump to var/dbbackup/{name}.sql.
      *
-     * @param string $name     Dateiname ohne Endung, z. B. 'upgrade-9.0.0-9.1.0-20260917-140211'
-     * @param int    $timeout  Sekunden, 0 = ohne Limit
-     * @return string          absoluter Pfad der Datei
+     * @param string $name     File name without extension, e.g. 'upgrade-9.0.0-9.1.0-20260917-140211'
+     * @param int    $timeout  Seconds, 0 = no limit
+     * @return string          absolute path of the file
      */
     public function dump(string $name, int $timeout = 600): string
     {
@@ -64,8 +64,8 @@ class Backup {
         $file = $this->dir() . '/' . $name . '.sql';
         $target = $file . '.tmp';
         $this->mysqldump(['--single-transaction', '--routines', '--triggers', '--events'], $target, $timeout);
-        // Ein Dump mit Exit-Code 0 kann trotzdem unbrauchbar sein (etwa nur eine
-        // Fehlermeldung enthalten) - dann gilt er als fehlgeschlagen
+        // A dump with exit code 0 can still be unusable (e.g. containing only an
+        // error message) - then it counts as failed
         if (($error = $this->verify($target)) !== null) {
             @unlink($target);
             throw new \Exception('invalid dump: ' . $error);
@@ -76,16 +76,16 @@ class Backup {
     }
 
     /**
-     * Ist eine Sicherungsdatei brauchbar? Zwei Prüfungen:
+     * Is a backup file usable? Two checks:
      *
-     *     Größe   unter MIN_DUMP_BYTES ist sie immer fehlgeschlagen - schon das
-     *             leere Schema von camindo ist ein Vielfaches davon. So landet eine
-     *             Datei, in der nur eine Fehlermeldung steht, nie als Sicherung.
-     *     Ende    mysqldump und mariadb-dump schreiben als letzte Zeile
-     *             "-- Dump completed on …". Fehlt sie, brach der Dump ab.
+     *     Size    below MIN_DUMP_BYTES it always counts as failed - even the
+     *             empty schema of camindo is many times that. So a file that contains
+     *             only an error message never ends up as a backup.
+     *     End     mysqldump and mariadb-dump write "-- Dump completed on …" as the
+     *             last line. If it is missing, the dump was aborted.
      *
-     * @return string|null  null = in Ordnung, sonst der Grund (mit dem Anfang der
-     *                      Datei, falls sie klein ist - dort steht meist der Fehler)
+     * @return string|null  null = OK, otherwise the reason (with the start of the
+     *                      file if it is small - the error is usually there)
      */
     public function verify(string $file): ?string
     {
@@ -103,9 +103,9 @@ class Backup {
     }
 
     /**
-     * Sicherung vor einer Änderung: {reason}-{Ymd-His}.sql
+     * Backup before a change: {reason}-{Ymd-His}.sql
      *
-     * @return string  absoluter Pfad
+     * @return string  absolute path
      */
     public function beforeChange(string $reason, int $timeout = 600): string
     {
@@ -113,13 +113,13 @@ class Backup {
     }
 
     /**
-     * mysqldump mit beliebigen Zusatzargumenten in eine Datei schreiben - auch für
-     * SchemaCommand (schema export). Host, Port, User, Passwortdatei und Datenbank
-     * kommen aus der Config; Optionen aus $args stehen vor dem Datenbanknamen,
-     * Tabellennamen (alles ohne --) dahinter.
+     * Write mysqldump with arbitrary extra arguments to a file - also for
+     * SchemaCommand (schema export). Host, port, user, password file and database
+     * come from the config; options from $args come before the database name,
+     * table names (everything without --) after it.
      *
-     * @param string[] $args    z. B. ['--no-data'] oder ['--no-create-info', 'status']
-     * @param string   $target  Zieldatei (wird überschrieben)
+     * @param string[] $args    e.g. ['--no-data'] or ['--no-create-info', 'status']
+     * @param string   $target  target file (will be overwritten)
      */
     public function mysqldump(array $args, string $target, int $timeout = 600): void
     {
@@ -137,8 +137,8 @@ class Backup {
     }
 
     /**
-     * Optionsdatei [client] mit dem Passwort, nur für den Eigentümer lesbar.
-     * Anführungszeichen, die im Passwort nicht vorkommen; \ wird verdoppelt.
+     * Option file [client] with the password, readable by the owner only.
+     * Quotes that do not occur in the password; \ is doubled.
      */
     private function writeOptionFile(string $password): string
     {
@@ -184,10 +184,10 @@ class Backup {
     }
 
     /**
-     * Rotierende Sicherung backup-1.sql … backup-{keep}.sql (Scheduler):
-     * vorhandene rücken um eins, überzählige fallen weg, dann wird backup-1 geschrieben.
+     * Rotating backup backup-1.sql … backup-{keep}.sql (scheduler):
+     * existing ones move up by one, surplus ones are dropped, then backup-1 is written.
      *
-     * @return string  absoluter Pfad von backup-1.sql
+     * @return string  absolute path of backup-1.sql
      */
     public function rotate(int $keep, int $timeout = 600): string
     {
@@ -202,9 +202,9 @@ class Backup {
     }
 
     /**
-     * Änderungs-Sicherungen (alles außer backup-N.sql) auf die jüngsten $keep kürzen.
+     * Trim the change backups (everything except backup-N.sql) to the newest $keep.
      *
-     * @return string[]  gelöschte Dateinamen
+     * @return string[]  deleted file names
      */
     public function prune(int $keep): array
     {
@@ -222,7 +222,7 @@ class Backup {
     }
 
     /**
-     * Vorhandene Sicherungen: [name => ['file', 'size', 'mtime']], jüngste zuerst.
+     * Existing backups: [name => ['file', 'size', 'mtime']], newest first.
      */
     public function list(): array
     {

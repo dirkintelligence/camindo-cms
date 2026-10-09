@@ -1,111 +1,111 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `field` - die Eingabefelder eines Inhaltsbereichs.
+ * Dataset subclass for the table `field` - the input fields of a content area.
  *
- * Ein Feld ist die Definition, kein Inhalt: Typ, Beschriftung, Darstellungsart,
- * Validierungsregeln. Die eigentlichen Werte liegen typgetrennt in den `data_*`-Tabellen
- * (EAV, siehe docs/developers/02-datenmodell.md).
+ * A field is the definition, not the content: type, label, display type,
+ * validation rules. The actual values are stored type-separated in the `data_*` tables
+ * (EAV, see developer docs, chapter 02 (Data model)).
  *
- * DREI TABELLEN, DIE MIT GEPFLEGT WERDEN
+ * THREE TABLES THAT ARE ALSO MAINTAINED
  * --------------------
- *     fieldname          globale Registrierung name -> typ, area-übergreifend eindeutig.
- *                        Der Primärschlüssel der data_*-Tabellen ist
- *                        (record_id, fieldname_id) - NICHT field_id. Dadurch kann
- *                        Cms::select() über Bereichsgrenzen hinweg nach einem Feldnamen
- *                        filtern, ohne die field_id je Bereich zu kennen. Preis dafür:
- *                        ein Name ist systemweit an genau einen Typ gebunden.
+ *     fieldname          global registration name -> type, unique across areas.
+ *                        The primary key of the data_* tables is
+ *                        (record_id, fieldname_id) - NOT field_id. This allows
+ *                        Cms::select() to filter by a field name across area boundaries
+ *                        without knowing the field_id per area. The price for this:
+ *                        a name is bound system-wide to exactly one type.
  *                        -> createFieldname() / cleanupFieldname()
  *     rel_field_area     Ziel-Bereiche eines 'pointer'-Feldes (n Bereiche)
  *     rel_fulltext_text  Quell-Felder eines 'fulltext'-Feldes
- *     rel_field_converter  Konverter eines Thumbnail-Feldes, mit `position` - die
- *                        Reihenfolge, in der die Thumbnail-Erzeugung sie durchgeht
- *                        (VirtualFieldsTrait: der erste passende gewinnt)
+ *     rel_field_converter  converter of a thumbnail field, with `position` - the
+ *                        order in which thumbnail generation runs through them
+ *                        (VirtualFieldsTrait: the first matching one wins)
  *
- * RESERVIERTE NAMENSPRÄFIXE
+ * RESERVED NAME PREFIXES
  * --------------------
- * $fieldPrefixes wird aus Cms::$dataSuffix aufgebaut (txt_, int_, fil_, …) plus vier
- * Sonderfällen. Ein Name darf nicht mit dem Kürzel eines ANDEREN Typs beginnen - `txt_x`
- * als Integer-Feld wird abgewiesen. Der Sinn: der Name allein soll den Typ verraten,
- * ohne dass man in `fieldname` nachsehen muss.
+ * $fieldPrefixes is built from Cms::$dataSuffix (txt_, int_, fil_, …) plus four
+ * special cases. A name must not begin with the prefix of a DIFFERENT type - `txt_x`
+ * as an integer field is rejected. The point: the name alone should reveal the type,
+ * without having to look in `fieldname`.
  *
- * FELDTYPEN MIT SONDERBEHANDLUNG
+ * FIELD TYPES WITH SPECIAL HANDLING
  * --------------------
- *     relation / relation1   Verknüpfung in einen anderen Bereich. Beim Anlegen wird im
- *                            ZIELBEREICH automatisch ein Gegenfeld erzeugt (Name
- *                            `rel_{areaname}`), damit die Verknüpfung von beiden Seiten
- *                            sichtbar ist. rel_field_id zeigt jeweils auf die Gegenseite.
- *     pointer / pointer1     Verweis auf Datensätze aus MEHREREN Bereichen. Die Liste
- *                            der Zielbereiche passt nicht in eine Spalte und liegt
- *                            deshalb in `rel_field_area`; die Schemaspalte
- *                            `rel_area_ids` bleibt leer.
- *     link                   Fest verknüpfte Inhalte (1:n): wie 'pointer' gerichtet
- *                            mit mehreren Zielbereichen (`rel_field_area`), aber die
- *                            Zieldatensätze GEHÖREN dem Quelldatensatz - je
- *                            Zieldatensatz höchstens ein Quelldatensatz, Löschen,
- *                            Kopieren und Verschieben des Quelldatensatzes wirken
- *                            auf sie mit (Camindo\Core\LinkTrait). Zielbereiche
- *                            müssen abhängige Bereiche sein (`area.dependent` = 1).
- *                            display_type 'lookup' (Suchfenster wie bisher) oder
- *                            'embed' (die Eingabemasken der Zieldatensätze stehen in
- *                            der Maske des Quelldatensatzes). Immer handsortiert
- *                            (custom_order = 1), ohne Höchstzahl; nicht umwandelbar.
- *     fulltext               Sammelfeld, das den Text mehrerer anderer Felder für die
- *                            Volltextsuche bündelt. Die Quell-Felder stehen in
- *                            `rel_fulltext_text`, im Formular unter dem Pseudo-Feld
+ *     relation / relation1   link into another area. When creating, a counter-field is
+ *                            created automatically in the TARGET AREA (name
+ *                            `rel_{areaname}`), so that the link is visible from both sides.
+ *                            rel_field_id always points to the other side.
+ *     pointer / pointer1     reference to records from SEVERAL areas. The list
+ *                            of target areas does not fit into one column and is therefore stored
+ *                            in `rel_field_area`; the schema column
+ *                            `rel_area_ids` stays empty.
+ *     link                   firmly linked content (1:n): directed like 'pointer'
+ *                            with several target areas (`rel_field_area`), but the
+ *                            target records BELONG to the source record - per
+ *                            target record at most one source record; deleting,
+ *                            copying and moving the source record affect
+ *                            them as well (Camindo\Core\LinkTrait). Target areas
+ *                            must be dependent areas (`area.dependent` = 1).
+ *                            display_type 'lookup' (search window as before) or
+ *                            'embed' (the input masks of the target records appear in
+ *                            the mask of the source record). Always hand-sorted
+ *                            (custom_order = 1), without maximum; cannot be converted.
+ *     fulltext               collective field that bundles the text of several other fields for the
+ *                            full-text search. The source fields are stored in
+ *                            `rel_fulltext_text`, in the form under the pseudo field
  *                            data['source_fields'].
- *     file + display_type    Thumbnail, aus einem Upload-Feld (parent_field_id)
+ *     file + display_type    thumbnail, from an upload field (parent_field_id)
  *     'thumbnail'            erzeugt. Seine Konverter stehen sortiert in
- *                            `rel_field_converter`, im Schema als 'reltable'-Feld
- *                            `converter_ids` (display_type 'sortable': die Reihenfolge
- *                            der angehakten Optionen ist der Wert). Mindestens einer
- *                            ist Pflicht. Bis 2026-09-15 lagen die Ids unsortiert in
+ *                            `rel_field_converter`, in the schema as 'reltable' field
+ *                            `converter_ids` (display_type 'sortable': the order
+ *                            of the ticked options is the value). At least one
+ *                            is required. Until 2026-09-15 the ids were stored unsorted in
  *                            details.converter_ids.
- *     relation/pointer +     details.lookup_detailed: 1 = die Vorschau der verknüpften
- *     display_type 'lookup'  Datensätze zeigt untereinander alle Listenfelder des
- *                            Zielbereichs (Default-Feld fett) und dessen
- *                            Listen-Template, statt nur des Default-Felds
+ *     relation/pointer +     details.lookup_detailed: 1 = the preview of the linked
+ *     display_type 'lookup'  records shows all list fields of the
+ *                            target area one below the other (default field in bold) and its
+ *                            list template, instead of only the default field
  *                            (RecordBackendEdit::_lookupPreviewCreate()).
  *     file + display_type    'thumbnail' erzeugt abgeleitete Medienversionen, verlangt
- *                            also mindestens einen Konverter und erlaubt keine Eingabe.
- *                            Upload- und Thumbnail-Felder kennen details.user_auth:
- *                            1 = Dateien nicht direkt über das Medienverzeichnis
- *                            abrufbar (Camindo\Core\MediaAccess sperrt das Feld-
- *                            Verzeichnis per .htaccess), ausgeliefert nur über
- *                            public/file.php an Frontend-User aus den Profil-
+ *                            so at least one converter and no input is allowed.
+ *                            Upload and thumbnail fields know details.user_auth:
+ *                            1 = files not directly retrievable via the media directory
+ *                            retrievable (Camindo\Core\MediaAccess locks the field
+ *                            directory via .htaccess), delivered only via
+ *                            public/file.php to frontend users from the profile
  *                            Bereichen in details.profile_area_ids.
  *
- * Die Suffixe '1' (relation1, pointer1) bedeuten "höchstens ein Ziel" - deshalb setzen
- * die Hooks für sie `max = 1`.
+ * The suffixes '1' (relation1, pointer1) mean "at most one target" - therefore set
+ * the hooks set `max = 1` for them.
  *
- * DAS VOLLTEXT-STANDARDFELD `fulltext`
+ * THE STANDARD FULL-TEXT FIELD `fulltext`
  * --------------------
- * Jeder Datensatzbereich hat einen Volltext `fulltext` über alle Text-, Zeichen-,
- * JSON- und Upload-Felder - ohne Zeile in dieser Tabelle; geschrieben wird er von
- * VirtualFieldsTrait::refreshStandardFulltext(). Hier nur: Der Name ist reserviert
- * (FULLTEXT), bleibt in `fieldname` stehen (cleanupFieldname()). Über ein link-Feld
- * gehen auch die Textfelder der Zielbereiche ein (VirtualFieldsTrait::
- * standardFulltextSources()). Quellen eigener Volltextfelder können zusätzlich
- * Felder hinter link- und relation-Feldern sein (fulltextSourceOptions()).
+ * Every record area has a full text `fulltext` over all text, character,
+ * JSON and upload fields - without a row in this table; it is written by
+ * VirtualFieldsTrait::refreshStandardFulltext(). Here only: the name is reserved
+ * (FULLTEXT), remains in `fieldname` (cleanupFieldname()). Via a link field
+ * the text fields of the target areas also go in (VirtualFieldsTrait::
+ * standardFulltextSources()). Sources of own full-text fields can additionally
+ * be fields behind link and relation fields (fulltextSourceOptions()).
  *
- * Wird ein Quellfeld gelöscht oder umgewandelt, ändern sich die Quellen eines
- * Volltextfeldes oder die Zielbereiche eines link-Feldes, markieren hookOnSaved(),
- * hookOnDeleted() bzw. convert() den Volltext der betroffenen Bereiche als veraltet
- * (FulltextState) - neu aufgebaut wird er über "Jetzt aktualisieren" oder den
- * Zeitplaner. Nur die Umwandlung in 'encrypted' baut sofort neu auf.
+ * If a source field is deleted or converted, the sources of a
+ * full-text field or the target areas of a link field change; hookOnSaved(),
+ * hookOnDeleted() or convert() mark the full text of the affected areas as outdated
+ * (FulltextState) - it is rebuilt via "Update now" or the
+ * scheduler. Only the conversion to 'encrypted' rebuilds immediately.
  *
- * TYP UND MEHRSPRACHIGKEIT ÄNDERN SICH NUR ÜBER convert()
+ * TYPE AND MULTILINGUALISM CHANGE ONLY VIA convert()
  * --------------------
- * Der Typ steht seit dem Anlegen fest, und das Kennzeichen `multilingual` lässt sich
- * bei einem bestehenden Feld nicht mehr über die Eingabemaske umschalten
- * (hookOnSave() nimmt es aus den zu schreibenden Feldern) - ein versehentlicher Klick
- * würde sonst die Übersetzungen aller Datensätze verwerfen. Beides ändert nur noch
- * die ausdrückliche Konvertierung: convert() kopiert den Bestand in die data_*-Tabelle
- * des Zieltyps um (conversionTargets() sagt, welche Ziele es gibt, conversionLossy(),
- * ob dabei etwas verloren gehen kann), stellt die `empty`-Kennzeichen bzw. die
- * Dateiablage um und passt die Felddefinition an.
+ * The type is fixed since creation, and the flag `multilingual` can no longer be
+ * switched via the input mask for an existing field
+ * (hookOnSave() removes it from the fields to be written) - an accidental click
+ * would otherwise discard the translations of all records. Both now change only via
+ * the explicit conversion: convert() copies the stock into the data_* table
+ * of the target type (conversionTargets() says which targets exist, conversionLossy(),
+ * whether something can be lost in the process), adjusts the `empty` flags resp. the
+ * file storage and adjusts the field definition.
  *
- * @see Camindo\Core\Modules\Area\Area          Inhaltsbereich, dem das Feld gehört
- * @see Camindo\Core\Modules\Area\FieldBackend  Backend-Oberfläche
+ * @see Camindo\Core\Modules\Area\Area          content area the field belongs to
+ * @see Camindo\Core\Modules\Area\FieldBackend  Backend interface
  * @see Camindo\Core\Cms                          $types, $dataSuffix, $relationTypes …
  * @see Camindo\Core\Dataset
  */
@@ -120,9 +120,9 @@ use Camindo\Core\Modules\Record\Record;
 
 class Field extends Dataset {
 
-    // Meta-Felder auf denen Eingabefelder basieren dürfen
-    // (fest im Record-Schema definierte Spalten - ein Eingabefeld kann sie
-    // beschriften und darstellen, ohne dass dafür eine data_*-Zeile entsteht)
+    // Meta fields that input fields may be based on
+    // (columns fixed in the record schema - an input field can
+    // label and display them without creating a data_* row for them)
     public array $metafields = [
         'online_at',
         'offline_at',
@@ -132,35 +132,35 @@ class Field extends Dataset {
         'parent_id'
     ];
 
-    // Reservierte Namenspräfixe, gefüllt in hookDefinition(): typ => kürzel.
-    // Ein Feldname darf nicht mit dem Kürzel eines anderen Typs beginnen.
+    // Reserved name prefixes, filled in hookDefinition(): type => prefix.
+    // A field name must not begin with the prefix of another type.
     private array $fieldPrefixes = [];
 
-    /** Name des Volltext-Standardfelds (siehe Klassenkommentar) - reserviert */
+    /** Name of the standard full-text field (see class comment) - reserved */
     public const FULLTEXT = 'fulltext';
 
-    /** Typen, deren Felder in einen Volltext eingehen können - 'file': Upload-Felder
-     *  mit ihrem Dateinamen (keine Thumbnails, die haben keinen eigenen) */
+    /** Types whose fields can go into a full text - 'file': upload fields
+     *  with their file name (no thumbnails, which have no own one) */
     public const FULLTEXT_SOURCE_TYPES = ['text', 'chars', 'json', 'file'];
 
-    // Bereiche, deren Volltext ein gerade gelöschtes Feld als Quelle hatte
+    // Areas whose full text had a just-deleted field as source
     // (hookOnDelete() -> hookOnDeleted())
     private array $fulltextOfDeleted = [];
 
-    // Typen, die sich ineinander umwandeln lassen (convert()): innerhalb und
-    // zwischen den beiden Gruppen. Dazu relation <-> relation1 und pointer <-> pointer1
-    // sowie der Wechsel ein-/mehrsprachig für alle mehrsprachigkeitsfähigen Typen.
-    // Nicht dabei: id (Fremdschlüssel auf `record`), password (Hash), json, Datum/
-    // Zeit, file, fulltext - für sie gibt es keinen sinnvollen Zieltyp.
+    // Types that can be converted into each other (convert()): within and
+    // between the two groups. Including relation <-> relation1 and pointer <-> pointer1
+    // as well as switching single/multilingual for all types capable of multilingualism.
+    // Not included: id (foreign key to `record`), password (hash), json, date/
+    // time, file, fulltext - for them there is no sensible target type.
     public array $convertTextTypes    = ['chars', 'text', 'encrypted'];
     public array $convertNumericTypes = ['integer', 'currency', 'float', 'decimal', 'bit'];
 
-    // Umwandlungen OHNE möglichen Datenverlust (quelltyp => zieltypen); jede andere
-    // Kombination bekommt in der Auswahl den Hinweis auf Datenverlust - z. B.
-    // text -> chars (255 Zeichen), Text -> Zahl (nicht-numerische Inhalte), float ->
-    // integer (Nachkommastellen), relation -> relation1 (nur eine Verknüpfung bleibt).
-    // integer -> float/decimal gilt als verlustfrei: die Wertebereiche des Bestands
-    // überschreiten die Genauigkeit von double bzw. decimal(20,10) praktisch nie.
+    // Conversions WITHOUT possible data loss (source type => target types); every other
+    // combination gets the data loss note in the selection - e.g.
+    // text -> chars (255 characters), text -> number (non-numeric content), float ->
+    // integer (decimal places), relation -> relation1 (only one link remains).
+    // integer -> float/decimal counts as lossless: the value ranges of the stock
+    // practically never exceed the precision of double or decimal(20,10).
     private array $losslessConversions = [
         'chars'     => ['text', 'encrypted'],
         'text'      => ['encrypted'],
@@ -174,11 +174,11 @@ class Field extends Dataset {
         'pointer1'  => ['pointer'],
     ];
 
-    // Zuordnung vordefinierter Mime-Types zu Werten im Feld 'media_types'
-    // Der Redakteur kreuzt im Formular Gruppen an ('image', 'pdf', …); daraus wird die
-    // tatsächliche Mime-Type-Liste für den Upload-Filter. 'image/*' ist ein Muster und
-    // wird beim Prüfen als Präfix behandelt - ohne SVG (aktiver Inhalt, siehe
-    // VirtualFieldsTrait::$mediaTypeGroupsExcl); SVG nur über media_types_incl.
+    // Assignment of predefined MIME types to values in the field 'media_types'
+    // The editor ticks groups in the form ('image', 'pdf', …); from this the
+    // actual MIME type list for the upload filter is built. 'image/*' is a pattern and
+    // is treated as a prefix when checking - without SVG (active content, see
+    // VirtualFieldsTrait::$mediaTypeGroupsExcl); SVG only via media_types_incl.
     public array $mimeTypes = [
         'image' => [
             'mime' => ['image/*'],
@@ -234,13 +234,13 @@ class Field extends Dataset {
     /**
      * Tabellenstruktur `field`
      *
-     * Die Einträge mit Punkt im Schlüssel ('details.media_types',
-     * …) sind keine eigenen Spalten, sondern Teilfelder der JSON-Spalte `details`.
-     * Dataset kennt diese Punktschreibweise und liest/schreibt sie in das JSON.
+     * The entries with a dot in the key ('details.media_types',
+     * …) are not own columns, but subfields of the JSON column `details`.
+     * Dataset knows this dot notation and reads/writes it into the JSON.
      *
-     * Am Ende werden die reservierten Namenspräfixe zusammengestellt: die Kürzel der
-     * data_*-Tabellen aus Cms::$dataSuffix plus vier Typen, die keine eigene
-     * data_*-Tabelle haben und deshalb dort nicht auftauchen.
+     * At the end the reserved name prefixes are assembled: the prefixes of the
+     * data_* tables from Cms::$dataSuffix plus four types that have no own
+     * data_* table and therefore do not appear there.
      */
     protected function hookDefinition(): void
     {
@@ -253,7 +253,7 @@ class Field extends Dataset {
                 'label' => 'field_id',
             ],
             'area_id' => [
-                'type'  => 'integer', // kein foreign key
+                'type'  => 'integer', // no foreign key
                 'label' => 'area_id',
                 'min'   => 1,
             ],
@@ -275,7 +275,7 @@ class Field extends Dataset {
                 'label' => '#area.field_field_label',
                 'tooltip' => '#area.tooltip_field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'display_type' => [
@@ -419,9 +419,9 @@ class Field extends Dataset {
             'meta' => [
                 'type' => 'bit',
             ],
-            // Mehrsprachiges Feld: je Sprache der Instanz ein eigener Inhalt, mit der
-            // Hauptsprache als Fallback. Nur für die Typen in Cms::$multilingualTypes
-            // und nicht für Felder auf Metaspalten (hookOnSave() setzt es sonst zurück).
+            // Multilingual field: one own content per language of the instance, with the
+            // main language as fallback. Only for the types in Cms::$multilingualTypes
+            // and not for fields on meta columns (hookOnSave() otherwise resets it).
             'multilingual' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
@@ -433,7 +433,7 @@ class Field extends Dataset {
                 'display_type' => 'none',
                 'label' => '#area.field_field_details',
             ],
-            // Lookup-Felder (relation/pointer): ausführliche Vorschau, siehe
+            // Lookup fields (relation/pointer): detailed preview, see
             // Klassenkommentar
             'details.lookup_detailed' => [
                 'type' => 'bit',
@@ -441,7 +441,7 @@ class Field extends Dataset {
                 'label' => '#area.field_field_lookup_detailed',
                 'tooltip' => '#area.tooltip_field_lookup_detailed',
             ],
-            // Feld-Extension (13 §3.3): Name einer aktiven Extension, die zum
+            // Field extension (developer docs, chapter 08 (Components and extensions)): name of an active extension that matches the
             // Display-Typ passt; ihre Optionen liegen in details.extension_options
             'details.extension' => [
                 'type' => 'chars',
@@ -475,16 +475,16 @@ class Field extends Dataset {
                 'note' => '#converter.note_field_media_types',
                 'tooltip' => '#converter.tooltip_field_media_types',
             ],
-            // Upload/Thumbnail: Dateien nur für angemeldete Frontend-User
-            // (siehe Klassenkommentar, MediaAccess::protectField())
+            // Upload/thumbnail: files only for logged-in frontend users
+            // (see class comment, MediaAccess::protectField())
             'details.user_auth' => [
                 'type' => 'bit',
                 'display_type' => 'switch',
                 'label' => '#area.field_field_user_auth',
                 'tooltip' => '#area.tooltip_field_user_auth',
             ],
-            // Profil-Bereiche, deren angemeldete User die Dateien sehen dürfen
-            // (nur mit user_auth = 1; leer = niemand)
+            // Profile areas whose logged-in users may see the files
+            // (only with user_auth = 1; empty = nobody)
             'details.profile_area_ids' => [
                 'type' => 'json',
                 'display_type' => 'checkbox',
@@ -493,14 +493,14 @@ class Field extends Dataset {
             ],
         ];
 
-        // Reservierter Prefix am Anfang eines Feldnames abhängig vom Typ
-        // ('reltable' hat keine data_*-Tabelle und ist kein wählbarer Feldtyp -
-        //  sein Platzhalter-Suffix gehört nicht in die Präfix-Liste)
+        // Reserved prefix at the start of a field name, depending on the type
+        // ('reltable' has no data_* table and is not a selectable field type -
+        //  its placeholder suffix does not belong in the prefix list)
         $this->fieldPrefixes = array_diff_key(
             $this->cms->dataSuffix,
             array_flip($this->cms->noColumnTypes)
         );
-        // Sonderfälle:
+        // Special cases:
         $this->fieldPrefixes['pointer'] = 'ptr';
         $this->fieldPrefixes['pointer1'] = 'pn1';
         $this->fieldPrefixes['link'] = 'lnk';
@@ -509,20 +509,20 @@ class Field extends Dataset {
     }
 
     /**
-     * Vor dem Neu-Erstellen: neues Feld ans Ende der Feldliste seines Bereichs.
+     * Before creating: place the new field at the end of the field list of its area.
      *
-     * Anders als Area::hookOnCreate() (COALESCE(..., -1) + 1, beginnt bei 0) zählt hier
-     * COALESCE(..., 0) + 1, das erste Feld bekommt also position = 1. Für die Sortierung
-     * ist das gleichgültig, beim Vergleich der beiden Klassen aber verwirrend.
+     * Unlike Area::hookOnCreate() (COALESCE(..., -1) + 1, starts at 0), here
+     * COALESCE(..., 0) + 1 is counted, so the first field gets position = 1. For sorting
+     * this does not matter, but it is confusing when comparing the two classes.
      */
     protected function hookOnCreate(array &$data): void
     {
-        // Position des neuen Feldes auf "höchste Position im Breichs + 1" setzen
+        // Set the position of the new field to "highest position in the area + 1"
         $area_id = (int)$data['area_id'];
         $sql = "SELECT COALESCE(MAX(`position`), 0) + 1 FROM `field` WHERE `area_id` =?";
         $this->db->query($sql, 'i', [$area_id]);
         $data['position'] = $this->db->fetchNum()[0] ?? 0;
-        // Sichtbarkeit bei bestimmten Feldern nicht vorselektieren
+        // Do not preselect visibility for certain fields
         $name = $data['name'] ?? '';
         $type = $data['type'] ?? '';
         $displayType = $data['display_type'] ?? '';
@@ -540,13 +540,13 @@ class Field extends Dataset {
             $data['visibility_list'] = 0;
         }
         if (in_array($name,['position','parent_id','indent'], true)) {
-            // Sortierung, Vaterdatensatz, Einrücken
-            // wird in der Liste ohnehin visualisiert
+            // Sorting, parent record, indentation
+            // is visualized in the list anyway
             $data['visibility_list'] = 0;
         }
-        // Datumsfeld: Kalender vorauswählen (nicht bei Meta-Feldern)
+        // Date field: preselect the calendar (not for meta fields)
         if (!isset($this->cms->schema[$name])) {
-            // init() belegt details.extension mit '' vor - das ist hier keine Wahl
+            // init() pre-fills details.extension with '' - this is not a choice here
             if (is_array($data['details'] ?? null) && (string)($data['details']['extension'] ?? '') === '') {
                 unset($data['details']['extension']);
             }
@@ -555,11 +555,11 @@ class Field extends Dataset {
     }
 
     /**
-     * Extension eines NEUEN Feldes vorbelegen: ein Datumsfeld (Cms::$dateTypes) mit
-     * Display-Typ 'text' bekommt die Extension Calendar ("nach Feldtyp",
-     * Minutenschritt 1) - sofern sie aktiv ist und keine Extension (auch keine
-     * leere = bewusst "keine") übergeben wurde. Aufgerufen von hookOnCreate()
-     * (Eingabemaske) und FieldApi::create() (KI-Assistent).
+     * Pre-fill the extension of a NEW field: a date field (Cms::$dateTypes) with
+     * display type 'text' gets the extension Calendar ("by field type",
+     * minute step 1) - provided it is active and no extension (also no
+     * empty = deliberately "none") was passed. Called by hookOnCreate()
+     * (input mask) and FieldApi::create() (AI assistant).
      */
     public function presetExtension(array &$data): void
     {
@@ -569,7 +569,7 @@ class Field extends Dataset {
         if (!in_array($type, $this->cms->dateTypes, true) || $displayType !== 'text') return;
         $details = $data['details'] ?? [];
         if (!is_array($details)) {
-            // als JSON-Text übergeben: nicht anfassen
+            // passed as JSON text: do not touch
             if ((string)$details !== '') return;
             $details = [];
         }
@@ -582,22 +582,22 @@ class Field extends Dataset {
     }
 
     /**
-     * Ein Datei-Feld wechselt zwischen ein- und mehrsprachig: Bestand umstellen.
+     * A file field switches between single and multilingual: convert the stock.
      *
-     * Die physischen Dateien heißen je nach Modus {record_id}.{ext} bzw.
-     * {record_id}_{language_id}.{ext} (Cms::mediaFileName()), und `data_fil` führt in
-     * file_language_id, welche Datei eine Zeile meint. Beides muss zum Kennzeichen
-     * des Feldes passen, sonst fänden Frontend und Backend die Dateien nicht mehr.
+     * The physical files are named, depending on the mode, {record_id}.{ext} or
+     * {record_id}_{language_id}.{ext} (Cms::mediaFileName()), and `data_fil` records in
+     * file_language_id which file a row refers to. Both must match the flag
+     * of the field, otherwise frontend and backend would no longer find the files.
      *
-     *     -> mehrsprachig   die Datei wird zur Datei der Hauptsprache der Instanz des
-     *                       Datensatzes; die Zeilen der übrigen Sprachen verweisen
-     *                       darauf (Fallback)
-     *     -> einsprachig    die Datei der Hauptsprache bleibt (umbenannt), Dateien
-     *                       anderer Sprachen werden gelöscht; alle Zeilen bekommen die
-     *                       Metadaten der Hauptsprache und file_language_id NULL
+     *     -> multilingual  the file becomes the file of the main language of the instance of
+     *                       the record; the rows of the other languages point to it
+     *                       (fallback)
+     *     -> single-language  the file of the main language stays (renamed), files of
+     *                       other languages are deleted; all rows get the metadata of
+     *                       the main language and file_language_id NULL
      *
-     * Läuft in der Transaktion von Dataset::save(); die Dateioperationen selbst sind
-     * nicht transaktional.
+     * Runs in the transaction of Dataset::save(); the file operations themselves are
+     * not transactional.
      *
      * @param int  $fieldId
      * @param bool $toMultilingual
@@ -639,7 +639,7 @@ class Field extends Dataset {
                 );
             }
             else {
-                // Dateien anderer Sprachen weg, die der Hauptsprache umbenennen
+                // Remove files of other languages; rename the ones of the main language
                 foreach ($rows as $lang => $row) {
                     $fileLang = $this->cms->fileLanguageId($row);
                     if ($fileLang === null || $fileLang !== (int)$lang) continue; // Fallback-Zeile
@@ -668,18 +668,18 @@ class Field extends Dataset {
     }
 
     /**
-     * Nach dem Laden: die Angaben nachreichen, die nicht in `field` stehen.
+     * After loading: supply the data that is not in `field`.
      *
-     * Zwei Feldtypen haben mehr Ziele, als in eine Spalte passen; ihre Daten liegen in
-     * Kantentabellen und werden hier als Pseudo-Felder in $data gelegt, damit das
-     * Formular sie wie normale Felder behandeln kann:
+     * Two field types have more targets than fit into one column; their data is stored in
+     * edge tables and are placed here as pseudo fields in $data, so that the
+     * form can treat them like normal fields:
      *
-     *     pointer   -> data['rel_area_ids']   aus `rel_field_area`
-     *     fulltext  -> data['source_fields']  aus `rel_fulltext_text`
-     *     thumbnail -> data['converter_ids']  aus `rel_field_converter` (nach position)
+     *     pointer   -> data['rel_area_ids']   from `rel_field_area`
+     *     fulltext  -> data['source_fields']  from `rel_fulltext_text`
+     *     thumbnail -> data['converter_ids']  from `rel_field_converter` (by position)
      *
-     * Database::fetchAll() liefert bei einspaltigen Abfragen eine flache Werteliste,
-     * die Zuweisungen ergeben also direkt ein Id-Array.
+     * Database::fetchAll() returns a flat list of values for single-column queries,
+     * so the assignments directly yield an id array.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -689,7 +689,7 @@ class Field extends Dataset {
         // pointer, link
         // --------------------
         if (in_array($type, $this->cms->multiAreaTypes, true)) {
-            // Die Ids der Ziel-Bereich kommen in der Tabelle `rel_field_area`
+            // The ids of the target areas come from the table `rel_field_area`
             $sql = "SELECT `area_id` FROM `rel_field_area` WHERE `field_id` =?";
             $this->db->query($sql, 'i', [$fieldId]);
             $data['rel_area_ids'] = $this->db->fetchAll();
@@ -698,10 +698,10 @@ class Field extends Dataset {
         // fulltext Felder
         // --------------------
         if ($type == 'fulltext') {
-            // Wenn es sich um ein Fulltextfeld handelt:
-            // dann sind die Quell-Feld-Ids in Tabelle `rel_fulltext_text` gespeichert
-            // Die Ids werden im Pseudofeld data['source_fields'] bereitgestellt
-            // (über ein link-Feld: Schlüssel "{rel_field_id}:{text_field_id}", sourceKey())
+            // If it is a full-text field:
+            // then the source field ids are stored in table `rel_fulltext_text`
+            // The ids are provided in the pseudo field data['source_fields']
+            // (via a link field: key "{rel_field_id}:{text_field_id}", sourceKey())
             $this->db->query("SELECT `rel_field_id`, `text_field_id` FROM `rel_fulltext_text` WHERE `fulltext_field_id`=?", 'i', [$fieldId]);
             $data['source_fields'] = array_map(
                 fn(array $row) => self::sourceKey((int)$row['text_field_id'], (int)($row['rel_field_id'] ?? 0)),
@@ -719,7 +719,7 @@ class Field extends Dataset {
     /**
      * Konverter eines Thumbnail-Feldes in ihrer Reihenfolge (`rel_field_converter`).
      *
-     * @return array  converter_ids, sortiert nach position
+     * @return array  converter_ids, sorted by position
      */
     public function getConverterIds(int $fieldId): array
     {
@@ -731,10 +731,10 @@ class Field extends Dataset {
     }
 
     /**
-     * Thumbnail-Felder, die einen Konverter verwenden (`rel_field_converter`) -
-     * für den Reiter "Verwendet von" der Konverter-Info.
+     * Thumbnail fields that use a converter (`rel_field_converter`) -
+     * for the tab "Used by" of the converter info.
      *
-     * @return array  field_ids, nach Bereich und Position
+     * @return array  field_ids, by area and position
      */
     public function getFieldIdsByConverter(int $converterId): array
     {
@@ -750,29 +750,29 @@ class Field extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: prüfen und Abhängigkeiten geraderücken.
+     * Before saving: check and straighten out dependencies.
      *
-     * Läuft innerhalb der Transaktion von Dataset::save(). Jeder Fehler wird als
-     * Feldfehler registriert und dann als Exception geworfen - dadurch rollt die
-     * Transaktion zurück und das Backend zeigt das Formular erneut an.
+     * Runs within the transaction of Dataset::save(). Every error is
+     * registered as a field error and then thrown as an exception - this rolls
+     * the transaction back and the backend shows the form again.
      *
-     * Der Reihe nach:
+     * In order:
      *
-     *  1. rel_field_id aus $fields entfernen - die Gegenfeld-Id trägt hookOnSaved()
-     *     selbst per UPDATE ein. Bliebe sie in der Liste, würde das Formular (das die
-     *     Spalte nicht kennt) sie beim erneuten Speichern mit 0 überschreiben.
-     *  2. Typ muss in Cms::$types stehen.
-     *  3. Bei Namensänderung: Konflikt mit der globalen Registrierung `fieldname`
-     *     (Name schon für einen anderen Typ vergeben) und reservierte Präfixe prüfen.
-     *  4. display_type 'thumbnail' erzeugt seinen Inhalt selbst -> keine Eingabe.
-     *  5. default_field ist ein Zustand von genau einem Feld je Bereich. Wird es
-     *     gesetzt, verlieren alle anderen Felder des Bereichs das Kennzeichen.
-     *     `area.default_field_id` selbst zieht hookOnSaved() nach - dort steht auch
-     *     bei einem neuen Feld die `field_id` fest (die Gegenrichtung dazu steht in
+     *  1. remove rel_field_id from $fields - hookOnSaved() enters the counter-field id
+     *     itself via UPDATE. If it stayed in the list, the form (which does not know the
+     *     column) would overwrite it with 0 when saving again.
+     *  2. type must be in Cms::$types.
+     *  3. On name change: conflict with the global registration `fieldname`
+     *     (name already assigned to another type) and check reserved prefixes.
+     *  4. display_type 'thumbnail' creates its content itself -> no input.
+     *  5. default_field is a state of exactly one field per area. If it is
+     *     set, all other fields of the area lose the flag.
+     *     `area.default_field_id` itself is updated by hookOnSaved() - there the
+     *     `field_id` is fixed for a new field (the reverse direction is noted in
      *     Area::hookOnSaved()).
-     *  6. Typabhängige Zwangswerte: max = 1 bei den '1'-Typen, custom_order nur
-     *     sinnvoll bei display_type 'lookup' mit n:m-Beziehung, min/max als Anzahl
-     *     bei Array-Typen, Konverterpflicht bei Thumbnails.
+     *  6. Type-dependent forced values: max = 1 for the '1' types, custom_order only
+     *     sensible with display_type 'lookup' and an n:m relation, min/max as count
+     *     for array types, converter required for thumbnails.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
@@ -786,24 +786,24 @@ class Field extends Dataset {
 
         // dest_relation_field
         // --------------------
-        // verhindere, dass beim erneuten Speichern Inhalt verloren geht
-        // (Gegenfeld-Id wird in hookOnSaved manuell eingetragen)
+        // prevent content from being lost when saving again
+        // (counter-field id is entered manually in hookOnSaved)
         $fields = array_diff($fields, ['rel_field_id']);
 
-        // 'reltable' ist kein wählbarer Feldtyp: er ist den fest im Code definierten
-        // Schemata vorbehalten (Inhalt in einer eigenen Relation-Tabelle) und hat
-        // keine data_*-Tabelle, in der ein virtuelles Feld landen könnte.
+        // 'reltable' is not a selectable field type: it is reserved for the schemas
+        // defined firmly in the code (content in its own relation table) and has
+        // no data_* table in which a virtual field could end up.
         $selectableTypes = array_diff($this->cms->types, $this->cms->noColumnTypes);
         if (in_array('type', $fields, true) && !in_array($type, $selectableTypes, true)) {
-            // Feld 'type' wird gespeichert, ist aber nicht bekannt
+            // Field 'type' is saved but not known
             $type = preg_replace('/[^a-z0-9_]/','', $type);
             $this->createFieldError('area.error_field_unknown_type', 'type', $schema['type']['label'] ?? '', $type);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
 
-        // fulltext: nur Quellen des eigenen Bereichs bzw. über eines seiner link-Felder
-        // (fulltextSourceOptions()) - ein Feld eines fremden Bereichs ohne Weg dorthin
-        // schriebe den Volltext an fremde Datensätze
+        // fulltext: only sources of the own area or via one of its link fields
+        // (fulltextSourceOptions()) - a field of a foreign area without a path there
+        // would write the full text to foreign records
         if ($type === 'fulltext' && array_key_exists('source_fields', $data)) {
             $allowed = $this->fulltextSourceOptions($areaId ?: (int)($previousData['area_id'] ?? 0));
             $keys = [];
@@ -819,29 +819,29 @@ class Field extends Dataset {
             $data['source_fields'] = array_values($keys);
         }
 
-        // name - Änderung / Neueintrag
+        // name - change / new entry
         // --------------------
         $nameChanged = in_array('name', $fields, true) && $name !== $previousName;
-        // Volltext-Standardfeld: Name reserviert (siehe Klassenkommentar)
+        // Standard full-text field: name reserved (see class comment)
         if ($nameChanged && $name === self::FULLTEXT) {
             $this->createFieldError('area.error_field_name_reserved', 'name', $schema['name']['label'] ?? '', $name);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
         if ($nameChanged) {
-            // Prüfe, ob Name bereits für Feld eines anderen Typs verwendet wird
+            // Check whether the name is already used for a field of another type
             $sql ="SELECT `type` FROM `fieldname` WHERE `name`=? AND `type` != ? ";
             $this->db->query($sql, 'ss', [$name, $type]);
             if ($this->db->num_rows > 0) {
-                // Ja, Name für anderen Feldtyp reserviert -> Fehlermeldung
+                // Yes, name reserved for another field type -> error message
                 $wrongType = $this->db->fetchNum()[0];
                 $this->createFieldError('area.error_field_name_wrong_type', 'name', $schema['name']['label'] ?? '', $wrongType);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            // Reservierte Prefixes prüfen
+            // Check reserved prefixes
             foreach ($this->fieldPrefixes as $long => $short) {
                 $prefix = $short . '_';
                 if (str_starts_with($name, $prefix) && $type != $long) {
-                    // Prefix ist für anderen Typ reserviert
+                    // Prefix is reserved for another type
                     $this->createFieldError('error_field_reserved_prefix', 'name', $schema['name']['label'] ?? '', $prefix);
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
@@ -850,18 +850,18 @@ class Field extends Dataset {
 
         // visibility
         // --------------------
-        // Thumbnail erlaubt keine Eingabe
+        // Thumbnail does not allow input
         if ($data['display_type'] == 'thumbnail') {
             $data['visibility_input'] = 0;
         }
 
         // multilingual
         // --------------------
-        // Nur für Typen mit sprachabhängiger data_*-Tabelle und nie für Felder auf
-        // Metaspalten von `record` - die Spalten selbst kennen keine Sprache.
-        // Bei einem BESTEHENDEN Feld wird das Kennzeichen hier nicht mehr geschrieben:
-        // der Wechsel geht nur über convert() (siehe Klassenkommentar); die Maske
-        // zeigt es nur an. Thumbnails bleiben ausgenommen - sie erben es unten.
+        // Only for types with a language-dependent data_* table and never for fields on
+        // meta columns of `record` - the columns themselves know no language.
+        // For an EXISTING field the flag is no longer written here:
+        // the change is only possible via convert() (see class comment); the mask
+        // only displays it. Thumbnails are excluded - they inherit it below.
         if ($fieldId > 0) {
             $fields = array_values(array_diff($fields, ['multilingual']));
         }
@@ -873,10 +873,10 @@ class Field extends Dataset {
                 $data['multilingual'] = 0;
             }
         }
-        // Thumbnails erben das Kennzeichen von ihrem Upload-Feld: sie werden aus
-        // dessen Datei erzeugt, je Sprache eine (siehe VirtualFieldsTrait::
-        // writeThumbnails()). hookOnSaved() zieht die Kinder nach, wenn sich das
-        // Upload-Feld ändert.
+        // Thumbnails inherit the flag from their upload field: they are created from
+        // its file, one per language (see VirtualFieldsTrait::
+        // writeThumbnails()). hookOnSaved() updates the children when the
+        // upload field changes.
         if ($type === 'file' && $displayType === 'thumbnail') {
             $parentFieldId = (int)($data['parent_field_id'] ?? 0);
             $data['multilingual'] = 0;
@@ -887,46 +887,46 @@ class Field extends Dataset {
             if (!in_array('multilingual', $fields, true)) $fields[] = 'multilingual';
         }
 
-        // default_field - Änderung / Neueintrag
+        // default_field - change / new entry
         // --------------------
         $isDefaultField = (int)($data['default_field'] ?? 0);
         $wasDefaultField = (int)($previousData['default_field'] ?? 0);
-        if ($isDefaultField !== $wasDefaultField        // Default-Feld Status ändert sich
-            && in_array('default_field', $fields, true) // Feld wird geschrieben
+        if ($isDefaultField !== $wasDefaultField        // Default field status changes
+            && in_array('default_field', $fields, true) // Field is written
         ) {
             if (!empty($isDefaultField)) {
                 // neuer Status: true
-                // Das Default-Feld ist immer sichtbar in der Datensatz-Liste
+                // The default field is always visible in the record list
                 $data['visibility_list'] = 1;
 
-                // Kein anderes Feld des Bereichs kann das default Field bleiben
+                // No other field of the area may remain the default field
                 $this->db->query("UPDATE `field` SET `default_field` = 0 WHERE `area_id` = ?", 'i', [$areaId]);
             }
 
-            // `area.default_field_id` wird erst in hookOnSaved() geschrieben:
-            // Bei einem neuen Feld steht die `field_id` hier noch nicht fest (der
-            // INSERT folgt erst nach diesem Hook), der Fremdschlüssel
-            // area.default_field_id -> field.field_id würde also scheitern.
+            // `area.default_field_id` is only written in hookOnSaved():
+            // For a new field the `field_id` is not yet fixed here (the
+            // INSERT only follows after this hook), so the foreign key
+            // area.default_field_id -> field.field_id would therefore fail.
             $data['__set_default_field'] = !empty($isDefaultField);
         }
 
-        // height: (auto) wird zu 0
+        // height: (auto) becomes 0
         $data['height'] = (int)$data['height'];
 
         // relation
         // --------------------
         if (str_starts_with($type, 'relation')) {
-            // Ziel-Bereich muss ausgewählt sein
+            // Target area must be selected
             if (empty($data['rel_area_id'])) {
                 $this->createFieldError('error_value_mandatory', 'rel_area_id', $schema['rel_area_id']['label']);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            // Typ Relation erlaubt nicht den eigenen Content-Bereich als Zielbereich
+            // Type relation does not allow the own content area as target area
             if ((int)$data['rel_area_id'] === $areaId) {
                 $this->createFieldError('area.error_field_rel_area_id', 'rel_area_id', $schema['rel_area_id']['label'] ?? '', $type);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            // Prüfe, ob Zielbereich existiert
+            // Check whether the target area exists
             $sql = "SELECT 1 FROM `area` WHERE `area_id`=? AND `deleted`=0";
             $this->db->query($sql, 'i', [(int)$data['rel_area_id']]);
             if ($this->db->num_rows == 0) {
@@ -936,7 +936,7 @@ class Field extends Dataset {
             if ($type == 'relation1') {
                 $data['max'] = 1;
             }
-            // custom_order | nur bei Typ 'lookup' und 1:n Relation
+            // custom_order | only for type 'lookup' and 1:n relation
             if ($displayType !== 'lookup' || str_ends_with($type, '1')) {
                 $data['custom_order'] = 0;
             }
@@ -945,15 +945,15 @@ class Field extends Dataset {
         // pointer
         // --------------------
         if (str_starts_with($type, 'pointer')) {
-            // In typify wurden die ausgewählten Ids der Zielbereiche bereits in einen String umgewandelt,
+            // In typify the selected ids of the target areas were already converted into a string,
             // (char-Feld laut Schema)
-            // Dieser String wird in hookOnSaved verarbeitet
+            // This string is processed in hookOnSaved
             $relAreaIds = $this->system->sanitizeIds((array)($data['rel_area_ids'] ?? []), removeZero:true);
             $data['__rel_area_ids'] = $relAreaIds;
-            // im char-Feld selbst landet nichts
+            // nothing ends up in the char field itself
             $data['rel_area_ids'] = '';
 
-            // Validierung (nur bei Typ pointer)
+            // Validation (only for type pointer)
             if (empty($relAreaIds)) {
                 $label = $schema['rel_area_ids']['label'] ?? 'rel_area_ids';
                 $this->createFieldError('error_value_mandatory', 'rel_area_ids', $label);
@@ -963,17 +963,17 @@ class Field extends Dataset {
                 $data['max'] = 1;
             }
 
-            // custom_order | nur bei Typ 'lookup' und 1:n Relation
+            // custom_order | only for type 'lookup' and 1:n relation
             if ($displayType !== 'lookup' || str_ends_with($type, '1')) {
                 $data['custom_order'] = 0;
             }
         }
 
-        // link - fest verknüpfte Inhalte (1:n), siehe Klassenkommentar
+        // link - firmly linked content (1:n), see class comment
         // --------------------
         if ($type === 'link') {
-            // Zielbereiche wie beim pointer (rel_field_area, hookOnSaved()) - aber nur
-            // abhängige Datensatzbereiche (area.dependent = 1)
+            // target areas as with pointer (rel_field_area, hookOnSaved()) - but only
+            // dependent record areas (area.dependent = 1)
             $relAreaIds = $this->system->sanitizeIds((array)($data['rel_area_ids'] ?? []), removeZero:true);
             $data['rel_area_ids'] = '';
             $label = $schema['rel_area_ids']['label'] ?? 'rel_area_ids';
@@ -994,43 +994,43 @@ class Field extends Dataset {
             }
             $data['__rel_area_ids'] = $relAreaIds;
 
-            // Darstellung: Suchfenster oder eingebettete Eingabemasken
+            // Display: search window or embedded input masks
             if (!in_array($displayType, ['lookup', 'embed'], true)) {
                 $data['display_type'] = $displayType = 'lookup';
             }
-            // Die Reihenfolge der Zieldatensätze ist immer Handarbeit (data_rel.position),
-            // eine Höchstzahl gibt es nicht - das Feld hält beliebig viele Inhalte
+            // The order of the target records is always manual (data_rel.position),
+            // there is no maximum - the field holds any number of contents
             $data['custom_order'] = 1;
             $data['max'] = '';
         }
 
-        // Array-Typen: min/max zählen Elemente, nicht Zeichen
+        // Array types: min/max count elements, not characters
         // --------------------
-        // Deshalb hängen min und das Flag 'not_empty' zusammen und werden hier in
-        // beide Richtungen synchron gehalten: not_empty erzwingt min >= 1, und ein
-        // min > 0 erzwingt umgekehrt das Flag. Sonst könnte die Validierung ein
-        // leeres Feld durchlassen, das laut min mindestens ein Element braucht.
+        // Therefore min and the flag 'not_empty' belong together and are kept here in
+        // sync in both directions: not_empty enforces min >= 1, and a
+        // min > 0 conversely enforces the flag. Otherwise the validation could let through an
+        // empty field that according to min needs at least one element.
         if (in_array($type, $this->cms->arrayTypes, true)) {
-            // "Anzahl" wird in min / max behandelt
-            // -> not_empty kann in min integriert werden
+            // "Count" is handled in min / max
+            // -> not_empty can be merged into min
             if ($data['min'] !== '') $data['min'] = (int)$data['min'];
             if ($data['max'] !== '') $data['max'] = (int)$data['max'];
 
-            // min kann nicht 0 bleiben wenn Flag 'not_empty' gesetzt ist
+            // min cannot remain 0 if flag 'not_empty' is set
             $flags = (array)($data['flags'] ?? []);
             if (in_array('not_empty', $flags)) {
                $data['min'] = max($data['min'], 1);
             }
 
-            // umgekehrt: wenn min > 0 muss 'not_empty' gesetzt sein
+            // conversely: if min > 0, 'not_empty' must be set
             if ($data['min'] > 0) {
                 $data['flags'] = array_diff($flags, ['not_empty']);
                 $data['flags'][] = 'not_empty';
             }
         }
 
-        // Extension (13 §3.3): muss aktiv sein und zu Feld- und Display-Typ passen;
-        // ohne Extension entfallen auch ihre Optionen
+        // Extension (developer docs, chapter 08 (Components and extensions)): must be active and match the field and display type;
+        // without extension its options are dropped as well
         if (isset($data['details']) && is_array($data['details'])) {
             $extension = trim((string)($data['details']['extension'] ?? ''));
             if ($extension !== '') {
@@ -1051,13 +1051,13 @@ class Field extends Dataset {
         }
 
         if (in_array($type, $this->cms->relationTypes, true)) {
-            // Zielbereiche nur aus der eigenen Instanz und deren lesbaren Instanzen
-            // (targetInstanceIds()) - geprüft werden nur NEU hinzukommende Ziele:
-            // ein bestehendes Ziel außerhalb bleibt gültig, bis es abgewählt wird
+            // Target areas only from the own instance and its readable instances
+            // (targetInstanceIds()) - only NEWLY added targets are checked:
+            // an existing target outside stays valid until it is deselected
             $newTargetIds = in_array($type, $this->cms->multiAreaTypes, true)
                 ? (array)($data['__rel_area_ids'] ?? [])
                 : [(int)$data['rel_area_id']];
-            // (bisherige Ziele: hookOnLoaded() legt rel_area_ids aus `rel_field_area` ab)
+            // (existing targets: hookOnLoaded() stores rel_area_ids from `rel_field_area`)
             $previousTargetIds = in_array($type, $this->cms->multiAreaTypes, true)
                 ? array_map('intval', (array)($previousData['rel_area_ids'] ?? []))
                 : [(int)($previousData['rel_area_id'] ?? 0)];
@@ -1077,18 +1077,18 @@ class Field extends Dataset {
                 }
             }
 
-            // Wenn aufgrund des gewählten DisplayTypes nur eine Verknüpfung erstellt werden kann,
-            // dann stelle 'max' auf 1 - das hilft in TemporaryTrait::_copyRelationsBack()
+            // If the chosen display type can only create one link,
+            // set 'max' to 1 - this helps in TemporaryTrait::_copyRelationsBack()
             if (in_array($displayType, ['radio', 'select'])) {
                 $data['max'] = '1';
             }
-            // ausführliche Lookup-Vorschau: 0/1 (ein ausgeschalteter Switch steht
-            // nicht im POST), nur bei display_type 'lookup' von Bedeutung
+            // detailed lookup preview: 0/1 (a switched-off switch is not
+            // sent in the POST), only relevant for display_type 'lookup'
             if (isset($data['details']) && is_array($data['details'])) {
                 $data['details']['lookup_detailed'] = (!empty($data['details']['lookup_detailed']) && $displayType === 'lookup') ? 1 : 0;
             }
 
-            // Wenn min oder max 0 ist, dann '' speichern = Limit nicht beachten
+            // If min or max is 0, save '' = ignore the limit
             if (empty($data['min'])) $data['min'] = '';
             if (empty($data['max'])) $data['max'] = '';
         }
@@ -1096,18 +1096,18 @@ class Field extends Dataset {
         // thumbnail: converter-selection
         if ($type === 'file') {
             if ($displayType === 'thumbnail') {
-                // Reihenfolge der Eingabe (sortable) bleibt, Dubletten und Fremdes fallen weg
+                // Input order (sortable) is kept, duplicates and foreign entries are dropped
                 $data['converter_ids'] = $this->system->sanitizeIds((array)($data['converter_ids'] ?? []), true);
                 if (empty($data['converter_ids'])) {
                     $label = $this->schema['converter_ids']['label'] ?? 'converter_ids';
                     $this->createFieldError('error_value_mandatory', 'converter_ids', $label);
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
-                // (ältere Daten: die Ids lagen in details - dort nichts mehr führen)
+                // (older data: the ids were in details - do not keep them there anymore)
                 if (isset($data['details']) && is_array($data['details'])) unset($data['details']['converter_ids']);
             }
-            // user_auth: Profil-Bereiche nur mit gesetztem Schalter, und nur
-            // bestehende Bereiche vom Typ 'profile'
+            // user_auth: profile areas only with the switch set, and only
+            // existing areas of type 'profile'
             if (isset($data['details']) && is_array($data['details'])) {
                 $data['details']['user_auth'] = empty($data['details']['user_auth']) ? 0 : 1;
                 $ids = $this->system->sanitizeIds((array)($data['details']['profile_area_ids'] ?? []), true);
@@ -1129,9 +1129,9 @@ class Field extends Dataset {
 
         // name == slug
         if ($name === 'slug') {
-            // Der Slug ist ein spezielles Feld, das als URI der Datensätze verwendet wird
-            // Daher ist 'unique' (über die Content-Bereiche hinweg) zwingend - beim Slug
-            // bedeutet es: eindeutiger URL-Pfad [Slug-Prefix des Bereichs/]slug, siehe
+            // The slug is a special field that is used as the URI of the records
+            // Therefore 'unique' (across the content areas) is mandatory - for the slug
+            // it means: unique URL path [slug prefix of the area/]slug, see
             // Record::slugPathOk()
             $flags = (array)($data['flags'] ?? []);
             $data['flags'] = array_diff($flags, ['unique', 'unique_in_area']);
@@ -1140,21 +1140,21 @@ class Field extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: die Nebentabellen nachziehen.
+     * After saving: update the side tables.
      *
-     * Erst hier steht bei einem neuen Feld die `field_id` fest - alles, was sie braucht,
-     * gehört deshalb in diesen Hook und nicht in hookOnSave(). Ebenfalls innerhalb der
-     * Transaktion.
+     * Only here is the `field_id` fixed for a new field - everything that needs it
+     * therefore belongs in this hook and not in hookOnSave(). Also within the
+     * transaction.
      *
-     *     area               `default_field_id` auf dieses Feld setzen bzw. leeren
-     *     fieldname          Namenseintrag anlegen bzw. den alten aufräumen
-     *     field (Gegenseite) bei 'relation' das Gegenfeld im Zielbereich erzeugen
-     *     rel_field_area     bei 'pointer' die Zielbereiche neu schreiben
-     *     rel_fulltext_text  bei 'fulltext' die Quellfelder neu schreiben
-     *     rel_field_converter  bei Thumbnails die Konverter neu schreiben (mit position)
+     *     area               set `default_field_id` to this field or clear it
+     *     fieldname          create the name entry or clean up the old one
+     *     field (counterpart) for 'relation', create the counter field in the target area
+     *     rel_field_area     for 'pointer', rewrite the target areas
+     *     rel_fulltext_text  for 'fulltext', rewrite the source fields
+     *     rel_field_converter  for thumbnails, rewrite the converters (with position)
      *
-     * Das Muster "erst DELETE, dann INSERT der ganzen Liste" ist Absicht: es spart den
-     * Vergleich alt/neu und ist innerhalb der Transaktion gefahrlos.
+     * The pattern "first DELETE, then INSERT the whole list" is intentional: it saves the
+     * old/new comparison and is safe within the transaction.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {   
@@ -1171,38 +1171,38 @@ class Field extends Dataset {
 
         // default_field
         // --------------------
-        // Nachtrag zu hookOnSave(): erst hier ist die `field_id` bekannt
+        // Addendum to hookOnSave(): only here is the `field_id` known
         if (array_key_exists('__set_default_field', $data)) {
             if ($data['__set_default_field']) {
                 // Default-Feld in Inhaltsbereich eintragen
                 $this->db->query("UPDATE `area` SET `default_field_id` = ? WHERE `area_id` = ?", 'ii', [$fieldId, $areaId]);
             }
             else {
-                // Default-Feld aus Inhaltsbereich entfernen
+                // Remove default field from the content area
                 $this->db->query("UPDATE `area` SET `default_field_id` = NULL WHERE `area_id` = ?", 'i', [$areaId]);
             }
         }
 
         // multilingual
         // --------------------
-        // (Der Wechsel ein-/mehrsprachig eines bestehenden Feldes läuft nicht mehr
-        //  über save(), sondern über convert() -> applyMultilingualChange();
-        //  hookOnSave() nimmt das Kennzeichen aus $fields.)
+        // (Switching an existing field between single and multilingual no longer
+        //  runs via save(), but via convert() -> applyMultilingualChange();
+        //  hookOnSave() takes the flag out of $fields.)
 
         // name
         // --------------------
         $nameChanged = !$isNew && in_array('name', $fields, true) && $name !== $previousName;
         if ($isNew || $nameChanged) {
-            // Eintrag in fieldname (wenn nicht bereits vorhanden)
-            // Bei falschem Typ: Rückgabe ist verwendeter Typ
+            // Entry in fieldname (if not already present)
+            // On wrong type: the return value is the type in use
             if ($wrongType = $this->createFieldname($name, $type)) {
                 // Name-Typ-Konflikt
                 $this->createFieldError('area.error_field_name_wrong_type', 'name', $this->schema['name']['label'] ?? '', (string)$wrongType);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            // Id nachschlagen, nicht insert_id: gab es den Namen schon (ein anderes
-            // Feld desselben Typs trägt ihn), hat createFieldname() nichts eingefügt -
-            // insert_id wäre 0 und die Daten verlören beim Umbenennen ihren Namen
+            // Look up the id, not insert_id: if the name already existed (another
+            // field of the same type carries it), createFieldname() inserted nothing -
+            // insert_id would be 0 and the data would lose its name on renaming
             $this->db->query("SELECT `fieldname_id` FROM `fieldname` WHERE `name` = ?", 's', [$name]);
             $fieldnameId = (int)($this->db->fetchNum()[0] ?? 0);
             if ($fieldnameId < 1) {
@@ -1210,8 +1210,8 @@ class Field extends Dataset {
             }
 
             if ($nameChanged) {
-                // Daten in der Data-Tabelle haben noch alte fieldname_id gespeichert,
-                // jetzt anpassen
+                // Rows in the data table still store the old fieldname_id,
+                // now adjust them
                 $previousDataSuffix = $this->cms->dataSuffix[$previousData['type']] ?? null;
                 if (!$previousDataSuffix) {
                     throw new \Exception('Internal error: previousData[type] is undefined.');
@@ -1219,26 +1219,25 @@ class Field extends Dataset {
                 $sql = "UPDATE `data_{$previousDataSuffix}` SET `fieldname_id` = ? WHERE `field_id` = ?";
                 $this->db->query($sql, 'ii', [$fieldnameId, $fieldId]);
 
-                // Prüfen ob Eintrag in `fieldname` gelöscht werden kann
+                // Check whether the entry in `fieldname` can be deleted
                 $this->cleanupFieldname($previousName);
             }
         }
 
-        // type Änderung
+        // type change
         // --------------------
-        // Nur über convert() - die Eingabemaske hält den Typ fest (formStatic)
+        // Only via convert() - the input mask keeps the type fixed (formStatic)
         $typeChanged = !$isNew && in_array('type', $fields, true) && $type !== $previousType;
         if ($typeChanged) {
             throw new \Exception("Internal Error: type changed");
         }
         /*
             ENTWURF
-            // Typenänderung wird nur begrenzt in der Eingabemaske erlaubt.
-            // Gewährleistet ist in diesem Fall, dass Daten 1:1 von einer data_Tabelle in eine andere
-            // kopiert werden können.
-            // Restliche Typenänderungen erfolgen über spezielle Konvertierungs-Tools. (GEPLANT)
+            // Type change is only allowed to a limited extent in the input mask.
+            // In this case it is ensured that data can be copied 1:1 from one data_ table to another.
+            // Other type changes are made via special conversion tools. (PLANNED)
             if ($typeChanged) {
-                // fieldname_id wurde bereits in der alten Tabelle angepasst
+                // fieldname_id has already been adjusted in the old table
                 $dataSuffix = $this->cms->dataSuffix[$data['type']] ?? null;
                 $previousDataSuffix = $this->cms->dataSuffix[$previousData['type']] ?? null;
                 if (!empty($dataSuffix) && !empty($previousDataSuffix)
@@ -1261,13 +1260,13 @@ class Field extends Dataset {
             if (!$isNew) {
                 $previousRelAreaId = (int)$previousData['rel_area_id'];
 
-                // Wurde Zielbereich geändert?
+                // Was the target area changed?
                 if ($relAreaId != $previousRelAreaId) {
-                    // Lösche altes Zielfeld
-                    // (löscht auch alle gespeicherten Verknüpfungen darin).
-                    // VORHER den eigenen Verweis darauf lösen: fk_field_rel_field
-                    // steht auf ON DELETE CASCADE - mit rel_field_id auf das alte
-                    // Gegenfeld risse dessen DELETE dieses Feld selbst mit
+                    // Delete old target field
+                    // (also deletes all saved links in it).
+                    // FIRST release its own reference to it: fk_field_rel_field
+                    // is ON DELETE CASCADE - with rel_field_id pointing to the old
+                    // counter field, its DELETE would take this field along
                     $relFieldId = (int)$previousData['rel_field_id'];
                     $this->db->query("UPDATE `field` SET `rel_field_id` = NULL WHERE `field_id` = ?", 'i', [$fieldId]);
                     if ($relFieldId > 0) {
@@ -1279,16 +1278,16 @@ class Field extends Dataset {
                 }
             }
 
-            // Neues Ziel-Relationfeld (Gegenfeld) im Zielbereich anlegen
+            // Create new target relation field (counter field) in the target area
             // --------------------
-            // Das Gegenfeld macht die Verknüpfung von der anderen Seite sichtbar. Es
-            // wird bewusst mit direktem INSERT angelegt und nicht über save(): das
-            // liefe rekursiv in diesen Hook und würde ein Gegenfeld zum Gegenfeld
-            // erzeugen. Es bleibt unsichtbar (visibility_* bleiben auf 0, weil sie
-            // im INSERT gar nicht vorkommen und die Spaltendefaults greifen).
+            // The counter field makes the link visible from the other side. It is
+            // deliberately created with a direct INSERT and not via save(): that
+            // would recurse into this hook and create a counter field for the counter field.
+            // It stays invisible (visibility_* stay 0, because they do not occur in the
+            // INSERT at all and the column defaults apply).
             if ($isNew || $flagCreateNewField) {
-                // Bereichs-Name des Quellfeldes wird Name des Zielfeldes
-                // Bereichs-Label des Quellfeldes wird Label des Zielfeldes
+                // Area name of the source field becomes the name of the target field
+                // Area label of the source field becomes the label of the target field
                 $sql = "SELECT `name`, `label` FROM `area` WHERE `area_id` =? AND `deleted`=0";
                 $this->db->query($sql, 'i', [$areaId]);
                 if ($this->db->num_rows < 1) {
@@ -1297,7 +1296,7 @@ class Field extends Dataset {
                 $areaData = $this->db->fetch();
                 $areaLabel = $areaData['label'];
                 $areaName = $areaData['name'];
-                // Freien Name mit Prefix "rel_{$areaName}" im Zielbereich ermitteln
+                // Determine a free name with prefix "rel_{$areaName}" in the target area
                 $relFieldName = $this->generateUniqueFieldName('rel_' . $areaName, $relAreaId);
 
                 $sql = "SELECT COALESCE(MAX(`position`), 0) + 1 FROM `field` WHERE `area_id` =?";
@@ -1305,10 +1304,10 @@ class Field extends Dataset {
                 $position = $this->db->fetchNum()[0];
 
                 // Fieldname-Eintrag erstellen
-                // (Rückgabewert spielt keine Rolle, weil Prefix 'rel_' für Typ 'relation' reserviert ist)
+                // (return value does not matter, because prefix 'rel_' is reserved for type 'relation')
                 $this->createFieldname($name, 'relation');
 
-                // Erstelle Daten für das Zielfeld
+                // Create data for the target field
                 $relFieldData = [
                     'area_id' => $relAreaId,    // Zielbereich
                     'rel_area_id' => $areaId,   // Quellbereich
@@ -1321,7 +1320,7 @@ class Field extends Dataset {
                     // visibility: 0,0,0
                 ];
 
-                // Query erstellen und absenden
+                // Build and send the query
                 $columns = implode("`,`", array_keys($relFieldData));
                 $placeholders = implode(',', array_fill(0, count($relFieldData), '?'));
                 $types = 'iiiissss';
@@ -1331,7 +1330,7 @@ class Field extends Dataset {
                     throw new \Exception("hookOnSave(): destination field could not be created!");
                 }
 
-                // Id des Zielfeldes in Quellfeld eintragen / aktualisieren
+                // Enter / update the id of the target field in the source field
                 $relFieldId = (int)$this->db->insert_id;
                 $sql = "UPDATE `field` SET `rel_field_id`=? WHERE `field_id`=? ";
                 $this->db->query($sql, 'ii', [$relFieldId, $fieldId]
@@ -1346,7 +1345,7 @@ class Field extends Dataset {
         // --------------------
         if (in_array($type, $this->cms->multiAreaTypes, true)) {
             $data['rel_area_ids'] = (array)$data['__rel_area_ids']; // see hookOnSave
-            // link: die Textfelder der Zielbereiche gehen in den Standard-Volltext ein
+            // link: the text fields of the target areas flow into the standard full text
             if ($type === 'link' && !$isNew) {
                 $old = array_map('intval', (array)($previousData['rel_area_ids'] ?? []));
                 $new = array_map('intval', $data['rel_area_ids']);
@@ -1358,7 +1357,7 @@ class Field extends Dataset {
             $sql = "DELETE FROM `rel_field_area` WHERE `field_id`=?";
             $this->db->query($sql, 'i', [$fieldId]);
             foreach ($data['rel_area_ids'] as $destAreaId) {
-                // foreign key gewährleistet, dass area_id in Tabelle area existiert
+                // foreign key ensures that area_id exists in table area
                 $sql = "INSERT INTO `rel_field_area` SET `field_id`=?, `area_id`=?";
                 $this->db->query($sql, 'ii', [$fieldId, $destAreaId]);
             }
@@ -1373,18 +1372,18 @@ class Field extends Dataset {
             !$isNew && $max < $previousMax 
             && in_array($type, $this->cms->relationTypes, true)
         ) {
-            // Maximale Auswahl wird verringert
-            // -> prüfe Verknüpfungen über dieses Feld
-            // entferne Verknüpfungen über das neue Maximum hinaus (sortiert nach eingesteller Sortierung)
+            // Maximum selection is reduced
+            // -> check links via this field
+            // remove links beyond the new maximum (sorted by the set order)
             // ...
         }
 
         // fulltext
         // --------------------
         if ($type == 'fulltext') {
-            // Bei einem Fulltext-Feld werden die Ids der Quell-Felder in Tabelle `rel_fulltext_text` gespeichert
-            // Die Ids wurden im Pseudofeld data['source_fields'] gesammelt
-            // Schlüssel siehe sourceKey(): über ein link-Feld mit `rel_field_id`
+            // For a full-text field the ids of the source fields are stored in table `rel_fulltext_text`
+            // The ids were collected in the pseudo field data['source_fields']
+            // key see sourceKey(): via a link field with `rel_field_id`
             $keys = array_map('strval', (array)($data['source_fields'] ?? []));
             $this->db->query("SELECT `rel_field_id`, `text_field_id` FROM `rel_fulltext_text` WHERE `fulltext_field_id`=?", 'i', [$fieldId]);
             $previousKeys = array_map(fn(array $row) => (string)self::sourceKey((int)$row['text_field_id'], (int)($row['rel_field_id'] ?? 0)), $this->db->fetchAll());
@@ -1396,8 +1395,8 @@ class Field extends Dataset {
                     'iii', [$fieldId, $relFieldId > 0 ? $relFieldId : null, $textFieldId]
                 );
             }
-            // Neues Volltextfeld oder andere Quellen: der Bestand passt nicht mehr -
-            // nicht sofort neu aufbauen, nur markieren (FulltextState)
+            // New full-text field or other sources: the stock no longer matches -
+            // do not rebuild immediately, only mark it (FulltextState)
             sort($keys);
             sort($previousKeys);
             if ($isNew || $keys !== $previousKeys) {
@@ -1407,9 +1406,9 @@ class Field extends Dataset {
 
         // thumbnail: Konverter
         // --------------------
-        // Nur wenn das Feld übergeben wurde - ein save() mit Feldliste ohne
-        // 'converter_ids' lässt die Zuordnung stehen. `position` ist die Reihenfolge
-        // der Eingabe (display_type 'sortable'), hookOnSave() hat die Ids bereinigt.
+        // Only if the field was passed - a save() with a field list without
+        // 'converter_ids' leaves the assignment as it is. `position` is the order
+        // of the input (display_type 'sortable'); hookOnSave() has cleaned up the ids.
         $displayType = (string)($data['display_type'] ?? $previousData['display_type'] ?? '');
         if ($type === 'file' && $displayType === 'thumbnail' && array_key_exists('converter_ids', $data)) {
             $ids = $this->system->sanitizeIds((array)$data['converter_ids'], true);
@@ -1431,27 +1430,27 @@ class Field extends Dataset {
 
         // Field 'position'
         // --------------------
-        // Default-Sortierung des Bereichs automatisch auf 'position ASC' umstellen
+        // Automatically switch the default sorting of the area to 'position ASC'
         if ($name === 'position') {
             // Default-Feld in Inhaltsbereich eintragen
             $this->db->query("UPDATE `area` SET `sort_field_id` = ?, `sort_order` = 'ASC' WHERE `area_id` = ?", 'ii', [$fieldId, $areaId]);
-            // Ohne `position`-Feld pflegt der Bereich keine Reihenfolge - die
-            // vorhandenen Datensätze tragen dann alle denselben Wert. Beim Anlegen
-            // des Feldes werden sie deshalb einmal durchnummeriert, sonst wäre die
-            // erste angezeigte Reihenfolge zufällig.
+            // Without a `position` field the area maintains no order - the
+            // existing records then all carry the same value. When the field is created
+            // they are therefore numbered once, otherwise the first displayed order
+            // would be random.
             if ($isNew || $nameChanged) {
                 $this->recordDataset()->normalizePositions($areaId);
             }
         }
 
-        // Field 'parent_id' - der Bereich bekommt (oder verliert) seinen Baum
+        // Field 'parent_id' - the area gets (or loses) its tree
         // --------------------
-        // Ein Bereich führt genau dann einen Baum, wenn er ein Eingabefeld
-        // `parent_id` hat (siehe TreeManagerTrait). Wird es angelegt, sind alle
-        // vorhandenen Datensätze zunächst Wurzelknoten und bekommen erstmalig
-        // lft/rgt/depth/parent_ids; wird es weg-umbenannt, ist der Bereich wieder
-        // flach und die Baumfelder werden zurückgesetzt (wie beim Löschen des
-        // Feldes, siehe hookOnDeleted()).
+        // An area has a tree exactly when it has an input field
+        // `parent_id` (see TreeManagerTrait). When it is created, all
+        // existing records are initially root nodes and get
+        // lft/rgt/depth/parent_ids for the first time; when it is renamed away, the area is flat again
+        // and the tree fields are reset (as when the field is deleted,
+        // see hookOnDeleted()).
         $wasParentField = ($previousName === 'parent_id');
         $isParentField  = ($name === 'parent_id');
         if ($isParentField && ($isNew || $nameChanged)) {
@@ -1461,13 +1460,13 @@ class Field extends Dataset {
             $this->recordDataset()->resetTreeFields($areaId);
         }
 
-        // Datei-Felder: Feld-Sperre im Medienverzeichnis (details.user_auth)
+        // File fields: field lock in the media directory (details.user_auth)
         // --------------------
-        // Die .htaccess im Verzeichnis media/{instance_id}/{field_id} wird bei
-        // jedem Speichern mit dem Schalter abgeglichen - auch bei einem neuen Feld,
-        // damit das Verzeichnis samt Sperre schon vor dem ersten Upload steht.
-        // ($data['details'] liegt hier bereits JSON-kodiert vor - Dataset::save()
-        //  hat die Spalte für das Schreiben umgewandelt)
+        // The .htaccess in the directory media/{instance_id}/{field_id} is reconciled
+        // with the switch on every save - also for a new field,
+        // so that the directory including the lock already exists before the first upload.
+        // ($data['details'] is already JSON-encoded here - Dataset::save()
+        //  has converted the column for writing)
         if ($type === 'file' && in_array('details', $fields, true)) {
             $details = is_array($data['details'] ?? null)
                 ? $data['details']
@@ -1480,26 +1479,26 @@ class Field extends Dataset {
     }
 
     /**
-     * Vor dem Löschen.
+     * Before deleting.
      *
-     * Fast alles erledigt die Datenbank per Fremdschlüssel: die `data_*`-Zeilen hängen
-     * mit ON DELETE CASCADE an `field`, ebenso das Gegenfeld einer Relation und die
-     * Einträge in `rel_field_area` / `rel_fulltext_text` / `rel_field_converter`.
-     * `area.default_field_id` wird per Constraint geleert.
+     * The database handles almost everything via foreign keys: the `data_*` rows hang
+     * with ON DELETE CASCADE to `field`, likewise the counter field of a relation and the
+     * entries in `rel_field_area` / `rel_fulltext_text` / `rel_field_converter`.
+     * `area.default_field_id` is cleared via constraint.
      *
-     * Übrig bleibt der Eintrag in der globalen Namensregistrierung `fieldname`.
+     * What remains is the entry in the global name registry `fieldname`.
      */
     protected function hookOnDelete(array $data): void
     {
         $fieldId = (int)($data['field_id'] ?? 0);
         if (empty($fieldId)) {
-            // (Dieser Fall kommt nie vor, weil Dataset::load() erfolgreich war)
+            // (This case never occurs, because Dataset::load() succeeded)
             throw new \Exception("hookOnDelete(): data[field_id] is empty!");
         }
 
-        // Bereiche, deren Volltext das Feld als Quelle hat - nach dem Löschen als
-        // veraltet markieren (die Zeilen in `rel_fulltext_text` verschwinden per
-        // Fremdschlüssel, auch die über ein gelöschtes link-Feld)
+        // Areas whose full text has the field as source - after deleting, mark them as
+        // stale (the rows in `rel_fulltext_text` disappear via
+        // foreign key, also those via a deleted link field)
         $type = (string)($data['type'] ?? '');
         $this->fulltextOfDeleted = [];
         if (in_array($type, self::FULLTEXT_SOURCE_TYPES, true) && (string)($data['display_type'] ?? '') !== 'thumbnail') {
@@ -1509,56 +1508,56 @@ class Field extends Dataset {
             $this->fulltextOfDeleted = [(int)($data['area_id'] ?? 0)];
         }
 
-        // (`default_field_id` in Tabelle `area` wird per Contraint entfernt)
-        // (der Eintrag in `fieldname` wird in hookOnDeleted() geprüft - solange die
-        //  `field`-Zeile noch steht, hielte sie ihren eigenen Namen fest)
+        // (`default_field_id` in table `area` is removed via constraint)
+        // (the entry in `fieldname` is checked in hookOnDeleted() - as long as the
+        //  `field` row still exists, it would hold on to its own name)
     }
 
     /**
-     * Nach dem Löschen.
+     * After deleting.
      *
-     * Erst hier ist die `field`-Zeile wirklich weg - beides unten braucht das:
+     * Only here is the `field` row really gone - both points below need this:
      *
-     *     fieldname   der Namenseintrag darf nur fallen, wenn ihn kein Feld mehr
-     *                 benutzt. Solange die eigene Zeile noch stünde, wäre die Prüfung
-     *                 immer negativ (das war der TODO in hookOnDelete()).
-     *     parent_id   war es DAS Treefeld des Bereichs, führt der Bereich ab jetzt
-     *                 keinen Baum mehr: alle seine Datensätze werden flach gemacht
-     *                 (parent_id = NULL, lft/rgt/depth = 0, parent_ids = []). Sonst
-     *                 blieben Verweise und Nested-Set-Grenzen stehen, die niemand
-     *                 mehr pflegt, über die aber weiterhin gefiltert würde.
-     *                 Die Anzeigereihenfolge des Baums bleibt als `position` erhalten.
+     *     fieldname   the name entry may only be dropped if no field uses it anymore
+     *                 used. As long as its own row still existed, the check would
+     *                 always be negative (this was the TODO in hookOnDelete()).
+     *     parent_id   if it was THE tree field of the area, the area no longer has a tree from now on:
+     *                 all its records are flattened
+     *                 (parent_id = NULL, lft/rgt/depth = 0, parent_ids = []). Otherwise
+     *                 references and nested-set boundaries would remain that nobody
+     *                 maintains anymore, but which would still be filtered by.
+     *                 The display order of the tree is kept as `position`.
      */
     protected function hookOnDeleted(array $data): void
     {
         $name   = (string)($data['name']    ?? '');
         $areaId = (int)   ($data['area_id'] ?? 0);
 
-        // Prüfe ob alter Name in `fieldname` entfernt werden kann
+        // Check whether the old name in `fieldname` can be removed
         $this->cleanupFieldname($name);
 
-        // Treefeld entfernt -> Bereich ist wieder flach
+        // tree field removed -> area is flat again
         if ($name === 'parent_id' && $areaId > 0) {
             $this->recordDataset()->resetTreeFields($areaId);
         }
 
-        // Volltext enthält noch die Inhalte des gelöschten Feldes: als veraltet
+        // the full text still contains the content of the deleted field: mark as stale
         // markieren statt sofort neu aufzubauen (FulltextState)
         $this->fulltextState()->markStale($this->fulltextOfDeleted);
         $this->fulltextOfDeleted = [];
     }
 
-    // Zielbereiche der Verweisfelder
+    // Target areas of the reference fields
     // ====================
 
     /**
-     * Instanzen, aus denen ein Verweisfeld (relation, pointer, link) eines Bereichs
-     * seine Zielbereiche wählen darf: die Instanz des Bereichs und deren lesbare
-     * Instanzen (`readable_instances`, siehe InstanceCache) - nur deren Datensätze
-     * sieht das Frontend der Instanz.
+     * Instances from which a reference field (relation, pointer, link) of an area
+     * may choose its target areas: the instance of the area and its readable
+     * instances (`readable_instances`, see InstanceCache) - only their records
+     * are visible to the frontend of the instance.
      *
-     * @param int $areaId  Quellbereich (der Bereich des Feldes)
-     * @return int[]       instance_ids, die eigene zuerst; [0] bei unbekanntem Bereich
+     * @param int $areaId  source area (the area of the field)
+     * @return int[]       instance_ids, own one first; [0] for unknown area
      */
     public function targetInstanceIds(int $areaId): array
     {
@@ -1577,16 +1576,16 @@ class Field extends Dataset {
     }
 
     /**
-     * Verknüpfungen (`data_rel`) eines pointer-/link-Feldes, deren Zieldatensatz in
-     * keinem der Bereiche $areaIds liegt - gezählt je Zielbereich, bevor die
-     * Zielbereiche des Feldes geändert werden (FieldBackend::_editSave()).
+     * Links (`data_rel`) of a pointer/link field whose target record lies in
+     * none of the areas $areaIds - counted per target area before the
+     * target areas of the field are changed (FieldBackend::_editSave()).
      *
-     * Arbeitskopien zählen mit: die Kanten eines ausgecheckten Quelldatensatzes
-     * verschwinden beim Bereinigen ebenso (removeRelationsOutside()).
+     * Working copies count too: the edges of a checked-out source record
+     * disappear during cleanup likewise (removeRelationsOutside()).
      *
      * @param int   $fieldId
-     * @param int[] $areaIds  die künftigen Zielbereiche
-     * @return array          area_id => Anzahl Kanten; leer, wenn nichts betroffen ist
+     * @param int[] $areaIds  the future target areas
+     * @return array          area_id => number of edges; empty if nothing is affected
      */
     public function countRelationsOutside(int $fieldId, array $areaIds): array
     {
@@ -1608,14 +1607,14 @@ class Field extends Dataset {
     }
 
     /**
-     * Verknüpfungen (`data_rel`) eines pointer-/link-Feldes entfernen, deren
-     * Zieldatensatz in keinem Zielbereich des Feldes (`rel_field_area`) mehr liegt -
-     * nach dem Speichern geänderter Zielbereiche, wenn der Admin das bestätigt hat.
+     * Remove links (`data_rel`) of a pointer/link field whose
+     * target record no longer lies in any target area of the field (`rel_field_area`) -
+     * after saving changed target areas, if the admin has confirmed it.
      *
-     * Bei 'link' gehören die Zieldatensätze dem Quelldatensatz (LinkTrait): ohne
-     * Kante wären sie verwaist und in ihrem abhängigen Bereich unerreichbar - sie
-     * werden deshalb wie beim Check-in soft gelöscht (produktive, nicht schon
-     * gelöschte Datensätze; Arbeitskopien bleiben ihrem Vorgang überlassen).
+     * With 'link' the target records belong to the source record (LinkTrait): without
+     * an edge they would be orphaned and unreachable in their dependent area - they
+     * are therefore soft-deleted as at check-in (live records, not already
+     * deleted records; working copies are left to their process).
      *
      * @return int  Anzahl entfernter Kanten
      */
@@ -1647,11 +1646,11 @@ class Field extends Dataset {
                 $orphanIds[(int)$row['dest_id']] = true;
             }
         }
-        // link: verwaiste Inhalte soft löschen (Record::delete() zieht deren eigene
-        // fest verknüpfte Inhalte mit, LinkTrait::cascadeDependents())
+        // link: soft-delete orphaned contents (Record::delete() also takes their own
+        // firmly linked contents along, LinkTrait::cascadeDependents())
         $record = $this->recordDataset();
         foreach (array_keys($orphanIds) as $orphanId) {
-            if ($record->linkOwner($orphanId) !== null) continue; // (gehört noch jemandem)
+            if ($record->linkOwner($orphanId) !== null) continue; // (still belongs to someone)
             $record->delete($orphanId, false);
         }
         return count($rows);
@@ -1660,9 +1659,9 @@ class Field extends Dataset {
     /**
      * Record-Instanz bereitstellen.
      *
-     * Wie in Area::recordDataset(): bewusst nicht über den Konstruktor injiziert -
-     * Dataset-Kindklassen erben dessen Signatur und deklarieren keinen eigenen.
-     * Der Container liefert dieselbe geteilte Instanz wie überall sonst.
+     * As in Area::recordDataset(): deliberately not injected via the constructor -
+     * Dataset child classes inherit its signature and do not declare their own.
+     * The container supplies the same shared instance as everywhere else.
      */
     private function recordDataset(): Record
     {
@@ -1678,8 +1677,8 @@ class Field extends Dataset {
     // ====================
 
     /**
-     * Schlüssel einer Volltext-Quelle (Pseudo-Feld source_fields): die field_id eines
-     * Feldes des eigenen Bereichs, über ein link-Feld "{rel_field_id}:{text_field_id}".
+     * Key of a full-text source (pseudo field source_fields): the field_id of a
+     * field of the own area, or via a link field "{rel_field_id}:{text_field_id}".
      */
     public static function sourceKey(int $textFieldId, int $relFieldId = 0): int|string
     {
@@ -1694,19 +1693,19 @@ class Field extends Dataset {
     }
 
     /**
-     * Wählbare Quellen eines Volltextfeldes: Text-, Zeichen-, JSON- und Upload-Felder
-     * (keine Thumbnails) des Bereichs und - über seine Felder vom Typ link, relation
-     * und relation1 - der Zielbereiche. Felder hinter einem pointer nicht: ein
-     * Verweis ist eine lose Referenz auf fremde Inhalte (oft mehrere Bereiche), deren
-     * Text gehört nicht zum Datensatz.
+     * Selectable sources of a full-text field: text, character, JSON and upload fields
+     * (no thumbnails) of the area and - via its fields of type link, relation
+     * and relation1 - of the target areas. Fields behind a pointer do not: a
+     * reference is a loose reference to foreign contents (often several areas), whose
+     * text does not belong to the record.
      *
-     * Änderungen an einem Zieldatensatz erreichen den Volltext nur bei link (der
-     * Inhalt gehört dem Datensatz, VirtualFieldsTrait::refreshAffectedFulltext());
-     * bei relation erst beim nächsten Speichern des Datensatzes selbst oder per
+     * Changes to a target record reach the full text only with link (the
+     * content belongs to the record, VirtualFieldsTrait::refreshAffectedFulltext());
+     * with relation only at the next save of the record itself or via
      * Neuaufbau (Zeitplaner-Aufgabe fulltext).
      *
      * @return array  sourceKey() => ['label' => HTML, 'text_field_id', 'rel_field_id',
-     *                'group' => Überschrift HTML ('' = eigener Bereich)]
+     *                'group' => heading HTML ('' = own area)]
      */
     public function fulltextSourceOptions(int $areaId): array
     {
@@ -1727,7 +1726,7 @@ class Field extends Dataset {
                     'text_field_id' => (int)$row['field_id'], 'rel_field_id' => 0,
                 ];
             }
-            // Zielbereiche: link über rel_field_area, relation/relation1 über rel_area_id
+            // Target areas: link via rel_field_area, relation/relation1 via rel_area_id
             $this->db->query(
                 "SELECT `l`.`field_id` AS `rel_id`, `l`.`name` AS `rel_name`, `l`.`label` AS `rel_label`,"
                 . " `a`.`label` AS `area_label`, `t`.`field_id`, `t`.`name`, `t`.`label`"
@@ -1759,22 +1758,22 @@ class Field extends Dataset {
     // ====================
 
     /**
-     * Mögliche Ziele einer Konvertierung für ein Feld (Auswahl in FieldBackend::convert()).
+     * Possible targets of a conversion for a field (selection in FieldBackend::convert()).
      *
-     * Je Eintrag: 'type', 'multilingual' (0|1) und 'lossy' (true = die Umwandlung kann
-     * Inhalte verlieren, siehe conversionLossy()). Ein Typwechsel behält die
-     * Mehrsprachigkeit bei, der Sprachwechsel den Typ - beides zugleich gibt es nicht,
-     * die Auswahl bleibt so überschaubar.
+     * Per entry: 'type', 'multilingual' (0|1) and 'lossy' (true = the conversion can
+     * lose content, see conversionLossy()). A type change keeps the
+     * multilingualism, a language change keeps the type - both at once do not exist,
+     * so the selection stays manageable.
      *
-     *     Text- und Zahltypen        untereinander (beide Gruppen)
+     *     Text and number types      among each other (both groups)
      *     relation <-> relation1     pointer <-> pointer1
-     *     ein- <-> mehrsprachig      alle mehrsprachigkeitsfähigen Typen
+     *     single <-> multilingual    all types capable of multilingualism
      *                                (Cms::isMultilingualField()), Thumbnails erben
-     *                                das Kennzeichen vom Upload-Feld und bleiben außen vor
+     *                                the flag from the upload field and are excluded
      *
-     * Felder auf Metaspalten von `record` haben einen festen Typ und keine Sprache.
+     * Fields on meta columns of `record` have a fixed type and no language.
      *
-     * @param array $data  Felddaten aus load()
+     * @param array $data  field data from load()
      * @return array       [['type' => ..., 'multilingual' => ..., 'lossy' => ...], ...]
      */
     public function conversionTargets(array $data): array
@@ -1793,7 +1792,7 @@ class Field extends Dataset {
             $typeTargets = array_values(array_diff($valueTypes, [$type]));
         }
         elseif (in_array($type, $this->cms->relationTypes, true) && !in_array($type, $this->cms->dependentTypes, true)) {
-            // (nicht 'link': dafür gibt es keinen Zieltyp)
+            // (not 'link': there is no target type for it)
             $typeTargets = [str_ends_with($type, '1') ? substr($type, 0, -1) : $type . '1'];
         }
         foreach ($typeTargets as $toType) {
@@ -1804,7 +1803,7 @@ class Field extends Dataset {
             ];
         }
 
-        // ein- <-> mehrsprachig
+        // single <-> multilingual
         if ($this->cms->isMultilingualField(['type' => $type, 'multilingual' => 1])
             && !($type === 'file' && ($data['display_type'] ?? '') === 'thumbnail')
         ) {
@@ -1818,14 +1817,14 @@ class Field extends Dataset {
     }
 
     /**
-     * Die Vorbedingungen von convert() - ohne etwas zu ändern (auch für Probeläufe):
+     * The preconditions of convert() - without changing anything (also for dry runs):
      *
-     *  1. das Ziel steht unter conversionTargets()
-     *  2. bei einem Typwechsel: der Name ist systemweit an einen Typ gebunden - kein
-     *     anderes Feld darf ihn tragen - und darf nicht das Präfix eines anderen Typs
-     *     haben ($fieldPrefixes)
+     *  1. the target is listed under conversionTargets()
+     *  2. on a type change: the name is bound system-wide to one type - no
+     *     other field may carry it - and it must not have the prefix of another type
+     *     ($fieldPrefixes)
      *
-     * @param array $data  Felddaten aus load()
+     * @param array $data  field data from load()
      * @return bool        false: Meldung in Cms::errors
      */
     public function conversionAllowed(array $data, string $toType, int $toMultilingual): bool
@@ -1867,10 +1866,10 @@ class Field extends Dataset {
     }
 
     /**
-     * Offene Arbeitskopien eines Bereichs (Hinweis vor convert(): die Umwandlung
-     * beachtet keine Bearbeitungssperre).
+     * Open working copies of an area (note before convert(): the conversion
+     * does not respect the edit lock).
      *
-     * @return array  Zeilen mit record_id und displayname des Bearbeiters
+     * @return array  rows with record_id and displayname of the editor
      */
     public function workingCopies(int $areaId): array
     {
@@ -1890,10 +1889,10 @@ class Field extends Dataset {
     }
 
     /**
-     * Kann eine Umwandlung Inhalte verlieren?
+     * Can a conversion lose contents?
      *
-     * Von mehrsprachig zu einsprachig immer (nur die Hauptsprache bleibt), bei einem
-     * Typwechsel alles, was nicht in $losslessConversions steht.
+     * From multilingual to single-language always (only the main language remains), on a
+     * type change everything not listed in $losslessConversions.
      */
     public function conversionLossy(string $fromType, string $toType, int $fromMultilingual, int $toMultilingual): bool
     {
@@ -1903,36 +1902,36 @@ class Field extends Dataset {
     }
 
     /**
-     * Feld in einen anderen Typ und/oder von ein- auf mehrsprachig umwandeln (und
-     * umgekehrt) - der einzige Weg dafür, siehe Klassenkommentar.
+     * Convert a field into another type and/or from single to multilingual (and
+     * vice versa) - the only way to do so, see class comment.
      *
-     * Der Reihe nach, in einer Transaktion:
+     * In order, within one transaction:
      *
-     *  1. Ziel gegen conversionTargets() prüfen.
-     *  2. Beim Typwechsel: der Name ist systemweit an einen Typ gebunden
-     *     (`fieldname`). Benutzt ein anderes Feld denselben Namen, geht es nicht - erst
-     *     umbenennen. Reservierte Präfixe gelten wie beim Anlegen.
-     *  3. Bestand umkopieren: Zeile für Zeile aus der alten in die neue data_*-Tabelle
-     *     (convertRows(), Werte über convertValue()), bei relation -> relation1 und
-     *     pointer -> pointer1 stattdessen je Datensatz alle Verknüpfungen bis auf die
-     *     erste entfernen. Der Typ des Namens in `fieldname` wird nachgezogen; ein
-     *     Feld, das kein Textfeld mehr ist, fällt aus den Volltext-Quellen.
-     *  4. Beim Sprachwechsel: applyMultilingualChange() - `empty`-Kennzeichen bzw.
+     *  1. check the target against conversionTargets().
+     *  2. On type change: the name is bound system-wide to one type
+     *     (`fieldname`). If another field uses the same name, it is not possible - first
+     *     rename it. Reserved prefixes apply as when creating.
+     *  3. Copy the stock: row by row from the old into the new data_* table
+     *     (convertRows(), values via convertValue()), for relation -> relation1 and
+     *     pointer -> pointer1 instead, per record remove all links except the
+     *     first. The type of the name in `fieldname` is updated; a
+     *     field that is no longer a text field drops out of the full-text sources.
+     *  4. On language change: applyMultilingualChange() - `empty` flags resp.
      *     Dateiablage umstellen.
      *  5. Felddefinition anpassen (conversionUpdate()): display_type, min/max,
-     *     Flags, Vorgabe - was zum neuen Typ nicht passt, wird zurückgesetzt.
-     *  6. Der Inhalts-Cache der Datensätze des Bereichs wird verworfen, Cms::fetch()
-     *     baut ihn beim nächsten Zugriff neu. Der Arbeitsstand offener Arbeitskopien
-     *     bleibt und wird umgewandelt (Record::retypeWorkingCopies(), bei Datei-Feldern
-     *     Record::migrateWorkingCopyFiles()); ist das Feld
-     *     Default-Feld, zieht `data_dft` nach.
+     *     flags, default - whatever does not fit the new type is reset.
+     *  6. The content cache of the area's records is discarded, Cms::fetch()
+     *     rebuilds it on the next access. The working state of open working copies
+     *     remains and is converted (Record::retypeWorkingCopies(), for file fields
+     *     Record::migrateWorkingCopyFiles()); if the field is
+     *     the default field, `data_dft` is updated as well.
      *
      * Fehler stehen in Cms::errors.
      *
      * @param int    $fieldId
      * @param string $toType
      * @param int    $toMultilingual  0|1
-     * @return bool  true, wenn umgewandelt
+     * @return bool  true if converted
      */
     public function convert(int $fieldId, string $toType, int $toMultilingual): bool
     {
@@ -1943,13 +1942,13 @@ class Field extends Dataset {
         $name = (string)$data['name'];
         $areaId = (int)$data['area_id'];
 
-        // 1. und 2.: Ziel zulässig, Name passt zum Zieltyp (conversionAllowed())
+        // 1. and 2.: target allowed, name fits the target type (conversionAllowed())
         if (!$this->conversionAllowed($data, $toType, $toMultilingual)) return false;
         $typeChanged = ($toType !== $fromType);
         $multilingualChanged = ($toMultilingual !== $fromMultilingual);
 
-        // Volltext betroffen? Bereiche jetzt ermitteln - convert() entfernt das Feld
-        // ggf. aus `rel_fulltext_text`
+        // Full text affected? Determine the areas now - convert() removes the field
+        // if necessary from `rel_fulltext_text`
         $isSource = fn(string $t) => in_array($t, self::FULLTEXT_SOURCE_TYPES, true)
             && (string)($data['display_type'] ?? '') !== 'thumbnail';
         $fulltextAffected = ($typeChanged && ($isSource($fromType) || $isSource($toType)))
@@ -1977,7 +1976,7 @@ class Field extends Dataset {
                 $this->db->query("UPDATE `fieldname` SET `type` = ? WHERE `name` = ?", 'ss', [$toType, $name]);
                 $this->cms->clearFieldCaches();
 
-                // Volltext-Quellen: nur Textfelder
+                // Full-text sources: text fields only
                 if (!in_array($toType, self::FULLTEXT_SOURCE_TYPES, true)) {
                     $this->db->query("SELECT `fulltext_field_id` FROM `rel_fulltext_text` WHERE `text_field_id` = ?", 'i', [$fieldId]);
                     $fulltextIds = array_map('intval', $this->db->fetchAll());
@@ -2006,13 +2005,13 @@ class Field extends Dataset {
             $values[] = $fieldId;
             $this->db->query("UPDATE `field` SET " . implode(', ', $set) . " WHERE `field_id` = ?", $bindTypes, $values);
 
-            // Volltext: das Feld kommt als Quelle hinzu, fällt heraus oder liefert in
-            // den übrigen Sprachen andere Werte (Sprachwechsel)
+            // Full text: the field is added as a source, drops out or yields in
+            // the other languages different values (language change)
             if ($fulltextAffected) {
                 if ($toType === 'encrypted') {
-                    // Sofort neu aufbauen - sonst stünde der Klartext bis dahin im
-                    // Suchindex (erst hier: standardFulltextSources() liest den Typ
-                    // aus `field`)
+                    // Rebuild immediately - otherwise the plain text would stand in the
+                    // search index until then (only here: standardFulltextSources() reads the type
+                    // from `field`)
                     foreach ($fulltextIds as $fulltextId) {
                         $this->recordDataset()->refreshFulltext($fulltextId);
                     }
@@ -2021,14 +2020,14 @@ class Field extends Dataset {
                     }
                 }
                 else {
-                    // sonst nur als veraltet markieren (FulltextState)
+                    // otherwise only mark as stale (FulltextState)
                     $this->fulltextState()->markStale($fulltextAreas);
                 }
             }
 
-            // Kopie des Default-Feldes (data_dft): Klartext eines verschlüsselten
-            // Feldes gehört nicht hinein (dann wie beim Speichern "ID {record_id}"),
-            // sonst der umgewandelte Wert je Sprache
+            // Copy of the default field (data_dft): plain text of an encrypted
+            // field does not belong in it (then as when saving "ID {record_id}"),
+            // otherwise the converted value per language
             if (!empty($data['default_field']) && $toType !== 'file') {
                 if (in_array($toType, ['password', 'encrypted', 'json'], true)) {
                     $this->db->query(
@@ -2048,9 +2047,9 @@ class Field extends Dataset {
                 }
             }
 
-            // 6. Inhalts-Cache des Bereichs verwerfen - Arbeitskopien ausgenommen: ihr
-            // `record_cache` ist der Arbeitsstand; er bekommt den neuen Typ
-            // (retypeWorkingCopies()), damit beim Speichern nichts verloren geht
+            // 6. Discard the content cache of the area - working copies excluded: their
+            // `record_cache` is the working state; it receives the new type
+            // (retypeWorkingCopies()), so that nothing is lost when saving
             $this->db->query(
                 "DELETE `c` FROM `record_cache` `c`"
                 . " INNER JOIN `record` `r` ON `r`.`record_id` = `c`.`record_id`"
@@ -2083,19 +2082,19 @@ class Field extends Dataset {
     }
 
     /**
-     * Änderungen an der Felddefinition, die ein Typwechsel nach sich zieht
-     * (Spalte => Wert für das UPDATE in convert()).
+     * Changes to the field definition that a type change entails
+     * (column => value for the UPDATE in convert()).
      *
-     *     display_type   muss zum neuen Typ passen (Backend::$displayTypes), sonst
-     *                    die erste zulässige Darstellung
-     *     flags          nur, was der neue Typ kennt (Backend::processingFlags() und
+     *     display_type   must match the new type (Backend::$displayTypes), otherwise
+     *                    the first allowed display
+     *     flags          only what the new type knows (Backend::processingFlags() and
      *                    $validationFlags)
-     *     min/max        bedeuten je Gruppe etwas anderes (Zeichen vs. Wert) und
-     *                    werden beim Gruppenwechsel geleert, ebenso pattern und default;
-     *                    bei relation1/pointer1 gilt max = 1, umgekehrt fällt es weg
-     *     custom_order   nur bei n:m-Verknüpfungen
+     *     min/max        mean something different per group (characters vs. value) and
+     *                    are cleared on group change, likewise pattern and default;
+     *                    for relation1/pointer1 max = 1 applies, the reverse drops it
+     *     custom_order   only for n:m links
      *
-     * @param array  $data    Felddaten aus load()
+     * @param array  $data    field data from load()
      * @param string $toType
      */
     private function conversionUpdate(array $data, string $toType): array
@@ -2121,7 +2120,7 @@ class Field extends Dataset {
         $flags = array_values(array_intersect((array)($data['flags'] ?? []), $allowedFlags));
         $update['flags'] = json_encode($flags, JSON_UNESCAPED_UNICODE);
 
-        // Gruppenwechsel Text <-> Zahl: Grenzwerte, Muster und Vorgabe passen nicht mehr
+        // Group change text <-> number: limits, pattern and default no longer fit
         $fromText = in_array($fromType, $this->convertTextTypes, true);
         $toText   = in_array($toType, $this->convertTextTypes, true);
         if ($fromText !== $toText || $toType === 'bit' || $fromType === 'bit') {
@@ -2143,13 +2142,13 @@ class Field extends Dataset {
     }
 
     /**
-     * Bestand eines Feldes in die data_*-Tabelle des neuen Typs umkopieren.
+     * Copy the stock of a field into the data_* table of the new type.
      *
-     * Zeile für Zeile in PHP statt INSERT ... SELECT: die Umwandlung der Werte
-     * (convertValue()) braucht Entschlüsseln, Cent-Rechnung und Zahlenparser, und
-     * MySQL würde ein unpassendes CAST im strikten Modus abbrechen. Gelesen wird in
-     * Blöcken; language_id, record_id, field_id, fieldname_id und `empty` wandern
-     * unverändert mit, verschlüsselte Ziele bekommen Geheimtext und Hash.
+     * Row by row in PHP instead of INSERT ... SELECT: the conversion of the values
+     * (convertValue()) needs decryption, cent arithmetic and a number parser, and
+     * MySQL would abort an unsuitable CAST in strict mode. Reading is done in
+     * blocks; language_id, record_id, field_id, fieldname_id and `empty` are carried
+     * over unchanged, encrypted targets get ciphertext and hash.
      *
      * @param int    $fieldId
      * @param string $fromType
@@ -2210,21 +2209,21 @@ class Field extends Dataset {
     }
 
     /**
-     * Einen Wert vom Quell- in den Zieltyp umrechnen (Datenbankformat beider Seiten).
+     * Convert a value from the source into the target type (database format on both sides).
      *
-     *     -> Text        Zahlen als Dezimalzahl mit Punkt (Cent -> Betrag mit zwei
-     *                    Nachkommastellen, decimal ohne Nachnullen), chars auf 255 Zeichen
-     *     Text -> Zahl   parseNumber(): erste Zahl im Text, Komma als Dezimaltrenner
-     *                    zulässig, sonst 0
-     *     -> integer     Nachkommastellen abgeschnitten, Cent -> ganze Beträge
+     *     -> Text        numbers as decimal with a point (cents -> amount with two
+     *                    decimal places, decimal without trailing zeros), chars to 255 characters
+     *     Text -> Zahl   parseNumber(): first number in the text, comma as decimal separator
+     *                    allowed, otherwise 0
+     *     -> integer     decimal places truncated, cents -> whole amounts
      *     -> currency    Betrag mal 100, gerundet
-     *     -> decimal     10 Nachkommastellen (bcmath, ohne Genauigkeitsverlust)
-     *     -> bit         1 für "true/yes/on/ja" und jede Zahl ungleich 0
+     *     -> decimal     10 decimal places (bcmath, without loss of precision)
+     *     -> bit         1 for "true/yes/on/ja" and any number not equal to 0
      *
      * @param string $fromType
      * @param string $toType
-     * @param string $value   Wert der Quelle (entschlüsselt)
-     * @return int|float|string  Wert für die Spalte `data` der Zieltabelle
+     * @param string $value   value of the source (decrypted)
+     * @return int|float|string  value for the column `data` of the target table
      */
     private function convertValue(string $fromType, string $toType, string $value): int|float|string
     {
@@ -2239,7 +2238,7 @@ class Field extends Dataset {
             return ($toType === 'chars') ? mb_substr($text, 0, 255) : $text;
         }
 
-        // Zahl-Ziel: Quelle als Dezimalzahl (String mit Punkt)
+        // Number target: source as decimal (string with a point)
         if (in_array($fromType, $this->convertTextTypes, true)) {
             $number = $this->parseNumber($value);
             if ($toType === 'bit' && $number === null) {
@@ -2267,7 +2266,7 @@ class Field extends Dataset {
     }
 
     /**
-     * Cent-Betrag (currency) als Dezimalzahl mit zwei Nachkommastellen, z. B. -1234 -> "-12.34".
+     * Cent amount (currency) as decimal number with two decimal places, e.g. -1234 -> "-12.34".
      */
     private function centsToText(int $cents): string
     {
@@ -2287,9 +2286,9 @@ class Field extends Dataset {
     }
 
     /**
-     * Erste Zahl in einem Text finden - Dezimaltrenner Punkt oder Komma, Tausender-
-     * trenner werden entfernt ("1.234,56" -> "1234.56", "1,234.56" -> "1234.56",
-     * "12,5" -> "12.5"). null, wenn keine Zahl enthalten ist.
+     * Find the first number in a text - decimal separator point or comma, thousands-
+     * separators are removed ("1.234,56" -> "1234.56", "1,234.56" -> "1234.56",
+     * "12,5" -> "12.5"). null if no number is contained.
      */
     private function parseNumber(string $text): ?string
     {
@@ -2299,7 +2298,7 @@ class Field extends Dataset {
         $lastComma = strrpos($number, ',');
         $lastDot   = strrpos($number, '.');
         if ($lastComma !== false && $lastDot !== false) {
-            // beides vorhanden: das hintere ist der Dezimaltrenner
+            // both present: the last one is the decimal separator
             $decimalSep = ($lastComma > $lastDot) ? ',' : '.';
             $number = str_replace($decimalSep === ',' ? '.' : ',', '', $number);
             $number = str_replace(',', '.', $number);
@@ -2307,7 +2306,7 @@ class Field extends Dataset {
         elseif ($lastComma !== false) {
             $number = str_replace(',', '.', $number);
         }
-        // mehrere Punkte: nur der letzte ist der Dezimaltrenner
+        // several points: only the last one is the decimal separator
         if (substr_count($number, '.') > 1) {
             $pos = strrpos($number, '.');
             $number = str_replace('.', '', substr($number, 0, $pos)) . substr($number, $pos);
@@ -2317,13 +2316,13 @@ class Field extends Dataset {
     }
 
     /**
-     * relation -> relation1 bzw. pointer -> pointer1: je Quelldatensatz bleibt nur die
-     * erste Verknüpfung (kleinste position, bei Gleichstand die kleinste dest_id);
-     * bei Verknüpfungen fällt die Gegenzeile des Gegenfeldes mit.
+     * relation -> relation1 resp. pointer -> pointer1: per source record only the
+     * first link remains (smallest position, on a tie the smallest dest_id);
+     * for links the counter row of the counter field is dropped as well.
      *
      * @param int  $fieldId
-     * @param int  $relFieldId     Gegenfeld (nur relation)
-     * @param bool $bidirectional  true bei relation
+     * @param int  $relFieldId     counter field (only relation)
+     * @param bool $bidirectional  true for relation
      */
     private function reduceRelations(int $fieldId, int $relFieldId, bool $bidirectional): void
     {
@@ -2354,29 +2353,29 @@ class Field extends Dataset {
     }
 
     /**
-     * Bestand eines Feldes von ein- auf mehrsprachig umstellen oder umgekehrt.
+     * Switch the stock of a field from single to multilingual or vice versa.
      *
-     * Jeder Datensatz führt je Sprache seiner Instanz eine Zeile (siehe
-     * docs/developers/02-datenmodell.md); geändert wird nur deren Bedeutung:
+     * Each record keeps one row per language of its instance (see
+     * developer docs, chapter 02 (Data model); only their meaning is changed:
      *
-     *     -> mehrsprachig   die Zeile der Hauptsprache trägt den Inhalt, alle anderen
-     *                       werden Fallback (`empty` = 1) - übersetzt ist noch nichts
-     *     -> einsprachig    alle Zeilen bekommen den Inhalt der Hauptsprache
-     *                       (`empty` = 0); die Übersetzungen gehen verloren
+     *     -> mehrsprachig   the row of the main language carries the content, all others
+     *                       become fallback (`empty` = 1) - nothing is translated yet
+     *     -> einsprachig    all rows get the content of the main language
+     *                       (`empty` = 0); the translations are lost
      *
-     * Die Hauptsprache ist die der Instanz des Datensatzes - je Instanz ein UPDATE.
-     * Datei-Felder stellen stattdessen Dateien und `data_fil`-Zeilen um
-     * (migrateFileLanguage()) und ziehen ihre Thumbnail-Felder nach.
+     * The main language is that of the instance of the record - one UPDATE per instance.
+     * File fields instead switch files and `data_fil` rows
+     * (migrateFileLanguage()) and update their thumbnail fields as well.
      *
      * @param int    $fieldId
-     * @param string $type            Typ (nach der Umwandlung)
+     * @param string $type            type (after the conversion)
      * @param bool   $toMultilingual
      */
     private function applyMultilingualChange(int $fieldId, string $type, bool $toMultilingual): void
     {
         if ($type === 'file') {
-            // Thumbnail-Felder (auch verschachtelte) erben das Kennzeichen, Dateien
-            // samt `data_fil`-Zeilen kommen auf das neue Ablageschema
+            // Thumbnail fields (also nested ones) inherit the flag, files
+            // along with `data_fil` rows move to the new storage scheme
             $parentIds = [$fieldId];
             $seen = [];
             while (!empty($parentIds)) {
@@ -2431,18 +2430,18 @@ class Field extends Dataset {
     // ====================
 
     /**
-     * Eintrag in `fieldname` löschen, wenn ihn kein Feld mehr benutzt.
+     * Delete the entry in `fieldname` if no field uses it anymore.
      *
-     * Öffentlich, weil Area::hookOnDelete() die Methode beim endgültigen Löschen
-     * eines Bereichs von außen ruft (dort fallen alle Felder des Bereichs per
-     * fk_field_area weg, ihre Namen bleiben sonst in `fieldname` stehen).
+     * Public, because Area::hookOnDelete() calls the method from outside when finally deleting
+     * an area (there all fields of the area drop via
+     * fk_field_area, otherwise their names would remain in `fieldname`).
      *
-     * @param string $name  speziellen Feldname prüfen,
-     *                      default '': alle Feldnamen prüfen. Wird z.B. bei Löschen eines Areas genutzt.
+     * @param string $name  check a specific field name,
+     *                      default '': check all field names. Used e.g. when deleting an area.
      */
     public function cleanupFieldname(string $name = ''): void
     {
-        // Das Volltext-Standardfeld hat keine `field`-Zeile - sein Name bleibt
+        // The standard full-text field has no `field` row - its name remains
         if (!empty($name)) {
             $sql = "DELETE FROM `fieldname` WHERE `name` = ? AND `name` != ?"
             ." AND NOT EXISTS (SELECT 1 FROM `field` WHERE `field`.`name` = `fieldname`.`name`)";
@@ -2456,17 +2455,17 @@ class Field extends Dataset {
     }
 
     /**
-     * Legt Eintrag in fieldname mit angegebenem Name+Typ an (wenn nicht schon vorhanden)
-     * Wenn schon vorhanden, aber mit anderem Typ, wird der verwendete Typ zurückgegeben
+     * Creates an entry in fieldname with the given name and type (if not already present)
+     * If already present but with another type, the type in use is returned
      *
-     * FOR UPDATE sperrt die Zeile bis zum Ende der Transaktion. Ohne das könnten zwei
-     * parallele Speichervorgänge denselben Namen für zwei verschiedene Typen anlegen -
-     * `fieldname` hat UNIQUE(name), einer der beiden liefe in einen Duplikatfehler
-     * statt in die verständliche Meldung error_field_name_wrong_type.
+     * FOR UPDATE locks the row until the end of the transaction. Without this, two
+     * parallel save operations create the same name for two different types -
+     * `fieldname` has UNIQUE(name), one of the two would run into a duplicate error
+     * instead of the understandable message error_field_name_wrong_type.
      *
      * @param string $name  Eingabefeld-Name
      * @param string $type  Eingabefeld-Typ
-     * @return string       bei Typkonflikt: verwendeter Typ, ansonsten ''
+     * @return string       on type conflict: type in use, otherwise ''
      */
     private function createFieldname(string $name, string $type): string
     {
@@ -2476,14 +2475,14 @@ class Field extends Dataset {
         if ($this->db->num_rows > 0) {
             $usedType = (string) $this->db->fetchNum()[0];
 
-            // Rückgabe falscher Typ
+            // Return wrong type
             if ($type !== $usedType) return $usedType;
 
-            // richtiger Typ - schon vorhanden -> keine Aktion nötig
+            // correct type - already present -> no action needed
             return '';
 
         } else {
-            // noch nicht vorhanden -> jetzt anlegen
+            // not yet present -> create it now
             $sql = "INSERT INTO `fieldname` (`name`, `type`) VALUES (?, ?)";
             $this->db->query($sql, 'ss', [$name, $type]);            
             return '';
@@ -2491,14 +2490,14 @@ class Field extends Dataset {
     }
 
     /**
-     * Generiert einen eindeutigen Feldname in Tabelle `field` mit maximal 32 Zeichen.
-     * Prüft ob der Name bereits existiert und kürzt bei Bedarf.
-     * (wegen FOR UPDATE nur innerhalb Transaktion verwendbar)
+     * Generates a unique field name in table `field` with at most 32 characters.
+     * Checks whether the name already exists and shortens it if necessary.
+     * (because of FOR UPDATE only usable within a transaction)
      *
-     * Gebraucht für die automatisch erzeugten Gegenfelder von Relationen: deren Name
-     * `rel_{areaname}` kann im Zielbereich schon vergeben sein. Angehängt wird dann
-     * _1, _2, … - und weil `field`.`name` nur 32 Zeichen fasst, wird der Präfix um die
-     * Länge des Suffixes gekürzt statt das Ergebnis hinten abzuschneiden.
+     * Needed for the automatically created counter fields of relations: their name
+     * `rel_{areaname}` may already be taken in the target area. Then is appended
+     * _1, _2, … - and because `field`.`name` holds only 32 characters, the prefix is shortened by the
+     * length of the suffix instead of cutting the result off at the end.
      *
      * @param string $prefix  Names-Prefix.
      * @param int $areaId     Bereichs-ID
@@ -2513,16 +2512,16 @@ class Field extends Dataset {
         $sql = "SELECT 1 FROM `field` WHERE `area_id`=? AND `name` = ? LIMIT 1 FOR UPDATE";
 
         while (!$isUnique) {
-            // Zähler-String bilden
+            // Build counter string
             $suffixStr = ($suffixNumber === 0) ? '' : '_' . $suffixNumber;
             
-            // Verfügbaren Platz berechnen und Präfix passend abschneiden
+            // Calculate the available space and cut the prefix accordingly
             $allowedPrefixLength = 32 - strlen($suffixStr);
             $currentPrefix = mb_substr($prefix, 0, $allowedPrefixLength);
             
             $finalName = $currentPrefix . $suffixStr;
 
-            // Abfrage mit vorbereitetem Statement
+            // Query with prepared statement
             $this->db->query($sql, 'is', [$areaId, $finalName]);
             
             if ($this->db->num_rows === 0) {

@@ -1,26 +1,26 @@
 <?php
 /**
- * Formularschutz ohne fremden Dienst: Köderfeld und signierter Zeitstempel.
- * developer_docs/20-frontend-schutz.md A.5.
+ * Form protection without an external service: decoy field and signed timestamp.
+ * Developer docs, chapter 14 (Security: web) (form guard).
  *
- * (CMS:USER_TOKEN formguard=true) gibt neben dem CSRF-Token aus:
+ * (CMS:USER_TOKEN formguard=true) outputs next to the CSRF token:
  *
- *     _ft      "{Unix-Zeit}.{HMAC}" - HMAC über Zeit und den Zufallswert des Cookies
- *              'ucsrf' (UserSession::csrfSeed()); ein Robot kann ihn weder fälschen
- *              noch aus einem fremden Browser übernehmen
- *     c9_url   ein Textfeld, das Menschen nicht sehen (außerhalb des Bildschirms,
- *              aria-hidden, tabindex -1) und deshalb leer lassen; Robots, die jedes
- *              Feld füllen, verraten sich
+ *     _ft      "{Unix time}.{HMAC}" - HMAC over the time and the random value of the cookie
+ *              'ucsrf' (UserSession::csrfSeed()); a robot can neither forge it
+ *              nor take it over from another browser
+ *     c9_url   a text field that humans do not see (off-screen,
+ *              aria-hidden, tabindex -1) and therefore leave empty; robots that fill
+ *              every field give themselves away
  *
- * Befehle mit formguard=true (USER_REGISTER, USER_PW, CMS:EMAIL) verlangen dann:
- * Köderfeld leer, Zeitstempel echt, zwischen user.formguard_min_seconds und
- * user.formguard_max_seconds alt. formguard=N (Zahl) setzt die Mindestzeit für
- * dieses Formular auf N Sekunden (0 = Schutz aus). Scheitert das, antworten sie wie bei der
- * Drosselung - ein Robot soll nicht lernen, woran es lag.
+ * Commands with formguard=true (USER_REGISTER, USER_PW, CMS:EMAIL) then require:
+ * decoy field empty, timestamp genuine, older than user.formguard_min_seconds and
+ * younger than user.formguard_max_seconds. formguard=N (number) sets the minimum time
+ * for this form to N seconds (0 = protection off). If this fails, they respond as with
+ * throttling - a robot should not learn what the cause was.
  *
- * Wer den Quelltext kennt, überlistet das (camindo wird Open Source). Gedacht ist es
- * gegen Robots, die blind jedes Formular füllen; für mehr lässt sich über
- * security.form_challenge ein Captcha anbinden (FormChallengeInterface).
+ * Anyone who knows the source code can get past this (camindo is open source). It is
+ * meant against robots that blindly fill every form; for more, a captcha can be
+ * connected via security.form_challenge (FormChallengeInterface).
  *
  * @see Camindo\Core\Modules\Record\RecordUser::cmsToken()
  */
@@ -40,8 +40,8 @@ class FormGuard
     ) {}
 
     /**
-     * Die beiden Felder als HTML - '' ohne Cookie (Aufruf nach der ersten Ausgabe
-     * ohne vorheriges USER_TOKEN).
+     * The two fields as HTML - '' without cookie (call after the first output
+     * without a preceding USER_TOKEN).
      */
     public function fields(): string
     {
@@ -55,8 +55,8 @@ class FormGuard
     }
 
     /**
-     * Stammt das abgeschickte Formular von einem Menschen? Prüft zusätzlich das
-     * Captcha aus security.form_challenge, wenn eines eingestellt ist.
+     * Was the submitted form sent by a human? Also checks the captcha from
+     * security.form_challenge, if one is configured.
      */
     public function verify(?int $minSeconds = null): bool
     {
@@ -69,10 +69,10 @@ class FormGuard
     }
 
     /**
-     * Parameter formguard eines Befehls: false = aus, true = Vorgaben, Zahl =
-     * Mindestzeit in Sekunden.
+     * formguard parameter of a command: false = off, true = defaults, number =
+     * minimum time in seconds.
      *
-     * @return int|false|null  false = aus, null = Vorgabe, sonst Sekunden
+     * @return int|false|null  false = off, null = default, otherwise seconds
      */
     public static function parameter(mixed $value): int|false|null
     {

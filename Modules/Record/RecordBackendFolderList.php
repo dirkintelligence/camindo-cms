@@ -1,44 +1,44 @@
 <?php
 /**
- * Baum der Inhaltsbereiche - der Einstieg ins Modul Record.
+ * Tree of the content areas - the entry point into the module Record.
  *
- * Einstiegspunkt: backend/index.php -> folderList()
+ * Entry point: backend/index.php -> folderList()
  *
- * Datensätze liegen immer in einem Inhaltsbereich. Der Einstieg ist deshalb nicht die
- * Datensatzliste, sondern der Bereichsbaum; ein Klick darauf legt die Liste als
- * weiteren Layer darüber (RecordBackendList).
+ * Records always live in a content area. The entry point is therefore not the
+ * record list, but the area tree; a click on it puts the list as
+ * a further layer on top (RecordBackendList).
  *
- * MANDANTEN ALS HAUPTORDNER
+ * INSTANCES AS MAIN FOLDERS
  * --------------------
- * Sind Mandanten eingerichtet (mehr als die Standard-Instance,
- * InstanceCache::hasMultipleInstances()), bekommt der Baum eine Ebene mehr: je
- * Instanz ein Hauptordner mit ihrem Label, darunter ihr eigener Bereichsbaum
- * (Area::loadAreas() mit Instanzfilter). Die Hauptordner sehen aus wie Ordner-
- * Bereiche und verhalten sich auch so - auf- und zuklappbar, der Zustand liegt in
- * der Admin-Session (expanded_instance_ids, getrennt von expanded_folder_ids, weil
- * sich Instanz- und Bereichs-Ids überschneiden). Mit nur einer Instanz bleibt der
- * Baum wie bisher.
+ * If instances are set up (more than the default instance,
+ * InstanceCache::hasMultipleInstances()), the tree gets one level more: for each
+ * instance a main folder with its label, below it its own area tree
+ * (Area::loadAreas() with instance filter). The main folders look like folder
+ * areas and also behave like them - expandable and collapsible; the state lies in
+ * the admin session (expanded_instance_ids, separate from expanded_folder_ids, because
+ * instance and area ids overlap). With only one instance the
+ * tree remains as before.
  *
- * ZULETZT GEÄNDERT (rechte Spalte)
+ * LAST CHANGED (right column)
  * --------------------
- * Neben dem Baum stehen die zehn Datensätze, die der angemeldete Admin zuletzt in der
- * Eingabemaske gespeichert hat (Camindo\Core\History, Tabelle `history`), jüngste
- * zuerst - in der ausführlichen Darstellung der Lookup-Vorschau
- * (RecordBackend::detailedText()). Dafür erbt die Klasse von RecordBackend; den Baum
- * selbst betrifft das nicht, er kennt weder Datensätze noch Lookup-Aufrufe.
+ * Next to the tree are the ten records that the logged-in admin last saved in the
+ * input mask (Camindo\Core\History, table `history`), most recent
+ * first - in the detailed display of the lookup preview
+ * (RecordBackend::detailedText()). For this the class inherits from RecordBackend; the tree
+ * itself is not affected by this, it knows neither records nor lookup calls.
  *
- * FAST WORTGLEICH ZU TemplateBackend::folderList()
+ * ALMOST IDENTICAL TO TemplateBackend::folderList()
  * --------------------
- * Beide zeigen denselben Baum, nur mit anderem Bereichstyp ('record' statt 'template')
- * und anderen HTML-Vorlagen. Sie teilen sich sogar den SESSION-SCHLÜSSEL
- * expanded_folder_ids - wer hier einen Ordner aufklappt, findet ihn im Modul Template
- * ebenfalls aufgeklappt vor. Bei getrennten Bereichsbäumen fällt das kaum auf, ein
- * eigener Schlüssel je Modul wäre aber sauberer.
+ * Both show the same tree, only with a different area type ('record' instead of 'template')
+ * and different HTML templates. They even share the SESSION KEY
+ * expanded_folder_ids - a folder expanded here is also found expanded
+ * in the module Template. With separate area trees this hardly matters, but a
+ * separate key per module would be cleaner.
  *
- * @see Camindo\Core\Modules\Record\RecordBackendList     die Liste dahinter
- * @see Camindo\Core\Modules\Template\TemplateBackend     dieselbe Darstellung für Templates
- * @see Camindo\Core\Modules\Area\Area::loadAreas()       liefert die Zeilen
- * @see Camindo\Core\History                             zuletzt geändert
+ * @see Camindo\Core\Modules\Record\RecordBackendList     the list behind it
+ * @see Camindo\Core\Modules\Template\TemplateBackend     the same display for templates
+ * @see Camindo\Core\Modules\Area\Area::loadAreas()       supplies the rows
+ * @see Camindo\Core\History                             last changed
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -48,47 +48,47 @@ use Camindo\Core\Modules\Area\Area;
 class RecordBackendFolderList extends RecordBackend {
 
     /**
-     * Bereichsbaum ausgeben (backend/index.php).
+     * Output the area tree (backend/index.php).
      *
-     * Zeigt Ordner und Bereiche vom Typ 'record' als flache Tabelle mit
-     * Pixel-Einrückung nach `depth`; die Reihenfolge liefert das Nested Set (lft).
-     * Area::loadAreas() lässt dabei Ordner weg, die keinen einzigen Bereich enthalten -
-     * leere Zweige stehen also gar nicht erst da.
+     * Shows folders and areas of type 'record' as a flat table with
+     * pixel indentation by `depth`; the order comes from the nested set (lft).
+     * Area::loadAreas() omits folders that contain no area at all -
+     * empty branches therefore do not appear.
      *
-     * AUF- UND ZUKLAPPEN
-     * Der Zustand steht in der Session (expanded_folder_ids, als JSON). Ein Klick ruft
-     * dieselbe Methode mit folder_id und toggle auf: die Id wird erst in jedem Fall aus
-     * der Liste entfernt und beim Öffnen wieder hinzugefügt - so bleibt sie eindeutig,
-     * ohne vorher prüfen zu müssen, ob sie schon enthalten ist.
+     * EXPAND AND COLLAPSE
+     * The state is kept in the session (expanded_folder_ids, as JSON). A click calls
+     * the same method with folder_id and toggle: the id is always first removed from
+     * the list and added again when opening - this keeps it unique,
+     * without having to check beforehand whether it is already included.
      *
-     * Zugeklappte Zweige werden nicht aus der Abfrage ausgeschlossen, sondern beim
-     * Durchlaufen übersprungen: $skipUntilRgt merkt sich den rechten Grenzwert des
-     * geschlossenen Ordners, alles mit kleinerem lft liegt in seinem Teilbaum. Eine
-     * einzige Abfrage genügt damit für den ganzen Baum.
+     * Collapsed branches are not excluded from the query, but skipped
+     * while iterating: $skipUntilRgt remembers the right boundary of the
+     * collapsed folder; everything with a smaller lft lies in its subtree. A single
+     * query is thus enough for the whole tree.
      *
-     * Anders als im Modul Template gibt es hier keinen "Neu"-Knopf - Bereiche werden
-     * im Modul Area angelegt.
+     * Unlike in the module Template, there is no "New" button here - areas are
+     * created in the module Area.
      *
-     * Request: folder_id, toggle (0|1) - beide optional; bei Mandanten-Hauptordnern
-     *          instance_id statt folder_id (siehe Klassenkommentar)
+     * Request: folder_id, toggle (0|1) - both optional; for instance main folders
+     *          instance_id instead of folder_id (see class comment)
      */
     public function folderList()
     {
-        // Hole die Ids der geöffneten Ordner aus der Session
+        // Get the ids of the open folders from the session
         $expandedFolderIds = $this->toggleExpanded('expanded_folder_ids', 'folder_id');
-        // dito für die Mandanten-Hauptordner
+        // ditto for the instance main folders
         $expandedInstanceIds = $this->toggleExpanded('expanded_instance_ids', 'instance_id');
 
-        // Seitenelemente
+        // Page elements
         // --------------------
 
         // Bread crum navi
         $this->backend->setNaviLabel('#record.module_label');
-        
+
         // Container header
         echo $this->backend->template('container_header');
-        
-        // Linker Seitenbereich
+
+        // Left page area
         // --------------------
         echo $this->backend->template('row_start');
         echo $this->backend->template('col_start_50');
@@ -100,8 +100,8 @@ class RecordBackendFolderList extends RecordBackend {
         $this->backend->buttonBarReset();
         $this->backend->buttonAdd('button_search', "cApp.layers.add('Record/record_global_search.php');cApp.layers.add('Record/record_search.php?' + cApp.layers.queryString());");
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
-        // Menü rechts: globaler Export / Import (alle Bereiche, Struktur, Templates) -
-        // XML-Backups sind dem Superuser vorbehalten
+        // Menu on the right: global export / import (all areas, structure, templates) -
+        // XML backups are reserved for the superuser
         if ($this->backend->isSuperuser()) {
             $this->backend->buttonAdd('record.record_folder_more_dropdown', '', '', alignRight:true);
         }
@@ -109,12 +109,12 @@ class RecordBackendFolderList extends RecordBackend {
 
         // Folders and Areas
         // --------------------
-        // Nur die Instanzen und lesbaren Bereiche der Benutzergruppe (null = alle)
+        // Only the instances and readable areas of the user group (null = all)
         $access = $this->backend->access();
         $instanceFilter = $access->instanceFilter();
         $areaFilter = $access->areaFilter(Area::CONTENT_TYPES);
         if ($this->instanceCache->hasMultipleInstances()) {
-            // Mandanten als Hauptordner, darunter je Instanz ihr Baum
+            // instances as main folders, each with its own tree below
             foreach ($this->instanceCache->instanceLabels() as $instanceId => $label) {
                 if ($instanceFilter !== null && !in_array((int)$instanceId, $instanceFilter, true)) continue;
                 $open = in_array($instanceId, $expandedInstanceIds, true);
@@ -137,7 +137,7 @@ class RecordBackendFolderList extends RecordBackend {
         echo $this->backend->template('col_end');
         echo $this->backend->template('col_start_50');
 
-        // Rechter Seitenbereich
+        // Right page area
         // --------------------
 
         $this->_lastChangedRecords();
@@ -150,12 +150,12 @@ class RecordBackendFolderList extends RecordBackend {
     }
 
     /**
-     * Auf- bzw. zuklappen (Request $requestKey + toggle) in der Session vermerken und
-     * die Liste der geöffneten Ids liefern.
+     * Record expanding or collapsing (request $requestKey + toggle) in the session and
+     * return the list of open ids.
      *
-     * Die Id wird erst in jedem Fall aus der Liste entfernt und beim Öffnen wieder
-     * hinzugefügt - so bleibt sie eindeutig, ohne vorher prüfen zu müssen, ob sie
-     * schon enthalten ist.
+     * The id is always first removed from the list and added again when opening - this
+     * keeps it unique, without having to check beforehand whether it is
+     * already included.
      *
      * @param string $sessionKey  expanded_folder_ids | expanded_instance_ids (JSON)
      * @param string $requestKey  folder_id | instance_id
@@ -176,25 +176,25 @@ class RecordBackendFolderList extends RecordBackend {
     }
 
     /**
-     * Das geladene Ergebnis von Area::loadAreas() als Baumzeilen ausgeben.
+     * Output the result of Area::loadAreas() loaded as tree rows.
      *
-     * @param int[] $expandedFolderIds  geöffnete Ordner
-     * @param int   $depthOffset        Einrückung: 1 unter einem Mandanten-Hauptordner
+     * @param int[] $expandedFolderIds  open folders
+     * @param int   $depthOffset        indentation: 1 below an instance main folder
      */
     private function printTree(array $expandedFolderIds, int $depthOffset): void
     {
-        $skipUntilRgt = null; // Speichert den rechten Grenzwert des aktuell geschlossenen Ordners
+        $skipUntilRgt = null; // Stores the right boundary of the currently collapsed folder
 
         for ($i=0; $i < $this->db->num_rows; $i++) {
             $data = $this->db->fetch();
             
-            // Prüfen, ob wir uns im Zweig eines geschlossenen Ordners befinden
+            // Check whether we are inside the branch of a collapsed folder
             if ($skipUntilRgt !== null) {
                 if ($data['lft'] < $skipUntilRgt) {
-                    // Element ist ein Kind/Kindeskind des geschlossenen Ordners -> überspringen
+                    // element is a child/descendant of the collapsed folder -> skip
                     continue;
                 } else {
-                    // Der Zweig des geschlossenen Ordners wurde verlassen
+                    // the branch of the collapsed folder has been left
                     $skipUntilRgt = null;
                 }
             }
@@ -204,13 +204,13 @@ class RecordBackendFolderList extends RecordBackend {
                 $icon = 'folder';
                 $folderId = (int)($data['area_id']);
                 if (in_array($folderId, $expandedFolderIds, true)) {
-                    // offener Ordner
+                    // open folder
                     $tpl = 'record.row_folder_open';
                 }
                 else {
-                    // geschlossener Ordner
+                    // closed folder
                     $tpl = 'record.row_folder';
-                    // Rgt-Wert des Ordners setzen, um alle folgenden Kinder zu überspringen
+                    // set the rgt value of the folder to skip all following children
                     $skipUntilRgt = $data['rgt'];
                 }
             }
@@ -228,11 +228,11 @@ class RecordBackendFolderList extends RecordBackend {
     }
 
     /**
-     * Vom Session-Admin zuletzt geänderte Datensätze listen (siehe Klassenkommentar).
+     * List the records last changed by the session admin (see class comment).
      *
-     * Die Ids kommen aus `history`, die Datensätze über Cms::select() - damit fehlen
-     * gelöschte (Papierkorb) und solche, die die Benutzergruppe nicht mehr lesen
-     * darf, von selbst. Ein Klick öffnet die Detailansicht.
+     * The ids come from `history`, the records via Cms::select() - so records that
+     * were deleted (trash) and those the user group may no longer read are
+     * left out automatically. A click opens the detail view.
      */
     private function _lastChangedRecords(): void
     {

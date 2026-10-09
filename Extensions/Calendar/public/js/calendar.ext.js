@@ -1,10 +1,10 @@
 /*
- * Extension Calendar - Handler für cApp.extensions (13 §3.4)
+ * Extension Calendar - handler for cApp.extensions (developer docs, chapter 08 (Components and extensions))
  *
- * Stellt neben das Textfeld einen nativen Picker (<input type="datetime-local|date|time">).
- * Eine Auswahl im Picker schreibt den Wert im ISO-Format in das Textfeld (das
- * Backend versteht ISO neben dem Landesformat); ein ISO-Wert im Textfeld wird beim
- * Öffnen in den Picker übernommen. Optionen: mode (auto|datetime|date|time), step (Minuten).
+ * Places a native picker (<input type="datetime-local|date|time">) next to the text field.
+ * A selection in the picker writes the value in ISO format into the text field (the
+ * backend understands ISO besides the national format); an ISO value in the text field is
+ * taken over into the picker on opening. Options: mode (auto|datetime|date|time), step (minutes).
  */
 (function (cApp) {
     'use strict';
@@ -14,7 +14,7 @@
 
     function modeFor(el, options) {
         if (options.mode && options.mode !== 'auto') return options.mode;
-        // Feldtyp aus data-c9-ext-type (Backend::formField): time -> time, sonst Datum + Zeit
+        // Field type from data-c9-ext-type (Backend::formField): time -> time, otherwise date + time
         return el.dataset.c9ExtType === 'time' ? 'time' : 'datetime';
     }
 

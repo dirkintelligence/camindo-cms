@@ -1,21 +1,21 @@
 <?php
 /**
- * Verstöße gegen die Script-Policy des Backends protokollieren (developer_docs/19-csp.md).
+ * Log violations of the backend script policy (developer docs, chapter 14 (Security: web)).
  *
- * Einstiegspunkt (Script in backend/):
+ * Entry point (script in backend/):
  *
  *     csp_report.php  -> report()
  *
- * backend-handlers.js meldet jedes 'securitypolicyviolation'-Ereignis hierher, je Seite
- * jede Stelle einmal. Im Modus security.backend_csp = 'report' sind das die Stellen, die
- * noch Handler-Attribute oder Scripts ohne Nonce schreiben; im Modus 'enforce' Scripts,
- * die der Browser abgewiesen hat - eigene Reste oder eingeschleuster Code.
+ * backend-handlers.js reports every 'securitypolicyviolation' event here, per page
+ * every place once. In mode security.backend_csp = 'report' these are the places that
+ * still write handler attributes or scripts without a nonce; in mode 'enforce' scripts
+ * that the browser rejected - own leftovers or injected code.
  *
- * Absichtlich nicht über report-uri: die Meldung des Browsers kommt ohne CSRF-Token und
- * ohne Bezug zur Sitzung. So gilt dieselbe Tür wie für jede Backend-Aktion (Sitzung,
- * POST, Token), und im Log steht, wer die Seite offen hatte.
+ * Deliberately not via report-uri: the browser's message comes without a CSRF token and
+ * without reference to the session. This way the same door applies as for every backend
+ * action (session, POST, token), and the log shows who had the page open.
  *
- * Log: var/log/{Y-m-d}_csp.log, eine Zeile je Meldung (Modul Logfiles: Kategorie warning)
+ * Log: var/log/{Y-m-d}_csp.log, one line per report (module Logfiles: category warning)
  */
 namespace Camindo\Core\Modules\Start;
 
@@ -39,7 +39,7 @@ class StartCspReport {
         if (!$this->backend->requirePost()) return;
 
         $field = function (string $name, int $max): string {
-            // Steuerzeichen raus (eine Zeile je Eintrag), Länge begrenzen
+            // Remove control characters (one line per entry), limit length
             $value = preg_replace('/[\x00-\x1F\x7F]+/', ' ', (string)($_POST[$name] ?? ''));
             return mb_substr(trim((string)$value), 0, $max);
         };

@@ -1,19 +1,19 @@
 <?php
 /**
- * Zweiter Faktor der Backend-Anmeldung (16-sicherheit.md §16).
+ * Second factor of the backend login (developer docs, chapter 13 (Security: authentication)).
  *
- * Der Ablauf bleibt für jeden Faktor derselbe - er gehört Admin:
+ * The process stays the same for every factor - it belongs to Admin:
  *
  *     loginByName()   Passwort stimmt -> uid + uid_date setzen -> start()
- *     loginByCode()   uid im Zeitfenster gefunden -> LoginGuard -> verify()
+ *     loginByCode()   uid found within the time window -> LoginGuard -> verify()
  *
- * Ein Faktor entscheidet nur, wie der Code entsteht und wie er geprüft wird. Die uid
- * (ein Versuch je uid), das Zeitfenster admin.2_factor_expiration, das Zählen der
- * Fehlversuche (LoginGuard, admin.bruteforce_max) und die Session macht Admin.
+ * A factor only decides how the code is created and how it is checked. The uid
+ * (one attempt per uid), the time window admin.2_factor_expiration, the counting of
+ * failed attempts (LoginGuard, admin.bruteforce_max) and the session are handled by Admin.
  *
- * Welcher Faktor gilt, entscheidet Admin::secondFactor() je Admin: TOTP, wenn der
- * Admin es eingerichtet hat und security.admin_2fa es zulässt, sonst E-Mail, wenn
- * admin.2_factor an ist.
+ * Which factor applies is decided per admin by Admin::secondFactor(): TOTP, if the
+ * admin has set it up and security.admin_2fa allows it, otherwise email, if
+ * admin.2_factor is on.
  *
  * @see Camindo\Core\Modules\Admin\EmailFactor  Code per E-Mail
  * @see Camindo\Core\Modules\Admin\TotpFactor   Authenticator-App (RFC 6238)
@@ -22,20 +22,20 @@ namespace Camindo\Core\Modules\Admin;
 
 interface SecondFactorInterface {
 
-    /** Kennung: 'email' | 'totp' - wählt u. a. den Hinweistext im Code-Formular */
+    /** Identifier: 'email' | 'totp' - selects, among other things, the hint text in the code form */
     public function name(): string;
 
     /**
-     * Zweite Stufe vorbereiten, nachdem das Passwort gestimmt hat und die uid steht.
+     * Prepare the second step, after the password matched and the uid exists.
      *
-     * @param array $admin  Admin::load() (E-Mail entschlüsselt), mit uid
-     * @return bool         false: Fehler in Cms::errors, die Anmeldung endet hier
-     * @throws \Throwable   wenn der Versand scheitert (StartBackend fängt das ab)
+     * @param array $admin  Admin::load() (email decrypted), with uid
+     * @return bool         false: errors in Cms::errors, the login ends here
+     * @throws \Throwable   if sending fails (StartBackend catches this)
      */
     public function start(array $admin): bool;
 
     /**
-     * Eingegebenen Code prüfen. Das Zählen von Fehlversuchen übernimmt Admin.
+     * Check the entered code. Admin handles the counting of failed attempts.
      *
      * @param array  $admin  Admin::load()
      * @param string $code   Eingabe, ungetrimmt

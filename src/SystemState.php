@@ -1,27 +1,27 @@
 <?php
 /**
- * Installations- und Wartungszustand - ohne Datenbank.
+ * Installation and maintenance state - without database.
  *
- * Drei Dateien unter var/ sagen jedem Request, ob er laufen darf
- * (docs/developers/14-installation-und-update.md, Abschnitte 2.2 und 7):
+ * Three files under var/ tell every request whether it may run
+ * (developer docs, chapter 09 (Installation and update), sections 2.2 and 7):
  *
- *     var/install.lock        Installation abgeschlossen (Installer, Schritt 12); fehlt
- *                             er UND der Stempel, ist camindo nie installiert worden:
- *                             Hinweisseite auf den Installer (isNotInstalled())
- *     var/config/core.php     Versionsstempel: auf welchen Stand die Datenbank
- *                             migriert ist - geschrieben von Installer und `upgrade`
- *     var/maintenance.lock    Wartungsmodus: Zeitpunkt und Grund
+ *     var/install.lock        installation completed (installer, step 12); if it is
+ *                             missing AND the stamp too, camindo was never installed:
+ *                             notice page pointing to the installer (isNotInstalled())
+ *     var/config/core.php     version stamp: the state the database has been
+ *                             migrated to - written by the installer and `upgrade`
+ *     var/maintenance.lock    maintenance mode: time and reason
  *
- * Weicht der Stempel von CAMINDO_VERSION ab, liegt neuer Code auf altem Schema
- * (composer update gelaufen, `upgrade` noch nicht) - das Frontend antwortet dann
- * mit 503, genau wie im Wartungsmodus. Die Prüfung kostet ein include und ein
- * is_file() je Request und braucht keine Datenbankverbindung; deshalb steht sie in
- * den Einstiegspunkten VOR dem ersten $app->get() einer Klasse mit Database.
+ * If the stamp differs from CAMINDO_VERSION, new code runs on the old schema
+ * (composer update ran, `upgrade` not yet) - the frontend then answers
+ * with 503, just as in maintenance mode. The check costs one include and one
+ * is_file() per request and needs no database connection; that is why it sits in
+ * the entry points BEFORE the first $app->get() of a class with Database.
  *
- * Aufrufer: Core/public_master/index.php, file.php (Frontend: guardFrontend()),
- * Core/public_master/backend/index.php, module.php (Backend: blockReason(), Superuser
- * dürfen weiter), Core/cron/cron.php, scheduler.php (Hintergrundjobs
- * beenden sich), Core/cron/camindo.php (schreibt Lock und Stempel).
+ * Callers: Core/public_master/index.php, file.php (frontend: guardFrontend()),
+ * Core/public_master/backend/index.php, module.php (backend: blockReason(), superusers
+ * may continue), Core/cron/cron.php, scheduler.php (background jobs
+ * terminate), Core/cron/camindo.php (writes lock and stamp).
  */
 namespace Camindo\Core;
 
@@ -76,7 +76,7 @@ class SystemState {
     // ==== Versionsstempel ====
 
     /**
-     * Stand der Datenbank laut var/config/core.php, null wenn die Datei fehlt.
+     * Database version according to var/config/core.php, null if the file is missing.
      */
     public function installedVersion(): ?string
     {
@@ -89,8 +89,8 @@ class SystemState {
     }
 
     /**
-     * true, wenn die Dateien (CAMINDO_VERSION) und die Datenbank (Stempel) nicht
-     * zusammenpassen - auch, wenn der Stempel fehlt.
+     * true if the files (CAMINDO_VERSION) and the database (stamp) do not match -
+     * also if the stamp is missing.
      */
     public function versionMismatch(): bool
     {
@@ -129,7 +129,7 @@ class SystemState {
     }
 
     /**
-     * ['since' => 'ISO-Zeit', 'reason' => '…', 'age' => Sekunden] oder null
+     * ['since' => 'ISO time', 'reason' => '…', 'age' => seconds] or null
      */
     public function maintenanceInfo(): ?array
     {
@@ -161,7 +161,7 @@ class SystemState {
     // ==== Sperre ====
 
     /**
-     * Warum der Request nicht laufen darf - oder null.
+     * Why the request may not run - or null.
      */
     public function blockReason(): ?string
     {
@@ -172,7 +172,7 @@ class SystemState {
     }
 
     /**
-     * Lesbare Meldung zu blockReason() - für Superuser im Backend und die CLI.
+     * Readable message for blockReason() - for superusers in the backend and the CLI.
      */
     public function blockMessage(?string $reason = null): string
     {
@@ -195,9 +195,9 @@ class SystemState {
     }
 
     /**
-     * Noch nie installiert: weder Installer-Lock noch Versionsstempel. Dann gibt es
-     * auch keine .camindo.php und keine Datenbank - Frontend und Backend zeigen den
-     * Hinweis auf den Installer, ohne irgendetwas zu laden.
+     * Never installed: neither installer lock nor version stamp. Then there is
+     * also no .camindo.php and no database - frontend and backend show the
+     * notice pointing to the installer without loading anything.
      */
     public function isNotInstalled(): bool
     {
@@ -205,7 +205,7 @@ class SystemState {
     }
 
     /**
-     * Frontend: bei Sperre 503 senden und beenden. Kein Datenbankzugriff.
+     * Frontend: on a block send 503 and exit. No database access.
      */
     public function guardFrontend(): void
     {
@@ -215,7 +215,7 @@ class SystemState {
     }
 
     /**
-     * Backend, vor dem Laden der Session: ohne Installation die Installer-Seite.
+     * Backend, before the session is loaded: without installation the installer page.
      */
     public function guardNotInstalled(): void
     {
@@ -223,7 +223,7 @@ class SystemState {
     }
 
     /**
-     * 503 mit Wartungsseite: var/custom/{template}, sonst
+     * 503 with the maintenance page: var/custom/{template}, otherwise
      * Core/install/templates/{template}.
      */
     public function sendUnavailable(string $template = 'maintenance.html'): never

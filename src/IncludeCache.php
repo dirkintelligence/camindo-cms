@@ -1,55 +1,55 @@
 <?php
 /**
- * Ausgabe-Cache für CMS:INCLUDE - (CMS:INCLUDE teaser caching=5m cacheparams=$params).
+ * Output cache for CMS:INCLUDE - (CMS:INCLUDE teaser caching=5m cacheparams=$params).
  *
- * Abgelegt wird die fertige Ausgabe eines eingebundenen Templates, nicht der
- * kompilierte Code. Wer das Template mit denselben Angaben innerhalb der Frist wieder
- * einbindet, bekommt die Datei, ohne dass das Template läuft.
+ * What is stored is the finished output of an included template, not the
+ * compiled code. Whoever includes the template again with the same parameters within the
+ * time limit gets the file without the template running.
  *
- * SCHLÜSSEL UND ABLAGE
+ * KEY AND STORAGE
  * --------------------
  *     var/cache/include/{area_id}/{name}/{hash}.html
  *
- * {area_id}/{name} ist die kompilierte Datei des Templates (Cms::templateFile()), der
- * Hash (sha256) bildet sich aus Instanz, Inhaltssprache und dem Text aus
- * 'cacheparams' (paramString()). Instanz und Sprache stecken also schon im
- * Schlüssel; alles andere, wovon die Ausgabe abhängt (Datensatz, Seite der
- * Pagination, angemeldeter Kunde …), gehört in 'cacheparams'.
+ * {area_id}/{name} is the compiled file of the template (Cms::templateFile()), the
+ * hash (sha256) is formed from instance, content language and the text from
+ * 'cacheparams' (paramString()). Instance and language are thus already part of the
+ * key; everything else the output depends on (record, page of the
+ * pagination, logged-in customer …) belongs in 'cacheparams'.
  *
- * Die erste Zeile der Datei ist die Ablaufzeit (Unix-Zeit, 0 = unbegrenzt) - für
- * cleanup(), das den Inhalt sonst nicht kennt. Beim Lesen gilt eine Datei nur,
- * solange
- *   - ihre Ablaufzeit nicht erreicht ist,
- *   - sie jünger ist als die im Aufruf angegebene Frist (eine verkürzte Frist greift
- *     sofort) und
- *   - die kompilierte Template-Datei nicht jünger ist als sie (ein gespeichertes
- *     Template macht seinen Cache ungültig; 'cache templates' damit alle).
+ * The first line of the file is the expiry time (Unix time, 0 = unlimited) - for
+ * cleanup(), which otherwise does not know the content. When reading, a file only applies
+ * as long as
+ *   - its expiry time has not been reached,
+ *   - it is younger than the time limit given in the call (a shortened limit applies
+ *     immediately) and
+ *   - the compiled template file is not younger than it (a saved template invalidates
+ *     its cache; 'cache templates' does so for all).
  *
- * Die Nonce der Seite (CMS:NONCE, CMS:FED_SCRIPT) steht nicht in der Datei, sondern
- * ein Platzhalter, der beim Ausliefern die Nonce des laufenden Requests bekommt -
- * sonst hielte die Script-Policy eine gecachte Script-Zeile an.
+ * The nonce of the page (CMS:NONCE, CMS:FED_SCRIPT) is not in the file; instead a
+ * placeholder that receives the nonce of the running request on delivery -
+ * otherwise the script policy would block a cached script line.
  *
- * GLEICHZEITIGE AUFRUFE
+ * CONCURRENT CALLS
  * --------------------
- * Fehlt die Datei oder ist sie abgelaufen, legt der Prozess die Sperrdatei
- * {hash}.html.lock exklusiv an (fopen 'x', O_EXCL) und rendert. Andere Prozesse mit
- * demselben Schlüssel warten, bis die Sperrdatei verschwindet (höchstens
- * admin.include_cache_lock_wait Sekunden), und lesen danach die frische Datei. Nach
- * Ablauf der Wartezeit rendern sie selbst, schreiben aber nichts. Die Cache-Datei
- * entsteht unter einem temporären Namen und wird per rename() eingesetzt - ein Leser
- * sieht nie eine halbe Datei.
+ * If the file is missing or expired, the process creates the lock file
+ * {hash}.html.lock exclusively (fopen 'x', O_EXCL) and renders. Other processes with
+ * the same key wait until the lock file disappears (at most
+ * admin.include_cache_lock_wait seconds), and then read the fresh file. After the
+ * waiting time has elapsed they render themselves, but write nothing. The cache file
+ * is created under a temporary name and put in place via rename() - a reader
+ * never sees a half-written file.
  *
- * Bewusst kein flock(): Es sperrt nicht auf jedem Dateisystem prozessübergreifend
- * (NFS, die Freigaben von Docker Desktop); das exklusive Anlegen schon. Endet der
- * rendernde Prozess vorzeitig (exit im Template, Fatal Error), löscht eine
- * Shutdown-Funktion seine Sperren. Bleibt trotzdem eine liegen (Prozess abgeschossen),
- * gilt sie nach staleAfter() Sekunden als verwaist und wird übernommen.
+ * Deliberately no flock(): it does not lock across processes on every file system
+ * (NFS, the shares of Docker Desktop); exclusive creation does. If the rendering
+ * process ends early (exit in the template, fatal error), a
+ * shutdown function deletes its locks. If one is still left behind (process killed),
+ * it counts as orphaned after staleAfter() seconds and is taken over.
  *
- * AUFRÄUMEN
+ * CLEANUP
  * --------------------
- * cleanup() - Aufgabentyp cachecleanup im Modul Scheduler: abgelaufene Dateien,
- * Dateien zu gelöschten oder geänderten Templates, liegen gebliebene temporäre Dateien
- * und Sperrdateien, leere Verzeichnisse. clear() leert alles (camindo.php cache
+ * cleanup() - task type cachecleanup in the Scheduler module: expired files,
+ * files for deleted or changed templates, left-over temporary files
+ * and lock files, empty directories. clear() empties everything (camindo.php cache
  * include).
  *
  * @see Camindo\Core\Cms::cmsInclude()                          Anbindung
@@ -63,25 +63,25 @@ class IncludeCache {
     /** Unterverzeichnis von var/cache */
     public const DIR = 'include';
 
-    /** Platzhalter für die Nonce der Seite im abgelegten Text */
+    /** Placeholder for the nonce of the page in the stored text */
     private const NONCE_PLACEHOLDER = "\x01c9-nonce\x01";
 
-    /** Abstand der Versuche beim Warten auf eine Sperre (Mikrosekunden) */
+    /** Interval between attempts when waiting for a lock (microseconds) */
     private const LOCK_POLL_US = 50000;
 
-    /** Alter, ab dem cleanup() temporäre und Sperrdateien entfernt (Sekunden) */
+    /** Age from which cleanup() removes temporary and lock files (seconds) */
     private const STALE_SECONDS = 3600;
 
-    /** Mindestalter einer verwaisten Sperre (Sekunden) - siehe staleAfter() */
+    /** Minimum age of an orphaned lock (seconds) - see staleAfter() */
     private const STALE_LOCK_SECONDS = 120;
 
     /**
-     * Laufende Aufzeichnungen (verschachtelte Includes): je Eintrag Zieldatei,
-     * Sperre, Ablaufzeit und Pufferebene
+     * Running recordings (nested includes): per entry target file,
+     * lock, expiry time and output level
      */
     private array $stack = [];
 
-    /** Sperrdateien dieses Prozesses (Pfad => true) - releaseAll() beim Beenden */
+    /** Lock files of this process (path => true) - releaseAll() on shutdown */
     private array $locks = [];
     private bool $shutdownRegistered = false;
 
@@ -97,20 +97,20 @@ class IncludeCache {
         return rtrim((string)$this->config->get('paths.var_dir'), '/') . '/cache/' . self::DIR;
     }
 
-    /** Cache eingeschaltet? (admin.include_cache) */
+    /** Cache enabled? (admin.include_cache) */
     public function enabled(): bool
     {
         return (bool)($this->config->get('admin.include_cache') ?? true);
     }
 
     /**
-     * Wert von 'caching' in Sekunden.
+     * Value of 'caching' in seconds.
      *
-     *     300, "300s"  Sekunden      "5m"  Minuten      "1h"  Stunden      "1d"  Tage
-     *     "infinite"   unbegrenzt (0)
-     *     "", "0"      kein Cache (null) - etwa um den Cache per Variable abzuschalten
+     *     300, "300s"  seconds       "5m"  minutes      "1h"  hours      "1d"  days
+     *     "infinite"   unlimited (0)
+     *     "", "0"      no cache (null) - e.g. to switch the cache off via a variable
      *
-     * @throws \InvalidArgumentException  unbekannte Schreibweise
+     * @throws \InvalidArgumentException  unknown notation
      */
     public static function ttl(mixed $value): ?int
     {
@@ -133,10 +133,10 @@ class IncludeCache {
     }
 
     /**
-     * 'cacheparams' als Text: null, bool, int, float und string wie (string),
-     * Arrays als JSON (Schlüssel und Reihenfolge zählen mit).
+     * 'cacheparams' as text: null, bool, int, float and string as (string),
+     * arrays as JSON (keys and order count).
      *
-     * @throws \InvalidArgumentException  Objekt ohne __toString(), Ressource
+     * @throws \InvalidArgumentException  object without __toString(), resource
      */
     public static function paramString(mixed $params): string
     {
@@ -151,7 +151,7 @@ class IncludeCache {
     }
 
     /**
-     * Hash des Schlüssels - siehe Klassenkommentar.
+     * Hash of the key - see class comment.
      */
     public static function key(int $instanceId, int $languageId, string $params): string
     {
@@ -159,16 +159,16 @@ class IncludeCache {
     }
 
     /**
-     * Gültigen Inhalt holen - oder die Aufzeichnung beginnen.
+     * Fetch valid content - or start the recording.
      *
-     * Bei einem Treffer kommt der Text (mit der Nonce $nonce) zurück; der Aufrufer gibt
-     * ihn aus und bindet das Template nicht ein. Sonst kommt null: dann läuft ab hier
-     * ein Ausgabepuffer, der Aufrufer bindet das Template ein und ruft danach finish().
+     * On a hit the text comes back (with the nonce $nonce); the caller outputs
+     * it and does not include the template. Otherwise null comes back: then from here on
+     * an output buffer runs, the caller includes the template and calls finish() afterwards.
      *
      * @param string $templateFile  "{area_id}/{name}" (Cms::templateFile())
-     * @param string $source        absoluter Pfad der kompilierten Datei
-     * @param int    $ttl           Frist in Sekunden, 0 = unbegrenzt
-     * @param string $nonce         Nonce der laufenden Seite
+     * @param string $source        absolute path of the compiled file
+     * @param int    $ttl           time limit in seconds, 0 = unlimited
+     * @param string $nonce         nonce of the running page
      */
     public function start(string $templateFile, string $key, int $ttl, string $source, string $nonce): ?string
     {
@@ -179,14 +179,14 @@ class IncludeCache {
         $content = $this->read($path, $ttl, $sourceTime);
         if ($content !== null) return $this->withNonce($content, $nonce);
 
-        // Derselbe Schlüssel wird in diesem Prozess schon aufgezeichnet (das Template
-        // bindet sich über Umwege selbst ein): ohne Cache rendern, sonst wartete der
-        // Prozess auf die eigene Sperre
+        // The same key is already being recorded in this process (the template
+        // includes itself indirectly): render without cache, otherwise the
+        // process would wait for its own lock
         $lock = false;
         if (!in_array($path, array_column($this->stack, 'path'), true)
             && $this->system->createDir(dirname($this->dir()), self::DIR . '/' . dirname($relative))) {
             $lock = $this->lock($path . '.lock');
-            // Ein anderer Prozess hat die Datei geschrieben, während wir warteten
+            // Another process wrote the file while we were waiting
             if ($lock && ($content = $this->read($path, $ttl, $sourceTime)) !== null) {
                 $this->unlock($path . '.lock');
                 return $this->withNonce($content, $nonce);
@@ -204,18 +204,18 @@ class IncludeCache {
     }
 
     /**
-     * Aufzeichnung beenden: Ausgabe zurückgeben und - bei $store und gehaltener
-     * Sperre - ablegen.
+     * End the recording: return the output and - if $store is set and the
+     * lock is held - store it.
      *
-     * @param bool   $store  false: nicht ablegen (Fehlermeldungen beim Rendern)
-     * @param string $nonce  Nonce der laufenden Seite - im abgelegten Text Platzhalter
+     * @param bool   $store  false: do not store (error messages while rendering)
+     * @param string $nonce  nonce of the running page - placeholder in the stored text
      */
     public function finish(bool $store, string $nonce): string
     {
         $entry = array_pop($this->stack);
         if ($entry === null) return '';
 
-        // Puffer, die das Template offen gelassen hat, gehören zur Ausgabe
+        // Buffers the template left open belong to the output
         $output = '';
         while (ob_get_level() > $entry['level']) {
             $output = (string)ob_get_clean() . $output;
@@ -232,10 +232,10 @@ class IncludeCache {
     }
 
     /**
-     * Abgelaufene und verwaiste Dateien löschen - siehe Klassenkommentar.
+     * Delete expired and orphaned files - see class comment.
      *
-     * @return array  ['files' => gelöschte Cache-Dateien, 'bytes' => deren Größe,
-     *                 'kept' => verbliebene Cache-Dateien, 'failed' => Dateinamen]
+     * @return array  ['files' => deleted cache files, 'bytes' => their size,
+     *                 'kept' => remaining cache files, 'failed' => file names]
      */
     public function cleanup(): array
     {
@@ -252,19 +252,19 @@ class IncludeCache {
         foreach ($iterator as $entry) {
             $path = $entry->getPathname();
             if ($entry->isDir()) {
-                @rmdir($path);   // nur leere Verzeichnisse
+                @rmdir($path);   // empty directories only
                 continue;
             }
             $name = $entry->getFilename();
             $mtime = (int)$entry->getMTime();
 
             if (!str_ends_with($name, '.html')) {
-                // Sperrdatei oder temporäre Datei eines abgebrochenen Prozesses
+                // Lock file or temporary file of an aborted process
                 if ($now - $mtime >= self::STALE_SECONDS) @unlink($path);
                 continue;
             }
 
-            // Template zur Datei: {area_id}/{name} aus dem Pfad
+            // Template of the file: {area_id}/{name} from the path
             $templateFile = substr(dirname($path), strlen($dir) + 1);
             $source = $templatePath . '/' . $templateFile . '.php';
             $expires = $this->expires($path);
@@ -290,9 +290,9 @@ class IncludeCache {
     }
 
     /**
-     * Umfang des Caches (Infoseite der Aufgabe, Startseite).
+     * Size of the cache (info page of the task, start page).
      *
-     * @return array  ['files' => Anzahl Cache-Dateien, 'bytes' => Größe]
+     * @return array  ['files' => number of cache files, 'bytes' => size]
      */
     public function stats(): array
     {
@@ -310,10 +310,10 @@ class IncludeCache {
     }
 
     /**
-     * Cache leeren - ganz oder für ein Template.
+     * Empty the cache - completely or for one template.
      *
-     * @param string $templateFile  "{area_id}/{name}", '' = alles
-     * @return int  Anzahl gelöschter Cache-Dateien
+     * @param string $templateFile  "{area_id}/{name}", '' = everything
+     * @return int  number of deleted cache files
      */
     public function clear(string $templateFile = ''): int
     {
@@ -335,14 +335,14 @@ class IncludeCache {
                 @rmdir($path);
             }
             elseif (str_ends_with($path, '.lock') && time() - (int)$entry->getMTime() < $this->staleAfter()) {
-                // Sperre eines gerade rendernden Prozesses bleibt
+                // Lock of a process that is currently rendering stays
             }
             elseif (@unlink($path) && str_ends_with($path, '.html')) {
                 $count++;
             }
         }
         if ($templateFile !== '') {
-            // leere Verzeichnisse des Templates und seines Bereichs
+            // empty directories of the template and its area
             @rmdir($dir);
             @rmdir(dirname($dir));
         }
@@ -359,7 +359,7 @@ class IncludeCache {
     }
 
     /**
-     * Inhalt einer gültigen Datei (mit Platzhalter), sonst null.
+     * Content of a valid file (with placeholder), otherwise null.
      */
     private function read(string $path, int $ttl, int $sourceTime): ?string
     {
@@ -379,7 +379,7 @@ class IncludeCache {
         return substr($data, $pos + 1);
     }
 
-    /** Ablaufzeit aus der ersten Zeile; null = keine Cache-Datei */
+    /** Expiry time from the first line; null = no cache file */
     private function expires(string $path): ?int
     {
         $fh = @fopen($path, 'r');
@@ -390,15 +390,15 @@ class IncludeCache {
         return ctype_digit($line) ? (int)$line : null;
     }
 
-    /** Platzhalter durch die Nonce des Requests ersetzen */
+    /** Replace the placeholder with the nonce of the request */
     private function withNonce(string $content, string $nonce): string
     {
         return str_replace(self::NONCE_PLACEHOLDER, $nonce, $content);
     }
 
     /**
-     * Datei schreiben: temporär daneben, dann rename() - Leser sehen die alte oder
-     * die neue Datei, nie eine halbe.
+     * Write the file: temporarily next to it, then rename() - readers see the old or
+     * the new file, never a half-written one.
      */
     private function write(string $path, int $expires, string $content): void
     {
@@ -412,11 +412,11 @@ class IncludeCache {
     }
 
     /**
-     * Sperre holen: Sperrdatei exklusiv anlegen - höchstens
-     * admin.include_cache_lock_wait Sekunden warten, solange ein anderer Prozess sie
-     * hält. Eine verwaiste Sperre (älter als staleAfter()) wird übernommen.
+     * Acquire the lock: create the lock file exclusively - wait at most
+     * admin.include_cache_lock_wait seconds while another process holds it.
+     * An orphaned lock (older than staleAfter()) is taken over.
      *
-     * @return bool  false: keine Sperre (Zeit abgelaufen, Datei nicht anlegbar)
+     * @return bool  false: no lock (time expired, file cannot be created)
      */
     private function lock(string $lockFile): bool
     {
@@ -438,11 +438,11 @@ class IncludeCache {
             clearstatcache(true, $lockFile);
             $mtime = @filemtime($lockFile);
             if ($mtime === false) {
-                // eben freigegeben - oder das Verzeichnis ist nicht beschreibbar
+                // just released - or the directory is not writable
                 if (!is_writable(dirname($lockFile))) return false;
             }
             elseif (time() - $mtime > $this->staleAfter()) {
-                // verwaist: umbenennen statt löschen - das gelingt nur einem
+                // orphaned: rename instead of delete - only one process succeeds at this
                 $stale = $lockFile . '.' . getmypid() . '.stale';
                 if (@rename($lockFile, $stale)) @unlink($stale);
                 continue;
@@ -453,8 +453,8 @@ class IncludeCache {
     }
 
     /**
-     * Ab diesem Alter gilt eine Sperre als verwaist (Sekunden): das Doppelte der
-     * Wartezeit, mindestens STALE_LOCK_SECONDS - so lange rendert kein Template.
+     * From this age a lock counts as orphaned (seconds): twice the waiting
+     * time, at least STALE_LOCK_SECONDS - no template renders that long.
      */
     private function staleAfter(): int
     {
@@ -462,7 +462,7 @@ class IncludeCache {
         return max(self::STALE_LOCK_SECONDS, 2 * $wait);
     }
 
-    /** Sperre freigeben */
+    /** Release the lock */
     private function unlock(string $lockFile): void
     {
         @unlink($lockFile);
@@ -470,8 +470,8 @@ class IncludeCache {
     }
 
     /**
-     * Alle Sperren dieses Prozesses freigeben - Shutdown-Funktion, falls das Template
-     * mit exit oder einem Fatal Error endet, bevor finish() lief.
+     * Release all locks of this process - shutdown function, in case the template
+     * ends with exit or a fatal error before finish() ran.
      */
     private function releaseAll(): void
     {

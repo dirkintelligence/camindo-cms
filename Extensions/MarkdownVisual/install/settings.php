@@ -1,9 +1,9 @@
 <?php
-// Core-Extension MarkdownVisual: Markdown in der Vorschau bearbeiten (eigener Editor,
-// keine Fremdbibliothek) für Textareas der Typen text und chars - Quelltext über die
-// Schaltfläche <>; Werkzeugleiste, Höhe und ein Stylesheet aus
-// var/extensions/markdownvisual/ je Feld einstellbar. Ausgabe im Template:
-// (CMS:TEXT feld markdown=true) bzw. Camindo\Core\Markdown.
+// Core extension MarkdownVisual: edit Markdown in the preview (own editor,
+// no third-party library) for textareas of the types text and chars - source via the
+// <> button; toolbar, height and a stylesheet from
+// var/extensions/markdownvisual/ can be set per field. Output in the template:
+// (CMS:TEXT feld markdown=true) or Camindo\Core\Markdown.
 return [
     'version'          => '9.0.0',
     'type'             => 'editor',

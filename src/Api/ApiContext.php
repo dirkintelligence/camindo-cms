@@ -1,27 +1,27 @@
 <?php
 /**
- * Zustand der API im laufenden Prozess: unter welcher Session, über welche
- * Oberfläche und über welchen Kanal gerade gearbeitet wird - und die Übersetzung
- * zwischen den Konventionen des Bestands (Cms::errors, language_id) und denen der
- * API (Fehlerliste, Sprachcodes).
+ * State of the API in the running process: under which session, via which
+ * interface and through which channel work is being done right now - and the translation
+ * between the conventions of the stock (Cms::errors, language_id) and those of the
+ * API (error list, language codes).
  *
- * OBERFLÄCHE UND KANAL
+ * INTERFACE AND CHANNEL
  * --------------------
- *     Oberfläche  die der Session (`admin_session`.`interface`): backend, cli, php.
- *                 Die Gruppe muss sie benutzen dürfen (Access::interface()).
- *     Kanal       wer über die Session arbeitet - erscheint im Audit-Log als
- *                 Herkunft (AuditLog::setContext()), der Admin bleibt der Handelnde:
- *                     llm        ein LLM im Chat des Backends (attach)
- *                     tool       ein Custom Tool aus einem Backend-Request (attach)
- *                     scheduler  eine Aufgabe des Zeitplaners (runAs)
- *                     cli, php   die Oberfläche selbst
+ *     Interface   that of the session (`admin_session`.`interface`): backend, cli, php.
+ *                 The group must be allowed to use it (Access::interface()).
+ *     Channel     who works via the session - appears in the audit log as
+ *                 origin (AuditLog::setContext()); the admin remains the acting party:
+ *                     llm        an LLM in the chat of the backend (attach)
+ *                     tool       a custom tool from a backend request (attach)
+ *                     scheduler  a task of the scheduler (runAs)
+ *                     cli, php   the interface itself
  *
- * "Angehängt" (attach) heißt: die API arbeitet in der Backend-Session eines
- * angemeldeten Admins mit. Nur dann gibt es Vorschau-Links (sie hängen an einer
- * Backend-Session, FrontendHandover), und logout() beendet die Session nicht.
+ * "Attached" (attach) means: the API works along in the backend session of a
+ * logged-in admin. Only then are there preview links (they hang on a
+ * backend session, FrontendHandover), and logout() does not end the session.
  *
- * @see Camindo\Core\Api\ApiSession   stellt den Zustand her
- * @see Camindo\Core\Api\Api          prüft ihn vor jedem Aufruf (require())
+ * @see Camindo\Core\Api\ApiSession   establishes the state
+ * @see Camindo\Core\Api\Api          checks it before each call (require())
  */
 namespace Camindo\Core\Api;
 
@@ -50,13 +50,13 @@ class ApiContext
     }
 
     // ====================
-    // Zustand
+    // State
 
     /**
-     * Arbeit über die API beginnen (ApiSession).
+     * Start working via the API (ApiSession).
      *
      * @param string $channel   CHANNELS
-     * @param bool   $attached  in einer Backend-Session mitarbeiten
+     * @param bool   $attached  work along in a backend session
      */
     public function begin(string $channel, bool $attached = false): void
     {
@@ -69,7 +69,7 @@ class ApiContext
     }
 
     /**
-     * Arbeit über die API beenden (ApiSession::logout()).
+     * End working via the API (ApiSession::logout()).
      */
     public function end(): void
     {
@@ -93,15 +93,15 @@ class ApiContext
         return $this->attached;
     }
 
-    /** Oberfläche der Session ('' ohne Session) */
+    /** Interface of the session ('' without session) */
     public function interface(): string
     {
         return (string)($this->session->get('interface') ?? '');
     }
 
     /**
-     * Vor jedem Aufruf: begonnen, Session geladen, Rechte geladen, Oberfläche erlaubt.
-     * Ohne das wäre Access ungeladen - und ungeladen verweigert Access nichts.
+     * Before each call: started, session loaded, rights loaded, interface allowed.
+     * Without that Access would be unloaded - and unloaded Access denies nothing.
      *
      * @throws ApiException  NOT_LOGGED_IN
      */
@@ -119,15 +119,15 @@ class ApiContext
     }
 
     // ====================
-    // Hinweise
+    // Notes
 
-    /** Hinweis zur Antwort des laufenden Aufrufs (Api::call(): 'warnings') */
+    /** Note on the response of the running call (Api::call(): 'warnings') */
     public function warn(string $message): void
     {
         $this->warnings[] = $message;
     }
 
-    /** Hinweise abholen und zurücksetzen */
+    /** Fetch notes and reset them */
     public function takeWarnings(): array
     {
         $warnings = $this->warnings;
@@ -136,13 +136,13 @@ class ApiContext
     }
 
     // ====================
-    // Fehler
+    // Errors
 
     /**
-     * Cms::errors als Fehlerliste der API. Schlüssel "feld" bzw. "feld.{language_id}"
-     * (mehrsprachige Felder) werden zu field + language (Code); Meldungen ohne HTML.
+     * Cms::errors as the error list of the API. Key "field" resp. "field.{language_id}"
+     * (multilingual fields) become field + language (code); messages without HTML.
      *
-     * @return array  Liste aus ['field' => ?string, 'language' => ?string,
+     * @return array  list of ['field' => ?string, 'language' => ?string,
      *                'label' => ?string, 'message' => string]
      */
     public function errorsFromCms(): array
@@ -168,9 +168,9 @@ class ApiContext
     }
 
     /**
-     * Ausnahme aus den gesammelten Fehlern (Cms::errors) - und die Sammlung leeren.
+     * Exception from the collected errors (Cms::errors) - and empty the collection.
      *
-     * @param string $errorCode  ApiException-Code
+     * @param string $errorCode  ApiException code
      */
     public function exceptionFromCms(string $errorCode = ApiException::VALIDATION): ApiException
     {
@@ -183,7 +183,7 @@ class ApiContext
         return new ApiException($errorCode, $message, $errors);
     }
 
-    /** Text ohne HTML und ohne überflüssigen Leerraum */
+    /** Text without HTML and without superfluous whitespace */
     public function plain(string $text): string
     {
         $text = html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $text)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -191,13 +191,13 @@ class ApiContext
     }
 
     // ====================
-    // Zeit
+    // Time
 
     /**
-     * UTC-Zeitpunkt direkt aus der Datenbank als ISO 8601 mit Offset in der Zeitzone
-     * des Admins ('2026-09-29T16:03:00+02:00') - das Ausgabeformat der API für Werte,
-     * die in UTC gespeichert sind (Werte aus Record::load() siehe isoLocal()).
-     * null bzw. '' bleiben null.
+     * UTC time taken directly from the database as ISO 8601 with offset in the time zone
+     * of the admin ('2026-09-29T16:03:00+02:00') - the output format of the API for values
+     * stored in UTC (values from Record::load() see isoLocal()).
+     * null resp. '' stay null.
      */
     public function isoTime(?string $utc): ?string
     {
@@ -209,8 +209,8 @@ class ApiContext
     }
 
     /**
-     * Zeitpunkt, der bereits in der Zeitzone des Admins vorliegt (Record::load() und
-     * Cms::fetch() rechnen `timestampl` aus UTC um), als ISO 8601 mit Offset.
+     * Time already present in the time zone of the admin (Record::load() and
+     * Cms::fetch() convert `timestampl` from UTC), as ISO 8601 with offset.
      */
     public function isoLocal(?string $local): ?string
     {
@@ -221,11 +221,11 @@ class ApiContext
     }
 
     // ====================
-    // Sprachen
+    // Languages
 
     /**
-     * language_id zu einem Sprachcode ('de_DE') oder einer Id - null, wenn es die
-     * Sprache nicht gibt. Mit $instanceId nur unter den Sprachen dieser Instanz.
+     * language_id for a language code ('de_DE') or an ID - null if there is no
+     * such language. With $instanceId only among the languages of this instance.
      */
     public function languageId(string|int $codeOrId, int $instanceId = 0): ?int
     {
@@ -240,14 +240,14 @@ class ApiContext
         return null;
     }
 
-    /** Sprachcode zu einer language_id ('' wenn unbekannt) */
+    /** Language code for a language_id ('' if unknown) */
     public function languageCode(int $languageId): string
     {
         return (string)($this->languages()[$languageId]['code'] ?? '');
     }
 
     /**
-     * Sprachen einer Instanz bzw. aller Instanzen: language_id => Sprachzeile
+     * Languages of an instance resp. of all instances: language_id => language row
      */
     private function languages(int $instanceId = 0): array
     {

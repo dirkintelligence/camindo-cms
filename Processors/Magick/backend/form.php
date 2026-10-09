@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\cms $this->cms
@@ -16,8 +16,8 @@ $prefix = strtolower($this->processorName);
 $tplProcessorForm = $this->backend->template("proc.{$prefix}.edit_form");
 $this->backend->formReplace('{processor_fields}', $tplProcessorForm);
 
-// Hinweis unter den Medientypen: SVG und PDF liest ImageMagick nicht selbst,
-// sondern über librsvg bzw. Ghostscript - deshalb sind sie nicht vorbelegt.
+// Note below the media types: ImageMagick does not read SVG and PDF itself,
+// but via librsvg or Ghostscript - therefore they are not preset.
 // Siehe developer_docs/18-imagemagick.md
 $this->backend->formReplace('{processor_note}', $this->backend->template('alert_warning', [
     '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.note_media_types'))
@@ -30,8 +30,8 @@ $this->backend->formField($this->converter, ['name' => 'details.width', 'value' 
 // height
 $this->backend->formField($this->converter, ['name' => 'details.height', 'value' => $details['height'] ?? '', 'id' => $this->id]);
 
-// Größe: Anpassung (crop), Bedingung, Einheit, Höchstzahl Pixel - Optionen und
-// Beschriftungen aus dem Schema (Magick::hookDefinition())
+// Size: adjustment (crop), condition, unit, maximum pixels - options and
+// labels from the schema (Magick::hookDefinition())
 $this->backend->formField($this->converter, ['name' => 'details.crop', 'value' => $details['crop'] ?? 0, 'id' => $this->id]);
 $this->backend->formField($this->converter, ['name' => 'details.resize_when', 'value' => $details['resize_when'] ?? 'always', 'id' => $this->id]);
 $this->backend->formField($this->converter, ['name' => 'details.unit', 'value' => $details['unit'] ?? 'px', 'id' => $this->id]);

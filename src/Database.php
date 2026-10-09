@@ -1,105 +1,105 @@
 <?php
 /**
- * Datenbank-Abstraktion über mysqli. Instanzname im Code: $db.
+ * Database abstraction over mysqli. Instance name in the code: $db.
  *
- * Alles, was das CMS an SQL absetzt, läuft hier durch. Die Klasse macht drei Dinge, die
- * mysqli allein nicht mitbringt: Prepared Statements mit einem einzigen Aufruf,
- * einen Stapel für verschachtelte Ergebnisse und verschachtelbare Transaktionen.
+ * Everything the CMS sends as SQL runs through here. The class does three things that
+ * mysqli alone does not provide: prepared statements with a single call,
+ * a stack for nested results and nestable transactions.
  *
  * PREPARED STATEMENTS
  * --------------------
  *     $db->query("SELECT * FROM `admin` WHERE `admin_id` = ?", 'i', [$id]);
  *     $data = $db->fetch();
  *
- * Werte gehören IMMER in $values, nie in den SQL-String. Bezeichner (Tabellen- und
- * Spaltennamen) lassen sich nicht binden - die werden von den Aufrufern vorher mit
- * preg_replace('/[^a-z0-9_]/', ...) bereinigt.
+ * Values ALWAYS belong in $values, never in the SQL string. Identifiers (table and
+ * column names) cannot be bound - the callers clean them beforehand with
+ * preg_replace('/[^a-z0-9_]/', ...).
  *
- * Bind-Typen wie bei mysqli: 'i' int, 'd' double, 's' string, 'b' blob.
- * Dataset::getBindType() leitet sie aus dem Feldtyp des Schemas ab.
+ * Bind types as in mysqli: 'i' int, 'd' double, 's' string, 'b' blob.
+ * Dataset::getBindType() derives them from the field type of the schema.
  *
- * DAS "AKTUELLE ERGEBNIS"
+ * THE "CURRENT RESULT"
  * --------------------
- * query() merkt sich sein Ergebnis intern. Die fetch*-Methoden arbeiten ohne Parameter
- * darauf weiter; ebenso werden $num_rows, $affected_rows und $insert_id nach jedem
- * query() neu gesetzt. Das hält den Aufrufercode kurz, heißt aber auch: die nächste
- * Abfrage überschreibt den Zustand.
+ * query() remembers its result internally. The fetch* methods continue on it without
+ * parameters; likewise $num_rows, $affected_rows and $insert_id are set anew after each
+ * query(). This keeps the caller's code short, but also means: the next
+ * query overwrites the state.
  *
- * ERGEBNIS-STAPEL (pushResult / popResult)
+ * RESULT STACK (pushResult / popResult)
  * --------------------
- * Genau deshalb gibt es den Stapel. Wer eine Unterabfrage startet, während er noch über
- * ein Ergebnis iteriert, klammert sie ein:
+ * That is exactly why the stack exists. Whoever starts a subquery while still iterating
+ * over a result brackets it:
  *
- *     $db->pushResult();          // laufendes Ergebnis + Zähler sichern
- *     $cms->select([...]);        // Unterabfrage
+ *     $db->pushResult();          // save the running result + counters
+ *     $cms->select([...]);        // subquery
  *     while ($row = $cms->fetch()) { ... }
- *     $db->popResult();           // vorherigen Zustand wiederherstellen
+ *     $db->popResult();           // restore the previous state
  *
- * Der Template-Compiler setzt das bei CMS:SELECT automatisch (php/push_result.php und
- * php/pop_result.php); Dataset::load(), save() und transactional() tun es ebenfalls.
- * MAX_STACK_DEPTH bricht bei 50 Ebenen ab - das ist eher eine Endlosschleifen-Bremse
- * als eine echte Grenze.
+ * The template compiler does this automatically for CMS:SELECT (php/push_result.php and
+ * php/pop_result.php); Dataset::load(), save() and transactional() do so as well.
+ * MAX_STACK_DEPTH aborts at 50 levels - more a brake on endless loops
+ * than a real limit.
  *
- * TRANSAKTIONEN
+ * TRANSACTIONS
  * --------------------
- * beginTransaction() / commit() / rollback() zählen mit ($transactionDepth). An MySQL
- * geht nur die äußerste Ebene, verschachtelte Aufrufe erhöhen bzw. senken den Zähler.
- * Ruft eine innere Ebene rollback(), wird die Transaktion als $rollbackOnly markiert:
- * das äußere commit() rollt dann trotzdem zurück und wirft - eine teilweise
- * geschriebene Transaktion kann so nicht unbemerkt committet werden.
+ * beginTransaction() / commit() / rollback() count with ($transactionDepth). MySQL
+ * only knows the outermost level; nested calls raise or lower the counter.
+ * If an inner level calls rollback(), the transaction is marked as $rollbackOnly:
+ * the outer commit() then still rolls back and throws - a partially
+ * written transaction can thus not be committed unnoticed.
  *
- * Transaktionen ausschließlich über diese Klasse steuern, nie direkt über mysqli,
- * sonst stimmt der Zähler nicht mehr. Dataset::transactional() kapselt das Übliche.
+ * Control transactions exclusively through this class, never directly through mysqli,
+ * otherwise the counter goes wrong. Dataset::transactional() encapsulates the usual.
  *
- * FEHLERVERHALTEN
+ * ERROR BEHAVIOR
  * --------------------
- * mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT) ist gesetzt: SQL-Fehler
- * werfen eine mysqli_sql_exception, es gibt keine stillen false-Rückgaben. Innerhalb
- * von Dataset fängt transactional() das ab und rollt zurück.
+ * mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT) is set: SQL errors
+ * throw a mysqli_sql_exception, there are no silent false returns. Within
+ * Dataset, transactional() catches this and rolls back.
  *
  * DEBUGGING
  * --------------------
- * system.debugsql = true in .camindo.php protokolliert jede Query samt Werten nach
+ * system.debugsql = true in .camindo.php logs every query with its values to
  * var/log/ (System::log('sql', ...)).
- * Setzt system.development_version = true voraus.
+ * Requires system.development_version = true.
  */
 namespace Camindo\Core;
 use \mysqli;
 
 class Database {
-    /** Reißleine gegen Endlosschleifen bei push/popResult - keine fachliche Grenze */
+    /** Emergency brake against endless loops in push/popResult - not a functional limit */
     const MAX_STACK_DEPTH = 50;
 
     private mysqli $mysqli;
-    /** Wiederverwendete Statements, nur bei query(..., cache: true) befüllt */
+    /** Reused statements, only filled when query(..., cache: true) */
     private array $stmtCache = [];
-    /** Gesicherte Ergebniszustände, siehe pushResult() */
+    /** Saved result states, see pushResult() */
     private array $stack = [];
-    /** Ergebnis der letzten query() - Grundlage aller fetch*-Aufrufe ohne Parameter */
+    /** Result of the last query() - basis of all fetch* calls without parameters */
     private ?\mysqli_result $currentResult = null;
     /**
-     * Ergebnis aus einem PHP-Array statt aus der Datenbank, siehe setArrayResult().
-     * Solange gesetzt, lesen fetch() / fetchNum() / fetchAll() / fetchColumn() daraus.
+     * Result from a PHP array instead of the database, see setArrayResult().
+     * While set, fetch() / fetchNum() / fetchAll() / fetchColumn() read from it.
      */
     private ?array $arrayResult = null;
     private int $arrayPos = 0;
     private bool $debug = false;
-    /** Verschachtelungstiefe der Transaktionen; nur 0 -> 1 startet wirklich eine */
+    /** Nesting depth of the transactions; only 0 -> 1 really starts one */
     public int $transactionDepth = 0;
-    /** true: eine innere Ebene hat rollback() gerufen, das äußere commit() muss scheitern */
+    /** true: an inner level called rollback(), the outer commit() must fail */
     private bool $rollbackOnly = false;
 
-    // Kennzahlen der letzten query(), von push/popResult mitgesichert
+    // Key figures of the last query(), saved along by push/popResult
     public int $affected_rows = 0;
     public int $insert_id = 0;
-    /** Zeilen im aktuellen Ergebnis (mit LIMIT) */
+    /** Rows in the current result (with LIMIT) */
     public int $num_rows = 0;
-    /** Gesamttreffer ohne LIMIT - nur gesetzt, wenn Cms::select() mit count=true lief */
+    /** Total hits without LIMIT - only set if Cms::select() ran with count=true */
     public int $num_rows_unlimited = 0;
-    /** LIMIT der Abfrage (Seitengröße für CMS:JUMP_*) - nur von Cms::select() gesetzt, 0 = ohne */
+    /** LIMIT of the query (page size for CMS:JUMP_*) - only set by Cms::select(), 0 = none */
     public int $num_rows_limit = 0;
 
-    // Der Konstruktor erwartet ein Config-Objekt
+    // The constructor expects a Config object
     public function __construct(
         private Config $config,
         private System $system
@@ -108,7 +108,7 @@ class Database {
         $dbConf = $config->get('db');
         $systemConf = $config->get('system');
         if (empty($dbConf['host']) || empty($dbConf['name'])) {
-            // keine .camindo.php (vor dem Installer) oder db-Block unvollständig
+            // no .camindo.php (before the installer) or incomplete db block
             throw new \Exception('Database not configured (.camindo.php missing or incomplete)');
         }
 
@@ -124,12 +124,12 @@ class Database {
             );
             $this->mysqli->set_charset('utf8mb4');
 
-            // SQL-Modus der Sitzung unabhängig vom Server-Standard (Config db.sql_mode)
+            // SQL mode of the session, independent of the server default (config db.sql_mode)
             if (isset($dbConf['sql_mode'])) {
                 $this->mysqli->query("SET SESSION sql_mode = '" . $this->mysqli->real_escape_string((string)$dbConf['sql_mode']) . "'");
             }
 
-            // Initiale Queries ausführen aus der Config 
+            // Run initial queries from the config
             if (!empty($dbConf['init_querys'])) {
                 foreach ((array)$dbConf['init_querys'] as $query) {
                     $this->mysqli->query($query);
@@ -150,19 +150,18 @@ class Database {
 
 
     /**
-     * Führt eine Query aus. Nutzt Prepared Statements und cacht diese.
-     * 
-     * @param string $sql       Das SQL-Template
-     * @param string $bindTypes Die Bind-Typen als String, z. B. 'is' für int + string
-     * @param array $values     Die zugehörigen Werte als Array
-     * @param bool $cache       true: speichere stmt-Template
-     *                          Lohnt nur für Abfragen, die im selben Request oft mit
-     *                          unterschiedlichen Werten laufen (Schleifen). Achtung:
-     *                          Schlüssel des Caches ist der SQL-String - dynamisch
-     *                          zusammengebaute Queries füllen ihn sinnlos auf.
-     * @return \mysqli_result|bool Gibt das Result-Objekt oder true (bei Erfolg ohne Result) zurück.
-     *                          Bei Fehlern kommt kein false zurück, sondern es wird
-     *                          eine mysqli_sql_exception geworfen (siehe Klassenkommentar).
+     * Runs a query. Uses prepared statements and caches them.
+     *
+     * @param string $sql       the SQL template
+     * @param string $bindTypes the bind types as a string, e.g. 'is' for int + string
+     * @param array $values     the corresponding values as an array
+     * @param bool $cache       true: store the stmt template
+     *                          Only worthwhile for queries that run often within the same request
+     *                          with different values (loops). Note: the key of the cache
+     *                          is the SQL string - dynamically built queries fill it uselessly.
+     * @return \mysqli_result|bool Returns the result object or true (on success without result).
+     *                          On errors no false is returned, instead a
+     *                          mysqli_sql_exception is thrown (see class comment).
      */
     public function query(string $sql, string $bindTypes = '', array $values = [], bool $cache = false): \mysqli_result|bool
     {
@@ -191,9 +190,9 @@ class Database {
 
         $result = $stmt->get_result();
 
-        // Ein Array-Ergebnis (setArrayResult) ist damit abgelöst
+        // An array result (setArrayResult) is replaced by this
         $this->arrayResult = null;
-        // Wandle false in null um, falls kein Ergebnis
+        // Convert false to null if there is no result
         $this->currentResult = ($result !== false) ? $result : null;
         $this->num_rows = $this->currentResult ? $this->currentResult->num_rows : 0;
 
@@ -201,15 +200,15 @@ class Database {
     }
 
     /**
-     * Ein PHP-Array als aktuelles Ergebnis einsetzen.
+     * Set a PHP array as the current result.
      *
-     * Für Ergebnismengen, die nicht aus der Datenbank kommen - etwa die Sprachen der
-     * Instanz aus dem Dateicache (Cms::cmsSelectLanguages()) - und trotzdem von der
-     * Ergebnisschleife der Templates (num_rows + fetch()) gelesen werden sollen.
-     * Verhält sich wie ein Query-Ergebnis: pushResult()/popResult() sichern es mit,
-     * die nächste query() löst es ab.
+     * For result sets that do not come from the database - e.g. the languages of the
+     * instance from the file cache (Cms::cmsSelectLanguages()) - but should still be read
+     * by the result loop of the templates (num_rows + fetch()).
+     * Behaves like a query result: pushResult()/popResult() save it along,
+     * the next query() replaces it.
      *
-     * @param array $rows  Liste assoziativer Zeilen
+     * @param array $rows  list of associative rows
      */
     public function setArrayResult(array $rows): void
     {
@@ -227,8 +226,8 @@ class Database {
     }
 
     /**
-     * Legt das aktuelle Resultat und die Eigenschaften auf den Stapel
-     * und setzt die aktuelle Ebene zurück.
+     * Puts the current result and the properties on the stack
+     * and resets the current level.
      */
     public function pushResult()
     {
@@ -259,9 +258,9 @@ class Database {
     }
 
     /**
-     * Holt das Resultat und die Eigenschaften vom Stapel zurück.
-     * 
-     * @return \mysqli_result|null Das wiederhergestellte Result-Objekt
+     * Takes the result and the properties back from the stack.
+     *
+     * @return \mysqli_result|null the restored result object
      */
     public function popResult(): ?\mysqli_result
     {
@@ -269,14 +268,14 @@ class Database {
             return null;
         }
 
-        // Speicher vom aktuellen Result-Objekt freigeben
+        // Free the memory of the current result object
         if ($this->currentResult instanceof \mysqli_result) {
             $this->currentResult->close();
         }
-        // Letztes Element vom Stapel holen
+        // Take the last element from the stack
         $state = array_pop($this->stack);
 
-        // Werte wiederherstellen
+        // Restore values
         $this->currentResult      = $state['result'];
         $this->arrayResult        = $state['array_result'];
         $this->arrayPos           = $state['array_pos'];
@@ -291,8 +290,8 @@ class Database {
 
 
     /**
-     * Holt die nächste Zeile als assoziatives Array.
-     * 
+     * Fetches the next row as an associative array.
+     *
      * @param ?\mysqli_result $dbResult
      * @return ?array
      */
@@ -307,7 +306,7 @@ class Database {
     }
 
     /**
-     * Holt alle Zeilen als flaches Array (eine Spalte)
+     * Fetches all rows as a flat array (one column)
      */
     public function fetchColumn(?\mysqli_result $dbResult = null) : array
     {
@@ -320,7 +319,7 @@ class Database {
     }
 
     /**
-     * Holt alle Zeilen als verschachteltes Array
+     * Fetches all rows as a nested array
      * @param ?\mysqli_result $dbResult
      * @return array
      */
@@ -346,8 +345,8 @@ class Database {
     }
 
     /**
-     * Holt genau zwei Spalten als flaches Key-Value-Array.
-     * (Erste Spalte ist der Index, zweite Spalte ist der Wert)
+     * Fetches exactly two columns as a flat key-value array.
+     * (First column is the index, second column is the value)
      *
      * @param ?\mysqli_result $dbResult
      * @return array
@@ -363,10 +362,10 @@ class Database {
     }
 
     /**
-     * Holt Zeilen bei Abfragen mit mehr als 2 Spalten und indiziert sie.
-     * Wenn kein Index angegeben ist, wird die erste Spalte als Index genutzt.
+     * Fetches rows of queries with more than 2 columns and indexes them.
+     * If no index is given, the first column is used as the index.
      *
-     * @param ?string $indexCol Optional: Spaltenname, der als Array-Key genutzt werden soll
+     * @param ?string $indexCol Optional: column name to be used as the array key
      * @param ?\mysqli_result $dbResult
      * @return array
      */
@@ -377,19 +376,19 @@ class Database {
             return [];
         }
 
-        // Spalten-Metadaten holen, um Existenz VOR dem Daten-Fetch zu prüfen
+        // Fetch column metadata to check existence BEFORE fetching the data
         $fields = array_column($res->fetch_fields(), 'name');
         
         if ($indexCol === null) {
             $indexCol = $fields[0] ?? null;
         }
         
-        // Wenn die gewünschte Spalte nicht existiert, direkt abbrechen
+        // If the requested column does not exist, abort right away
         if ($indexCol === null || !in_array($indexCol, $fields, true)) {
             return [];
         }
         
-        // Erst jetzt, wo alles validiert ist, die Daten laden
+        // Only now, with everything validated, load the data
         $rows = $res->fetch_all(MYSQLI_ASSOC);
         if (empty($rows)) {
             return [];
@@ -399,7 +398,7 @@ class Database {
     }
     
     /**
-     * Holt die nächste Zeile als numerisches Array.
+     * Fetches the next row as a numeric array.
      *
      * @param ?\mysqli_result $dbResult
      * @return ?array
@@ -418,7 +417,7 @@ class Database {
 
 
     /**
-     * Gibt den Speicher des Result-Objekts frei.
+     * Frees the memory of the result object.
      * 
      * @param ?\mysqli_result $dbResult
      */
@@ -427,7 +426,7 @@ class Database {
         if ($res instanceof \mysqli_result) {
             $res->close();
         }
-        // Wenn das intern gemerkte Result geschlossen wird, Referenz löschen
+        // If the internally remembered result is closed, clear the reference
         if ($res === $this->currentResult) {
             $this->currentResult = null;
         }
@@ -435,8 +434,8 @@ class Database {
 
 
     /**
-     * Lösche die Templates der Prepared Statements
-     * Schließe die MySQL-Verbindung
+     * Delete the templates of the prepared statements
+     * Close the MySQL connection
      */
     public function __destruct()
     {
@@ -449,20 +448,20 @@ class Database {
     }
 
 
-    // ========== Transaktionen ========== 
-    // Verschachtelte Transaktionen warten mit commit() / rollback() auf Rückkehr zur äußersten Ebene.
-    // Transaktionen nur über diese Abstraktionsklasse behanden, nicht direkt über mysqli!
-    // commit innerhalb try-Block ausführen, rollback innerhalb catch-Block!
+    // ========== Transactions ==========
+    // Nested transactions wait with commit() / rollback() for the return to the outermost level.
+    // Handle transactions only through this abstraction class, not directly through mysqli!
+    // Run commit inside a try block, rollback inside a catch block!
 
 
     /**
-     * Starten einer neue Datenbank-Transaktion
+     * Start a new database transaction
      */
     /**
-     * Code nach dem erfolgreichen Commit der äußersten Transaktion ausführen - für
-     * Seiteneffekte außerhalb der Datenbank, die ein Rollback nicht zurücknehmen
-     * könnte (Audit-Log im Dateisystem, AuditStore). Ohne laufende Transaktion sofort.
-     * Ein Rollback verwirft die vorgemerkten Aufrufe.
+     * Run code after the successful commit of the outermost transaction - for
+     * side effects outside the database that a rollback could not undo
+     * (audit log in the file system, AuditStore). Immediately if no transaction is running.
+     * A rollback discards the queued calls.
      */
     public function afterCommit(callable $callback): void
     {
@@ -473,13 +472,13 @@ class Database {
         $this->afterCommit[] = $callback;
     }
 
-    /** Vorgemerkt für afterCommit() */
+    /** Queued for afterCommit() */
     private array $afterCommit = [];
 
     public function beginTransaction(): void
     {
         if ($this->transactionDepth === 0) {
-            // Nur bei der ersten Ebene wirklich an MySQL senden
+            // Only send to MySQL at the first level
             $this->mysqli->begin_transaction();
         }
         $this->transactionDepth++;
@@ -487,19 +486,19 @@ class Database {
 
 
     /**
-     * Transaktion rückabwickeln
+     * Roll back the transaction
      */
     public function rollback(): void
     {
         if ($this->transactionDepth > 0) {
             $this->transactionDepth--;
             if ($this->transactionDepth === 0) {
-                // Äußerste Ebene: Rollback ausführen
+                // Outermost level: run the rollback
                 $this->rollbackOnly = false;
                 $this->afterCommit = [];
                 $this->mysqli->rollback();
             } else {
-                // Innere Ebene: Transaktion ungültig markieren
+                // Inner level: mark the transaction as invalid
                 $this->rollbackOnly = true;
             }
         }
@@ -507,7 +506,7 @@ class Database {
 
 
     /**
-     * Transaktion bestätigen
+     * Confirm the transaction
      */
     public function commit(): void
     {
@@ -515,7 +514,7 @@ class Database {
             $this->transactionDepth--;
             if ($this->transactionDepth === 0) {
                 if ($this->rollbackOnly) {
-                    // Jemand hat vorher rollback() gerufen, nie committen
+                    // Someone called rollback() before, never commit
                     $this->rollbackOnly = false;
                     $this->afterCommit = [];
                     $this->mysqli->rollback();
@@ -531,7 +530,7 @@ class Database {
 
 
     /**
-     * Prüft, ob aktuell eine Transaktion läuft.
+     * Checks whether a transaction is currently running.
      */
     public function inTransaction(): bool
     {

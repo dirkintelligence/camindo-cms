@@ -1,61 +1,61 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `instance` - eine "Instance" ist eine Website
- * bzw. ein eigenständiger Frontend-Auftritt.
+ * Dataset child class for the table `instance` - an "Instance" is a website
+ * or a standalone frontend presence.
  *
- * Die Tabelle selbst ist schmal; der größere Teil der Angaben liegt in drei
- * Relation-Tabellen, die über Felder vom Typ 'reltable' im Schema vertreten sind
- * (siehe Cms::$dataSuffix):
+ * The table itself is narrow; most of the details are in three
+ * relation tables, which the schema represents via fields of type 'reltable'
+ * (see Cms::$dataSuffix):
  *
- *     additional_languages   `rel_instance_language`   Sprachen neben der Hauptsprache
- *     additional_domains     `rel_instance_domain`     Domains neben der Haupt-Domain
- *     readable_instances     `rel_instance_instance`   fremde Instanzen, deren Inhalte
- *                                                      im Frontend lesbar sind
+ *     additional_languages   `rel_instance_language`   languages besides the main language
+ *     additional_domains     `rel_instance_domain`     domains besides the main domain
+ *     readable_instances     `rel_instance_instance`   foreign instances whose content is
+ *                                                      readable in the frontend
  *
- * FELDER OHNE EIGENE SPALTE ('reltable')
+ * FIELDS WITHOUT THEIR OWN COLUMN ('reltable')
  * --------------------
- * Der Typ steht nur deshalb im Schema, damit Dataset::save() seine Eingabeprüfung
- * (min/max, Pflichtfeld) auch auf diese Felder anwendet. Dataset::save() übergeht
- * sie beim Schreiben der Tabellenspalten - gelesen und geschrieben werden sie hier:
+ * The type is in the schema only so that Dataset::save() applies its input check
+ * (min/max, required field) to these fields as well. Dataset::save() skips
+ * them when writing the table columns - they are read and written here:
  *
- *     hookOnLoaded()   Relation-Tabelle -> $data
- *     hookOnSaved()    $data -> Relation-Tabelle   (innerhalb der Transaktion)
+ *     hookOnLoaded()   relation table -> $data
+ *     hookOnSaved()    $data -> relation table   (inside the transaction)
  *
- * ZUGEHÖRIGKEIT DER INHALTE
+ * OWNERSHIP OF THE CONTENT
  * --------------------
- * Ein Inhaltsbereich (`area`, alle drei Typen) gehört über `area`.`instance_id` zu
- * genau einer Instanz. Seine Datensätze und Templates erben die Zuordnung:
- * `record`.`instance_id` wird von Record::hookOnSave() aus dem Bereich geholt,
- * Templates hängen über fk_template_area_id am Bereich.
+ * A content area (`area`, all three types) belongs via `area`.`instance_id` to
+ * exactly one instance. Its records and templates inherit the assignment:
+ * `record`.`instance_id` is taken from the area by Record::hookOnSave(),
+ * templates hang on the area via fk_template_area_id.
  *
- * DATEICACHE UND SPRACHEN
+ * FILE CACHE AND LANGUAGES
  * --------------------
- * Das Frontend liest die Instanzen nicht aus der Datenbank, sondern aus
- * var/cache/instances.php und instance-{id}.php (Camindo\Core\InstanceCache).
- * hookOnSaved() und hookOnDeleted() schreiben diese Dateien neu. Ändert sich die
- * Sprachliste einer Instanz, zieht hookOnSaved() außerdem die Inhaltszeilen der
- * Datensätze nach (Camindo\Core\LanguageData): je Sprache der Instanz eine Zeile
- * pro Feld, siehe VirtualFieldsTrait::saveVirtualFields().
+ * The frontend does not read the instances from the database but from
+ * var/cache/instances.php and instance-{id}.php (Camindo\Core\InstanceCache).
+ * hookOnSaved() and hookOnDeleted() rewrite these files. If the language list
+ * of an instance changes, hookOnSaved() also updates the content rows of the
+ * records (Camindo\Core\LanguageData): per language of the instance one row
+ * per field, see VirtualFieldsTrait::saveVirtualFields().
  *
- * MEDIENVERZEICHNIS
+ * MEDIA DIRECTORY
  * --------------------
- * Die Mediendateien liegen je Instanz unter media/{instance_id}/{field_id}/. Jedes
- * Instanz-Verzeichnis trägt eine .htaccess, die den direkten Zugriff auf die
- * Domains der Instanz und ihrer lesenden Instanzen beschränkt. Beide Hooks
- * schreiben diese Dateien für ALLE Instanzen neu (Camindo\Core\MediaAccess) -
- * die Sperre von B hängt davon ab, ob A sie lesen darf.
+ * The media files are stored per instance under media/{instance_id}/{field_id}/. Each
+ * instance directory carries an .htaccess that restricts direct access to the
+ * domains of the instance and its reading instances. Both hooks
+ * rewrite these files for ALL instances (Camindo\Core\MediaAccess) -
+ * the lock of B depends on whether A may read it.
  *
- * DIE STANDARD-INSTANCE
+ * THE DEFAULT INSTANCE
  * --------------------
- * `instance_id` 1 (Instance::DEFAULT_ID) ist das Sammelbecken für alles was keine
- * konfigurierte Domain matcht. Zusatz-Domains ist immer ".*" (PCRE)
- * Geändert werden kann aber alles andere.
- * Sie steht überall, wo Instanzen aufgezählt werden, am Ende - unabhängig von ihrer
- * `position` (orderSql(), InstanceCache) - und lässt sich nicht löschen: ohne sie
- * liefe jeder Aufruf ins Leere, dessen Domain nirgends eingetragen ist.
+ * `instance_id` 1 (Instance::DEFAULT_ID) is the catch-all for everything that matches
+ * no configured domain. The additional domains are always ".*" (PCRE).
+ * Everything else can be changed, however.
+ * It is always listed last wherever instances are enumerated, regardless of its
+ * `position` (orderSql(), InstanceCache), and it cannot be deleted: without it
+ * every call whose domain is not registered anywhere would go nowhere.
  *
  * @see Camindo\Core\Modules\Instance\InstanceBackend
- * @see Camindo\Core\Modules\Area\Area   Zuordnung der Inhaltsbereiche
+ * @see Camindo\Core\Modules\Area\Area   assignment of the content areas
  * @see Camindo\Core\Dataset
  */
 namespace Camindo\Core\Modules\Instance;
@@ -71,17 +71,17 @@ use Camindo\Core\Modules\Snippets\Snippets;
 class Instance extends Dataset {
 
     /**
-     * Die Standard-Instance - siehe Klassenkommentar.
-     * Auch der Datenbank-Default von `area`.`instance_id` und `record`.`instance_id`.
+     * The default instance - see class comment.
+     * Also the database default of `area`.`instance_id` and `record`.`instance_id`.
      */
     public const DEFAULT_ID = 1;
 
     /**
-     * ORDER-BY-Ausdruck für die Reihenfolge der Instanzen: nach `position`, die
-     * Standard-Instance immer zuletzt (Klassenkommentar). Systemweit dieselbe
-     * Reihenfolge - Abfragen, die nach Instanzen sortieren, nehmen diesen Ausdruck.
+     * ORDER BY expression for the order of the instances: by `position`, the
+     * default instance always last (class comment). System-wide the same
+     * order - queries that sort by instance use this expression.
      *
-     * @param string $alias  Tabellen-Alias von `instance` ('' = ohne)
+     * @param string $alias  table alias of `instance` ('' = none)
      */
     public static function orderSql(string $alias = ''): string
     {
@@ -89,15 +89,15 @@ class Instance extends Dataset {
         return "{$prefix}`instance_id` = " . self::DEFAULT_ID . " ASC, {$prefix}`position` ASC";
     }
 
-    /** Höchstzahl der Domains je Instanz (Haupt-Domain nicht mitgezählt) */
+    /** Maximum number of domains per instance (main domain not counted) */
     public const MAX_DOMAINS = 32;
 
     protected function hookDefinition(): void
     {
         $this->tableName  = 'instance';
         $this->moduleName = 'Instance';
-        // Pseudo-Feld 'instance' (Cms::select()): Reihenfolge des Instanz-Caches,
-        // die Standard-Instance zuletzt
+        // Pseudo field 'instance' (Cms::select()): order of the instance cache,
+        // the default instance last
         $this->defaultSortOrder = 'instance ASC';
         $this->schema = [
             'instance_id' => [
@@ -108,7 +108,7 @@ class Instance extends Dataset {
                 'type'  => 'chars',
                 'label' => '#instance.field_label',
                 'max'   => 64,
-                'extension' => 'Snippets',   // Core-Extension: Snippet auswählen (#prefix.key)
+                'extension' => 'Snippets',   // Core extension: select snippet (#prefix.key)
                 'flags' => ['trim', 'not_empty'],
             ],
             'position' => [
@@ -116,17 +116,17 @@ class Instance extends Dataset {
                 'label' => '#instance.field_position',
                 'display_type' => 'select',
             ],
-            // `instance`.`primary_language_id` ist NOT NULL (kein Fremdschlüssel),
-            // deshalb 'integer' und nicht 'id' - 'id' schriebe bei 0 ein NULL.
+            // `instance`.`primary_language_id` is NOT NULL (no foreign key),
+            // therefore 'integer' and not 'id' - 'id' would write a NULL for 0.
             'primary_language_id' => [
                 'type'  => 'integer',
                 'label' => '#instance.field_primary_language_id',
                 'display_type' => 'select',
                 'min'   => 0,
             ],
-            // Tabelle `rel_instance_language`
-            // 'sortable': die Reihenfolge der angehakten Sprachen ist der Wert
-            // (sie landet als `position` in der Relation-Tabelle)
+            // Table `rel_instance_language`
+            // 'sortable': the order of the checked languages is the value
+            // (it ends up as `position` in the relation table)
             'additional_languages' => [
                 'type'  => 'reltable',
                 'display_type' => 'sortable',
@@ -155,18 +155,18 @@ class Instance extends Dataset {
                 'display_type' => 'switch',
                 'default' => 1,
             ],
-            // Tabelle `rel_instance_domain`
-            // Das Feld hat kein eigenes Eingabefeld: die Domains stehen als
-            // Zeilenpaare data[domain][] / data[regex][] im Formular (siehe
-            // InstanceBackend::_editForm()). Es muss aber im Schema stehen, damit
-            // hookOnSaved() es in $fields wiederfindet.
+            // Table `rel_instance_domain`
+            // The field has no input field of its own: the domains are in the form as
+            // pairs of rows data[domain][] / data[regex][] (see
+            // InstanceBackend::_editForm()). It must be in the schema, though, so that
+            // hookOnSaved() finds it again in $fields.
             'additional_domains' => [
                 'type'  => 'reltable',
                 'display_type' => 'multiselect',
                 'label' => '#instance.field_additional_domains',
                 'max'   => self::MAX_DOMAINS,
             ],
-            // Tabelle `rel_instance_instance`
+            // Table `rel_instance_instance`
             'readable_instances' => [
                 'type'  => 'reltable',
                 'display_type' => 'multiselect',
@@ -174,8 +174,8 @@ class Instance extends Dataset {
                 'tooltip' => '#instance.tooltip_readable_instances',
                 'height' => 'auto',
             ],
-            // Startseite - beide Spalten sind NULLable (Fremdschlüssel mit
-            // ON DELETE SET NULL), deshalb 'id': der Typ schreibt bei 0 ein NULL.
+            // Start page - both columns are NULLable (foreign key with
+            // ON DELETE SET NULL), therefore 'id': the type writes a NULL for 0.
             'record_id' => [
                 'type'  => 'id',
                 'label' => '#instance.field_record_id',
@@ -192,20 +192,20 @@ class Instance extends Dataset {
                 'table' => 'template',
                 'max'   => 1,
             ],
-            // Zusatzangaben (JSON): Script-Policy des Frontends
+            // Additional info (JSON): script policy of the frontend
             'details' => [
                 'type'  => 'json',
                 'label' => '#instance.field_details',
             ],
-            // Script-Policy des Frontends (SecurityHeaders::frontendPolicy(),
-            // developer_docs/19-csp.md §9): '' = Vorgabe security.frontend_csp
+            // Script policy of the frontend (SecurityHeaders::frontendPolicy(),
+            // see developer docs, chapter 14 (Security: web): '' = default security.frontend_csp
             'details.csp' => [
                 'type'  => 'chars',
                 'display_type' => 'select',
                 'label' => '#instance.field_csp',
                 'tooltip' => '#instance.tooltip_csp',
             ],
-            // weitere Script-Quellen, je Zeile eine (https://js.example.com)
+            // further script sources, one per line (https://js.example.com)
             'details.csp_script_sources' => [
                 'type'  => 'text',
                 'display_type' => 'textarea',
@@ -213,14 +213,14 @@ class Instance extends Dataset {
                 'tooltip' => '#instance.tooltip_csp_script_sources',
                 'max'   => 2000,
             ],
-            // 'strict-dynamic': was ein vertrautes Script nachlädt, läuft auch
+            // 'strict-dynamic': whatever a trusted script loads also runs
             'details.csp_strict_dynamic' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
                 'label' => '#instance.field_csp_strict_dynamic',
                 'tooltip' => '#instance.tooltip_csp_strict_dynamic',
             ],
-            // form-action: Formulare nur an die eigene Website (+ Quellen)
+            // form-action: forms only to the own website (+ sources)
             'details.csp_form_action' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
@@ -238,9 +238,9 @@ class Instance extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: neue Instance ans Ende der Sortierung stellen.
-     * Die Position ist manuell änderbar; ohne Vorbelegung stünde jede neue Instance
-     * mit position = 0 vorne.
+     * Before creating: put the new instance at the end of the sorting.
+     * The position can be changed manually; without a preset every new instance
+     * would stand at the front with position = 0.
      */
     protected function hookOnCreate(array &$data): void
     {
@@ -248,35 +248,35 @@ class Instance extends Dataset {
         $this->db->query($sql);
         $data['position'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-        // Feld 'additional_domains': in der Tabelle `rel_instance_domain` stehen je
-        // Zeile ZWEI Werte (domain + regex). Das Formular führt sie deshalb als zwei
-        // parallele Arrays, nicht als einen Wert im Feld selbst.
+        // Field 'additional_domains': in the table `rel_instance_domain` each
+        // row holds TWO values (domain + regex). The form therefore carries them as two
+        // parallel arrays, not as one value in the field itself.
         $data['domain'] = [];
         $data['regex']  = [];
     }
 
     /**
-     * Vor dem Speichern: prüfen und normalisieren.
+     * Before saving: check and normalize.
      *
-     * Die Inhalte der drei 'reltable'-Felder werden hier in die Form gebracht, in der
-     * hookOnSaved() sie erwartet - Dataset::save() schreibt zwischen beiden Hooks nur
-     * die echten Tabellenspalten.
+     * The contents of the three 'reltable' fields are brought here into the form that
+     * hookOnSaved() expects - Dataset::save() only writes the real table columns between
+     * both hooks.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         $instanceId = (int)($data['instance_id'] ?? 0);
 
-        // Sprachen
+        // Languages
         // --------------------
         if (in_array('additional_languages', $fields, true)) {
             $primaryLanguageId = (int)($data['primary_language_id'] ?? 0);
-            // "Keine Hauptsprache" wird nicht an der 0 festgemacht - maßgeblich ist,
-            // ob es die Sprache in `language` überhaupt gibt.
+            // "No main language" is not tied to 0 - decisive is
+            // whether the language exists in `language` at all.
             $additionalLanguages = $this->system->sanitizeIds(
                 (array)($data['additional_languages'] ?? [])
             );
 
-            // Weitere Sprachen ohne gültige Hauptsprache ergeben keine Sprachfolge
+            // Further languages without a valid main language yield no language sequence
             if (!empty($additionalLanguages)
                 && empty($this->existingIds('language', [$primaryLanguageId]))
             ) {
@@ -289,13 +289,13 @@ class Instance extends Dataset {
                 throw new \Exception('#' . $errorMsg);
             }
 
-            // Die Hauptsprache steht nicht noch einmal in den weiteren Sprachen
+            // The main language does not appear again in the further languages
             $additionalLanguages = array_values(
                 array_diff($additionalLanguages, [$primaryLanguageId])
             );
 
-            // Nur Sprachen, die es wirklich gibt (der Fremdschlüssel würde sonst
-            // erst in hookOnSaved() zuschlagen - dort ohne verwertbare Meldung)
+            // Only languages that really exist (otherwise the foreign key would strike
+            // only in hookOnSaved() - there without a usable message)
             $additionalLanguages = $this->existingIds('language', $additionalLanguages);
 
             $data['additional_languages'] = $additionalLanguages;
@@ -303,12 +303,12 @@ class Instance extends Dataset {
 
         // Domains
         // --------------------
-        // Aus den beiden parallelen Arrays des Formulars eine bereinigte Liste bauen:
-        // leere Zeilen fliegen raus, Domains werden kleingeschrieben, Dubletten
-        // entfallen (`rel_instance_domain` hat den Primärschlüssel instance_id+domain,
-        // eine doppelte Zeile ließe das INSERT scheitern).
-        // Domains sind nicht schreibungsempfindlich - klein geschrieben ablegen,
-        // sonst stünde dieselbe Domain in zwei Schreibweisen in der Liste
+        // Build a cleaned list from the two parallel arrays of the form:
+        // empty rows are dropped, domains are lowercased, duplicates
+        // are removed (`rel_instance_domain` has the primary key instance_id+domain,
+        // a duplicate row would make the INSERT fail).
+        // Domains are not case-sensitive - store them in lowercase,
+        // otherwise the same domain would appear in two spellings in the list
         $primaryDomain = mb_strtolower(trim((string)($data['primary_domain'] ?? '')));
         if (in_array('primary_domain', $fields, true)) {
             $data['primary_domain'] = $primaryDomain;
@@ -332,7 +332,7 @@ class Instance extends Dataset {
                     );
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
-                // Die Haupt-Domain gehört nicht noch einmal in die Liste
+                // The main domain must not appear in the list again
                 if ($domain === $primaryDomain) continue;
                 if (in_array($domain, $cleanDomains, true)) continue;
                 $cleanDomains[] = $domain;
@@ -340,15 +340,15 @@ class Instance extends Dataset {
             }
             $data['domain'] = $cleanDomains;
             $data['regex']  = $cleanRegex;
-            // Der Feldwert selbst trägt die Domains - so greifen 'max' und die
-            // Anzeige auf der Info-Seite (Backend::backendValue behandelt 'reltable'
-            // wie 'json': Liste der Einträge).
+            // The field value itself carries the domains - so 'max' and the
+            // display on the info page take effect (Backend::backendValue treats 'reltable'
+            // like 'json': list of entries).
             $data['additional_domains'] = $cleanDomains;
         }
 
-        // Zusatzangaben
+        // Additional info
         // --------------------
-        // Script-Policy: nur bekannte Modi, Quellen nur als Host-Angabe
+        // Script policy: only known modes, sources only as host names
         // (SecurityHeaders::cleanSources()).
         if (in_array('details', $fields, true) || array_key_exists('details', $data)) {
             $details = is_array($data['details'] ?? null) ? $data['details'] : [];
@@ -366,15 +366,15 @@ class Instance extends Dataset {
             $data['details'] = $details;
         }
 
-        // Lesbare Instanzen
+        // Readable instances
         // --------------------
         if (in_array('readable_instances', $fields, true)) {
             $readable = $this->system->sanitizeIds(
                 (array)($data['readable_instances'] ?? [])
             );
-            // Sich selbst zu lesen ergibt keinen Sinn - und der Primärschlüssel
-            // instance_id+readable_id ließe es zwar zu, die Auswertung im Frontend
-            // liefe damit aber im Kreis.
+            // Reading oneself makes no sense - and the primary key
+            // instance_id+readable_id would allow it, but the evaluation in the frontend
+            // would then run in circles.
             $readable = array_values(array_diff($readable, [$instanceId]));
             $readable = $this->existingIds('instance', $readable);
             $data['readable_instances'] = $readable;
@@ -382,13 +382,13 @@ class Instance extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: die drei Relation-Tabellen neu schreiben.
+     * After saving: rewrite the three relation tables.
      *
-     * Läuft innerhalb der Transaktion von Dataset::save() - wirft eine der Abfragen,
-     * wird auch die Instanz-Zeile selbst zurückgerollt.
+     * Runs inside the transaction of Dataset::save() - if one of the queries throws,
+     * the instance row itself is rolled back too.
      *
-     * Immer erst DELETE, dann INSERT: die Tabellen tragen keine eigene Id, ein
-     * Abgleich Zeile für Zeile wäre aufwendiger als das Neuschreiben.
+     * Always DELETE first, then INSERT: the tables carry no own ID, a
+     * row-by-row comparison would be more work than rewriting them.
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
@@ -396,7 +396,7 @@ class Instance extends Dataset {
 
         // 'additional_domains' -> `rel_instance_domain`
         // --------------------
-        // Zwei Werte je Zeile (domain + regex) und eine eigene Sortierung.
+        // Two values per row (domain + regex) and an own sort order.
         if (in_array('additional_domains', $fields, true)) {
             $this->db->query("DELETE FROM `rel_instance_domain` WHERE `instance_id` = ?", 'i', [$instanceId]);
 
@@ -422,8 +422,8 @@ class Instance extends Dataset {
 
         // 'additional_languages' -> `rel_instance_language`
         // --------------------
-        // `position` hält die Reihenfolge fest, in der der Redakteur die Sprachen
-        // sortiert hat (display_type 'sortable').
+        // `position` keeps the order in which the editor sorted the languages
+        // (display_type 'sortable').
         if (in_array('additional_languages', $fields, true)) {
             $this->db->query("DELETE FROM `rel_instance_language` WHERE `instance_id` = ?", 'i', [$instanceId]);
 
@@ -447,8 +447,8 @@ class Instance extends Dataset {
 
         // 'readable_instances' -> `rel_instance_instance`
         // --------------------
-        // Ohne eigene Sortierung: gelesen wird in der Reihenfolge der Instanzen
-        // selbst (`instance`.`position`, siehe hookOnLoaded()).
+        // Without an own sort order: reading happens in the order of the instances
+        // themselves (`instance`.`position`, see hookOnLoaded()).
         if (in_array('readable_instances', $fields, true)) {
             $this->db->query("DELETE FROM `rel_instance_instance` WHERE `instance_id` = ?", 'i', [$instanceId]);
 
@@ -469,17 +469,17 @@ class Instance extends Dataset {
             }
         }
 
-        // Sprachliste geändert? -> Inhaltszeilen nachziehen
+        // Language list changed? -> update the content rows
         // --------------------
-        // Jeder Datensatz der Instanz führt je Sprache eine Zeile pro Feld (siehe
-        // LanguageData). Kommt eine Sprache hinzu, bekommt sie die Werte der
-        // Hauptsprache als Fallback; fällt eine weg, verschwinden ihre Zeilen und
-        // eigenen Dateien (siehe LanguageData::removeLanguage()).
-        // Wechselt die Hauptsprache, stimmen die Fallback-Werte der übrigen
-        // Sprachen nicht mehr - der Bestand bleibt stehen (er wird beim nächsten
-        // Speichern des Datensatzes richtig), nur `record_cache` wird verworfen.
-        // Der Volltext ist nach den Regeln der Sprache gefaltet: faltet eine neue
-        // Sprache anders als die Hauptsprache, wird er als veraltet markiert.
+        // Each record of the instance keeps one row per language and field (see
+        // LanguageData). If a language is added, it gets the values of the
+        // main language as fallback; if one is removed, its rows and
+        // own files disappear (see LanguageData::removeLanguage()).
+        // If the main language changes, the fallback values of the other
+        // languages no longer match - the stock stays (it is correct again at the next
+        // saving of the record); only `record_cache` is discarded.
+        // The full text is folded according to the rules of the language: if a new
+        // language folds differently than the main language, it is marked as stale.
         $refreshFulltext = false;
         if (!empty($previousData)
             && (in_array('additional_languages', $fields, true) || in_array('primary_language_id', $fields, true))
@@ -504,7 +504,7 @@ class Instance extends Dataset {
             foreach ($removed as $languageId) {
                 $languageData->removeLanguage($instanceId, $languageId);
             }
-            // war eine entfernte Sprache Hauptsprache, zeigen Datei-Fallbacks ins Leere
+            // if a removed language was the main language, file fallbacks point nowhere
             if (!empty($removed)) {
                 $languageData->repairFileFallbacks($instanceId);
             }
@@ -513,43 +513,43 @@ class Instance extends Dataset {
             }
         }
 
-        // Cache-Dateien erneuern (var/cache/instances.php, instance-{id}.php)
+        // Renew cache files (var/cache/instances.php, instance-{id}.php)
         // --------------------
-        // Läuft noch in der Transaktion: die Abfragen des Neuaufbaus sehen den
-        // gerade geschriebenen Stand. Rollt die Transaktion danach zurück, stimmt
-        // der Cache bis zur nächsten Änderung nicht - im Backend ist das sichtbar
-        // und behebt sich mit dem nächsten Speichern.
+        // Still runs in the transaction: the queries of the rebuild see the
+        // state just written. If the transaction rolls back afterwards, the
+        // cache is wrong until the next change - in the backend this is visible
+        // and resolves with the next saving.
         $this->instanceCache()->rebuild();
 
-        // Volltext neu falten: nur markieren - "Jetzt aktualisieren" bzw. der Zeitplaner
-        // baut ihn neu auf (FulltextState)
+        // Re-fold the full text: only mark it - "Update now" or the scheduler
+        // rebuilds it (FulltextState)
         if ($refreshFulltext) $this->languageData()->markFulltextStale($instanceId);
 
-        // Domain-Sperren der Medienverzeichnisse neu schreiben (aus dem Cache)
+        // Rewrite the domain locks of the media directories (from the cache)
         // --------------------
         $this->mediaAccess()->rebuildAll();
     }
 
     /**
-     * Nach dem endgültigen Löschen: Cache-Dateien, Medien-Sperren und das
-     * Snippet-Set der Instanz.
-     * Die Datei instance-{id}.php der gelöschten Instanz wird dabei entfernt; ihr
-     * Medienverzeichnis bleibt stehen (die Bereiche wurden in hookOnDelete()
-     * einzeln abgeräumt, ihre Dateien sind weg) und bekommt eine Vollsperre.
+     * After final deletion: cache files, media locks and the
+     * snippet set of the instance.
+     * The file instance-{id}.php of the deleted instance is removed; its
+     * media directory remains (the areas were cleared individually in hookOnDelete(),
+     * their files are gone) and gets a full lock.
      */
     protected function hookOnDeleted(array $data): void
     {
         $this->instanceCache()->rebuild();
         $this->mediaAccess()->rebuildAll();
-        // Snippet-Set der Instanz (Modul Snippets, var/custom/snippets/{id})
+        // Snippet set of the instance (module Snippets, var/custom/snippets/{id})
         $this->container->get(Snippets::class)->delete((int)($data['instance_id'] ?? 0));
     }
 
     /**
-     * Nach dem Laden: die Inhalte der drei Relation-Tabellen nachreichen.
+     * After loading: supply the contents of the three relation tables.
      *
-     * Die 'reltable'-Felder stehen nicht in der Ergebniszeile - sie haben keine
-     * Spalte. Ohne diesen Hook kämen sie als NULL im Formular an.
+     * The 'reltable' fields are not in the result row - they have no
+     * column. Without this hook they would arrive as NULL in the form.
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -557,8 +557,8 @@ class Instance extends Dataset {
 
         // `rel_instance_domain` -> 'additional_domains' + 'domain'/'regex'
         // --------------------
-        // Das Formular braucht die beiden parallelen Arrays (eine Zeile je Domain),
-        // das Feld selbst die reine Domain-Liste. Sortierung erhalten.
+        // The form needs the two parallel arrays (one row per domain),
+        // the field itself the pure domain list. Sort order preserved.
         $data['domain'] = [];
         $data['regex']  = [];
         $sql = "SELECT `domain`, `regex` FROM `rel_instance_domain`"
@@ -572,7 +572,7 @@ class Instance extends Dataset {
 
         // `rel_instance_language` -> 'additional_languages'
         // --------------------
-        // Eigene Sortierung je Instanz (siehe hookOnSaved())
+        // Own sort order per instance (see hookOnSaved())
         $sql = "SELECT `language_id` FROM `rel_instance_language`"
             . " WHERE `instance_id` = ? ORDER BY `position` ASC";
         $this->db->query($sql, 'i', [$instanceId]);
@@ -580,7 +580,7 @@ class Instance extends Dataset {
 
         // `rel_instance_instance` -> 'readable_instances'
         // --------------------
-        // Reihenfolge der Instanzen selbst - die Kantentabelle führt keine eigene.
+        // Order of the instances themselves - the edge table keeps none of its own.
         $sql = "SELECT `r`.`readable_id` FROM `rel_instance_instance` `r`"
             . " LEFT JOIN `instance` `i` ON `i`.`instance_id` = `r`.`readable_id`"
             . " WHERE `r`.`instance_id` = ?"
@@ -590,37 +590,37 @@ class Instance extends Dataset {
     }
 
     /**
-     * Vor dem Löschen: die gesamten Inhalte dieser Website entfernen.
+     * Before deleting: remove all the contents of this website.
      *
-     * WAS HIER PASSIERT, IST NICHT UMKEHRBAR. `instance` hat kein `deleted`-Feld, es
-     * gibt für Instanzen also keinen Papierkorb - Dataset::delete() löscht sofort
-     * endgültig. Das Backend warnt vorher mit den gezählten Mengen
+     * WHAT HAPPENS HERE CANNOT BE UNDONE. `instance` has no `deleted` field, so
+     * there is no trash for instances - Dataset::delete() deletes immediately and
+     * permanently. The backend warns beforehand with the counted quantities
      * (InstanceBackend::_editDeleteForm()).
      *
-     * WARUM HIER UND NICHT IN hookOnDeleted()
+     * WHY HERE AND NOT IN hookOnDeleted()
      * --------------------
-     * Sobald die `instance`-Zeile weg ist, räumen die Fremdschlüssel auf: `area` und
-     * `record` hängen mit ON DELETE CASCADE an ihr, `field` und `template` wiederum
-     * am Bereich. Die Datenbank löscht dabei nur Zeilen - die Mediendateien im
-     * Dateisystem blieben als Leichen zurück, und kein Hook eines Moduls liefe.
-     * Deshalb wird der Inhalt hier, VOR dem DELETE, ordentlich abgeräumt; die
-     * Fremdschlüssel sind danach nur noch das Sicherheitsnetz.
+     * As soon as the `instance` row is gone, the foreign keys clean up: `area` and
+     * `record` hang on it with ON DELETE CASCADE, `field` and `template` in turn
+     * on the area. The database then deletes only rows - the media files in the
+     * file system would remain as orphans, and no hook of any module would run.
+     * Therefore the content is cleaned up properly here, BEFORE the DELETE;
+     * the foreign keys are then only the safety net.
      *
-     * Gelöscht wird über die Inhaltsbereiche: Area::hookOnDelete() nimmt die
-     * Datensätze des Bereichs einzeln (samt Mediendateien), `field` und `template`
-     * fallen per Fremdschlüssel mit dem Bereich. Blätter zuerst (cascadeIds mit
-     * 'purge'), damit kein Bereich per ON DELETE CASCADE über area.parent_id an
-     * seinem eigenen Hook vorbei verschwindet.
+     * Deletion goes via the content areas: Area::hookOnDelete() takes the
+     * records of the area individually (including media files), `field` and `template`
+     * drop with the area by foreign key. Leaves first (cascadeIds with
+     * 'purge'), so that no area vanishes via ON DELETE CASCADE over area.parent_id past
+     * its own hook.
      *
-     * Läuft in der Transaktion von Dataset::purge(): wirft ein Schritt, bleibt alles
-     * stehen.
+     * Runs in the transaction of Dataset::purge(): if one step throws, everything
+     * stays.
      */
     protected function hookOnDelete(array $data): void
     {
         $instanceId = (int)($data['instance_id'] ?? 0);
 
-        // Die Standard-Instance fängt alle Aufrufe auf, die keine konfigurierte Domain
-        // treffen - ohne sie liefe jeder solche Aufruf ins Leere. Sie bleibt.
+        // The default instance catches all calls that match no configured domain -
+        // without it every such call would go nowhere. It stays.
         if ($instanceId === self::DEFAULT_ID) {
             $errorMsg = $this->cms->snippet('instance.error_default_instance');
             $this->cms->error($errorMsg);
@@ -630,24 +630,24 @@ class Instance extends Dataset {
         $area = $this->areaDataset();
         foreach ($area->cascadeIds('instance_id', $instanceId, 'purge') as $areaId) {
             if (!$area->finalDelete($areaId)) {
-                // Fehlermeldung steht bereits in Cms::errors -> Transaktion verwerfen
+                // Error message already in Cms::errors -> discard the transaction
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
 
         // `rel_instance_domain`, `rel_instance_language`, `rel_instance_instance`
-        // räumen die Fremdschlüssel ab (ON DELETE CASCADE auf instance_id bzw.
-        // readable_id) - hier ist nichts zu tun.
+        // are cleaned up by the foreign keys (ON DELETE CASCADE on instance_id resp.
+        // readable_id) - nothing to do here.
     }
 
-    // Sonderfunktionen für Instance
+    // Special functions for Instance
     // --------------------
 
     /**
-     * Was verschwindet mit dieser Instanz?
+     * What disappears with this instance?
      *
-     * Grundlage der Warnung im Löschformular. Gezählt wird über die Inhaltsbereiche
-     * der Instanz - genau das, was hookOnDelete() abräumt.
+     * Basis of the warning in the delete form. Counted are the content areas
+     * of the instance - exactly what hookOnDelete() clears away.
      *
      * @param int $instanceId
      * @return array  ['areas' => int, 'fields' => int, 'records' => int, 'templates' => int]
@@ -678,15 +678,15 @@ class Instance extends Dataset {
     }
 
     /**
-     * Aus einer Id-Liste die Ids heraussuchen, die es in $tableName wirklich gibt.
+     * From a list of IDs, pick out the IDs that really exist in $tableName.
      *
-     * Die Relation-Tabellen tragen Fremdschlüssel; eine Id aus einem veralteten
-     * Formular ließe das INSERT in hookOnSaved() mit einer nackten MySQL-Meldung
-     * scheitern. Hier fällt sie vorher heraus.
+     * The relation tables carry foreign keys; an ID from an outdated
+     * form would make the INSERT in hookOnSaved() fail with a raw MySQL message.
+     * It is dropped here beforehand.
      *
-     * @param string $tableName  'language' oder 'instance' - fest im Code, kein Request-Wert
-     * @param array  $ids        bereits durch System::sanitizeIds() gegangen
-     * @return array             die vorhandenen Ids, Reihenfolge wie übergeben
+     * @param string $tableName  'language' or 'instance' - fixed in the code, not a request value
+     * @param array  $ids        already passed through System::sanitizeIds()
+     * @return array             the existing IDs, order as passed
      */
     private function existingIds(string $tableName, array $ids): array
     {
@@ -700,16 +700,16 @@ class Instance extends Dataset {
         $found = array_map('intval', $this->db->fetchColumn());
         $this->db->popResult();
 
-        // Reihenfolge der Übergabe erhalten (bei den Sprachen ist sie die Sortierung)
+        // Order of the submission preserved (for the languages it is the sort order)
         return array_values(array_filter($ids, fn($id) => in_array((int)$id, $found, true)));
     }
 
     /**
-     * Area-Instanz bereitstellen.
+     * Provide the area instance.
      *
-     * Bewusst NICHT über den Konstruktor injiziert: Dataset-Kindklassen erben den
-     * Konstruktor der Basisklasse und deklarieren keinen eigenen (siehe
-     * Area::recordDataset(), dieselbe Überlegung).
+     * Deliberately NOT injected via the constructor: dataset child classes inherit the
+     * constructor of the base class and declare none of their own (see
+     * Area::recordDataset(), same reasoning).
      */
     private function areaDataset(): Area
     {
@@ -717,7 +717,7 @@ class Instance extends Dataset {
     }
 
     /**
-     * Dateicache der Instanzen (siehe Camindo\Core\InstanceCache).
+     * File cache of the instances (see Camindo\Core\InstanceCache).
      */
     private function instanceCache(): InstanceCache
     {
@@ -725,7 +725,7 @@ class Instance extends Dataset {
     }
 
     /**
-     * Pflege der sprachabhängigen Inhaltszeilen (siehe Camindo\Core\LanguageData).
+     * Maintenance of the language-dependent content rows (see Camindo\Core\LanguageData).
      */
     private function languageData(): LanguageData
     {
@@ -733,7 +733,7 @@ class Instance extends Dataset {
     }
 
     /**
-     * .htaccess-Dateien des Medienverzeichnisses (siehe Camindo\Core\MediaAccess).
+     * .htaccess files of the media directory (see Camindo\Core\MediaAccess).
      */
     private function mediaAccess(): MediaAccess
     {

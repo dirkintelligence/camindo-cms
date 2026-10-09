@@ -8,10 +8,10 @@ return [
 'description' => '#scheduler.module_description',
 'icon' => 'schedule',
 'listed' => true,
-// API: lesen und anlegen/ändern (SchedulerApi)
+ // API: read and create/change (SchedulerApi)
 'api' => ['SchedulerApi'],
-// Zusätzliche Modulrechte:
-// keine (reines Superuser-Modul)
+ // Additional module rights:
+ // none (superuser-only module)
 'access' => [
 ]
 

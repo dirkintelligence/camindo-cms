@@ -1,24 +1,24 @@
 <?php
 /**
- * Werkzeug "Baum normalisieren" (Tools -> Daten).
+ * Tool "Normalize tree" (Tools -> Data).
  *
- * Repariert den Baum EINES Inhaltsbereichs (`record`, siehe TreeManagerTrait), wenn
- * `position` und/oder `lft`/`rgt` durcheinandergeraten sind - z. B. doppelt vergebene
- * `position`-Werte innerhalb eines Parents oder ein beschädigter Nested-Set-Bereich
- * (`lft`/`rgt` mit Lücken, Überschneidungen oder außerhalb 1..2n).
+ * Repairs the tree of ONE content area (`record`, see TreeManagerTrait) if
+ * `position` and/or `lft`/`rgt` have got out of order - e.g. duplicate
+ * `position` values within a parent, or a damaged nested-set range
+ * (`lft`/`rgt` with gaps, overlaps or outside 1..2n).
  *
- * Beide reparierenden Schritte existieren bereits im Trait und werden hier nur
- * verkettet - erst `position` je Parent lückenlos neu vergeben (Reihenfolge bleibt
- * erhalten), dann `lft`/`rgt`/`depth`/`parent_ids` komplett aus `parent_id` +
- * `position` neu aufbauen:
+ * Both repairing steps already exist in the trait and are only chained here -
+ * first reassign `position` per parent without gaps (order is preserved),
+ * then rebuild `lft`/`rgt`/`depth`/`parent_ids` completely from `parent_id` +
+ * `position`:
  *
- *     Record::normalizePositions()   siehe TreeManagerTrait
- *     Record::externalRebuildTree()  siehe TreeManagerTrait
+ *     Record::normalizePositions()   see TreeManagerTrait
+ *     Record::externalRebuildTree()  see TreeManagerTrait
  *
- * diagnose() ist rein lesend und dient der Anzeige vor/nach dem Lauf.
+ * diagnose() is read-only and serves for display before and after the run.
  *
- *     backend/index_data.php             -> ToolsBackend::dataTools()      das Formular
- *     backend/tool_tree_normalize.php    -> ToolsBackend::treeNormalize()  prüfen / ausführen
+ *     backend/index_data.php             -> ToolsBackend::dataTools()      the form
+ *     backend/tool_tree_normalize.php    -> ToolsBackend::treeNormalize()  check / run
  *
  * @see Camindo\Core\TreeManagerTrait
  * @see Camindo\Core\Modules\Tools\ToolsBackend
@@ -41,9 +41,9 @@ class ToolTree {
     {}
 
     /**
-     * Inhaltsbereiche mit Baum (Eingabefeld `parent_id`, Record::treeAreaIds()):
-     * area_id => Beschriftung (Label, bei mehreren Mandanten mit dem Namen der
-     * Instanz), in Baumreihenfolge der Bereiche selbst.
+ *     Content areas with a tree (input field `parent_id`, Record::treeAreaIds()):
+ *     area_id => label (label, with multiple tenants the name of the
+ *     instance), in tree order of the areas themselves.
      */
     public function areaOptions(): array
     {
@@ -74,20 +74,20 @@ class ToolTree {
     }
 
     /**
-     * Baum eines Bereichs auf Unstimmigkeiten prüfen - rein lesend.
-     * Als deleted markierte Datensätze zählen mit (sie belegen weiterhin
-     * position/lft/rgt, siehe Klassenkommentar TreeManagerTrait); Arbeitskopien
-     * (tmp=1) nie.
+     * Check a tree of an area for inconsistencies - read-only.
+     * Records marked as deleted count too (they still occupy
+     * position/lft/rgt, see class comment TreeManagerTrait); working copies
+     * (tmp=1) never.
      *
      * @return array{
      *     total: int,
-     *     duplicate_positions: int,   Anzahl (parent_id, position)-Gruppen mit >1 Datensatz
-     *     unclean_parents: int,       Anzahl Parents, deren position-Folge nicht exakt 1..n ist
-     *     invalid_bounds: int,        Datensätze mit lft<1 oder rgt<=lft
-     *     duplicate_lft: int,         Anzahl lft-Werte, die mehrfach vergeben sind
-     *     orphan_parents: int,        parent_id verweist auf keinen Datensatz desselben Bereichs
-     *     range_ok: bool,             MIN(lft)==1 und MAX(rgt)==2*total (bei total>0)
-     *     clean: bool                 alle Prüfungen unauffällig
+     *     duplicate_positions: int,   number of (parent_id, position) groups with >1 record
+     *     unclean_parents: int,       number of parents whose position sequence is not exactly 1..n
+     *     invalid_bounds: int,        records with lft<1 or rgt<=lft
+     *     duplicate_lft: int,         number of lft values assigned more than once
+     *     orphan_parents: int,        parent_id points to no record of the same area
+     *     range_ok: bool,             MIN(lft)==1 and MAX(rgt)==2*total (when total>0)
+     *     clean: bool                 all checks inconspicuous
      * }
      */
     public function diagnose(int $areaId): array
@@ -110,7 +110,7 @@ class ToolTree {
         $result['total'] = (int)($this->db->fetchNum()[0] ?? 0);
 
         if ($result['total'] > 0) {
-            // doppelt vergebene position je Parent
+            // duplicate position per parent
             $this->db->query(
                 "SELECT COUNT(*) FROM ("
                 . "  SELECT `parent_id`, `position` FROM `record` WHERE `area_id` = ? AND `tmp` = 0"
@@ -120,8 +120,8 @@ class ToolTree {
             );
             $result['duplicate_positions'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-            // Parents, deren position-Folge nicht lückenlos 1..n ist (fängt auch
-            // Lücken ein, die keine Duplikate sind)
+            // Parents whose position sequence is not gapless 1..n (also catches
+            // gaps that are not duplicates)
             $this->db->query(
                 "SELECT COUNT(DISTINCT `parent_id`) FROM ("
                 . "  SELECT `parent_id`, `position`,"
@@ -132,7 +132,7 @@ class ToolTree {
             );
             $result['unclean_parents'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-            // lft/rgt: ungültige Grenzen
+            // lft/rgt: invalid bounds
             $this->db->query(
                 "SELECT COUNT(*) FROM `record` WHERE `area_id` = ? AND `tmp` = 0"
                 . " AND (`lft` < 1 OR `rgt` <= `lft`)",
@@ -140,7 +140,7 @@ class ToolTree {
             );
             $result['invalid_bounds'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-            // lft/rgt: doppelt vergebene lft-Werte
+            // lft/rgt: duplicate lft values
             $this->db->query(
                 "SELECT COUNT(*) FROM ("
                 . "  SELECT `lft` FROM `record` WHERE `area_id` = ? AND `tmp` = 0"
@@ -150,7 +150,7 @@ class ToolTree {
             );
             $result['duplicate_lft'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-            // parent_id verweist auf keinen (noch vorhandenen) Datensatz desselben Bereichs
+            // parent_id points to no (still existing) record of the same area
             $this->db->query(
                 "SELECT COUNT(*) FROM `record` `r` WHERE `r`.`area_id` = ? AND `r`.`tmp` = 0"
                 . " AND `r`.`parent_id` IS NOT NULL"
@@ -162,7 +162,7 @@ class ToolTree {
             );
             $result['orphan_parents'] = (int)($this->db->fetchNum()[0] ?? 0);
 
-            // Gesamtbereich: lft beginnt bei 1, rgt endet bei 2*total (lückenloses Nested Set)
+            // Overall range: lft starts at 1, rgt ends at 2*total (gapless nested set)
             $this->db->query(
                 "SELECT MIN(`lft`), MAX(`rgt`) FROM `record` WHERE `area_id` = ? AND `tmp` = 0",
                 'i', [$areaId]
@@ -187,13 +187,13 @@ class ToolTree {
     }
 
     /**
-     * Baum eines Bereichs reparieren: position je Parent lückenlos neu vergeben
-     * (bisherige Reihenfolge bleibt erhalten), danach lft/rgt/depth/parent_ids
-     * komplett aus parent_id + position neu aufbauen.
-     * Ein `orphan_parents`-Befund aus diagnose() wird dabei mit-repariert:
-     * rebuildTree() behandelt eine bereichsfremde/fehlende parent_id als Wurzel.
+     * Repair the tree of an area: reassign position per parent without gaps
+     * (previous order is preserved), then rebuild lft/rgt/depth/parent_ids
+     * completely from parent_id + position.
+     * An `orphan_parents` finding from diagnose() is repaired along with it:
+     * rebuildTree() treats a parent_id that is foreign to the area or missing as root.
      *
-     * @return array{before: array, after: array}  diagnose() vor und nach dem Lauf
+     * @return array{before: array, after: array}  diagnose() before and after the run
      */
     public function normalize(int $areaId): array
     {

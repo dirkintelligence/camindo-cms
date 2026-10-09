@@ -1,71 +1,71 @@
 <?php
 /**
- * Trait für die Tabelle `record`: fest verknüpfte Inhalte - Felder vom Typ 'link'.
+ * Trait for the table `record`: permanently linked contents - fields of type 'link'.
  *
- * Ein 'link'-Feld ist ein gerichteter Verweis wie 'pointer' (Kante in `data_rel`,
- * Zielbereiche in `rel_field_area`), aber mit Besitz: die Zieldatensätze GEHÖREN dem
- * Quelldatensatz. Zwei Regeln folgen daraus:
+ * A 'link' field is a directed reference like 'pointer' (edge in `data_rel`,
+ * target areas in `rel_field_area`), but with ownership: the target records BELONG to the
+ * source record. Two rules follow from this:
  *
- *   1. Je Zieldatensatz höchstens ein Quelldatensatz (linkOwner(); geprüft in
+ *   1. At most one source record per target record (linkOwner(); checked in
  *      VirtualFieldsTrait::createRelations()).
- *   2. Der Zieldatensatz teilt das Schicksal seines Quelldatensatzes: Löschen,
- *      Wiederherstellen und endgültiges Löschen (Record-Hooks -> cascade*()),
- *      Kopieren (die Inhalte werden mitkopiert) und Verschieben (die Inhalte
- *      nicht abgebildeter link-Felder fallen weg).
+ *   2. The target record shares the fate of its source record: deleting,
+ *      restoring and permanently deleting (record hooks -> cascade*()),
+ *      copying (the contents are copied along) and moving (the contents
+ *      of link fields not mapped are dropped).
  *
- * Die Zielbereiche sind abhängige Bereiche (`area.dependent` = 1): sie erscheinen
- * nicht in der Bereichsliste des Moduls Record, ihre Datensätze werden über den
- * Quelldatensatz bearbeitet.
+ * The target areas are dependent areas (`area.dependent` = 1): they do not appear
+ * in the area list of the Record module; their records are edited via the
+ * source record.
  *
- * ZWEI DARSTELLUNGEN IN DER EINGABEMASKE (field.display_type)
+ * TWO REPRESENTATIONS IN THE INPUT MASK (field.display_type)
  * --------------------
- *     lookup   das Suchfenster der übrigen Verknüpfungsfelder. Die Zieldatensätze
- *              bleiben während der Bearbeitung produktiv, die Verknüpfungen hängen
- *              an der Arbeitskopie des Quelldatensatzes.
- *     embed    die Eingabemasken der Zieldatensätze stehen in der Maske des
- *              Quelldatensatzes. Dafür werden die Zieldatensätze beim Öffnen der Maske
- *              MIT ausgecheckt (checkOutDependents()): Uploads und Lookup-Felder in
- *              den eingebetteten Masken schreiben sofort an eine record_id und
- *              brauchen dafür eine Arbeitskopie des Session-Admins - und ein
- *              Abbrechen muss auch die eingebetteten Eingaben verwerfen können
- *              (cancelDependents()). Die Kanten der Arbeitskopie zeigen dann auf die
- *              Arbeitskopien der Zieldatensätze; ein neu eingefügter Zieldatensatz
- *              ist eine Arbeitskopie ohne Original (tmpInit()).
+ *     lookup   the search window of the other link fields. The target records
+ *              remain live during editing, the links hang
+ *              on the working copy of the source record.
+ *     embed    the input masks of the target records sit inside the mask of the
+ *              source record. For this, the target records are checked out WHEN THE MASK
+ *              IS OPENED (checkOutDependents()): uploads and lookup fields in
+ *              the embedded masks write immediately to a record_id and
+ *              need a working copy of the session admin for this - and cancelling
+ *              must also be able to discard the embedded input
+ *              (cancelDependents()). The edges of the working copy then point to the
+ *              working copies of the target records; a newly inserted target record
+ *              is a working copy without original (tmpInit()).
  *
- * DER CHECK-IN (checkInDependents())
+ * THE CHECK-IN (checkInDependents())
  * --------------------
- * Läuft VOR Dataset::save() des Quelldatensatzes, in derselben Transaktion
- * (RecordBackendEdit::_editSave(), MoveTrait::moveSave()). Je Kante der Arbeitskopie:
+ * Runs BEFORE Dataset::save() of the source record, in the same transaction
+ * (RecordBackendEdit::_editSave(), MoveTrait::moveSave()). For each edge of the working copy:
  *
- *     Ziel ist eine Arbeitskopie des Admins   -> Check-in (Record::save()), rekursiv
- *                                               für dessen eigene link-Felder; die
- *                                               Kante wandert dabei auf das Original
+ *     target is a working copy of the admin   -> check-in (Record::save()), recursively
+ *                                               for its own link fields; the
+ *                                               edge moves onto the original
  *                                               (TemporaryTrait::_copyRelations())
- *     Ziel gehört einem anderen produktiven   -> der Quelldatensatz ist eine Kopie
- *     Datensatz (nicht dem eigenen Original)     (TemporaryTrait::checkOut() mit $copy):
- *                                               das Ziel wird kopiert, die Kante zeigt
- *                                               auf die Kopie
- *     Ziel ist produktiv und frei             -> bleibt (Lookup: aus dem Suchfenster
- *                                               verknüpft bzw. neu angelegt)
+ *     target belongs to another live           -> the source record is a copy
+ *     record (not to the own original)            (TemporaryTrait::checkOut() with $copy):
+ *                                               the target is copied, the edge points
+ *                                               to the copy
+ *     target is live and free                  -> stays (lookup: linked from the search
+ *                                               window or newly created)
  *
- * Danach die Verwaisten: Inhalte, die das Original bisher hielt und die an keiner
- * Kante der Arbeitskopie mehr hängen (Lookup "Verknüpfung aufheben", eingebettet
- * "Löschen", Verschieben ohne Abbildung), werden gelöscht - soft, wie jeder
- * Datensatz im Backend. Bis zum Check-in ist alles umkehrbar: die Arbeitskopie
- * verwerfen (cancel) lässt das Original samt Inhalten, wie es war.
+ * Then the orphans: contents that the original held so far and that no longer hang
+ * on any edge of the working copy (lookup "remove link", embedded
+ * "Delete", moving without mapping), are deleted - soft, like every
+ * record in the backend. Up to the check-in everything is reversible: discarding the working copy
+ * (cancel) leaves the original including its contents as it was.
  *
  * IMPORT (CSV, DOCX)
  * --------------------
- * RecordImport::_importLinks() arbeitet wie die eingebettete Maske: Inhalte an der
- * Arbeitskopie auschecken (linkRepoint()) bzw. anlegen (embedInsert()), Werte mit
- * stayTemporary prüfen, Reihenfolge setzen (linkReorder()), dann
- * checkInDependents() mit dem Quelldatensatz in einer Transaktion.
+ * RecordImport::_importLinks() works like the embedded mask: check out contents at the
+ * working copy (linkRepoint()) or create them (embedInsert()), check values with
+ * stayTemporary, set the order (linkReorder()), then
+ * checkInDependents() with the source record in one transaction.
  *
- * NICHT ABGEDECKT
+ * NOT COVERED
  * --------------------
- * Stapelverarbeitung, XML-Import und CMS:USER_INPUT speichern ohne
- * checkInDependents(): sie kopieren die Kanten der Arbeitskopie unverändert
- * zurück - Inhalte werden dort weder kopiert noch verwaist gelöscht.
+ * Batch processing, XML import and CMS:USER_INPUT save without
+ * checkInDependents(): they copy the edges of the working copy back unchanged -
+ * contents are neither copied nor deleted as orphans there.
  *
  * @see Camindo\Core\Modules\Record\RecordBackendEdit  Eingabemaske (Lookup, eingebettet)
  * @see Camindo\Core\Modules\Area\Field                 Felddefinition 'link'
@@ -76,10 +76,10 @@ namespace Camindo\Core;
 trait LinkTrait
 {
     /**
-     * Die link-Felder eines Bereichs.
+     * The link fields of an area.
      *
      * @param array $schemaVirtual  virtualSchema($areaId, false)
-     * @return array  name => Felddefinition
+     * @return array  name => field definition
      */
     public function linkFields(array $schemaVirtual): array
     {
@@ -90,9 +90,9 @@ trait LinkTrait
     }
 
     /**
-     * link-Felder, deren Zielbereich die Benutzergruppe lesen darf - nur diese
-     * werden mit aus- und eingecheckt; die übrigen behalten ihre Kanten auf die
-     * produktiven Inhalte (Dataset::relationTargetReadable()).
+     * link fields whose target area the user group may read - only these
+     * are checked out and in as well; the others keep their edges to the
+     * live contents (Dataset::relationTargetReadable()).
      */
     public function accessibleLinkFields(array $schemaVirtual): array
     {
@@ -100,7 +100,7 @@ trait LinkTrait
     }
 
     /**
-     * Zielbereiche eines link-Feldes (rel_field_area).
+     * Target areas of a link field (rel_field_area).
      *
      * @return int[]
      */
@@ -116,13 +116,13 @@ trait LinkTrait
     }
 
     /**
-     * Felder der Zielbereiche eines link-Feldes, wie sie Export und Import als
-     * Felder des Quelldatensatzes führen ("{link}.{feld}", RecordExport,
-     * EINGEBETTETE INHALTE) - bei mehreren Zielbereichen die Vereinigung nach Name.
-     * Alle virtuellen Felder außer Verknüpfungen, Volltext und den Baum-/
-     * Sortierfeldern; Datei-Felder samt Thumbnails.
+     * Fields of the target areas of a link field, as export and import carry them
+     * as fields of the source record ("{link}.{field}", RecordExport,
+     * EMBEDDED CONTENTS) - for several target areas the union by name.
+     * All virtual fields except links, full text and the tree/
+     * sort fields; file fields including thumbnails.
      *
-     * @return array  name => Felddefinition (die des ersten Zielbereichs mit dem Namen)
+     * @return array  name => field definition (that of the first target area with this name)
      */
     public function linkTargetFields(array $colDef): array
     {
@@ -139,9 +139,9 @@ trait LinkTrait
     }
 
     /**
-     * Eine Kante eines link-Feldes auf ein anderes Ziel umhängen (Import: der
-     * Inhalt wurde ausgecheckt, die Kante der Arbeitskopie des Quelldatensatzes
-     * zeigt danach auf seine Arbeitskopie - wie bei checkOutDependents()).
+     * Re-attach an edge of a link field to another target (import: the
+     * content was checked out, the edge of the working copy of the source record
+     * then points to its working copy - as with checkOutDependents()).
      */
     public function linkRepoint(int $fieldId, int $srcId, int $oldDestId, int $newDestId): void
     {
@@ -149,9 +149,9 @@ trait LinkTrait
     }
 
     /**
-     * Reihenfolge der Inhalte eines link-Feldes setzen.
+     * Set the order of the contents of a link field.
      *
-     * @param int[] $ids  dest_ids in der gewünschten Reihenfolge
+     * @param int[] $ids  dest_ids in the desired order
      */
     public function linkReorder(int $srcId, int $fieldId, array $ids): void
     {
@@ -159,8 +159,8 @@ trait LinkTrait
     }
 
     /**
-     * Zieldatensätze eines link-Feldes in ihrer Reihenfolge (data_rel.position) -
-     * auch Arbeitskopien, deshalb nicht über Cms::select().
+     * Target records of a link field in their order (data_rel.position) -
+     * including working copies, hence not via Cms::select().
      *
      * @return int[]  dest_ids
      */
@@ -179,11 +179,11 @@ trait LinkTrait
     }
 
     /**
-     * Alle fest verknüpften Inhalte eines Datensatzes (über jedes seiner link-Felder).
+     * All permanently linked contents of a record (via each of its link fields).
      *
-     * Solange ein Inhalt ausgecheckt ist, hält der produktive Quelldatensatz auch
-     * eine Kante auf dessen Arbeitskopie (TemporaryTrait::_copyRelations() kopiert
-     * die eingehenden Kanten mit) - $productiveOnly lässt Arbeitskopien weg.
+     * As long as a content is checked out, the live source record also holds
+     * an edge to its working copy (TemporaryTrait::_copyRelations() copies
+     * the incoming edges along) - $productiveOnly leaves out working copies.
      *
      * @return int[]  dest_ids
      */
@@ -205,20 +205,20 @@ trait LinkTrait
     }
 
     /**
-     * Wem gehört ein Datensatz? Der PRODUKTIVE Quelldatensatz, der ihn über ein
-     * link-Feld hält - außer $exceptId und dessen Original bzw. Arbeitskopien:
-     * die Arbeitskopie eines Quelldatensatzes darf verknüpfen, was ihr Original
-     * schon hält (createRelations() nach einem Reiterwechsel, Check-in).
+     * Who owns a record? The LIVE source record that holds it via a
+     * link field - except $exceptId and its original or working copies:
+     * the working copy of a source record may link what its original
+     * already holds (createRelations() after a tab switch, check-in).
      *
-     * @param int $destId    Zieldatensatz
-     * @param int $exceptId  Quelldatensatz (produktiv oder Arbeitskopie), der nicht zählt
-     * @return int|null      record_id des Besitzers oder null (frei)
+     * @param int $destId    target record
+     * @param int $exceptId  source record (live or working copy) that does not count
+     * @return int|null      record_id of the owner or null (free)
      */
     public function linkOwner(int $destId, int $exceptId = 0): ?int
     {
         if ($destId < 1) return null;
         $this->db->pushResult();
-        // $exceptId auf sein Original auflösen
+        // resolve $exceptId to its original
         $originId = 0;
         if ($exceptId > 0) {
             $this->db->query("SELECT `tmp`, `origin_id` FROM `record` WHERE `record_id` = ?", 'i', [$exceptId]);
@@ -240,9 +240,9 @@ trait LinkTrait
     }
 
     /**
-     * Ist die Arbeitskopie $tmpId ein EINGEBETTETER Inhalt - hängt sie an einem
-     * link-Feld einer anderen Arbeitskopie (checkOutDependents() / embedInsert())?
-     * Dann heißen ihre Eingabefelder embed[{tmpId}][feld] statt data[feld]
+     * Is the working copy $tmpId an EMBEDDED content - is it attached to a
+     * link field of another working copy (checkOutDependents() / embedInsert())?
+     * Then its input fields are called embed[{tmpId}][field] instead of data[field]
      * (RecordBackendUpload::fileServerSelect()).
      */
     public function isEmbedded(int $tmpId): bool
@@ -263,8 +263,8 @@ trait LinkTrait
     }
 
     /**
-     * Eingehende link-Verknüpfungen eines Datensatzes entfernen (eine Kopie gehört
-     * niemandem - TemporaryTrait::checkOut() mit $copy).
+     * Remove the incoming link edges of a record (a copy belongs to
+     * nobody - TemporaryTrait::checkOut() with $copy).
      */
     public function removeIncomingLinks(int $recordId): void
     {
@@ -278,24 +278,24 @@ trait LinkTrait
     }
 
     /**
-     * Beim Öffnen der Eingabemaske: die Inhalte der EINGEBETTETEN link-Felder
-     * (display_type 'embed') mit auschecken - siehe Klassenkommentar.
+     * When the input mask is opened: check out the contents of the EMBEDDED link fields
+     * (display_type 'embed') as well - see class comment.
      *
-     * Die Kanten der Arbeitskopie $tmpId (von checkOut() vom Vorbild kopiert, sie
-     * zeigen auf die produktiven Inhalte) werden auf die neuen Arbeitskopien der
-     * Inhalte umgehängt. Bei einer KOPIE des Quelldatensatzes ($copy) entstehen
-     * Kopien der Inhalte (checkOut() mit $copy: ohne Original, mit kopierten
-     * Dateien) - der Check-in macht daraus neue Datensätze. Ein fremd gesperrter
-     * Inhalt (Bearbeitungssperre eines anderen Admins) bricht ab.
+     * The edges of the working copy $tmpId (copied from the original by checkOut(), they
+     * point to the live contents) are re-attached to the new working copies of the
+     * contents. For a COPY of the source record ($copy) copies of the contents are created
+     * (checkOut() with $copy: without original, with copied files) -
+     * the check-in turns them into new records. A content locked by someone else
+     * (edit lock of another admin) aborts.
      *
-     * Rekursiv für eingebettete Felder der Inhalte selbst (die Maske zeigt sie nicht
-     * an - ihre Kanten und Arbeitskopien müssen trotzdem stimmen, damit der Check-in
-     * und das Abbrechen sie finden).
+     * Recursive for embedded fields of the contents themselves (the mask does not show them
+     * - their edges and working copies must still be correct so that the check-in
+     * and cancelling find them).
      *
-     * @param int   $tmpId          Arbeitskopie des Quelldatensatzes
-     * @param bool  $copy           true: der Quelldatensatz wird kopiert
-     * @param array $schemaVirtual  Schema des Bereichs (virtuelle Felder)
-     * @return bool                 false bei Fehlern (Cms::errors)
+     * @param int   $tmpId          working copy of the source record
+     * @param bool  $copy           true: the source record is copied
+     * @param array $schemaVirtual  schema of the area (virtual fields)
+     * @return bool                 false on errors (Cms::errors)
      */
     public function checkOutDependents(int $tmpId, bool $copy, array $schemaVirtual): bool
     {
@@ -307,11 +307,11 @@ trait LinkTrait
                 $this->db->query("SELECT `tmp` FROM `record` WHERE `record_id` = ?", 'i', [$destId]);
                 $isTmp = !empty($this->db->fetch()['tmp']);
                 $this->db->popResult();
-                if ($isTmp) continue;   // schon ausgecheckt (Maske erneut geöffnet)
+                if ($isTmp) continue;   // already checked out (mask opened again)
 
                 if (!$destData = $this->load($destId)) return false;
                 if (!empty($destData['deleted'])) {
-                    // gelöschter Inhalt: Kante lösen, der Check-in räumt ihn nicht mehr ab
+                    // deleted content: drop the edge, the check-in no longer cleans it up
                     $this->db->query("DELETE FROM `data_rel` WHERE `src_id` = ? AND `dest_id` = ?", 'ii', [$tmpId, $destId]);
                     continue;
                 }
@@ -325,9 +325,9 @@ trait LinkTrait
                     return false;
                 }
                 if (!$destTmpId = $this->checkOut($destData, $copy)) return false;
-                // Kante auf die Arbeitskopie des Inhalts umhängen
+                // re-attach the edge to the working copy of the content
                 $this->_repointLink($fieldId, $tmpId, $destId, $destTmpId);
-                // rekursiv: eingebettete Felder des Inhalts
+                // recursive: embedded fields of the content
                 $destSchema = $this->virtualSchema((int)$destData['area_id'], false);
                 if (!$this->checkOutDependents($destTmpId, $copy, $destSchema)) return false;
             }
@@ -336,16 +336,16 @@ trait LinkTrait
     }
 
     /**
-     * Einen neuen Inhalt in ein eingebettetes link-Feld einfügen: Arbeitskopie ohne
-     * Original im Zielbereich (tmpInit()) und Kante an der Arbeitskopie des
-     * Quelldatensatzes, eingereiht vor bzw. nach $refId (0 = ans Ende).
+     * Insert a new content into an embedded link field: working copy without
+     * original in the target area (tmpInit()) and edge on the working copy of the
+     * source record, placed before or after $refId (0 = at the end).
      *
-     * @param array  $colDef   link-Feld
-     * @param int    $srcId    Arbeitskopie des Quelldatensatzes (Session-Admin)
-     * @param int    $areaId   Zielbereich (einer der Zielbereiche des Feldes)
-     * @param int    $refId    Bezugs-Inhalt oder 0
-     * @param bool   $before   true: vor $refId, sonst danach
-     * @return int|null        record_id der neuen Arbeitskopie, null bei Fehlern
+     * @param array  $colDef   link field
+     * @param int    $srcId    working copy of the source record (session admin)
+     * @param int    $areaId   target area (one of the target areas of the field)
+     * @param int    $refId    reference content or 0
+     * @param bool   $before   true: before $refId, otherwise after it
+     * @return int|null        record_id of the new working copy, null on errors
      */
     public function embedInsert(array $colDef, int $srcId, int $areaId, int $refId, bool $before): ?int
     {
@@ -365,7 +365,7 @@ trait LinkTrait
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
             $newId = (int)$data['record_id'];
-            // ans Ende anhängen, dann einreihen
+            // append at the end, then insert in order
             $this->createRelations($colDef, $srcId, $newId, replace:false);
             $ids = $this->linkDestIds($srcId, $fieldId);
             $ids = array_values(array_diff($ids, [$newId]));
@@ -388,10 +388,10 @@ trait LinkTrait
     }
 
     /**
-     * Einen Inhalt eines eingebetteten link-Feldes um eine Stelle verschieben.
+     * Move a content of an embedded link field by one position.
      *
      * @param string $direction  'up' | 'down'
-     * @return bool  false, wenn nichts zu verschieben war (Anfang/Ende) oder Fehler
+     * @return bool  false if there was nothing to move (start/end) or an error
      */
     public function embedMove(array $colDef, int $srcId, int $destId, string $direction): bool
     {
@@ -409,10 +409,10 @@ trait LinkTrait
     }
 
     /**
-     * Einen Inhalt aus einem eingebetteten link-Feld entfernen: Kante lösen; eine
-     * Arbeitskopie (neu eingefügt oder mit ausgecheckt) wird verworfen - ihr
-     * produktives Original bleibt bis zum Check-in stehen und wird dort als
-     * verwaist gelöscht (checkInDependents()).
+     * Remove a content from an embedded link field: drop the edge; a
+     * working copy (newly inserted or checked out) is discarded - its
+     * live original remains until the check-in and is deleted there as
+     * an orphan (checkInDependents()).
      */
     public function embedRemove(array $colDef, int $srcId, int $destId): bool
     {
@@ -426,11 +426,11 @@ trait LinkTrait
     }
 
     /**
-     * Beim Check-in des Quelldatensatzes - siehe Klassenkommentar. Rekursiv.
+     * At the check-in of the source record - see class comment. Recursive.
      *
-     * @param int $tmpId     Arbeitskopie des Quelldatensatzes (Session-Admin)
-     * @param int $originId  produktives Original (0 bei neuem Datensatz / Kopie)
-     * @return bool          false bei Fehlern (Cms::errors); der Aufrufer rollt zurück
+     * @param int $tmpId     working copy of the source record (session admin)
+     * @param int $originId  live original (0 for a new record / copy)
+     * @return bool          false on errors (Cms::errors); the caller rolls back
      */
     public function checkInDependents(int $tmpId, int $originId): bool
     {
@@ -440,8 +440,8 @@ trait LinkTrait
         }
         $areaId = (int)$prodData[1];
         $schemaVirtual = $this->virtualSchema($areaId, false);
-        // (Felder ohne Zielzugriff wurden nicht ausgecheckt - ihre Kanten zeigen
-        //  weiter auf die produktiven Inhalte und wandern unverändert mit)
+        // (Fields without target access were not checked out - their edges continue
+        //  to point to the live contents and move along unchanged)
         $linkFields = $this->accessibleLinkFields($schemaVirtual);
         if (empty($linkFields)) return true;
 
@@ -461,10 +461,10 @@ trait LinkTrait
                 if (!$row) continue;
 
                 if (!empty($row['tmp'])) {
-                    // Arbeitskopie eines Inhalts (eingebettet bzw. Kopie): eigene
-                    // Inhalte zuerst, dann Check-in - die Kante wandert auf das
-                    // Original (checkIn() -> _copyRelations()) bzw. bleibt bei einer
-                    // Arbeitskopie ohne Original an deren Id
+                    // working copy of a content (embedded or copy): its own
+                    // contents first, then check-in - the edge moves onto the
+                    // original (checkIn() -> _copyRelations()) or, for a
+                    // working copy without an original, stays with its id
                     if ((int)$row['changed_by'] !== $sessionAdminId || !empty($row['deleted'])) {
                         $this->cms->error($this->cms->snippet('error_tmp_record_access_denied'));
                         return false;
@@ -474,8 +474,8 @@ trait LinkTrait
                     continue;
                 }
 
-                // produktiver Inhalt: gehört er einem anderen Datensatz, ist der
-                // Quelldatensatz eine Kopie - der Inhalt wird mitkopiert
+                // live content: if it belongs to another record, the
+                // source record is a copy - the content is copied along
                 if ($this->linkOwner($destId, $tmpId) !== null) {
                     if (!$copyId = $this->_copyDependent($destId)) return false;
                     $this->_repointLink($fieldId, $tmpId, $destId, $copyId);
@@ -483,12 +483,12 @@ trait LinkTrait
             }
         }
 
-        // Verwaiste Inhalte des Originals löschen (die Inhalte sind jetzt alle
-        // produktiv: eingecheckt, kopiert oder unverändert)
+        // Delete orphaned contents of the original (the contents are now all
+        // live: checked in, copied or unchanged)
         if ($originId > 0) {
             $after = $this->dependentIds($tmpId, productiveOnly: true);
             foreach (array_diff($before, $after) as $orphanId) {
-                if ($this->linkOwner($orphanId, $tmpId) !== null) continue; // (kann nicht sein)
+                if ($this->linkOwner($orphanId, $tmpId) !== null) continue; // (cannot happen)
                 if (!$this->delete($orphanId, false)) return false;
             }
         }
@@ -496,27 +496,27 @@ trait LinkTrait
     }
 
     /**
-     * Beim Abbrechen (Record::cancel()): die Arbeitskopien der Inhalte mit
-     * verwerfen - rekursiv, bevor die Kanten mit der Arbeitskopie verschwinden.
+     * On cancelling (Record::cancel()): discard the working copies of the contents
+     * as well - recursively, before the edges disappear with the working copy.
      *
-     * @param int $tmpId  Arbeitskopie des Quelldatensatzes (Session-Admin)
+     * @param int $tmpId  working copy of the source record (session admin)
      */
     public function cancelDependents(int $tmpId): void
     {
         foreach ($this->dependentIds($tmpId) as $destId) {
-            if (!$this->getProdData($destId)) continue;   // produktiv oder fremd
+            if (!$this->getProdData($destId)) continue;   // live or foreign
             $this->cancelDependents($destId);
             $this->cancel($destId);
         }
     }
 
     /**
-     * Soft-Delete / Wiederherstellen / endgültiges Löschen des Quelldatensatzes auf
-     * seine Inhalte ausdehnen (Record-Hooks). Läuft in der Transaktion des Vorgangs;
-     * die Inhalte laufen einzeln durch dieselben Hooks - rekursiv über ihre eigenen
-     * link-Felder.
+     * Extend soft delete / restore / permanent deletion of the source record to its
+     * contents (record hooks). Runs in the transaction of the operation;
+     * the contents go through the same hooks one by one - recursively via their own
+     * link fields.
      *
-     * @param int    $srcId  produktiver Datensatz
+     * @param int    $srcId  live record
      * @param string $mode   'delete' | 'restore' | 'purge'
      */
     protected function cascadeDependents(int $srcId, string $mode): void
@@ -534,7 +534,7 @@ trait LinkTrait
                     break;
                 case 'restore':
                     if (empty($row['deleted'])) continue 2;
-                    // nur Inhalte desselben Löschvorgangs (gleicher Zeitstempel)
+                    // only contents of the same deletion operation (same timestamp)
                     $stamp = $this->getRestoreTimestamp();
                     if ($stamp !== '' && $this->rawChangedAt($destId) !== $stamp) continue 2;
                     $this->restoreOneCore($destId);
@@ -550,10 +550,10 @@ trait LinkTrait
     // Hilfsfunktionen
 
     /**
-     * Check-in einer Arbeitskopie eines Inhalts: Record::save() mit den gestagten
-     * Werten aus ihrem Arbeitsstand (die Eingabemaske hat sie mit stayTemporary
-     * geprüft und zwischengespeichert, eine Kopie trägt den Stand ihres Vorbilds).
-     * Die Zustände eines äußeren save() (MoveTrait, Import) bleiben unberührt.
+     * Check-in of a working copy of a content: Record::save() with the staged
+     * values from its working state (the input mask checked them with stayTemporary
+     * and saved them temporarily; a copy carries the state of its original).
+     * The states of an outer save() (MoveTrait, import) remain untouched.
      */
     private function _saveDependent(int $tmpId, int $areaId): bool
     {
@@ -561,9 +561,9 @@ trait LinkTrait
         $this->storedFormatFields = [];
         $this->prehashedFields = [];
         $this->deferRelationChecks = false;
-        // Die Uploads des laufenden Requests ($_FILES['data']) gehören dem
-        // Quelldatensatz - die des Inhalts hat die Maske schon gesichert
-        // (RecordBackendEdit::_embedSave() mit stayTemporary)
+        // The uploads of the current request ($_FILES['data']) belong to the
+        // source record - the mask has already saved those of the content
+        // (RecordBackendEdit::_embedSave() with stayTemporary)
         $files = $_FILES['data'] ?? null;
         unset($_FILES['data']);
         try {
@@ -576,9 +576,9 @@ trait LinkTrait
     }
 
     /**
-     * Eine Kante (src -> old) auf ein anderes Ziel umhängen (src -> new), ohne am
-     * Primärschlüssel zu scheitern: TemporaryTrait::_copyRelations() hat die Kante
-     * beim Auschecken des Ziels unter Umständen schon auf die Arbeitskopie kopiert.
+     * Re-attach an edge (src -> old) to another target (src -> new) without failing
+     * on the primary key: TemporaryTrait::_copyRelations() may already have copied the edge
+     * to the working copy when the target was checked out.
      */
     private function _repointLink(int $fieldId, int $srcId, int $oldDestId, int $newDestId): void
     {
@@ -605,11 +605,11 @@ trait LinkTrait
     }
 
     /**
-     * Einen produktiven Inhalt kopieren (für die Kopie eines Quelldatensatzes):
-     * Arbeitskopie ohne Original mit kopierten Dateien (checkOut() mit $copy), dann
-     * Check-in als neuer Datensatz - samt seiner eigenen fest verknüpften Inhalte.
+     * Copy a live content (for the copy of a source record):
+     * working copy without original with copied files (checkOut() with $copy), then
+     * check-in as a new record - including its own permanently linked contents.
      *
-     * @return int|null  record_id der Kopie
+     * @return int|null  record_id of the copy
      */
     private function _copyDependent(int $recordId): ?int
     {
@@ -622,9 +622,9 @@ trait LinkTrait
     }
 
     /**
-     * data_rel.position eines link-Feldes neu durchnummerieren.
+     * Renumber data_rel.position of a link field.
      *
-     * @param int[] $ids  dest_ids in der gewünschten Reihenfolge
+     * @param int[] $ids  dest_ids in the desired order
      */
     private function _writeLinkPositions(int $srcId, int $fieldId, array $ids): void
     {
@@ -637,7 +637,7 @@ trait LinkTrait
     }
 
     /**
-     * SQL-Liste der abhängigen Feldtypen (Cms::$dependentTypes), z. B. "'link'".
+     * SQL list of the dependent field types (Cms::$dependentTypes), e.g. "'link'".
      */
     private function _dependentTypeList(): string
     {

@@ -1,7 +1,7 @@
 <?php
-// Ansichten des Moduls, die ein Werkzeug öffnen darf (Core\BackendViews): Script =>
-// Beschreibung (englisch, für das Sprachmodell) und erlaubte Parameter.
-// Nur Scripte, die beim Öffnen nichts ändern.
+// Views of the module that may open a tool (Core\BackendViews): script =>
+// description (English, for the language model) and allowed parameters.
+// Only scripts that change nothing when opened.
 return [
     'policy_list.php' => [
         'description' => 'Privacy: delete policies of the content areas (what happens when a record is deleted, after how long).',

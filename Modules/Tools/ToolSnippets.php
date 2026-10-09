@@ -1,19 +1,19 @@
 <?php
 /**
- * Backend-Zugang zum Snippet-Cache: Tools/tool_snippets.php -> SnippetCache::build().
- * Vorher werden Snippet-Sets der Instanzen im früheren PHP-Format in .ini-Dateien
- * umgewandelt (Snippets::convertLegacy()).
+ * Backend access to the snippet cache: Tools/tool_snippets.php -> SnippetCache::build().
+ * Beforehand, snippet sets of the instances in the earlier PHP format are converted
+ * into .ini files (Snippets::convertLegacy()).
  *
- * Das Einsammeln, Kompilieren (ICU -> Closure) und Schreiben erledigt
- * Camindo\Core\SnippetCache; hier bleiben nur Rechteprüfung und die Ausgabe des
- * Berichts in den Aside-Bereich - samt Übersetzungspaketen (var/translation/translated)
- * und Übersetzungsvorlagen (var/translation/blueprint). Kommandozeile:
+ * Collecting, compiling (ICU -> Closure) and writing is done by
+ * Camindo\Core\SnippetCache; here only the permission check and the output of the
+ * report into the aside area remain - including translation packages (var/translation/translated)
+ * and translation templates (var/translation/blueprint). Command line:
  * php Core/cron/camindo.php refresh snippets.
  *
  * @see Camindo\Core\SnippetCache
  * @see Camindo\Core\Cms::snippet()
- * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  dasselbe für die HTML-Vorlagen
- * @see docs/developers/03-backend-entwicklung.md
+ * @see Camindo\Core\Modules\Tools\ToolHtmlTemplates  the same for the HTML templates
+ * @see developer docs, chapter 05 (Backend development)
  */
 namespace Camindo\Core\Modules\Tools;
 
@@ -34,17 +34,17 @@ class ToolSnippets {
     }
 
     /**
-     * Snippet-Cache-Files neu aufbauen; Fortschritt und Bericht (fehlende
-     * Übersetzungen, doppelte Schlüssel, Fehler in .ini-Dateien, geschriebene
-     * Vorlagen) gehen als HTML direkt in den Aside-Bereich.
+     * Rebuild snippet cache files; progress and report (missing
+     * translations, duplicate keys, errors in .ini files, written
+     * templates) go directly as HTML into the aside area.
      *
-     * @param ?string $prefix  nur diese Komponente (siehe SnippetCache::build())
+     * @param ?string $prefix  only this component (see SnippetCache::build())
      */
     public function buildSnippetCache(?string $prefix = null): void {
-        // Zusatzrecht "developer" (Backend-Benutzergruppen)
+        // Additional right "developer" (backend user groups)
         $this->accessGuard('developer');
 
-        // Snippet-Sets der Instanzen im früheren PHP-Format -> .ini
+        // Snippet sets of the instances in the earlier PHP format -> .ini
         if ($prefix === null || str_starts_with($prefix, SnippetCache::CUSTOM_PREFIX . '.')) {
             $legacy = $this->snippets->convertLegacy();
             if ($legacy['converted'] || $legacy['errors']) {
@@ -90,8 +90,8 @@ class ToolSnippets {
     }
 
     /**
-     * Zusatzrecht des Moduls Tools prüfen - Meldung und Abbruch, wenn es fehlt.
-     * Ohne geladene Rechte (kein Backend-Request) verweigert Access nichts.
+     * Check the additional right of the module Tools - message and abort if it is missing.
+     * Without loaded rights (no backend request) Access denies nothing.
      */
     private function accessGuard(string $right): void
     {

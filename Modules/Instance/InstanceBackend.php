@@ -1,37 +1,37 @@
 <?php
 /**
- * Backend-Oberfläche für die Instances - die einzelnen Websites (Tabelle `instance`).
+ * Backend UI for the instances - the individual websites (table `instance`).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     instance_list.php  -> list()   Instance-Liste
- *     instance_info.php  -> info()   Detailansicht
- *     instance_edit.php  -> edit()   anlegen / kopieren / ändern / löschen
+ *     instance_list.php  -> list()   instance list
+ *     instance_info.php  -> info()   detail view
+ *     instance_edit.php  -> edit()   create / copy / change / delete
  *
- * DIE STANDARD-INSTANCE
+ * THE DEFAULT INSTANCE
  * --------------------
- * Instance::DEFAULT_ID ist das Sammelbecken für alles, was keine konfigurierte Domain
- * trifft. Ändern lässt sie sich wie jede andere - nur zwei Dinge sind fest:
+ * Instance::DEFAULT_ID is the catch-all for everything that matches no configured domain.
+ * It can be changed like any other - only two things are fixed:
  *
- *     die Zusatz-Domains sind immer ".*" (statt der Zeilenliste steht dort ein
- *     Hinweis, siehe _editForm())
- *     sie steht in der Liste immer am Ende und kann nicht als Vorgänger einer
- *     anderen Instanz gewählt werden - sie fängt ja auf, was die übrigen nicht
- *     abdecken
+ *     the additional domains are always ".*" (instead of the list of lines there is a
+ *     note, see _editForm())
+ *     it is always at the end of the list and cannot be selected as predecessor of an
+ *     other instance - after all, it catches what the others do not
+ *     cover
  *
- * Kopieren und Löschen bietet das Backend für sie nicht an; Instance::hookOnDelete()
- * weist eine Löschung zusätzlich ab.
+ * The backend offers no copying or deleting for it; Instance::hookOnDelete()
+ * additionally rejects a deletion.
  *
- * LÖSCHEN
+ * DELETION
  * --------------------
- * `instance` hat kein `deleted`-Feld - es gibt keinen Papierkorb, Dataset::delete()
- * löscht sofort endgültig. Und mit der Instanz gehen ihre gesamten Inhalte:
- * Inhaltsbereiche, deren Eingabefelder, Datensätze und Templates
- * (Instance::hookOnDelete()). _editDeleteForm() zeigt die Mengen deshalb vorher an.
+ * `instance` has no `deleted` field - there is no trash, Dataset::delete()
+ * deletes immediately and permanently. And with the instance its entire content goes:
+ * content areas, their input fields, records and templates
+ * (Instance::hookOnDelete()). _editDeleteForm() therefore shows the quantities beforehand.
  *
  * @see Camindo\Core\Modules\Instance\Instance           Dataset/Model
- * @see Camindo\Core\Modules\Area\AreaBackend            dort wird der Container zugeordnet
- * @see Camindo\Core\Modules\Language\LanguageBackend    die Vorlage dieser Klasse
+ * @see Camindo\Core\Modules\Area\AreaBackend            where the container is assigned
+ * @see Camindo\Core\Modules\Language\LanguageBackend    the template of this class
  */
 namespace Camindo\Core\Modules\Instance;
 
@@ -57,8 +57,8 @@ class InstanceBackend {
         private Cms $cms,
         private Crypt $crypt,
         private Instance $instance,
-        // Beide nur für die Lookup-Felder der Startseite: sie rendern den
-        // Vorschaublock ihrer eigenen Tabelle (siehe _editFormStartPage()).
+        // Both only for the lookup fields of the start page: they render the
+        // preview block of their own table (see _editFormStartPage()).
         private RecordBackendEdit $recordBackend,
         private TemplateBackend $templateBackend,
         private Config $config,
@@ -67,17 +67,17 @@ class InstanceBackend {
     {}
 
     /**
-     * Instance-Liste (backend/instance_list.php).
+     * Instance list (backend/instance_list.php).
      *
-     * limit -1: keine Paginierung, alle Instances auf einer Seite. Sortiert nach
+     * limit -1: no pagination, all instances on one page. Sorted by
      * `position`.
      *
-     * Die Standard-Instance steht mit in der Liste, aber ohne Kontextmenü und ohne
-     * Klick auf die Detailansicht - an ihr gibt es nichts zu tun.
+     * The default instance is in the list too, but without context menu and without
+     * a click on the detail view - there is nothing to do with it.
      */
     public function list(): void
     {
-        // Seitenelemente
+        // Page elements
         // --------------------
 
         // Bread crum navi
@@ -95,7 +95,7 @@ class InstanceBackend {
         $this->backend->buttonAdd('button_refresh', "cApp.layers.refresh();");
         echo $this->backend->buttonBar();
 
-        // Instance-Liste
+        // Instance list
         // --------------------
         $this->cms->select([
             'request' => 'all',
@@ -107,7 +107,7 @@ class InstanceBackend {
 
         if ($this->db->num_rows > 0) {
 
-            // Sprachen einmal holen - je Zeile eine Abfrage wäre Verschwendung
+            // Get languages once - one query per row would be wasteful
             $languages = $this->_languageOptions();
 
             // Table-Head
@@ -116,8 +116,8 @@ class InstanceBackend {
             // Table-Rows
             $tableRows = '';
 
-            // Hole Ergebnisse (Dataset::fetch: mit Datennachbeareitung)
-            $tableRowLast = ''; // Default-Instanz
+            // Get results (Dataset::fetch: with post-processing)
+            $tableRowLast = ''; // Default instance
             while ($data = $this->instance->fetch()) {
                 $instanceId = (int)$data['instance_id'];
                 $labelText = $this->cms->textOrSnippet($data['label']);
@@ -130,9 +130,9 @@ class InstanceBackend {
                     '{data_language}' => htmlspecialchars($languages[$languageId] ?? ''),
                     '{data_id}' => $instanceId
                 ]);
-                // {name} steht nicht in der Vorlage, sondern im Sprach-Snippet
-                // ('Instanz "{name}"' als aria-label) - das setzt Backend::template()
-                // erst NACH seinen eigenen Ersetzungen ein.
+                // {name} is not in the template but in the language snippet
+                // ('Instance "{name}"' as aria-label) - that is inserted by Backend::template()
+                // only AFTER its own replacements.
                 $tableRow = strtr($tableRow, ['{name}' => $labelText]) . "\n";
                 if ($instanceId === Instance::DEFAULT_ID) {
                     $tableRowLast = $tableRow;
@@ -158,10 +158,10 @@ class InstanceBackend {
     }
 
     /**
-     * Detailansicht einer Instance (backend/instance_info.php).
+     * Detail view of an instance (backend/instance_info.php).
      *
-     * Bearbeiten, Kopieren und Löschen erscheinen nicht für die Standard-Instance
-     * (siehe Klassenkommentar).
+     * Edit, copy and delete do not appear for the default instance
+     * (see class comment).
      */
     public function info(): void
     {
@@ -174,7 +174,7 @@ class InstanceBackend {
         // Container header
         echo $this->backend->template('container_header');
 
-        // Instance-Data laden
+        // Load instance data
         // --------------------
         if (!$this->data = $this->instance->load($this->id)) {
             echo $this->backend->template('alert_danger', [
@@ -202,10 +202,10 @@ class InstanceBackend {
         }
         echo $this->backend->buttonBar();
 
-        // Reiter: Info | Änderungen (Audit-Log, Backend::infoAuditTabs())
+        // Tabs: Info | Changes (audit log, Backend::infoAuditTabs())
         if ($this->backend->infoAuditTabs("Instance/instance_info.php?id={$this->id}", 'instance', $this->id)) return;
 
-        // Data - in den Abschnitten der Eingabemaske (edit_form.html)
+        // Data - in the sections of the input mask (edit_form.html)
         // --------------------
         $languages = $this->_languageOptions();
         $instances = $this->_instanceOptions();
@@ -221,14 +221,14 @@ class InstanceBackend {
         $this->backend->infoAdd($this->instance, 'label', $this->cms->textOrSnippet($this->data['label']), ['primary']);
         $this->backend->infoAdd($this->instance, 'position', $this->_positionLabel());
 
-        // Sprachen
+        // Languages
         $section('instance.headline_languages');
         $this->backend->infoAdd(
             $this->instance,
             'primary_language_id',
             $languages[(int)$this->data['primary_language_id']] ?? ''
         );
-        // Die Sprach-Ids in lesbare Namen übersetzen (backendValue gibt die Liste aus)
+        // Translate the language IDs into readable names (backendValue outputs the list)
         $this->backend->infoAdd(
             $this->instance,
             'additional_languages',
@@ -241,11 +241,11 @@ class InstanceBackend {
         $this->backend->infoAdd($this->instance, 'protocol', (string)($this->data['protocol'] ?? ''));
         $this->backend->infoAdd($this->instance, 'canonical', $yesNo($this->data['canonical'] ?? 0));
         if ($this->id === Instance::DEFAULT_ID) {
-            // Standard-Instanz - immer ".*" (wie im Formular)
+            // Default instance - always ".*" (as in the form)
             $this->backend->infoAdd($this->instance, 'additional_domains', $this->backend->template('instance.all_other_domains'), ['html']);
         }
         else {
-            // je Domain eine Zeile; reguläre Ausdrücke mit Kennzeichnung "RegEx"
+            // one row per domain; regular expressions marked "RegEx"
             $regex = array_values((array)($this->data['regex'] ?? []));
             $domains = [];
             foreach (array_values((array)($this->data['domain'] ?? [])) as $i => $domain) {
@@ -254,7 +254,7 @@ class InstanceBackend {
             $this->backend->infoAdd($this->instance, 'additional_domains', $domains);
         }
 
-        // Zugriff
+        // Access
         $section('instance.headline_access');
         $this->backend->infoAdd(
             $this->instance,
@@ -262,8 +262,8 @@ class InstanceBackend {
             $this->_translateIds($this->data['readable_instances'], $instances)
         );
 
-        // Script-Policy des Frontends (19-csp.md §9) - ohne eigene Angabe die Vorgabe
-        // der Konfiguration, wie in der Auswahl der Maske
+        // Script policy of the frontend (developer docs, chapter 14 (Security: web)) - without an own value the default
+        // of the configuration, as in the choice of the mask
         $section('instance.headline_script_policy');
         $mode = $this->cms->snippet('instance.option_csp_' . $this->securityHeaders->frontendCspMode(['details' => $details]));
         if ((string)($details['csp'] ?? '') === '') {
@@ -277,7 +277,7 @@ class InstanceBackend {
             $this->backend->infoAdd($this->instance, 'details.csp_form_sources', "'self' " . str_replace("\n", ' ', (string)($details['csp_form_sources'] ?? '')));
         }
 
-        // Startseite
+        // Start page
         $section('instance.headline_start_page');
         $recordId = (int)($this->data['record_id'] ?? 0);
         $templateId = (int)($this->data['template_id'] ?? 0);
@@ -292,14 +292,14 @@ class InstanceBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/instance_edit.php).
+     * Create / copy / change / delete (backend/instance_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'] wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md).
+     * State machine via $_REQUEST['function'] as in the other modules
+     * (developer docs, chapter 05 (Backend development)).
      */
     public function edit(): void
     {
-        // Seiten-Parameter
+        // Page parameters
         $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->function = (string)($_REQUEST['function'] ?? '');
         if ($this->function == '') $this->function = 'edit';
@@ -329,7 +329,7 @@ class InstanceBackend {
             $this->_editSave();
         }
 
-        // Delete confirm
+        // Delete confirmation
         if ($this->function == 'delete_confirm') {
             $this->_editDeleteConfirm();
         }
@@ -353,7 +353,7 @@ class InstanceBackend {
     }
 
     // ====================
-    // edit() Hilfsfunktionen
+    // edit() helper functions
 
     private function _editCreate(): void
     {
@@ -362,42 +362,42 @@ class InstanceBackend {
     }
 
     /**
-     * function=edit|copy|delete: Instance laden.
+     * function=edit|copy|delete: load the instance.
      *
-     * Beim Kopieren wird die Id verworfen (save() legt dadurch einen neuen Datensatz
-     * an) und die Position um eins erhöht, damit die Kopie hinter dem Original steht.
-     * Die Startseite wird dabei NICHT mitkopiert: Datensatz und Template gehören zu
-     * den Inhalten der Vorlage, nicht zur neuen Website.
+     * When copying, the ID is discarded (save() thereby creates a new record)
+     * and the position is raised by one, so that the copy stands behind the original.
+     * The start page is NOT copied along: record and template belong to the
+     * contents of the template, not to the new website.
      */
     private function _editLoad(): void
     {
         $this->data = $this->instance->load($this->id);
         if (!$this->data) {
-            // Angeforderter Datensatz nicht gefunden
+            // Requested record not found
             $this->function = 'skip';
             $this->data = [];
             return;
         }
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the ID now
         if ($this->function == 'copy') {
             $this->id = 0;
             $this->data['instance_id'] = 0;
             $this->data['position']++;
-            // Domains sind je Website eindeutig - die Kopie startet ohne sie
+            // Domains are unique per website - the copy starts without them
             $this->data['primary_domain'] = '';
             $this->data['domain'] = [];
             $this->data['regex'] = [];
             $this->data['additional_domains'] = [];
-            // Startseite gehört zu den Inhalten der Vorlage
+            // Start page belongs to the contents of the template
             $this->data['record_id'] = 0;
             $this->data['template_id'] = 0;
         }
     }
 
     /**
-     * Überschrift für Formular und Detailansicht. Beim Löschen und in der
-     * Detailansicht steht die Instance selbst darüber, sonst die allgemeine
-     * Überschrift.
+     * Heading for form and detail view. When deleting and in the
+     * detail view the instance itself stands above it, otherwise the general
+     * heading.
      */
     private function _editHeadline(): string
     {
@@ -406,8 +406,8 @@ class InstanceBackend {
             $labelHtml = $this->backend->template('instance.icon_instance') . ' ' . $labelText;
         }
         else {
-            // 'errors'/'skip' sind Folgezustände von 'save' bzw. eines fehlgeschlagenen
-            // Ladens - sie tragen keine eigene Überschrift
+            // 'errors'/'skip' are follow-up states of 'save' resp. of a failed
+            // loading - they carry no heading of their own
             $headlines = [
                 'create' => 'instance.headline_instance_create',
                 'copy'   => 'instance.headline_instance_copy',
@@ -423,17 +423,17 @@ class InstanceBackend {
     }
 
     /**
-     * function=save: speichern. $fields leer = alle Schema-Felder aus $data.
+     * function=save: save. $fields empty = all schema fields from $data.
      *
-     * Fallen Sprachen weg, verschwinden ihre Inhalte (LanguageData::removeLanguage()).
-     * Das geschieht erst nach einem Zwischenschritt: das Formular erscheint noch
-     * einmal mit der Warnung (function=confirm) und trägt die bestätigten Sprachen im
-     * Hiddenfeld `confirm_remove_languages`; erst wenn genau diese Sprachen wegfallen,
-     * wird gespeichert.
+     * If languages drop out, their contents disappear (LanguageData::removeLanguage()).
+     * This happens only after an intermediate step: the form appears once more
+     * with the warning (function=confirm) and carries the confirmed languages in the
+     * hidden field `confirm_remove_languages`; only when exactly these languages drop out
+     * is it saved.
      */
     private function _editSave(): void
     {
-        // Prüfe Daten und speichere
+        // Check data and save
         $fields = [];
         $this->data['instance_id'] = $this->id;
 
@@ -460,7 +460,7 @@ class InstanceBackend {
             $msg = $this->cms->snippet('instance.message_instance_saved');
             $this->backend->balloon('success', $msg);
 
-            // Referer aktualisieren und Fenster schließen
+            // Update referer and close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -472,9 +472,9 @@ class InstanceBackend {
     }
 
     /**
-     * function=delete_confirm: löschen.
+     * function=delete_confirm: delete.
      *
-     * Endgültig und unwiderruflich, samt aller Inhalte der Website - siehe
+     * Final and irrevocable, including all contents of the website - see
      * Instance::hookOnDelete().
      */
     private function _editDeleteConfirm(): void
@@ -484,7 +484,7 @@ class InstanceBackend {
             $msg = $this->cms->snippet('instance.message_instance_deleted');
             $this->backend->balloon('success', $msg);
 
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -496,7 +496,7 @@ class InstanceBackend {
     }
 
     /**
-     * Fehlermeldungen aus Cms::errors als roten Kasten ausgeben.
+     * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
     {
@@ -506,18 +506,18 @@ class InstanceBackend {
     }
 
     /**
-     * Das Eingabeformular.
+     * The input form.
      *
-     * Bei der Position wählt der Redakteur den VORGÄNGER, der Optionsschlüssel ist
-     * dessen position + 1.
-     * Die "Default"-Instanz ist immer am Ende, da sie alle Domains auffängt, die
-     * von den anderen nicht abgedeckt werden.
+     * For the position, the editor chooses the PREDECESSOR; the option key is
+     * its position + 1.
+     * The "Default" instance is always at the end, since it catches all domains
+     * that the others do not cover.
      *
-     * Die weiteren Domains sind kein reguläres Formularfeld: je Domain steht eine
-     * Zeile mit zwei Eingaben (data[domain][] und data[regex][]) im Formular. Sie
-     * werden hier über den Platzhalter {domain_items} eingesetzt, den jede Zeile
-     * wieder hinter sich neu ablegt - so bleibt die Reihenfolge erhalten. Verschieben,
-     * Anfügen und Entfernen übernimmt cApp.smartrows im Browser.
+     * The further domains are no regular form field: for each domain there is a
+     * row with two inputs (data[domain][] and data[regex][]) in the form. They
+     * are inserted here via the placeholder {domain_items}, which each row
+     * re-appends after itself - so the order is kept. Moving, adding and removing
+     * is handled by cApp.smartrows in the browser.
      */
     private function _editForm(): void
     {
@@ -539,9 +539,9 @@ class InstanceBackend {
 
         // position
         // --------------------
-        // Der Redakteur wählt den Vorgänger; gespeichert wird dessen position + 1.
-        // Die Standard-Instance steht unabhängig von deren Position (0) immer am Ende
-        // kann also nicht als Vorgänger gewählt werden
+        // The editor chooses the predecessor; position + 1 of it is saved.
+        // The default instance is always at the end regardless of its position (0),
+        // so it cannot be chosen as predecessor
         if ($this->id === 1) {
             $options = [1 => $this->cms->snippet('position_at_end')];
         }
@@ -613,12 +613,12 @@ class InstanceBackend {
 
         // additional domains
         if ($this->id === Instance::DEFAULT_ID) {
-            // Standard-Instanz - immer ".*"
+            // Default instance - always ".*"
             $snippetAllDomains = $this->backend->template('instance.all_other_domains');
             $this->backend->formStatic($this->instance, 'additional_domains', $snippetAllDomains);
         }
         else {
-            // alle anderen Instanzen erlauben mehrere Werte mit Domain und Flag "regex"
+            // all other instances allow several values with domain and flag "regex"
             $this->backend->formReplace('{data_additional_domains}',
                 $this->backend->template('instance.edit_form_domain_list')
             );
@@ -631,7 +631,7 @@ class InstanceBackend {
                 ]);
                 $this->backend->formReplace('{domain_items}', $tplDomainTableRow . "\n" . '{domain_items}');
             }
-            // Letzte Zeile bleibt leer und kann gleich ausgefüllt werden.
+            // Last row stays empty and can be filled right away.
             $tplDomainTableRow = $this->backend->template('instance.edit_form_domain_item', [
                 '{domain}' => '',
                 '{regex_checked}' => ''
@@ -650,7 +650,7 @@ class InstanceBackend {
             'options' => $this->_instanceOptions(),
         ]);
 
-        // Script-Policy des Frontends (19-csp.md §9)
+        // Script policy of the frontend (developer docs, chapter 14 (Security: web))
         // --------------------
         $details = is_array($this->data['details'] ?? null) ? $this->data['details'] : (json_decode((string)($this->data['details'] ?? ''), true) ?: []);
         $default = (string)($this->config->get('security.frontend_csp') ?? 'off');
@@ -674,14 +674,14 @@ class InstanceBackend {
 
         // start page
         // --------------------
-        // Zwei Lookup-Felder auf FREMDE Tabellen (`record` und `template`) - dasselbe
-        // Verfahren wie beim Standard-Template eines Bereichs (AreaBackend). Die
-        // Auswahl kommt aus der jeweiligen Trefferliste im nächsten Layer; der
-        // Vorschaublock trägt das versteckte Feld, das mit dem Formular abgeht.
+        // Two lookup fields on FOREIGN tables (`record` and `template`) - same
+        // procedure as with the default template of an area (AreaBackend). The
+        // selection comes from the respective hit list in the next layer; the
+        // preview block carries the hidden field that goes along with the form.
         //
-        // Beides bleibt auf die Inhalte DIESER Website begrenzt:
-        //     Datensätze  über filter[instance_id]
-        //     Templates   über filter[area_id][] - die Template-Container der Instanz
+        // Both stay limited to the contents of THIS website:
+        //     records   via filter[instance_id]
+        //     templates via filter[area_id][] - the template containers of the instance
         $this->_editFormStartPage();
 
         // function
@@ -698,10 +698,10 @@ class InstanceBackend {
     }
 
     /**
-     * function=delete: Löschbestätigung.
+     * function=delete: deletion confirmation.
      *
-     * Die Inhalte der Website verschwinden mit ihr. Deshalb steht die Aufstellung
-     * dessen im Formular, was verloren geht.
+     * The contents of the website disappear with it. Therefore the form shows
+     * an overview of what is lost.
      */
     private function _editDeleteForm(): void
     {
@@ -726,10 +726,10 @@ class InstanceBackend {
     }
 
     /**
-     * Sprachen, die beim Speichern aus der Instanz wegfallen: bisherige Haupt- und
-     * weitere Sprachen laut Datenbank, die im Formular nicht mehr vorkommen.
+     * Languages that drop out of the instance when saving: previous main and
+     * further languages according to the database that no longer appear in the form.
      *
-     * @return array  language_id => "code | Label", nach language_id sortiert
+     * @return array  language_id => "code | label", sorted by language_id
      */
     private function _removedLanguages(): array
     {
@@ -755,10 +755,10 @@ class InstanceBackend {
     }
 
     // ====================
-    // Auswahllisten
+    // Choice lists
 
     /**
-     * Sprachversionen als key-value-Pairs
+     * Language versions as key-value pairs
      */
     private function _languageOptions(): array
     {
@@ -774,9 +774,9 @@ class InstanceBackend {
     }
 
     /**
-     * Instanzen, für readable_instances
-     * (lesbare andere Instanzen, die aktuelle also ausgeschlossen)
-     * Default-Instanz immer am Ende
+     * Instances, for readable_instances
+     * (readable other instances; the current one is therefore excluded)
+     * default instance always at the end
      */
     private function _instanceOptions(): array
     {
@@ -794,19 +794,19 @@ class InstanceBackend {
     }
 
     /**
-     * Die beiden Lookup-Felder der Startseite ins Formular setzen.
+     * Set the two lookup fields of the start page in the form.
      *
-     * Aufbau wie bei jedem Lookup auf eine fremde Tabelle (siehe
-     * AreaBackend::_editForm(), Feld default_template_id):
+     * Structure as with every lookup on a foreign table (see
+     * AreaBackend::_editForm(), field default_template_id):
      *
-     *     {search_url}   Trefferliste, aus der gewählt wird
-     *     {update_url}   Ajax-Endpunkt, der den Vorschaublock neu rendert
-     *     {data_ids}     aktuell gewählte Id (cApp.ui merkt sie sich im data-Attribut)
-     *     {preview}      der Vorschaublock samt verstecktem Eingabefeld
+     *     {search_url}   hit list from which one is chosen
+     *     {update_url}   Ajax endpoint that renders the preview block again
+     *     {data_ids}     currently chosen ID (cApp.ui keeps it in the data attribute)
+     *     {preview}      the preview block including the hidden input field
      *
-     * Bei einer noch nicht gespeicherten Instanz ($id < 1) gibt es keine Inhalte, aus
-     * denen sich eine Startseite wählen ließe - die Felder erscheinen dann als
-     * Hinweis statt als Auswahl.
+     * For an instance not yet saved ($id < 1) there are no contents
+     * from which a start page could be chosen - the fields then appear as a
+     * note instead of a choice.
      */
     private function _editFormStartPage(): void
     {
@@ -825,8 +825,8 @@ class InstanceBackend {
             'name' => 'record_id',
             'value' => $recordId,
             'template' => 'edit_form_lookup_foreign_table',
-            // Das Kontextmenü hinter einem Lookup-Feld arbeitet mit der field_id eines
-            // Verknüpfungsfeldes - die gibt es hier nicht (fremde Tabelle).
+            // The context menu behind a lookup field works with the field_id of a
+            // link field - there is none here (foreign table).
             'contextMenu' => '',
         ]);
         $urlSuffix = "src_field=record_id&filter[instance_id]={$this->id}";
@@ -851,14 +851,14 @@ class InstanceBackend {
             'template' => 'edit_form_lookup_foreign_table',
             'contextMenu' => '',
         ]);
-        // Nur Templates aus den Template-Containern dieser Website
+        // Only templates from the template containers of this website
         $areaFilter = '';
         foreach ($this->_templateAreaIds() as $areaId) {
             $areaFilter .= '&filter[area_id][]=' . $areaId;
         }
         if ($areaFilter === '') {
-            // Kein Template-Container - ein Suchaufruf ohne Einschränkung zeigte sonst
-            // die Templates aller Websites. Eine unerfüllbare area_id sperrt die Liste.
+            // No template container - a search call without restriction would otherwise
+            // show the templates of all websites. An unfulfillable area_id blocks the list.
             $areaFilter = '&filter[area_id][]=0';
         }
         $urlSuffix = "src_field=template_id" . $areaFilter;
@@ -875,7 +875,7 @@ class InstanceBackend {
     }
 
     /**
-     * area_ids der Template-Container dieser Website.
+     * area_ids of the template containers of this website.
      */
     private function _templateAreaIds(): array
     {
@@ -889,9 +889,9 @@ class InstanceBackend {
     }
 
     /**
-     * Position einer Instanz für die Info-Seite - wie die Auswahl "Position nach..."
-     * der Maske: Bezeichnung des Vorgängers, "(an den Anfang)" bzw. bei der
-     * Standard-Instanz "(ans Ende)".
+     * Position of an instance for the info page - like the choice "Position after..."
+     * of the mask: label of the predecessor, "(at the beginning)" resp. for the
+     * default instance "(at the end)".
      */
     private function _positionLabel(): string
     {
@@ -907,12 +907,12 @@ class InstanceBackend {
     }
 
     /**
-     * Id-Liste in die zugehörigen Beschriftungen übersetzen.
-     * Für die Detailansicht: Backend::backendValue() gibt bei 'reltable' die Werte
-     * des Arrays aus - und das sind ohne diesen Schritt nur Zahlen.
+     * Translate an ID list into the corresponding labels.
+     * For the detail view: Backend::backendValue() outputs for 'reltable' the values
+     * of the array - and without this step those would only be numbers.
      *
-     * @param mixed $ids      Id-Liste aus dem Datensatz
-     * @param array $options  Id => Beschriftung
+     * @param mixed $ids      ID list from the record
+     * @param array $options  ID => label
      */
     private function _translateIds(mixed $ids, array $options): array
     {

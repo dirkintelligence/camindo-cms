@@ -1,28 +1,28 @@
 <?php
 /**
- * Inhalt des Reiters "Server" im Werkzeugkasten - und die Pflege der .htaccess.
+ * Content of the "Server" tab in the toolbox - and the maintenance of the .htaccess.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     index.php / index_server.php  -> list()       Serverübersicht
- *     tool_db_info.php              -> mysqlInfo()  MySQL-Konfiguration
+ *     index.php / index_server.php  -> list()       server overview
+ *     tool_db_info.php              -> mysqlInfo()  MySQL configuration
  *
- * Die Übersicht zeigt camindo-Version, Betriebssystem, Webserver, Datenbank, PHP und
- * ob ImageMagick und FFmpeg tatsächlich laufen (die Versionen holt ToolVersions durch
- * einen echten Aufruf der Programme).
+ * The overview shows the camindo version, operating system, web server, database, PHP and
+ * whether ImageMagick and FFmpeg actually run (ToolVersions fetches the versions by
+ * a real call of the programs).
  *
- * DIE .HTACCESS WIRD TEILWEISE GENERIERT
+ * THE .HTACCESS IS PARTLY GENERATED
  * --------------------
- * Im Frontend läuft jede Anfrage über index.php - AUSSER sie zeigt auf eine echte
- * Datei oder in eines der Unterverzeichnisse des Docroots (media/, backend/, …).
- * Diese Ausnahmen stehen als RewriteCond-Zeilen in einem verwalteten Block der
- * public/.htaccess; eine Prüfsumme über die Verzeichnisliste verrät, ob die Datei
- * veraltet ist. Erzeugen und Prüfen erledigt Camindo\Core\HtaccessWriter - dieselbe
- * Klasse benutzen camindo.php upgrade und der Installer. Hier: der Knopf und die
- * Anzeige des Zustands.
+ * In the frontend every request runs through index.php - EXCEPT when it points to a real
+ * file or to one of the subdirectories of the docroot (media/, backend/, …).
+ * These exceptions appear as RewriteCond lines in a managed block of the
+ * public/.htaccess; a checksum over the directory list reveals whether the file is
+ * outdated. Creating and checking is done by Camindo\Core\HtaccessWriter - the same
+ * class is used by camindo.php upgrade and the installer. Here: the button and the
+ * display of the state.
  *
- * @see Camindo\Core\Modules\Tools\ToolVersions  Versionen der externen Programme
- * @see Camindo\Core\Modules\Tools\ToolsBackend  Rahmen mit den Reitern
+ * @see Camindo\Core\Modules\Tools\ToolVersions  versions of the external programs
+ * @see Camindo\Core\Modules\Tools\ToolsBackend  frame with the tabs
  */
 namespace Camindo\Core\Modules\Tools;
 
@@ -48,20 +48,20 @@ class ToolServer {
     }
 
     /**
-     * Serverübersicht ausgeben.
+     * Output server overview.
      *
-     * Drei Abschnitte: Serverkomponenten als Infotabelle, der Zustand der beiden
-     * Kommandozeilenwerkzeuge, und der Zustand der .htaccess mit dem Knopf zum
-     * Neuaufbau.
+     * Three sections: server components as an info table, the state of the two
+     * command-line tools, and the state of the .htaccess with the button for the
+     * rebuild.
      *
-     * Der Knopf schickt function=renew_htaccess an dieselbe Seite zurück - die
-     * Auswertung steht deshalb mitten in der Methode, vor der Zustandsprüfung, damit
-     * die Meldung anschließend den NEUEN Zustand zeigt.
+     * The button sends function=renew_htaccess back to the same page - the
+     * evaluation therefore sits in the middle of the method, before the state check, so that
+     * the message afterwards shows the NEW state.
      *
      * Request: function = renew_htaccess (optional)
      */
     public function list() {
-        // Zusatzrecht "server" (Backend-Benutzergruppen; ohne Session - Cache-Bootstrap, CLI - gilt alles)
+        // Additional right "server" (backend user groups; without session - cache bootstrap, CLI - everything applies)
         $this->accessGuard('server');
 
         // server components
@@ -96,7 +96,7 @@ class ToolServer {
         // render Table
         echo $this->backend->infoTable();
 
-        // commandline tools
+        // command-line tools
         // --------------------
         $magickVersion = $this->toolVersions->getMagickVersion();
         if ($magickVersion) {
@@ -123,7 +123,7 @@ class ToolServer {
             '{text}' => '{#tools.headline_htaccess_file}'
         ]);
 
-        // Schreibt public/.htaccess - nur per POST (17-csrf.md §2.7)
+        // Writes public/.htaccess - only via POST (developer docs, chapter 14 (Security: web))
         $function = (string)($_REQUEST['function'] ?? '');
         if ($function === 'renew_htaccess' && !$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
@@ -141,7 +141,7 @@ class ToolServer {
             echo $this->backend->template('spacer');
         }
 
-        // Prüfe aktuellen Zustand der .htaccess-Datei
+        // Check current state of the .htaccess file
         if ($hasChanges = $this->hasChanges()) {
             echo $this->backend->template('alert_danger', [
                 '{text}' => $this->cms->_nl2br($this->cms->snippet('tools.htaccess_obsolete'))
@@ -154,9 +154,9 @@ class ToolServer {
         }
 
         // Refresh .htaccess
-        // Der Knopf steht bewusst immer da - die auskommentierte Bedingung würde ihn
-        // nur bei Änderungsbedarf zeigen. Ein Neuaufbau schadet aber nicht, und
-        // außerdem stimmt die Bedingung nicht: verglichen wird gegen 'renew', der
+        // The button is deliberately always shown - the commented-out condition would show it
+        // only when changes are needed. A rebuild does no harm, and besides, the condition is
+        // wrong anyway: it is compared against 'renew', the parameter is called 'renew_htaccess'.
         // Parameter heisst 'renew_htaccess'.
         // if ($function !== 'renew' && $hasChanges) {
             $labelHtml = $this->cms->snippet('button_renew');
@@ -169,14 +169,14 @@ class ToolServer {
     }
 
     /**
-     * MySQL-Konfiguration anzeigen (backend/tool_db_info.php).
+     * Show MySQL configuration (backend/tool_db_info.php).
      *
-     * Zwei Tabellen: zuerst alles, was 'version' im Namen trägt, danach der Rest.
-     * Dazwischen setzt infoReset() die Sammlung zurück - infoTable() gibt sonst beim
-     * zweiten Aufruf auch die Zeilen des ersten noch einmal aus.
+     * Two tables: first everything that carries 'version' in its name, then the rest.
+     * In between infoReset() resets the collection - otherwise infoTable() would also
+     * output the rows of the first table again on the second call.
      *
-     * Schlüssel und Werte kommen aus der Serverkonfiguration und werden vor der
-     * Ausgabe maskiert.
+     * Keys and values come from the server configuration and are masked before
+     * output.
      */
     public function mysqlInfo(): void
     {
@@ -199,7 +199,7 @@ class ToolServer {
         }
         echo $this->backend->infoTable();
 
-        // Neue Infotabelle beginnen
+        // Start a new info table
         $this->backend->infoReset();
 
         echo $this->backend->template('headline4_mt', [
@@ -220,14 +220,14 @@ class ToolServer {
 
     // ==== .htaccess ====
     //
-    // Die Arbeit macht Camindo\Core\HtaccessWriter (auch camindo.php upgrade und der
-    // Installer schreiben die Datei damit); hier bleiben nur die beiden Aufrufe, die
-    // list() braucht.
+    // The work is done by Camindo\Core\HtaccessWriter (camindo.php upgrade and the
+    // installer also write the file that way); only the two calls that
+    // list() needs remain here.
 
     /**
-     * Schreibt den verwalteten Block der public/.htaccess neu.
+     * Rewrite the managed block of public/.htaccess.
      *
-     * @return bool  false, wenn die Datei nicht geschrieben werden konnte
+     * @return bool  false, if the file could not be written
      */
     public function updateHtaccess(): bool
     {
@@ -235,7 +235,7 @@ class ToolServer {
     }
 
     /**
-     * true, wenn die .htaccess nicht mehr zur Verzeichnisstruktur passt.
+     * true, if the .htaccess no longer matches the directory structure.
      */
     public function hasChanges(): bool
     {
@@ -243,8 +243,8 @@ class ToolServer {
     }
 
     /**
-     * Zusatzrecht des Moduls Tools prüfen - Meldung und Abbruch, wenn es fehlt.
-     * Ohne geladene Rechte (kein Backend-Request) verweigert Access nichts.
+     * Check the additional right of the module Tools - message and abort if it is missing.
+     * Without loaded rights (no backend request) Access denies nothing.
      */
     private function accessGuard(string $right): void
     {

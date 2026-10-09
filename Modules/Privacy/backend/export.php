@@ -1,6 +1,6 @@
 <?php
 // @var Camindo\Core\ContainerInterface $app
-// Datenexport personenbezogener Daten - Website-User und Benutzer (Modul Privacy)
+// Export of personal data - website users and users (module Privacy)
 use Camindo\Core\Modules\Privacy\PrivacyBackend;
 
 $app->get(PrivacyBackend::class)->export();

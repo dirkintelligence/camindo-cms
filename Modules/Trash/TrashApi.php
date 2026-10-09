@@ -1,11 +1,11 @@
 <?php
 /**
- * API-Methode des Papierkorbs: die gelöschten Datensätze (und für Superuser die
- * gelöschten Bereiche) - wie die Liste des Moduls Papierkorb, also nur die Wurzel
- * jedes Löschvorgangs. Wiederherstellen: record.restore.
+ * API method of the trash: the deleted records (and for superusers the
+ * deleted areas) - like the list of the module Trash, i.e. only the root of
+ * each deletion operation. Restore: record.restore.
  *
- * Wie in der Oberfläche sieht jeder Admin nur, was er selbst gelöscht hat, und nur
- * aus Bereichen, die er lesen darf; Superuser mit all = true die Löschungen aller.
+ * As in the UI, each administrator only sees what they deleted themselves, and only
+ * from areas they may read; superusers with all = true see the deletions of all.
  *
  * @see Trash
  */
@@ -34,15 +34,15 @@ class TrashApi
     }
 
     /**
-     * Gelöschte Datensätze, zuletzt gelöschte zuerst: Bezeichnung, Bereich, wer und
-     * wann gelöscht hat, mitgelöschte Nachkommen, wann der Papierkorb sie endgültig
-     * löscht. Superuser zusätzlich die gelöschten Bereiche.
+     * Deleted records, most recently deleted first: label, area, who and
+     * when deleted, deleted descendants, when the trash permanently deletes them.
+     * Superusers additionally get the deleted areas.
      *
-     * @param bool   $all     Löschungen aller Admins (nur Superuser; sonst nur die eigenen)
-     * @param string $search  Teilwort in der Bezeichnung des Datensatzes ('' = alle)
-     * @param int    $areaId  nur aus diesem Bereich (0 = alle)
-     * @param int    $limit   Höchstzahl (1-200)
-     * @return array  records (record_id, label, area, deleted_at, deleted_by, children, expires_at), areas (nur Superuser), more
+     * @param bool   $all     deletions of all administrators (superusers only; otherwise only their own)
+     * @param string $search  partial word in the label of the record ('' = all)
+     * @param int    $areaId  only from this area (0 = all)
+     * @param int    $limit   maximum number (1-200)
+     * @return array  records (record_id, label, area, deleted_at, deleted_by, children, expires_at), areas (superusers only), more
      */
     #[ApiMethod('trash.list', '#trash.api_list')]
     public function list(bool $all = false, string $search = '', int $areaId = 0, int $limit = 50): array
@@ -95,7 +95,7 @@ class TrashApi
 
     // ====================
 
-    /** Bezeichnung eines gelöschten Datensatzes: Teaser, sonst die aus dem Audit-Log (Stand beim Löschen) */
+    /** Label of a deleted record: teaser, otherwise the one from the audit log (state at deletion) */
     private function label(int $recordId): string
     {
         $label = $this->teaser('record', $recordId);
@@ -111,7 +111,7 @@ class TrashApi
         return $id > 0 ? $this->context->plain($this->backend->teaser($type, $id, linked: false, icon: false)) : '';
     }
 
-    /** Wann der Papierkorb-Cronjob endgültig löscht (wie Trash::expiresAt(), als ISO 8601) */
+    /** When the trash cron job permanently deletes (as Trash::expiresAt(), as ISO 8601) */
     private function expiresAt(string $changedAt): ?string
     {
         $days = max(0, (int)($this->config->get('admin.trash_retention_days') ?? 7));

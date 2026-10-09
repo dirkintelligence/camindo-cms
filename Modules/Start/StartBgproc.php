@@ -1,39 +1,39 @@
 <?php
 /**
- * Anzeige der Hintergrundprozesse im Kopfbereich des Backends.
+ * Display of the background processes in the header area of the backend.
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     bgproc_list.php   -> bgprocList()   Liste und Zähler aktualisieren
- *     bgproc_abort.php  -> bgprocAbort()  einen Prozess abbrechen
+ *     bgproc_list.php   -> bgprocList()   update list and counter
+ *     bgproc_abort.php  -> bgprocAbort()  abort a process
  *
- * Lange laufende Arbeiten - Videokonvertierungen, Massen-Löschungen - wandern in einen
- * eigenen Betriebssystemprozess (BackgroundProcess, Tabelle `bgproc`) und laufen dort
- * weiter, während der Redakteur im Backend weiterarbeitet. Diese Klasse ist der Blick
- * darauf.
+ * Long-running work - video conversions, mass deletions - moves into its own
+ * operating system process (BackgroundProcess, table `bgproc`) and keeps running there
+ * while the editor continues working in the backend. This class is the view
+ * onto it.
  *
- * ZWEI ANTWORTEN AUS EINER METHODE
+ * TWO RESPONSES FROM ONE METHOD
  * --------------------
- * bgprocList() wird in zwei Situationen gerufen und liefert je nachdem mehr oder
- * weniger:
+ * bgprocList() is called in two situations and returns more or
+ * less depending on them:
  *
- *     ohne details=1   nur das Javascript für den Kopfbereich: Zähler im Abzeichen und
- *                      das drehende Symbol, wenn etwas läuft. Das ruft der Timer im
- *                      Sekundentakt, es soll also klein bleiben.
- *     mit  details=1   zusätzlich die aufgeklappte Liste der einzelnen Prozesse.
+ *     without details=1   only the JavaScript for the header area: counter in the badge and
+ *                         the spinning symbol when something is running. The timer calls this
+ *                         every second, so it should stay small.
+ *     with  details=1    additionally the expanded list of the individual processes.
  *
- * Gezeigt werden nur die Prozesse des angemeldeten Benutzers - die admin_id kommt aus
- * der Session, nicht aus dem Request.
+ * Only the processes of the logged-in user are shown - the admin_id comes from
+ * the session, not from the request.
  *
- * STATUS-WERTE in `bgproc`
+ * STATUS VALUES in `bgproc`
  * --------------------
- *     0    beendet
- *     1    läuft
- *     > 1  gescheitert (Einzelheiten im JSON-Feld `message`)
+ *     0    finished
+ *     1    running
+ *     > 1  failed (details in the JSON field `message`)
  *
- * @see Camindo\Core\BackgroundProcess  Start, Fortschritt, Abbruch
- * @see Camindo\Core\MassDeletion       einer der Auftraggeber
- * @see Core/cron/cron.php               führt den Fortschritt laufender Prozesse nach
+ * @see Camindo\Core\BackgroundProcess  start, progress, abort
+ * @see Camindo\Core\MassDeletion       one of the callers
+ * @see Core/cron/cron.php               advances the progress of running processes
  */
 namespace Camindo\Core\Modules\Start;
 
@@ -54,23 +54,23 @@ class StartBgproc {
     {}
 
     /**
-     * Liste und Zähler der Hintergrundprozesse (backend/bgproc_list.php).
+     * List and counter of the background processes (backend/bgproc_list.php).
      *
-     * Ohne details=1 nur das Javascript für Zähler und Symbol, mit details=1 auch die
-     * Liste (siehe Klassenkommentar).
+     * Without details=1 only the JavaScript for counter and symbol, with details=1 also the
+     * list (see class comment).
      *
-     * Die Zeitangabe je Prozess ist gestaffelt: was in den letzten 24 Stunden begonnen
-     * hat, wird nur mit Uhrzeit gezeigt, Älteres mit Datum. In der Datenbank stehen die
-     * Zeitstempel in UTC, für die Anzeige rechnet utcToUserTZ() sie in die Zeitzone des
-     * Benutzers um.
+     * The time shown per process is graded: what started in the last 24 hours shows only
+     * the time of day, older items show the date. The timestamps are stored in UTC in the
+     * database; for display, utcToUserTZ() converts them to the user's time zone.
+     *
      *
      * Request: details = 0|1
      */
     public function bgprocList(): void
     {
-        // Prozesse des Session-Admins laden - Beendete vorher abräumen: die Liste
-        // zeigt nur, was läuft oder fehlgeschlagen ist (list() gleicht zuerst den
-        // Zustand ab, der Rest wird danach gelöscht)
+        // Load processes of the session admin - clear finished ones beforehand: the
+        // list only shows what is running or failed (list() first reconciles the
+        // state, the rest is deleted afterwards)
         $adminId = (int)$this->session->get('admin_id');
         $processes = $this->bgproc->list($adminId);
         if ($this->bgproc->purgeFinishedOfAdmin($adminId) > 0) {
@@ -81,30 +81,30 @@ class StartBgproc {
             ));
         }
 
-        // ---- Liste ausgeben ----
+        // ---- Output list ----
         $details = (int)($_REQUEST['details'] ?? 0);
         if ($details) {
-            // Schwelle für "älter als 24 Stunden".
-            // Achtung: gmdate() liefert UTC, verglichen wird unten aber mit
-            // $createdAt, das bereits in die Benutzer-Zeitzone umgerechnet ist.
-            // Bei einer Abweichung von der UTC verschiebt sich die Grenze um
-            // genau diesen Versatz. Folgenlos - es geht nur um die Wahl zwischen
-            // Uhrzeit und Datum in der Anzeige.
+            // Threshold for "older than 24 hours".
+            // Note: gmdate() returns UTC, but the comparison below is with
+            // $createdAt, which is already converted to the user's time zone.
+            // With a deviation from UTC the limit shifts by
+            // exactly this offset. Harmless - it is only about the choice between
+            // time of day and date in the display.
             $before24h = gmdate('Y-m-d H:i:s', time() - 24 * 3600);
             $items = [];
             foreach ($processes as $process) {
-                // Datum liegt in UTC-Zeit in der Datenbank
+                // Date is in UTC time in the database
                 $createdAt = $this->cms->utcToUserTZ($process['created_at']);
-                // Älter als 24 Stunden? Dann mit Datum angzeigen
+                // Older than 24 hours? Then show with date
                 if ($createdAt <= $before24h) {
                     $date = $this->cms->_formatDate(substr($createdAt, 0, 16), false);
                 }
                 else {
                     $date = $this->cms->_formatTime(substr($createdAt, 11, 5));
                 }
-                // Fortschritt in %
+                // Progress in %
                 $progress = (int)($process['progress'] ?? 0);
-                // Fehler?
+                // Error?
                 $status = (int)($process['status'] ?? 0);
                 $class = 'success';
                 $tooltip = '';
@@ -134,10 +134,10 @@ class StartBgproc {
             ]);
         }
 
-        // ---- Icon aktualisieren----
-        // Das Abzeichen zählt nur laufende Prozesse und verschwindet bei 0;
-        // Fehlgeschlagene und noch nicht abgeräumte Beendete (TRIGGER_TYPES)
-        // stehen nur in der Liste
+        // ---- Update icon ----
+        // The badge counts only running processes and disappears at 0;
+        // failed and not yet cleared finished ones (TRIGGER_TYPES)
+        // stand only in the list
         $runningCount = 0;
         $failed = 0;
         foreach ($processes as $process) {
@@ -154,27 +154,27 @@ class StartBgproc {
         }
         $script[] = "\$('#c9-bgproc-btn .c9-badge small').text({$count});";
         $script[] = "\$('#c9-bgproc-btn .c9-badge').toggle(" . ($running ? 'true' : 'false') . ");";
-        // Überwachung im Browser: weiter, solange etwas läuft; die Meldung
-        // "abgeschlossen" kommt, wenn nichts mehr läuft (cApp.polling)
+        // Monitoring in the browser: continue as long as something runs; the message
+        // "completed" comes when nothing runs any more (cApp.polling)
         $script[] = "cApp.polling.bgprocState(" . ($running ? 'true' : 'false') . ", {$failed});";
         echo '<script' . $this->backend->nonceAttr() . '>' . implode("\n", $script) . "</script>";
     }
 
     /**
-     * Einen Hintergrundprozess abbrechen (backend/bgproc_abort.php).
+     * Abort a background process (backend/bgproc_abort.php).
      *
-     * Der Token identifiziert den Prozess und wird hart auf [a-z0-9_-] gefiltert -
-     * er geht in ein Betriebssystem-Kommando ein.
+     * The token identifies the process and is strictly filtered to [a-z0-9_-] -
+     * it goes into an operating system command.
      *
-     * BackgroundProcess::abort() kehrt erst zurück, wenn der Prozess tatsächlich
-     * beendet ist, längstens nach drei Sekunden. Die Antwort ist nur eine
-     * Meldungs-Blase.
+     * BackgroundProcess::abort() returns only once the process has really
+     * ended, at most after three seconds. The response is only a
+     * message bubble.
      *
      * Request: token
      */
     public function bgprocAbort(): void
     {
-        // Abbrechen ist ein Seiteneffekt - nur per POST (17-csrf.md §2.7)
+        // Aborting is a side effect - only via POST (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
@@ -185,13 +185,13 @@ class StartBgproc {
 
         $rawToken = (string)($_REQUEST['token'] ?? '');
         $token = preg_replace('/[^a-z0-9_\\-]/i', '', $rawToken ?? '');
-        // stopProcess wartet bis Prozess beendet ist oder 3 Sek Timeout verstrichen sind
+        // stopProcess waits until the process has ended or 3 sec timeout has elapsed
         if ($this->bgproc->abort($token)) {
-            // Prozess wurde gestoppt
+            // Process was stopped
             $this->backend->balloon('danger', $msgSuccess);
         }
         else {
-            // Prozess konnte nicht gestoppt werden
+            // Process could not be stopped
             $this->backend->balloon('danger', $msgError);
         }
     }

@@ -1,15 +1,15 @@
 <?php
 /**
- * API des Moduls Area (Struktur): Inhaltsbereiche und ihre Eingabefelder lesen.
+ * API of module Area (Structure): read content areas and their input fields.
  *
- *     area.list    die lesbaren Inhaltsbereiche mit Rechten der Gruppe
- *     area.info    ein Bereich: Instanz, Sprachen, Default- und Sortierfeld, Baum …
- *     area.fields  die Eingabefelder eines Bereichs - z. B. um die Feldzuordnung beim
- *                  Verschieben eines Datensatzes (Quell- und Zielbereich) zu planen
+ *     area.list    the readable content areas with the rights of the group
+ *     area.info    an area: instance, languages, default and sort field, tree …
+ *     area.fields  the input fields of an area - e.g. to plan the field assignment when
+ *                  moving a record (source and target area)
  *
- * Lesen braucht nur das Leserecht auf den Bereich (wie Liste und Maske des Moduls
- * Record), nicht den Modulzugriff auf Struktur - die Feldliste eines Bereichs sieht
- * jeder, der dessen Datensätze sieht.
+ * Reading only needs the read right on the area (like the list and mask of module
+ * Record), not module access to Structure - the field list of an area is seen
+ * by everyone who sees its records.
  *
  * @see Camindo\Core\Api\Api
  */
@@ -40,11 +40,11 @@ class AreaApi
     }
 
     /**
-     * Die lesbaren Inhaltsbereiche.
+     * The readable content areas.
      *
-     * @param int   $instanceId  nur Bereiche dieser Instanz (0 = alle zugewiesenen)
-     * @param array $types       Bereichstypen: record, profile, ugc (leer = alle drei)
-     * @return array  Liste aus area_id, name, label, type, instance_id, parent_id, depth,
+     * @param int   $instanceId  only areas of this instance (0 = all assigned)
+     * @param array $types       area types: record, profile, ugc (empty = all three)
+     * @return array  list of area_id, name, label, type, instance_id, parent_id, depth,
      *                dependent, tree, records (Anzahl), can (create, write_own, write_other,
      *                delete_own, delete_other, set_owner)
      */
@@ -56,7 +56,7 @@ class AreaApi
         $areaIds = $this->access->readableAreaIds($types);
         if (!$areaIds) return [];
 
-        // Anzahl produktiver Datensätze je Bereich (eine Abfrage)
+        // Number of live records per area (one query)
         $counts = [];
         $this->db->pushResult();
         $this->db->query(
@@ -89,12 +89,12 @@ class AreaApi
     }
 
     /**
-     * Ein Inhaltsbereich.
+     * A content area.
      *
      * @param int $areaId  Bereich
-     * @return array  area_id, name, label, note, type, instance, languages (Codes, Hauptsprache zuerst),
+     * @return array  area_id, name, label, note, type, instance, languages (codes, main language first),
      *                default_field, sort (field, order), tree, dependent, language_tabs,
-     *                slug_prefix (Code => Präfix), fields (Anzahl), can
+     *                slug_prefix (code => prefix), fields (count), can
      */
     #[ApiMethod('area.info', '#area.api_info')]
     public function info(int $areaId): array
@@ -136,11 +136,11 @@ class AreaApi
     }
 
     /**
-     * Die Eingabefelder eines Bereichs.
+     * The input fields of an area.
      *
      * @param int  $areaId    Bereich
-     * @param bool $withMeta  auch die Metafelder (Spalten von record: record_id, status_id, created_at …)
-     * @return array  Liste aus name, field_id, label, type, display_type, multilingual, required, unique,
+     * @param bool $withMeta  also the meta fields (columns of record: record_id, status_id, created_at …)
+     * @return array  list of name, field_id, label, type, display_type, multilingual, required, unique,
      *                min, max, pattern, options, default, rel_areas, parent_field, visible (list, input, search),
      *                default_field, note, tooltip, meta
      */
@@ -151,7 +151,7 @@ class AreaApi
         $this->readable($areaId);
         $list = [];
         foreach ($this->record->virtualSchema($areaId, $withMeta) as $name => $colDef) {
-            // Verknüpfungsfelder ohne lesbaren Zielbereich zeigt die Maske nicht
+            // Link fields without a readable target area are not shown by the mask
             if (!$this->record->relationTargetReadable($colDef)) continue;
             $type = (string)($colDef['type'] ?? '');
             $displayType = (string)($colDef['display_type'] ?? '');
@@ -208,7 +208,7 @@ class AreaApi
     // ====================
 
     /**
-     * Bereichsdaten mit Leserecht - sonst not_found bzw. access_denied.
+     * Area data with read right - otherwise not_found or access_denied.
      */
     private function readable(int $areaId): array
     {
@@ -223,7 +223,7 @@ class AreaApi
     }
 
     /**
-     * Rechte der Gruppe im Bereich - für Datensätze der eigenen bzw. anderer Gruppen.
+     * Rights of the group in the area - for records of the own or other groups.
      */
     private function rights(int $areaId): array
     {

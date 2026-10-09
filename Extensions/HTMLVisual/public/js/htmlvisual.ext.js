@@ -1,60 +1,60 @@
 /*
- * Extension HTMLVisual - HTML in der Vorschau bearbeiten (Handler für cApp.extensions)
+ * Extension HTMLVisual - edit HTML in the preview (handler for cApp.extensions)
  *
- * Dieselbe Oberfläche wie MarkdownVisual (markdownvisual.ext.js, daraus kopiert):
- * bearbeitet wird die formatierte Ansicht (contenteditable), den HTML-Quelltext zeigt
- * die Schaltfläche <>. Das Feld enthält HTML - nur die Elemente, die der Editor
- * abbildet; der Editor schreibt es bei jeder Änderung und vor dem Absenden in die
- * Textarea zurück. Keine Fremdbibliothek.
+ * The same user interface as MarkdownVisual (markdownvisual.ext.js, copied from it):
+ * the formatted view (contenteditable) is edited, the HTML source is shown by
+ * the button <>. The field contains HTML - only the elements the editor
+ * maps; the editor writes it back into the textarea on every change and before
+ * submitting. No third-party library.
  *
- * AUFBAU
+ * STRUCTURE
  * --------------------
- *     htmlToBlocks(html)     beliebiges HTML (Feld, Quelltext, Zwischenablage) ->
- *                            Blockliste; Inline-Teile intern als Markdown
- *     parseMarkdown(md)      Markdown -> Blockliste (eingefügter Klartext, der wie
- *                            Markdown aussieht, und die Markdown-Kürzel beim Tippen)
- *     renderBlocks(blocks)   Blockliste -> HTML des Editors (nur unterstützte Elemente,
- *                            Text maskiert, Link-Ziele geprüft)
- *     domToBlocks(el)        DOM des Editors -> Blockliste
- *     writeHtml(blocks)      Blockliste -> HTML des Feldes (sauber, eingerückt)
- *     Editor                 Oberfläche, Befehle, Tastatur, Einfügen, Verlauf
+ *     htmlToBlocks(html)     any HTML (field, source, clipboard) ->
+ *                            block list; inline parts internally as Markdown
+ *     parseMarkdown(md)      Markdown -> block list (pasted plain text that looks like
+ *                            Markdown, and the Markdown shortcuts while typing)
+ *     renderBlocks(blocks)   block list -> HTML of the editor (only supported elements,
+ *                            text escaped, link targets checked)
+ *     domToBlocks(el)        DOM of the editor -> block list
+ *     writeHtml(blocks)      block list -> HTML of the field (clean, indented)
+ *     Editor                 user interface, commands, keyboard, paste, history
  *
- * Das interne Markdown ist nur das Austauschformat zwischen DOM und Blockliste (wie in
- * MarkdownVisual) - gespeichert wird es nie. Eingefügtes HTML läuft durch dieselbe
- * Blockliste - was sie nicht abbildet (Bilder, Durchstreichen, Farben, Schriften,
- * Klassen, Attribute …), entfällt, der Text bleibt.
+ * The internal Markdown is only the exchange format between DOM and block list (as in
+ * MarkdownVisual) - it is never saved. Pasted HTML runs through the same
+ * block list - what it does not map (images, strikethrough, colors, fonts,
+ * classes, attributes …) is dropped, the text remains.
  *
- * HTML IM FELD
+ * HTML IN THE FIELD
  * --------------------
  *     <p> <h1>…<h6> <ul>/<ol start> <li> <blockquote> <pre><code class="language-x">
- *     <hr> <table><thead><tbody><tr><th><td>  (erste Zeile = Kopfzeile)
+ *     <hr> <table><thead><tbody><tr><th><td>  (first row = header row)
  *     <strong> <em> <u> <code> <a href> <br> <bdi dir="rtl|ltr">
- *     style="text-align: left|center|right" an Absatz, Überschrift, Liste, Zitat,
- *     Tabelle und Zelle (Spaltenausrichtung)
- * Unsichtbare Sonderzeichen stehen als Entities im HTML (&nbsp; &shy; &#8239; …); im
- * Editor sind sie markierte, nicht bearbeitbare span.htv-ch. Ein vom Browser selbst
- * gesetztes &nbsp; (Leerzeichen am Zeilenende) wird dagegen zum normalen Leerzeichen.
+ *     style="text-align: left|center|right" on paragraph, heading, list, quote,
+ *     table and cell (column alignment)
+ * Invisible special characters are entities in the HTML (&nbsp; &shy; &#8239; …); in the
+ * editor they are marked, non-editable span.htv-ch. An &nbsp; set by the browser itself
+ * (space at the end of a line), on the other hand, becomes a normal space.
  *
- * Optionen: toolbar (full|basic|custom), toolbar_custom, min_height, max_height (px),
- * stylesheet (Datei aus var/extensions/htmlvisual/, ausgeliefert von
- * backendExtensions/HTMLVisual/css.php), css_class (Vorgabe
- * c9-htmlvisual-{feldname}), texts (Camindo\Core\HtmlVisualOptions, Snippets
- * ext.htmlvisual.ui_*; fehlende Texte englisch).
+ * Options: toolbar (full|basic|custom), toolbar_custom, min_height, max_height (px),
+ * stylesheet (file from var/extensions/htmlvisual/, delivered by
+ * backendExtensions/HTMLVisual/css.php), css_class (default
+ * c9-htmlvisual-{feldname}), texts (Camindo\Core\HtmlVisualOptions, snippets
+ * ext.htmlvisual.ui_*; missing texts in English).
  *
- * Ohne Backend: C9HtmlVisual.attach(textarea, options) - window.C9HtmlVisual stellt
- * außerdem toHtml(element) (Editor-DOM -> HTML) und cleanHtml(html) (beliebiges HTML
- * auf die unterstützten Elemente gestutzt) bereit.
+ * Without the backend: C9HtmlVisual.attach(textarea, options) - window.C9HtmlVisual also
+ * provides toHtml(element) (editor DOM -> HTML) and cleanHtml(html) (any HTML
+ * trimmed to the supported elements).
  */
 (function (window, document) {
     'use strict';
 
     // =====================================================================
-    // Konstanten und kleine Hilfen
+    // Constants and small helpers
     // =====================================================================
 
     const ALIGNS = ['left', 'center', 'right'];
 
-    // Unsichtbare bzw. verwechselbare Zeichen - im Editor markiert
+    // Invisible or confusable characters - marked in the editor
     const INVISIBLE = {
         ' ': 'nbsp',
         ' ': 'nnbsp',
@@ -66,7 +66,7 @@
     const INVISIBLE_RE = /[    ­‑]/g;
     const ZW_RE = /[​﻿]/g;
 
-    // Schreibrichtung (Unicode-Isolate): rechts nach links, links nach rechts, Ende
+    // Writing direction (Unicode isolates): right to left, left to right, end
     const RLI = '\u2067';
     const LRI = '\u2066';
     const PDI = '\u2069';
@@ -79,7 +79,7 @@
     const SKIP_TAGS = /^(AREA|AUDIO|BUTTON|CANVAS|DATALIST|EMBED|HEAD|IFRAME|IMG|INPUT|LINK|MAP|META|METER|NOSCRIPT|OBJECT|OPTION|OUTPUT|PICTURE|PROGRESS|SCRIPT|SELECT|SOURCE|STYLE|SVG|TEMPLATE|TEXTAREA|TITLE|TRACK|VIDEO)$/;
     const BLOCK_SELECTOR = 'address,article,aside,blockquote,dd,div,dl,dt,figure,footer,form,h1,h2,h3,h4,h5,h6,header,hr,li,main,nav,ol,p,pre,section,table,ul';
 
-    // Textblöcke des Editors: dort steht die Einfügemarke
+    // Text blocks of the editor: that is where the caret is
     const TEXTBLOCK = /^(P|DIV|H[1-6]|LI|PRE|TD|TH)$/;
 
     function tagOf(n) {
@@ -90,7 +90,7 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Text für den Editor: maskiert, unsichtbare Zeichen markiert
+    // Text for the editor: escaped, invisible characters marked
     function escText(s) {
         return esc(s).replace(INVISIBLE_RE, (c) => specialHtml(c));
     }
@@ -101,14 +101,14 @@
 
     let entityBox = null;
     function decodeEntity(entity) {
-        // innerHTML einer Textarea: Entities werden aufgelöst, Tags bleiben Text
+        // innerHTML of a textarea: entities are resolved, tags remain text
         if (!entityBox) entityBox = document.createElement('textarea');
         entityBox.innerHTML = entity;
         const value = entityBox.value;
         return value === entity ? null : value;
     }
 
-    // Link-Ziele: http(s), mailto, tel, ftp und relative Adressen - sonst ''
+    // Link targets: http(s), mailto, tel, ftp and relative addresses - otherwise ''
     function safeUrl(url) {
         url = String(url || '').trim();
         if (url === '' || /[\u0000-\u001F\u007F]/.test(url)) return '';
@@ -126,11 +126,11 @@
     }
 
     // =====================================================================
-    // Markdown -> Blockliste
+    // Markdown -> block list
     //
-    // Blöcke: {t:'p', inl}, {t:'h', level, inl}, {t:'hr'}, {t:'code', lang, text},
+    // Blocks: {t:'p', inl}, {t:'h', level, inl}, {t:'hr'}, {t:'code', lang, text},
     // {t:'quote', children}, {t:'list', ordered, start, items:[{children}]},
-    // {t:'table', aligns, head:[inl], rows:[[inl]]}; jeder Block optional mit align.
+    // {t:'table', aligns, head:[inl], rows:[[inl]]}; each block optionally with align.
     // =====================================================================
 
     function splitLines(md) {
@@ -141,7 +141,7 @@
         return /^[ \t]*$/.test(line);
     }
 
-    // Einrückung in Spalten (Tab = bis zur nächsten Viererspalte)
+    // Indentation in columns (tab = up to the next multiple of four)
     function indentWidth(line) {
         let w = 0;
         for (const c of line) {
@@ -152,7 +152,7 @@
         return w;
     }
 
-    // n Spalten Einrückung entfernen
+    // Remove n columns of indentation
     function stripIndent(line, n) {
         let w = 0;
         let i = 0;
@@ -174,7 +174,7 @@
         return /^([-*_])([ \t]*\1){2,}[ \t]*$/.test(s);
     }
 
-    // Beginnt die Zeile einen Block, der einen Absatz unterbricht?
+    // Does the line start a block that interrupts a paragraph?
     function startsBlock(line) {
         if (indentWidth(line) > 3) return false;
         const s = line.replace(/^[ \t]+/, '');
@@ -255,7 +255,7 @@
                 const l = lines[i];
                 if (isBlank(l)) { body.push(''); blank = true; i++; continue; }
                 if (indentWidth(l) >= mk.contentIndent) { body.push(stripIndent(l, mk.contentIndent)); blank = false; i++; continue; }
-                // Fortsetzungszeile ohne Einrückung ("lazy")
+                // Continuation line without indentation ("lazy")
                 if (!blank && !listMarker(l) && !startsBlock(l)) { body.push(l.replace(/^[ \t]+/, '')); i++; continue; }
                 break;
             }
@@ -275,7 +275,7 @@
             const s = line.replace(/^[ \t]+/, '');
             let m;
             if (ind >= 4) {
-                // Eingerückter Code
+                // Indented code
                 const body = [];
                 while (i < lines.length && (indentWidth(lines[i]) >= 4 || isBlank(lines[i]))) {
                     body.push(stripIndent(lines[i], 4));
@@ -347,7 +347,7 @@
                 const r = parseTable(lines, i);
                 if (r) { blocks.push(r.block); i = r.next; continue; }
             }
-            // Absatz, ggf. Setext-Überschrift
+            // Paragraph, possibly setext heading
             const para = [s];
             let level = 0;
             i++;
@@ -373,7 +373,7 @@
     }
 
     // =====================================================================
-    // Inline-Markdown -> HTML
+    // Inline Markdown -> HTML
     // =====================================================================
 
     function findBacktickRun(src, from, run) {
@@ -387,7 +387,7 @@
         return -1;
     }
 
-    // [Text](Ziel "Titel") ab src[i] === '['
+    // [Text](target "title") starting at src[i] === '['
     function parseLinkAt(src, i) {
         const n = src.length;
         let depth = 0;
@@ -479,7 +479,7 @@
                 continue;
             }
             if (c === '!' && src[i + 1] === '[') {
-                // Bilder werden nicht unterstützt - sie entfallen ganz
+                // Images are not supported - they are dropped entirely
                 const link = parseLinkAt(src, i + 1);
                 if (link) { i = link.end; continue; }
                 text += c;
@@ -519,7 +519,7 @@
                     i += m[0].length;
                     continue;
                 }
-                // anderes HTML entfällt, der Text dazwischen bleibt
+                // other HTML is dropped, the text in between remains
                 if ((m = rest.match(/^<!--[\s\S]*?-->/)) || (m = rest.match(/^<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>/))) {
                     i += m[0].length;
                     continue;
@@ -537,7 +537,7 @@
                 const m = src.slice(i, i + 40).match(ENTITY_RE);
                 if (m) {
                     const v = decodeEntity(m[0]);
-                    // auch &#x2067; … &#x2069; geschrieben
+                    // also written as &#x2067; … &#x2069;
                     if (v === RLI || v === LRI || v === PDI) { push({ type: 'iso', ch: v }); i += m[0].length; continue; }
                     if (v !== null) { text += v; i += m[0].length; continue; }
                 }
@@ -589,8 +589,8 @@
         return nodes;
     }
 
-    // Isolate paaren: RLI/LRI … PDI -> bdi[dir], innen eigene Hervorhebungen (sie
-    // reichen nicht über die Grenze); was kein Gegenstück hat, bleibt Text
+    // Pair isolates: RLI/LRI … PDI -> bdi[dir], with their own emphasis inside (it
+    // does not reach across the boundary); whatever has no counterpart remains text
     function pairIsolates(nodes) {
         const open = [];
         for (let k = 0; k < nodes.length; k++) {
@@ -607,7 +607,7 @@
         open.forEach((k) => { nodes[k] = { type: 'text', v: nodes[k].ch }; });
     }
 
-    // Hervorhebungen paaren (vereinfachter CommonMark-Algorithmus)
+    // Pair emphasis (simplified CommonMark algorithm)
     function processEmphasis(nodes) {
         let ci = 0;
         while (ci < nodes.length) {
@@ -632,7 +632,7 @@
             if (closer.html) { use = 1; tag = closer.ch.slice(4); }
             else if (closer.ch === '*' || closer.ch === '_') { use = op.len >= 2 && closer.len >= 2 ? 2 : 1; tag = use === 2 ? 'strong' : 'em'; }
             else if (closer.ch === '+') tag = 'u';
-            // '~~' (Durchstreichen) wird nicht unterstützt: Text ohne Format
+            // '~~' (strikethrough) is not supported: text without format
             const el = { type: 'elem', tag: tag, children: nodes.slice(found + 1, ci) };
             op.len -= use;
             closer.len -= use;
@@ -674,7 +674,7 @@
     }
 
     // =====================================================================
-    // Blockliste -> HTML des Editors
+    // Block list -> HTML of the editor
     // =====================================================================
 
     function alignAttr(a) {
@@ -717,7 +717,7 @@
         return '';
     }
 
-    // Listeneintrag: Inline-Inhalt, Unterlisten; andere Blöcke werden zu Text
+    // List item: inline content, sub-lists; other blocks become text
     function renderItem(it) {
         const parts = [];
         let inline = [];
@@ -743,11 +743,11 @@
     }
 
     // =====================================================================
-    // DOM -> Blockliste (Editor und eingefügtes HTML)
+    // DOM -> block list (editor and pasted HTML)
     // =====================================================================
 
-    // true, solange HTML des Feldes gelesen wird (htmlToBlocks(html, true)) - dort ist
-    // "left" eine gewählte Ausrichtung (z. B. in einem Feld von rechts nach links)
+    // true while the HTML of the field is being read (htmlToBlocks(html, true)) - there
+    // "left" is a chosen alignment (e.g. in a right-to-left field)
     let ownHtml = false;
 
     function alignOf(el) {
@@ -756,7 +756,7 @@
         let a = (el.getAttribute('align') || (el.style && el.style.textAlign) || '').toLowerCase();
         if (a === 'middle') a = 'center';
         if (ownHtml && a === 'left') return a;
-        // "left" aus fremdem HTML ist die Vorgabe - keine eigene Ausrichtung
+        // "left" from foreign HTML is the default - no alignment of its own
         return a === 'center' || a === 'right' ? a : '';
     }
 
@@ -772,7 +772,7 @@
         return m ? m[1] : '';
     }
 
-    // Text eines Codeblocks; ein <br> als letztes Kind ist der Platzhalter des Editors
+    // Text of a code block; a <br> as the last child is the editor's placeholder
     function preText(pre) {
         return nodeText(pre, pre.lastChild);
     }
@@ -811,7 +811,7 @@
             const tag = tagOf(n);
             if (SKIP_TAGS.test(tag)) return;
             if (!BLOCK_TAGS.test(tag)) {
-                // Inline-Element mit Blöcken darin (Google Docs: <b id="docs-internal-guid…">)
+                // Inline element with blocks inside (Google Docs: <b id="docs-internal-guid…">)
                 if (hasBlockDescendant(n)) { flush(); out.push(...domToBlocks(n, alignOf(n) || align)); }
                 else inline.push(n);
                 return;
@@ -855,7 +855,7 @@
             const tag = n.nodeType === 1 ? tagOf(n) : '';
             if (tag === 'LI') items.push({ children: domToBlocks(n, '') });
             else if (tag === 'UL' || tag === 'OL') {
-                // Unterliste direkt in der Liste (execCommand indent) gehört zum Eintrag davor
+                // Sub-list directly in the list (execCommand indent) belongs to the item before it
                 const sub = listFromDom(n, '');
                 if (items.length) items[items.length - 1].children.push(sub);
                 else items.push({ children: [sub] });
@@ -898,10 +898,10 @@
 
     // ---- Inline: DOM -> Markdown ----
     //
-    // Erst "Läufe" sammeln (Text mit Formaten strong/em/u/code/href, Umbrüche), dann
-    // Markdown ausgeben - so werden verschachtelte, überlappende oder doppelte
-    // Formate fremden HTMLs zu gültigem Markdown, und Leerraum steht nie innen an
-    // einer Marke.
+    // First collect "runs" (text with formats strong/em/u/code/href, line breaks), then
+    // output Markdown - this way nested, overlapping or duplicate
+    // formats of foreign HTML become valid Markdown, and whitespace never sits on the inside
+    // of a marker.
 
     function inlineMd(nodes, ctx) {
         const runs = [];
@@ -951,7 +951,7 @@
                 else if (/^(normal|lighter|[1-5]00)$/.test(w)) m.strong = false;
                 if (st.fontStyle === 'italic' || st.fontStyle === 'oblique') m.em = true;
                 else if (st.fontStyle === 'normal') m.em = false;
-                // Unterstrichene Links fremder Seiten sind nur Link, kein Unterstrich
+                // Underlined links of foreign pages are only a link, not an underline
                 if (!m.inLink && /underline/.test(st.textDecorationLine || st.textDecoration || '')) m.u = true;
             }
             collectRuns(Array.from(n.childNodes), m, runs);
@@ -973,7 +973,7 @@
             }
             out.push(Object.assign({}, r));
         });
-        // Leerraum am Zeilenanfang und doppelten Leerraum entfernen
+        // Remove whitespace at the start of lines and double whitespace
         let lineStart = true;
         let space = false;
         out.forEach((r) => {
@@ -981,7 +981,7 @@
             if (!r.keep && (lineStart || space)) r.text = r.text.replace(/^ +/, '');
             if (r.text !== '') { lineStart = false; space = !r.keep && / $/.test(r.text); }
         });
-        // … und am Zeilenende
+        // … and at the end of lines
         for (let k = out.length - 1, end = true; k >= 0; k--) {
             const r = out[k];
             if (r.br) { end = true; continue; }
@@ -992,13 +992,13 @@
             end = false;
         }
         const res = out.filter((r) => r.br || r.text !== '');
-        // Umbrüche am Anfang und Ende (Platzhalter) entfallen
+        // Line breaks at the beginning and end (placeholders) are dropped
         while (res.length && res[0].br) res.shift();
         while (res.length && res[res.length - 1].br) res.pop();
         return res;
     }
 
-    // Die Schreibrichtung umschließt alles andere
+    // The writing direction encloses everything else
     const MARK_ORDER = ['dir', 'href', 'strong', 'em', 'u'];
     const MARK_TEXT = { strong: '**', em: '*', u: '++' };
     const markOpen = (mk) => mk.key === 'href' ? '[' : (mk.key === 'dir' ? (mk.value === 'rtl' ? RLI : LRI) : MARK_TEXT[mk.key]);
@@ -1017,9 +1017,9 @@
         });
         merged.forEach((r, k) => {
             if (r.br) return;
-            // Formate auf reinem Leerraum entfallen
+            // Formats on pure whitespace are dropped
             if (r.text.trim() === '' && !r.marks.code) r.marks = {};
-            // Link, dessen Text die Adresse ist: als Adresse schreiben
+            // Link whose text is the address: write it as an address
             const m = r.marks;
             if (m.href && m.href === r.text && /^https?:\/\//i.test(m.href) && !m.strong && !m.em && !m.u && !m.code && !m.dir) {
                 const prev = merged[k - 1];
@@ -1087,7 +1087,7 @@
     const URL_IN_TEXT = /\bhttps?:\/\/[^\s<]*[^\s<.,:;!?"')\]*_~]/gi;
 
     function escapeInline(text, ctx) {
-        // Adressen bleiben unverändert - Parsedown und der Editor verlinken sie selbst
+        // Addresses remain unchanged - Parsedown and the editor link them themselves
         let out = '';
         let last = 0;
         text.replace(URL_IN_TEXT, (m, off) => {
@@ -1108,14 +1108,14 @@
         return s;
     }
 
-    // Zeilenanfang eines Absatzes, der sonst als Block gelesen würde
+    // Start of a paragraph line that would otherwise be read as a block
     function escapeLineStart(line) {
         if (/^#{1,6}([ \t]|$)/.test(line) || /^>/.test(line) || /^[-+]([ \t]|$)/.test(line)
             || /^(=+|-+)[ \t]*$/.test(line) || /^:::/.test(line) || /^~~~/.test(line)) return '\\' + line;
         return line.replace(/^(\d{1,9})([.)])(?=[ \t]|$)/, '$1\\$2');
     }
 
-    // ---- Nachbarlisten zusammenführen ----
+    // ---- Merge neighboring lists ----
 
     function mergeAdjacentLists(blocks) {
         const out = [];
@@ -1132,13 +1132,13 @@
         return out;
     }
 
-    // ---- Blockliste -> HTML des Feldes ----
+    // ---- Block list -> HTML of the field ----
     //
-    // Über das HTML des Editors (renderBlocks): dessen Eigenheiten werden zu
-    // gewöhnlichem HTML - data-align -> style="text-align: …", pre[data-lang] ->
-    // pre > code.language-…, span.htv-ch -> Entity, Platzhalter-<br> leerer Zellen
-    // entfallen. Blöcke stehen je auf einer Zeile, Listen, Zitate und Tabellen
-    // eingerückt; beim Lesen ist dieser Leerraum bedeutungslos.
+    // Via the HTML of the editor (renderBlocks): its peculiarities become
+    // ordinary HTML - data-align -> style="text-align: …", pre[data-lang] ->
+    // pre > code.language-…, span.htv-ch -> entity, placeholder <br> of empty cells
+    // are dropped. Blocks are each on one line, lists, quotes and tables
+    // indented; when reading, this whitespace is meaningless.
 
     const ENTITY_OUT = { ' ': '&nbsp;', ' ': '&#8239;', ' ': '&ensp;', ' ': '&thinsp;', '­': '&shy;', '‑': '&#8209;' };
     const CONTAINER = /^(UL|OL|BLOCKQUOTE|TABLE|THEAD|TBODY|TR)$/;
@@ -1177,20 +1177,20 @@
         }
         const subs = tag === 'li' ? Array.from(el.children).filter((c) => /^(UL|OL)$/.test(c.nodeName)) : [];
         if (!subs.length) return ind + el.outerHTML;
-        // Listeneintrag mit Unterliste: Text in der Zeile des Eintrags, Unterlisten darunter
+        // List item with sub-list: text on the line of the item, sub-lists below
         const own = el.cloneNode(true);
         Array.from(own.children).forEach((c) => { if (/^(UL|OL)$/.test(c.nodeName)) c.remove(); });
         return ind + open + own.innerHTML + '\n' + subs.map((c) => blockHtml(c, inner)).join('\n') + '\n' + ind + close;
     }
 
-    // Editor-DOM -> HTML des Feldes
+    // Editor DOM -> HTML of the field
     function toHtml(el) {
         return writeHtml(mergeAdjacentLists(domToBlocks(el, '')));
     }
 
-    // ---- Einfügen: Zwischenablage -> Blockliste ----
+    // ---- Paste: clipboard -> block list ----
 
-    // Word: Listen sind Absätze mit mso-list, das Aufzählungszeichen steht in einem span
+    // Word: lists are paragraphs with mso-list, the bullet is in a span
     function convertWordLists(doc) {
         const ps = Array.from(doc.querySelectorAll('p')).filter((p) => /mso-list:\s*l\d+\s+level\d+/i.test(p.getAttribute('style') || ''));
         if (!ps.length) return;
@@ -1219,8 +1219,8 @@
         });
     }
 
-    // own: HTML des Feldes (nicht aus der Zwischenablage) - unsichtbare Zeichen und
-    // "left" sind dort gewollt
+    // own: HTML of the field (not from the clipboard) - invisible characters and
+    // "left" are intended there
     function htmlToBlocks(html, own) {
         const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
         convertWordLists(doc);
@@ -1230,8 +1230,8 @@
         finally { ownHtml = false; }
     }
 
-    // Unsichtbare Zeichen im Text als span.htv-ch, wie im Editor - sonst würde ein
-    // geschütztes Leerzeichen zum normalen (Code ausgenommen, wie im Editor)
+    // Invisible characters in the text as span.htv-ch, as in the editor - otherwise a
+    // non-breaking space would become a normal one (except code, as in the editor)
     const INVISIBLE_SPLIT = new RegExp('([' + Object.keys(INVISIBLE).join('') + '])');
 
     function markInvisible(root) {
@@ -1254,12 +1254,12 @@
         });
     }
 
-    // Beliebiges HTML auf das gestutzt, was der Editor abbildet
+    // Any HTML trimmed to what the editor maps
     function cleanHtml(html) {
         return writeHtml(htmlToBlocks(html, true));
     }
 
-    // HTML des Feldes -> HTML des Editors
+    // HTML of the field -> HTML of the editor
     function editorHtml(html) {
         return renderBlocks(htmlToBlocks(html, true));
     }
@@ -1272,7 +1272,7 @@
             || /\+\+\S[^+\n]*\+\+/.test(text) || /^\|.*\|[ \t]*\n[ \t]*\|?[ \t]*:?-+/m.test(text);
     }
 
-    // Kopien aus Code-Editoren (VS Code …) kommen als HTML ohne Formatierung
+    // Copies from code editors (VS Code …) arrive as HTML without formatting
     function isUnformattedHtml(html) {
         return !/<(b|strong|i|em|u|h[1-6]|ul|ol|li|table|a|blockquote|hr)[\s>]/i.test(html);
     }
@@ -1291,7 +1291,7 @@
     }
 
     // =====================================================================
-    // Auswahl und DOM-Hilfen des Editors
+    // Selection and DOM helpers of the editor
     // =====================================================================
 
     function getRange(root) {
@@ -1322,7 +1322,7 @@
         let n = el;
         while (n && !isLeaf(n)) {
             let c = last ? n.lastChild : n.firstChild;
-            // eine Unterliste gehört nicht zum Text des Eintrags
+            // a sub-list does not belong to the text of the item
             if (tagOf(n) === 'LI') {
                 const own = Array.from(n.childNodes).filter((x) => !/^(UL|OL)$/.test(x.nodeName));
                 c = own.length ? own[last ? own.length - 1 : 0] : null;
@@ -1333,7 +1333,7 @@
         return n;
     }
 
-    // Einfügemarke an Anfang bzw. Ende des Textes von el
+    // Caret at the beginning or end of the text of el
     function caretInto(el, atEnd) {
         const r = document.createRange();
         const leaf = edgeLeaf(el, !!atEnd);
@@ -1364,7 +1364,7 @@
         return null;
     }
 
-    // Kinder eines Blocks ohne Unterlisten und Unterblöcke
+    // Children of a block without sub-lists and sub-blocks
     function ownNodes(el) {
         return Array.from(el.childNodes).filter((n) => !(n.nodeType === 1 && (/^(UL|OL|BLOCKQUOTE|TABLE|PRE)$/.test(n.nodeName) || TEXTBLOCK.test(n.nodeName))));
     }
@@ -1412,7 +1412,7 @@
         el.remove();
     }
 
-    // Leere Inline-Reste nach dem Teilen (<strong></strong>) entfernen
+    // Remove empty inline leftovers after splitting (<strong></strong>)
     function cleanupEmptyInline(el) {
         Array.from(el.querySelectorAll('strong,b,em,i,u,code,a,span:not(.htv-ch)')).reverse().forEach((n) => {
             if (!n.textContent.replace(ZW_RE, '') && !n.querySelector('br,.htv-ch')) n.remove();
@@ -1455,7 +1455,7 @@
                 setRange(r);
                 return;
             }
-            catch (e) { /* weiter mit fallback */ }
+            catch (e) { /* continue with fallback */ }
         }
         if (fallback && root.contains(fallback)) caretInto(fallback, true);
     }
@@ -1502,7 +1502,7 @@
     }
 
     // =====================================================================
-    // Werkzeugleiste
+    // Toolbar
     // =====================================================================
 
     const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '');
@@ -1547,7 +1547,7 @@
         { group: 'spaces', named: [[' ', 'nbsp'], [' ', 'nnbsp'], [' ', 'ensp'], [' ', 'thinsp'], ['­', 'shy']] }
     ];
 
-    // Englische Vorgaben - im Backend kommen die Texte aus den Snippets
+    // English defaults - in the backend the texts come from the snippets
     const TEXTS = {
         editor: 'Text editor', mod: 'Ctrl',
         bold: 'Bold', italic: 'Italic', underline: 'Underline', code: 'Inline code', heading: 'Paragraph format',
@@ -1598,7 +1598,7 @@
             this.sourceMode = false;
             this.build();
             this.setHtml(el.value, true);
-            // Werkzeugleiste gleich im Zustand des Feldes (z. B. Schreibrichtung rtl)
+            // Toolbar right away in the state of the field (e.g. writing direction rtl)
             this.updateState();
         }
 
@@ -1611,7 +1611,7 @@
             return key.replace('Mod', this.t('mod'));
         }
 
-        // ---- Aufbau ----
+        // ---- Structure ----
 
         build() {
             const el = this.el;
@@ -1629,7 +1629,7 @@
             const content = this.content = document.createElement('div');
             content.className = 'c9-htv-content';
             content.contentEditable = this.readonly ? 'false' : 'true';
-            // Schreibrichtung wie das Feld (dir je Sprache, Backend::fieldDirection())
+            // Writing direction like the field (dir per language, Backend::fieldDirection())
             content.dir = getComputedStyle(el).direction === 'rtl' ? 'rtl' : 'ltr';
             content.setAttribute('role', 'textbox');
             content.setAttribute('aria-multiline', 'true');
@@ -1674,13 +1674,13 @@
             document.addEventListener('mousedown', this.onDocDown);
             this.onSourceInput = () => this.onChange();
             el.addEventListener('input', this.onSourceInput);
-            try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { /* ältere Browser */ }
+            try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { /* older browsers */ }
         }
 
         buildToolbar() {
             const bar = this.bar;
             this.buttons = {};
-            // Auswahl im Text behalten: kein Fokuswechsel beim Klick in die Leiste
+            // Keep the selection in the text: no focus change when clicking in the toolbar
             bar.addEventListener('mousedown', (e) => {
                 if (!e.target.closest('input,select,textarea')) e.preventDefault();
             });
@@ -1716,7 +1716,7 @@
             add('source', 'code', this.t('source'), false).setAttribute('aria-pressed', 'false');
         }
 
-        // ---- Inhalt, Synchronisation, Verlauf ----
+        // ---- Content, synchronization, history ----
 
         setHtml(html, initial) {
             this.content.innerHTML = editorHtml(html) || '<p><br></p>';
@@ -1814,7 +1814,7 @@
             this.restoreState(this.history[this.hIndex]);
         }
 
-        // Befehl ausführen: Tippen abschließen, Befehl, aufräumen, speichern, Verlauf
+        // Execute a command: finish typing, command, clean up, save, history
         exec(fn) {
             if (this.sourceMode || this.readonly) return;
             this.commitTyping();
@@ -1835,7 +1835,7 @@
             if (last) caretInto(last, true);
         }
 
-        // Nach Eingaben: Text direkt im Editor in Absätze, Stil-Spans des Browsers weg
+        // After input: text directly in the editor into paragraphs, the browser's style spans gone
         normalize() {
             const root = this.content;
             if (!root.firstChild || (root.childNodes.length === 1 && root.firstChild.nodeName === 'BR')) {
@@ -1843,8 +1843,8 @@
                 caretInto(root.firstChild, false);
                 return;
             }
-            // Die Auswahl nur anfassen, wenn sich etwas ändert - ein Neusetzen verwirft
-            // den Schreibmodus des Browsers (Fett-Schalter ohne markierten Text)
+            // Only touch the selection if something changes - setting it again discards
+            // the browser's typing mode (bold toggle without selected text)
             const stray = Array.from(root.childNodes).some((n) => n.nodeType === 3 || (n.nodeType === 1 && !BLOCK_TAGS.test(n.nodeName)));
             const styled = root.querySelector('span[style]:not(.htv-ch), font, [style]:not(.htv-ch)');
             if (!stray && !styled) return;
@@ -1862,13 +1862,13 @@
             restoreSel(root, s);
         }
 
-        // Hinter Tabelle, Code, Linie, Liste oder Zitat am Ende: ein Absatz zum Weiterschreiben
+        // After a table, code, rule, list or quote at the end: a paragraph to keep writing
         ensureTrailing() {
             const last = this.content.lastElementChild;
             if (!last || /^(TABLE|PRE|HR|BLOCKQUOTE|UL|OL)$/.test(last.nodeName)) this.content.appendChild(newP());
         }
 
-        // ---- Zustand der Werkzeugleiste ----
+        // ---- State of the toolbar ----
 
         updateState() {
             if (!this.buttons) return;
@@ -1914,8 +1914,8 @@
                 undo: this.hIndex <= 0 && !this.typingTimer,
                 redo: this.hIndex >= this.history.length - 1
             };
-            // Schreibrichtung: das Symbol zeigt die Richtung an der Einfügemarke - die des
-            // Feldes (dir je Sprache) bzw. eines umschließenden bdi
+            // Writing direction: the icon shows the direction at the caret - that of the
+            // field (dir per language) or of an enclosing bdi
             if (this.buttons.dir) {
                 const at = node ? (node.nodeType === 1 ? node : node.parentNode) : root;
                 const rtl = getComputedStyle(at || root).direction === 'rtl';
@@ -1965,7 +1965,7 @@
             }
         }
 
-        // ---- Ereignisse ----
+        // ---- Events ----
 
         onKeydown(e) {
             if (e.isComposing || e.keyCode === 229) return;
@@ -2016,7 +2016,7 @@
                 case 'formatJustifyCenter': e.preventDefault(); this.exec(() => this.setAlign('center')); break;
                 case 'formatJustifyRight': e.preventDefault(); this.exec(() => this.setAlign('right')); break;
                 default:
-                    // andere Formate (Durchstreichen, Farben, Schriften …) gibt es nicht
+                    // other formats (strikethrough, colors, fonts …) do not exist
                     if (/^format/.test(e.inputType)) e.preventDefault();
             }
         }
@@ -2035,7 +2035,7 @@
             return !!(r && closestIn(this.content, r.startContainer, 'pre'));
         }
 
-        // "# ", "- ", "1. ", "> " am Anfang eines leeren Absatzes
+        // "# ", "- ", "1. ", "> " at the start of an empty paragraph
         markdownShortcut() {
             const r = getRange(this.content);
             if (!r || !r.collapsed) return;
@@ -2103,7 +2103,7 @@
                 this.exec(() => { prev.remove(); caretInto(tb, false); });
             }
             else if (prev.nodeName === 'TABLE' || prev.nodeName === 'PRE') {
-                // nicht mit Tabelle oder Code verschmelzen - nur hineinspringen
+                // do not merge with a table or code - only jump into it
                 e.preventDefault();
                 this.exec(() => {
                     const target = prev.nodeName === 'TABLE' ? prev.rows[prev.rows.length - 1].cells[prev.rows[prev.rows.length - 1].cells.length - 1] : prev;
@@ -2147,7 +2147,7 @@
             if (tb.nodeName === 'PRE' && !e.shiftKey) { e.preventDefault(); this.exec(() => this.preInsert(tb, '\t')); }
         }
 
-        // Am Ende von Inline-Code: aus dem Code heraus
+        // At the end of inline code: out of the code
         onArrowRight(e) {
             if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
             const r = getRange(this.content);
@@ -2188,9 +2188,9 @@
             this.insertExternal(html, text);
         }
 
-        // ---- Blöcke ----
+        // ---- Blocks ----
 
-        // Fließbereich (Editor oder Zitat) und die Einheit darin, die el enthält
+        // Flow area (editor or quote) and the unit inside it that contains el
         containerOf(el) {
             let p = el.parentNode;
             while (p !== this.content && p.nodeName !== 'BLOCKQUOTE') p = p.parentNode;
@@ -2203,7 +2203,7 @@
             return el;
         }
 
-        // Textblöcke der Auswahl in Dokumentreihenfolge
+        // Text blocks of the selection in document order
         selectedBlocks() {
             const root = this.content;
             const r = getRange(root);
@@ -2223,7 +2223,7 @@
                 if (own.length !== el.childNodes.length && !own.some((n) => r.intersectsNode(n))) continue;
                 out.push(el);
             }
-            // Dreifachklick markiert bis zum Anfang des nächsten Blocks - der zählt nicht
+            // A triple click selects up to the start of the next block - that one does not count
             if (out.length > 1 && isAtStartOf(out[out.length - 1], r.endContainer, r.endOffset)) out.pop();
             if (!out.length) {
                 const b = textBlockOf(root, r.startContainer);
@@ -2232,7 +2232,7 @@
             return out;
         }
 
-        // Einheiten von der ersten bis zur letzten gewählten im gemeinsamen Fließbereich
+        // Units from the first to the last selected one in the common flow area
         unitsRange(blocks) {
             let c = this.containerOf(blocks[0]);
             while (c !== this.content && !blocks.every((b) => c.contains(b))) c = this.containerOf(c);
@@ -2335,7 +2335,7 @@
             return li;
         }
 
-        // Eintrag ganz aus der Liste lösen - wird Absatz; Unterlisten bleiben Listen
+        // Detach the item from the list entirely - it becomes a paragraph; sub-lists remain lists
         liftItem(li) {
             while (isNested(li)) this.outdentItem(li);
             const list = li.parentNode;
@@ -2383,7 +2383,7 @@
             const list = li.parentNode;
             const parentLi = list.parentNode;
             if (!parentLi || parentLi.nodeName !== 'LI') return;
-            // folgende Einträge werden Unterpunkte des herausgerückten
+            // following items become sub-items of the outdented one
             if (li.nextElementSibling) {
                 const lastSub = li.lastElementChild;
                 let sub = lastSub && lastSub.nodeName === list.nodeName ? lastSub : null;
@@ -2436,7 +2436,7 @@
             caretInto(pre, true);
         }
 
-        // Neuen Block an der Einfügemarke: Absatz teilen bzw. leeren Absatz ersetzen
+        // New block at the caret: split the paragraph or replace an empty paragraph
         placeBlock(node) {
             const root = this.content;
             const r = getRange(root);
@@ -2464,7 +2464,7 @@
             caretInto(hr.nextElementSibling, false);
         }
 
-        // Einfügemarke teilt den Textblock; der hintere Teil wird ein neuer Block danach
+        // The caret splits the text block; the rear part becomes a new block after it
         splitAtCaret(tb) {
             const r = getRange(this.content);
             const tail = document.createRange();
@@ -2534,7 +2534,7 @@
                     return;
                 }
             }
-            // Enter im leeren ausgerichteten Absatz beendet die Ausrichtung (wie bei Listen)
+            // Enter in an empty aligned paragraph ends the alignment (as with lists)
             if (isEmptyBlock(tb) && /^(P|DIV)$/.test(tag) && tb.getAttribute('data-align')) {
                 tb.removeAttribute('data-align');
                 caretInto(tb, false);
@@ -2561,7 +2561,7 @@
             const br = newBr();
             r.insertNode(br);
             const tb = textBlockOf(this.content, br);
-            // ein <br> am Blockende zeigt keine neue Zeile - Platzhalter dahinter
+            // a <br> at the end of a block shows no new line - placeholder after it
             if (tb && this.isLastInBlock(br, tb)) br.after(newBr());
             const nr = document.createRange();
             nr.setStartAfter(br);
@@ -2586,7 +2586,7 @@
             const set = (el) => { if (align) el.setAttribute('data-align', align); else el.removeAttribute('data-align'); };
             const cell = closestIn(root, r.startContainer, 'td,th');
             if (cell) {
-                // in einer Tabelle: die ganze Spalte
+                // in a table: the whole column
                 const table = closestIn(root, cell, 'table');
                 const col = cell.cellIndex;
                 Array.from(table.rows).forEach((row) => { if (row.cells[col]) set(row.cells[col]); });
@@ -2603,7 +2603,7 @@
         // ---- Inline ----
 
         inline(cmd) {
-            try { document.execCommand('styleWithCSS', false, false); } catch (e) { /* egal */ }
+            try { document.execCommand('styleWithCSS', false, false); } catch (e) { /* does not matter */ }
             document.execCommand(cmd, false, null);
         }
 
@@ -2634,9 +2634,9 @@
             setRange(nr);
         }
 
-        // Schreibrichtung umschalten: die Auswahl (bzw. ab der Einfügemarke) bekommt die
-        // Gegenrichtung der Stelle als bdi[dir] - so auch im HTML des Feldes. In einem bdi
-        // hebt der Schalter es wieder auf, wie Fett im Fetten.
+        // Toggle the writing direction: the selection (or from the caret on) gets the
+        // opposite direction of the position as bdi[dir] - likewise in the HTML of the field. Inside a bdi
+        // the toggle removes it again, like bold inside bold.
         toggleDir() {
             const root = this.content;
             const r = getRange(root);
@@ -2662,7 +2662,7 @@
             if (!sb || sb !== textBlockOf(root, r.endContainer)) return;
             el.appendChild(r.extractContents());
             r.insertNode(el);
-            // verschachtelte Isolate der Auswahl entfallen - es gilt die neue Richtung
+            // nested isolates of the selection are dropped - the new direction applies
             el.querySelectorAll('bdi').forEach(unwrapEl);
             cleanupEmptyInline(sb);
             const nr = document.createRange();
@@ -2670,8 +2670,8 @@
             setRange(nr);
         }
 
-        // Code-Schalter im Code: ohne Auswahl ab der Einfügemarke normal weiterschreiben,
-        // mit Auswahl nur den gewählten Teil zurück in normalen Text
+        // Code toggle inside code: without a selection continue writing normally from the caret,
+        // with a selection turn only the selected part back into normal text
         leaveCode(code, r) {
             const text = code.textContent;
             const off = (c, o) => {
@@ -2715,7 +2715,7 @@
             r.insertNode(node);
             let after = node;
             if (node.nodeType === 1 && (!node.nextSibling || node.nextSibling.nodeName === 'BR')) {
-                // hinter einem nicht bearbeitbaren span braucht die Einfügemarke Text
+                // after a non-editable span the caret needs text
                 after = document.createTextNode('​');
                 node.after(after);
             }
@@ -2726,7 +2726,7 @@
             setRange(nr);
         }
 
-        // ---- Codeblock ----
+        // ---- Code block ----
 
         preState(pre) {
             const r = getRange(this.content);
@@ -2760,7 +2760,7 @@
             const st = this.preState(pre);
             const before = st.text.slice(0, st.s);
             const after = st.text.slice(st.e);
-            // Enter in der leeren letzten Zeile: raus aus dem Codeblock
+            // Enter on the empty last line: out of the code block
             if (after === '' && before.endsWith('\n')) {
                 this.setPre(pre, before.slice(0, -1), before.length - 1);
                 let p = pre.nextElementSibling;
@@ -2768,7 +2768,7 @@
                 caretInto(p, false);
                 return;
             }
-            // Enter am Anfang des ersten Blocks: Absatz davor
+            // Enter at the start of the first block: paragraph before it
             if (st.s === 0 && st.e === 0 && st.text !== '' && !pre.previousElementSibling) {
                 const p = newP();
                 pre.before(p);
@@ -2778,7 +2778,7 @@
             this.setPre(pre, before + '\n' + after, st.s + 1);
         }
 
-        // ---- Tabellen ----
+        // ---- Tables ----
 
         tableCtx() {
             const r = getRange(this.content);
@@ -2829,7 +2829,7 @@
                 return tr;
             }
             if (inHead) {
-                // neue Kopfzeile, die bisherige wird erste Datenzeile
+                // new header row, the previous one becomes the first data row
                 const tr = make('TH');
                 const body = this.body(table);
                 const head = row.parentNode;
@@ -2848,7 +2848,7 @@
             if (rows.length <= 1) { this.deleteTable(ctx); return; }
             let target;
             if (ctx.row.parentNode.nodeName === 'THEAD') {
-                // erste Datenzeile wird Kopfzeile
+                // the first data row becomes the header row
                 target = rows[1];
                 ctx.row.parentNode.appendChild(this.convertRow(target, 'TH'));
                 ctx.row.remove();
@@ -2912,7 +2912,7 @@
             if (target) caretInto(target, true);
         }
 
-        // ---- Einfügen (Zwischenablage, Drag & Drop) ----
+        // ---- Paste (clipboard, drag & drop) ----
 
         insertExternal(html, text) {
             this.exec(() => {
@@ -2943,7 +2943,7 @@
             let tb = textBlockOf(root, r.startContainer);
             const cell = tb && /^(TD|TH)$/.test(tb.nodeName) ? tb : null;
             if (cell || (blocks.length === 1 && blocks[0].t === 'p' && !blocks[0].align)) {
-                // Inline an der Einfügemarke; in Tabellenzellen nur Inline mit Umbrüchen
+                // Inline at the caret; in table cells only inline with line breaks
                 const html = cell ? blocks.flatMap(flattenInline).filter((s) => s !== '').join('<br>') : parseInline(blocks[0].inl);
                 const frag = fragmentOf(html);
                 const last = frag.lastChild;
@@ -2969,7 +2969,7 @@
             this.mergeEdges(tb, nodes, tail);
         }
 
-        // Rand-Absätze des Eingefügten mit dem geteilten Absatz verbinden, Marke ans Ende
+        // Join the edge paragraphs of the pasted content with the split paragraph, caret at the end
         mergeEdges(head, nodes, tail) {
             const marker = document.createElement('span');
             marker.className = 'c9-htv-mark';
@@ -3079,14 +3079,14 @@
             setRange(r);
         }
 
-        // ---- Menüs und Dialoge ----
+        // ---- Menus and dialogs ----
 
         openPop(btn, build) {
             if (btn && this.popFor === btn && !this.pop.hidden) { this.closePop(); return; }
             this.closePop();
             const r = getRange(this.content);
             this.savedRange = r ? r.cloneRange() : null;
-            // jedes Mal ein neues Element - Listener früherer Dialoge dürfen nicht mitlaufen
+            // a new element every time - listeners of earlier dialogs must not run along
             const fresh = document.createElement('div');
             fresh.className = 'c9-htv-pop';
             fresh.hidden = true;
@@ -3157,7 +3157,7 @@
             pop.appendChild(box);
         }
 
-        // Enter und Escape in den Eingabefeldern eines Dialogs (sonst sendet Enter das Formular)
+        // Enter and Escape in the input fields of a dialog (otherwise Enter submits the form)
         dialogKeys(pop, apply) {
             pop.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); apply(); }
@@ -3327,7 +3327,7 @@
             });
         }
 
-        // ---- Quelltext ----
+        // ---- Source code ----
 
         toggleSource() {
             this.closePop();
@@ -3355,7 +3355,7 @@
             this.updateState();
         }
 
-        // ---- Lebenszyklus ----
+        // ---- Life cycle ----
 
         beforeSubmit() {
             if (this.sourceMode) {
@@ -3387,7 +3387,7 @@
     Editor.uid = 0;
 
     // =====================================================================
-    // Anbindung
+    // Binding
     // =====================================================================
 
     function loadStylesheet(file) {

@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\cms $this->cms
@@ -37,8 +37,8 @@ $this->backend->formField($this->converter, [
     ]
 ]);
 
-// Größe: Bedingung, Einheit, Höchstzahl Pixel - Optionen und Beschriftungen aus
-// dem Schema (ImageGd::hookDefinition())
+// Size: condition, unit, maximum pixels - options and labels from
+// the schema (ImageGd::hookDefinition())
 $this->backend->formField($this->converter, ['name' => 'details.resize_when', 'value' => $details['resize_when'] ?? 'always', 'id' => $this->id]);
 $this->backend->formField($this->converter, ['name' => 'details.unit', 'value' => $details['unit'] ?? 'px', 'id' => $this->id]);
 $this->backend->formField($this->converter, ['name' => 'details.max_pixels', 'value' => $details['max_pixels'] ?? '', 'id' => $this->id]);

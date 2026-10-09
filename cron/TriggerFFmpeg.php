@@ -1,16 +1,16 @@
 <?php
 /**
- * Trigger für Hintergrundprozesse des Typs 'ffmpeg'.
+ * Trigger for background processes of type 'ffmpeg'.
  *
- * Bedient alle Prozessoren, die ffmpeg aufrufen - FFmpegVideo, FFmpegAudio und
- * FFmpegImage. Welcher davon eine fertige Datei auslesen darf, entscheidet nicht dieser
- * Trigger, sondern der 'proc'-Eintrag in `bgproc`.`message`, siehe TriggerMedia.
+ * Serves all processors that call ffmpeg - FFmpegVideo, FFmpegAudio and
+ * FFmpegImage. Which of them may read a finished file is decided not by this
+ * trigger but by the 'proc' entry in `bgproc`.`message`, see TriggerMedia.
  *
- * Fortschrittsformat: ffmpeg schreibt mit "-progress DATEI" fortlaufend Blöcke aus
- * "schlüssel=wert"-Zeilen. Ein Block endet mit "progress=continue", der letzte mit
+ * Progress format: ffmpeg writes continuously with "-progress FILE" blocks of
+ * "key=value" lines. A block ends with "progress=continue", the last with
  * "progress=end".
  *
- * @see Camindo\Core\cron\TriggerMedia  gemeinsamer Ablauf aller Medien-Trigger
+ * @see Camindo\Core\cron\TriggerMedia  common flow of all media triggers
  */
 namespace Camindo\Core\cron;
 
@@ -22,15 +22,15 @@ class TriggerFFmpeg extends TriggerMedia {
     protected const PROGRESS_PREFIX    = 'ffmpeg-';
     protected const PROGRESS_EXTENSION = '.progress';
 
-    /** Ein Fortschrittsblock ist wenige hundert Bytes groß */
+    /** A progress block is a few hundred bytes in size */
     protected const TAIL_BYTES = 8192;
 
     /**
-     * Fortschritt aus der ffmpeg-Fortschrittsdatei lesen.
+     * Read progress from the ffmpeg progress file.
      *
-     * Bevorzugt über die Framezahl, weil sie exakt ist. Streams ohne nb_frames und
-     * ohne verwertbare Bildrate (und Tonspuren, die gar keine Frames haben) fallen
-     * auf die Zeitachse zurück.
+     * Preferably via the frame count, because it is exact. Streams without nb_frames and
+     * without a usable frame rate (and audio tracks that have no frames at all) fall
+     * back to the time axis.
      */
     protected function readProgress(string $file, array $parts, int $previous): ?array
     {
@@ -38,20 +38,20 @@ class TriggerFFmpeg extends TriggerMedia {
         if ($state === null) return null;
 
         $percent     = $previous;
-        $totalFrames = (int)($parts['frames'] ?? 0); // wurde mittels ffprobe ermittelt
-        $frame       = (int)($state['frame'] ?? 0);  // aus der Fortschrittsdatei
+        $totalFrames = (int)($parts['frames'] ?? 0); // was determined using ffprobe
+        $frame       = (int)($state['frame'] ?? 0);  // from the progress file
 
         if ($totalFrames > 0 && $frame > 0) {
             $percent = (int)floor($frame * 100 / $totalFrames);
         } else {
-            // Rückfallebene: Zeitachse statt Frames
+            // fallback: time axis instead of frames
             $totalSeconds = (float)($parts['dur'] ?? 0);
             $doneSeconds  = $this->elapsedSeconds($state);
 
             if ($totalSeconds > 0 && $doneSeconds > 0) {
                 $percent = (int)floor($doneSeconds * 100 / $totalSeconds);
             }
-            // else: $percent bleibt stehen
+            // else: $percent stays as it is
         }
 
         return [
@@ -61,13 +61,13 @@ class TriggerFFmpeg extends TriggerMedia {
     }
 
     /**
-     * Liest die letzten Zeilen einer ffmpeg-Fortschrittsdatei und gibt die Werte des
-     * jüngsten Blocks zurück.
+     * Reads the last lines of an ffmpeg progress file and returns the values of the
+     * most recent block.
      *
-     * Es genügt, das Dateiende zu lesen und den letzten Wert je Schlüssel zu behalten.
+     * It is enough to read the end of the file and keep the last value per key.
      *
      * @return array|null ['frame' => '4200', 'speed' => '1.5x', 'progress' => 'continue', ...]
-     *                    oder null, wenn die Datei fehlt oder noch leer ist
+     *                    or null if the file is missing or still empty
      */
     private function readProgressBlock(string $file): ?array
     {
@@ -77,7 +77,7 @@ class TriggerFFmpeg extends TriggerMedia {
         $values = [];
         $lines = preg_split('/\r?\n/', $tail) ?: [];
         if (count($lines) > 1 && (int)@filesize($file) > self::TAIL_BYTES) {
-            // erste Zeile könnte wegen des Sprungs ans Dateiende unvollständig sein
+            // the first line could be incomplete because of the jump to the end of the file
             array_shift($lines);
         }
         foreach ($lines as $line) {
@@ -86,7 +86,7 @@ class TriggerFFmpeg extends TriggerMedia {
             $key   = trim($key);
             $value = trim($value);
             if ($key === '') continue;
-            // Der letzte Wert je Schlüssel gewinnt, das ist der jüngste Block
+            // The last value per key wins; that is the most recent block
             $values[$key] = $value;
         }
 
@@ -94,10 +94,10 @@ class TriggerFFmpeg extends TriggerMedia {
     }
 
     /**
-     * Bereits verarbeitete Laufzeit in Sekunden aus einem Fortschrittsblock lesen.
+     * Read the already processed run time in seconds from a progress block.
      *
-     * out_time_us gibt es erst ab ffmpeg 5, out_time_ms ist trotz des Namens
-     * ebenfalls in Mikrosekunden angegeben, out_time ist die Klartextfassung.
+     * out_time_us only exists from ffmpeg 5; out_time_ms is, despite its name,
+     * also given in microseconds; out_time is the plain text version.
      */
     private function elapsedSeconds(array $state): float
     {

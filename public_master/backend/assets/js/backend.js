@@ -1,10 +1,10 @@
 /*
- * camindo Backend – Zentraler Einstiegspunkt
+ * camindo backend – Central entry point
  *
- * window.cConfig muss vor diesem Script definiert sein!
- * Ladereihenfolge der Scripte:
- *   backend.js           (dieser File – Namespace + jQuery-Extensions)
- *   backend-handlers.js  (cApp.handlers – Event-Handler unter der Script-Policy)
+ * window.cConfig must be defined before this script!
+ * Loading order of the scripts:
+ *   backend.js           (this file – namespace + jQuery extensions)
+ *   backend-handlers.js  (cApp.handlers – event handlers under the script policy)
  *   backend-system.js    (cApp.system)
  *   backend-forms.js     (cApp.forms)
  *   backend-ui.js        (cApp.ui)
@@ -14,36 +14,36 @@
  *   backend-polling.js   (cApp.polling)
  *   backend-smartrows.js (cApp.smartrows)
  *   backend-embedded.js  (cApp.embedded)
- *   backend-init.js      ($(document).ready → alle .init())
+ *   backend-init.js      ($(document).ready → all .init())
  */
 
 // ---------------------------------------------------------------------------
-// Globaler Namespace
+// Global namespace
 // ---------------------------------------------------------------------------
 window.cApp = window.cApp || {};
 
-// Sicherheits-Fallback falls cConfig fehlt
+// Safety fallback in case cConfig is missing
 // window.cConfig ...
 
 // ---------------------------------------------------------------------------
-// jQuery-Extension: cLoadContent
+// jQuery extension: cLoadContent
 // ---------------------------------------------------------------------------
 (function ($) {
     'use strict';
 
     /**
-     * Lädt Inhalt dynamisch per Ajax in das jQuery-Element.
+     * Loads content dynamically via Ajax into the jQuery element.
      *
-     * @param {string|object} options  URL-String oder Options-Objekt:
-     * url      {string}     Pfad relativ zum modules Directory
-     * params   {string|FormData}  POST-Daten
-     * method   {string}     'GET' (default) oder 'POST'
-     * callback {function}   Wird nach erfolgreichem Laden aufgerufen
-     * nocache  {boolean}    true (default): verhindert Browser-Caching
-     * spinner  {boolean}    true (default): weißes Overlay+Spinner anzeigen bis Inhalt geladen ist
-     * timeout  {int}        0 (default), >0 : Timeout in ms
-     * background {boolean}  false (default); true: Abfrage im Hintergrund (Polling) -
-     *                       verlängert die Session nicht (Header X-Camindo-Background)
+     * @param {string|object} options  URL string or options object:
+     * url      {string}     Path relative to the modules directory
+     * params   {string|FormData}  POST data
+     * method   {string}     'GET' (default) or 'POST'
+     * callback {function}   Called after successful loading
+     * nocache  {boolean}    true (default): prevents browser caching
+     * spinner  {boolean}    true (default): show white overlay+spinner until the content is loaded
+     * timeout  {int}        0 (default), >0 : timeout in ms
+     * background {boolean}  false (default); true: request in the background (polling) -
+     *                       does not extend the session (header X-Camindo-Background)
      */
     $.fn.cLoadContent = function (options) {
         options = options || {};
@@ -59,7 +59,7 @@ window.cApp = window.cApp || {};
             background: false
         }, (typeof options === 'string') ? { url: options } : options);
 
-        // Aufsteigende Pfade blockieren
+        // Block ascending paths
         const urlPath = settings.url.split('?')[0];
         if (urlPath.includes('..')) {
             alert('Ascending paths not permitted!');
@@ -89,10 +89,10 @@ window.cApp = window.cApp || {};
 
         const $this = $(this);
 
-        // Verwaiste Tooltips entfernen: alle im Element, das gleich ersetzt wird,
-        // und außerhalb davon nur die, über denen die Maus NICHT gerade steht -
-        // das Polling der Hintergrundprozesse (#c9-bgproc-container) darf einen
-        // offenen Tooltip anderswo nicht schließen.
+        // Remove orphaned tooltips: all in the element that is about to be replaced,
+        // and outside of it only those the mouse is NOT currently over -
+        // the polling of the background processes (#c9-bgproc-container) must not
+        // close an open tooltip elsewhere.
         $('[data-bs-toggle="tooltip"]').each(function () {
             const tooltip = bootstrap.Tooltip.getInstance(this);
             if (!tooltip) return;
@@ -100,7 +100,7 @@ window.cApp = window.cApp || {};
             tooltip.dispose();
         });
 
-        // Laufenden Request für dieses Element abbrechen, falls er noch nicht abgeschlossen ist
+        // Abort a running request for this element if it has not finished yet
         const existingXhr = $this.data('xhr');
         if (existingXhr && existingXhr.readyState !== 4) {
             existingXhr.abort();
@@ -114,10 +114,10 @@ window.cApp = window.cApp || {};
             contentType: contentType,
             processData: processData,
             timeout:     settings.timeout,
-            // CSRF-Token der Session (17-csrf.md). Der Server verlangt es bei allem
-            // außer GET; hier geht es immer mit, damit eine Aktion nicht beim
-            // Umstellen auf POST vergessen wird. Jetzt gelesen, nicht beim Laden der
-            // Seite: nach einer Anmeldung steht ein neues Token in cConfig.
+            // CSRF token of the session (developer docs, chapter 14 (Security: web)). The server requires it for everything
+            // except GET; here it is always sent, so that an action is not forgotten
+            // when switching to POST. Read now, not when the page
+            // loads: after a login there is a new token in cConfig.
             headers:     settings.background
                 ? Object.assign({ 'X-Camindo-Background': '1' }, cApp.system.csrfHeaders())
                 : cApp.system.csrfHeaders(),
@@ -127,32 +127,32 @@ window.cApp = window.cApp || {};
                 if (response.trim() === '##accessdenied##') {
                     cApp.layers.login();
                 } else {
-                    // Feld-Extensions im ersetzten Inhalt sauber beenden
+                    // Cleanly shut down field extensions in the replaced content
                     if (cApp.extensions && cApp.extensions.destroyAll) {
                         cApp.extensions.destroyAll($this);
                     }
                     $this.html(response);
-                    // Event-Handler des neuen Inhalts sofort binden (backend-handlers.js;
-                    // der MutationObserver käme erst nach diesem Aufruf)
+                    // Bind the event handlers of the new content immediately (backend-handlers.js;
+                    // the MutationObserver would only come after this call)
                     if (cApp.handlers) cApp.handlers.scan($this[0]);
                     
-                    // Warte bis Inhalt sicher gerendert ist
+                    // Wait until the content is surely rendered
                     requestAnimationFrame(() => {
-                        // Feld-Extensions (class c9-ext) initialisieren - lädt ihre
-                        // Assets beim ersten Mal nach
+                        // Initialize field extensions (class c9-ext) - loads their
+                        // assets the first time
                         if (cApp.extensions && cApp.extensions.refreshAll) {
                             cApp.extensions.refreshAll($this);
                         }
 
-                        // Smartrows-Container im frisch geladenen Inhalt auffrischen.
-                        // Die Hoch-/Runter-Buttons sind per CSS ausgeblendet und
-                        // werden erst von refresh() eingeblendet - ohne diesen Aufruf
-                        // bliebe jede nachgeladene Zeile unsortierbar.
+                        // Refresh smartrows containers in the freshly loaded content.
+                        // The up/down buttons are hidden via CSS and
+                        // are only shown by refresh() - without this call
+                        // every row loaded later would remain unsortable.
                         if (cApp.smartrows && cApp.smartrows.refreshAll) {
                             cApp.smartrows.refreshAll($this);
                         }
 
-                        // Fokus auf erstes sichtbares Formularelement setzen
+                        // Set focus on the first visible form element
                         const $firstInput = $this.find('form:visible').first()
                             .find('input, select, textarea')
                             .filter(':visible:not(:disabled)')
@@ -173,7 +173,7 @@ window.cApp = window.cApp || {};
 
                 if (textStatus === 'timeout') {
                     console.warn('cLoadContent: Timeout erreicht für ' + settings.url);
-                    settings.callback(); // Damit das Polling im Fehlerfall nicht stirbt
+                    settings.callback(); // So that polling does not die on error
                     $this.html('timeout');
                     return;
                 }
@@ -188,7 +188,7 @@ window.cApp = window.cApp || {};
                 }
             },
             complete: function () {
-                // Nach Abschluss sauber aufräumen, falls es sich noch um diesen Request handelt
+                // Clean up after completion, if it is still this request
                 if ($this.data('xhr') === xhr) {
                     $this.removeData('xhr');
                 }
@@ -200,11 +200,11 @@ window.cApp = window.cApp || {};
     };
 
     // ---------------------------------------------------------------------------
-    // jQuery-Extension: serializeFiles
+    // jQuery extension: serializeFiles
     // ---------------------------------------------------------------------------
     /**
-     * Serialisiert ein Suchformular als FormData, ignoriert dabei aber komplett leere 
-     * Felder (value === '') und ungenutzte Datei-Uploads, um kurze URLs zu gewährleisten.
+     * Serializes a search form as FormData, but ignores completely empty
+     * fields (value === '') and unused file uploads, to keep URLs short.
      * @returns {FormData}
      */
     $.fn.serializeFiles = function () {
@@ -220,20 +220,20 @@ window.cApp = window.cApp || {};
         const filteredData = new FormData();
 
         for (const [key, value] of rawData.entries()) {
-            // Textfelder: Nur übernehmen, wenn der String nicht komplett leer ist.
-            // Gewollte Leerzeichen bleiben somit unangetastet.
+            // Text fields: only take over if the string is not completely empty.
+            // Intentional spaces thus remain untouched.
             if (typeof value === 'string') {
                 if (value !== '') {
                     filteredData.append(key, value);
                     totalSize += value.length;
                 }
             } 
-            // Datei-Uploads: Nur übernehmen, wenn eine tatsächliche Datei ausgewählt wurde.
+            // File uploads: only take over if an actual file was selected.
             else if (value instanceof File && value.size > 0) {
                 filteredData.append(key, value);
                 totalSize += value.size;
             }
-            // Für alles was künftig noch dazu kommen könnte
+            // For anything that might be added in the future
             else if (value !== null && value !== undefined) {
                 filteredData.append(key, value);
             }

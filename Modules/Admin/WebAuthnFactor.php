@@ -1,38 +1,38 @@
 <?php
 /**
- * Zweiter Faktor per Passkey bzw. Sicherheitsschlüssel (WebAuthn) -
- * developer_docs/22-webauthn.md.
+ * Second factor via passkey or security key (WebAuthn) -
+ * developer docs, chapter 13 (Security: authentication).
  *
- * WANN ER GILT (applies(), Admin::secondFactor() fragt ihn zuerst)
+ * WHEN IT APPLIES (applies(), Admin::secondFactor() asks it first)
  * --------------------
- *     admin.second_factor = 'webauthn'   der Admin hat nur Passkeys (kein TOTP). Die
- *                                        Kennung steht in der Zeilensignatur - wer die
- *                                        Passkey-Zeilen löscht, stuft das Konto damit
- *                                        nicht auf E-Mail oder gar nichts herunter:
- *                                        es bleiben die Wiederherstellungscodes.
- *     Passkeys vorhanden und WebAuthn    auch neben TOTP (second_factor = 'totp') -
- *     verfügbar                          dann nimmt das Formular Passkey, App-Code
- *                                        und Wiederherstellungscode
+ *     admin.second_factor = 'webauthn'   the admin has only passkeys (no TOTP). The
+ *                                        identifier is part of the row signature - whoever
+ *                                        deletes the passkey rows does not thereby downgrade the account
+ *                                        to email or to nothing at all:
+ *                                        the recovery codes remain.
+ *     Passkeys present and WebAuthn    also alongside TOTP (second_factor = 'totp') -
+ *     available                          then the form takes passkey, app code
+ *                                        and recovery code
  *
  * ANMELDUNG
  * --------------------
- * start() tut nichts. Die Challenge ist ein HMAC über die uid der laufenden
- * Anmeldung (challengeFor()) - die uid ist zufällig und genau einen Versuch wert
- * (Admin::_claimUid()), damit auch die Challenge; eine Spalte dafür braucht es
- * nicht. loginOptions() liefert die Optionen für navigator.credentials.get(), das
- * Anmeldeformular schickt die Antwort als JSON im Feld 'passkey', Admin::loginByCode()
- * reicht sie mit der uid an verify(). Ein Code statt JSON geht an TotpFactor::verify()
- * (App-Code, wenn TOTP aktiv ist; Wiederherstellungscode immer).
+ * start() does nothing. The challenge is an HMAC over the uid of the running
+ * login (challengeFor()) - the uid is random and good for exactly one attempt
+ * (Admin::_claimUid()), so the challenge is too; no column is needed for it.
+ * loginOptions() returns the options for navigator.credentials.get(); the
+ * login form sends the response as JSON in the field 'passkey', Admin::loginByCode()
+ * passes it with the uid to verify(). A code instead of JSON goes to TotpFactor::verify()
+ * (app code, if TOTP is active; recovery code always).
  *
  * EINRICHTEN
  * --------------------
- * registrationStart() nach dem bisherigen Passwort (AdminBackend): Challenge und
- * Bezeichnung reisen verschlüsselt als Token im Formular (an die admin_id gebunden,
- * SETUP_SECONDS gültig) - gespeichert ist bis registrationFinish() nichts. Der erste
- * Passkey setzt second_factor = 'webauthn' (außer bei TOTP) und erzeugt
- * Wiederherstellungscodes, wenn es noch keine gibt.
+ * registrationStart() after the previous password (AdminBackend): challenge and
+ * label travel encrypted as a token in the form (bound to the admin_id,
+ * valid for SETUP_SECONDS) - nothing is stored until registrationFinish(). The first
+ * passkey sets second_factor = 'webauthn' (except with TOTP) and creates
+ * recovery codes if there are none yet.
  *
- * @see Camindo\Core\WebAuthn        Prüfung
+ * @see Camindo\Core\WebAuthn        Verification
  * @see Camindo\Core\Modules\Admin\Passkeys
  */
 namespace Camindo\Core\Modules\Admin;
@@ -47,10 +47,10 @@ use Camindo\Core\WebAuthn;
 
 class WebAuthnFactor implements SecondFactorInterface {
 
-    /** Gültigkeit eines Einrichtungs-Tokens (Passwort bis Geste am Gerät) in Sekunden */
+    /** Validity of a setup token (password until gesture on the device) in seconds */
     public const SETUP_SECONDS = 600;
 
-    /** Höchstlänge der Antwort aus dem Browser (JSON) */
+    /** Maximum length of the response from the browser (JSON) */
     private const MAX_RESPONSE_BYTES = 16384;
 
     public function __construct(
@@ -72,19 +72,19 @@ class WebAuthnFactor implements SecondFactorInterface {
         return 'webauthn';
     }
 
-    /** WebAuthn nutzbar (feste Backend-Domain, nicht abgeschaltet)? */
+    /** WebAuthn usable (fixed backend domain, not switched off)? */
     public function available(): bool
     {
         return $this->webAuthn->available();
     }
 
-    /** Hat der Admin nutzbare Passkeys? */
+    /** Does the admin have usable passkeys? */
     public function hasPasskeys(int $adminId): bool
     {
         return $this->available() && $this->passkeys->count($adminId) > 0;
     }
 
-    /** Gilt dieser Faktor für den Admin? (siehe Klassenkommentar) */
+    /** Does this factor apply to the admin? (see class comment) */
     public function applies(array $admin): bool
     {
         $adminId = (int)($admin['admin_id'] ?? 0);
@@ -97,17 +97,17 @@ class WebAuthnFactor implements SecondFactorInterface {
     // ====================
     // Anmeldung (SecondFactorInterface)
 
-    /** Nichts zu tun - die Challenge hängt an der uid */
+    /** Nothing to do - the challenge depends on the uid */
     public function start(array $admin): bool
     {
         return true;
     }
 
     /**
-     * Optionen für navigator.credentials.get() - null, wenn WebAuthn nicht verfügbar
-     * ist oder der Admin (noch) keine Passkeys hat (dann nur Code-Eingabe).
+     * Options for navigator.credentials.get() - null if WebAuthn is not available
+     * or the admin (still) has no passkeys (then only code entry).
      *
-     * @param array $admin  mit admin_id und uid
+     * @param array $admin  with admin_id and uid
      */
     public function loginOptions(array $admin): ?array
     {
@@ -120,16 +120,16 @@ class WebAuthnFactor implements SecondFactorInterface {
         return $allow ? $this->webAuthn->requestOptions($this->challengeFor($uid), $allow) : null;
     }
 
-    /** Hat der Admin TOTP als Ausweich-Code? (Hinweistext im Formular) */
+    /** Does the admin have TOTP as a fallback code? (hint text in the form) */
     public function totpActive(int $adminId): bool
     {
         return $this->totpFactor->isActive($adminId);
     }
 
     /**
-     * Passkey-Antwort (JSON) oder Code (App, Wiederherstellung).
+     * Passkey response (JSON) or code (app, recovery).
      *
-     * @param array $admin  Admin::load() mit 'uid' der laufenden Anmeldung
+     * @param array $admin  Admin::load() with 'uid' of the running login
      */
     public function verify(array $admin, string $code): bool
     {
@@ -141,8 +141,8 @@ class WebAuthnFactor implements SecondFactorInterface {
     }
 
     /**
-     * Antwort von navigator.credentials.get() prüfen und den Signaturzähler
-     * fortschreiben. Gründe einer Ablehnung stehen im Log 'security'.
+     * Check the response from navigator.credentials.get() and advance the signature counter.
+     * Reasons for a rejection are logged in 'security'.
      *
      * @param string $json  {id, clientDataJSON, authenticatorData, signature} base64url
      */
@@ -179,8 +179,8 @@ class WebAuthnFactor implements SecondFactorInterface {
     // Einrichten, entfernen
 
     /**
-     * Optionen für navigator.credentials.create() und das Token fürs Formular.
-     * Aufrufer hat das bisherige Passwort geprüft.
+     * Options for navigator.credentials.create() and the token for the form.
+     * The caller has checked the previous password.
      *
      * @param array $admin  Admin::load()
      * @return array        options, token
@@ -202,13 +202,13 @@ class WebAuthnFactor implements SecondFactorInterface {
     }
 
     /**
-     * Antwort von navigator.credentials.create() prüfen und speichern.
+     * Check the response from navigator.credentials.create() and save it.
      *
      * @param string $clientData   base64url
      * @param string $attestation  base64url
-     * @param string $transports   JSON-Liste aus dem Browser
-     * @return array  passkey_id, codes (neue Wiederherstellungscodes oder []) - oder
-     *                error: expired | unavailable | limit | failed (Grund im Log
+     * @param string $transports   JSON list from the browser
+     * @return array  passkey_id, codes (new recovery codes or []) - or
+     *                error: expired | unavailable | limit | failed (reason in the log
      *                'security') | exists
      */
     public function registrationFinish(array $admin, string $token, string $clientData, string $attestation, string $transports): array
@@ -257,9 +257,9 @@ class WebAuthnFactor implements SecondFactorInterface {
     }
 
     /**
-     * Einen Passkey entfernen (der Admin selbst, nach dem Passwort). War es der
-     * letzte und gilt kein TOTP, endet der eigene zweite Faktor: second_factor = '',
-     * die Wiederherstellungscodes verfallen.
+     * Remove a passkey (the admin themselves, after the password). If it was the
+     * last one and no TOTP applies, the own second factor ends: second_factor = '',
+     * the recovery codes expire.
      */
     public function remove(array $admin, int $passkeyId): bool
     {
@@ -288,8 +288,8 @@ class WebAuthnFactor implements SecondFactorInterface {
     }
 
     /**
-     * Zweiten Faktor zurücksetzen (Superuser): TOTP samt Passkeys über TotpFactor,
-     * sonst alle Passkeys und die Wiederherstellungscodes.
+     * Reset the second factor (superuser): TOTP including passkeys via TotpFactor,
+     * otherwise all passkeys and the recovery codes.
      */
     public function reset(array $admin): void
     {
@@ -313,7 +313,7 @@ class WebAuthnFactor implements SecondFactorInterface {
         $this->notify('passkey_removed', $admin, ['reset' => true]);
     }
 
-    /** Keine Passkeys mehr und kein TOTP: eigener Faktor aus, Codes verfallen */
+    /** No passkeys left and no TOTP: own factor off, codes expire */
     private function afterLastRemoved(array $admin, string $after = 'email'): void
     {
         $adminId = (int)$admin['admin_id'];
@@ -329,13 +329,13 @@ class WebAuthnFactor implements SecondFactorInterface {
     // ====================
     // Intern
 
-    /** Challenge der laufenden Anmeldung (roh, 32 Bytes) */
+    /** Challenge of the running login (raw, 32 bytes) */
     public function challengeFor(string $uid): string
     {
         return $this->crypt->hash('webauthn-login|' . $uid, true);
     }
 
-    /** Nicht sprechende, stabile Kennung des Kontos für den Authenticator */
+    /** Non-descriptive, stable identifier of the account for the authenticator */
     private function userHandle(int $adminId): string
     {
         return $this->crypt->hash('webauthn-user|' . $adminId, true);

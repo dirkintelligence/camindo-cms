@@ -1,47 +1,47 @@
 <?php
 /**
- * Backend-Oberfläche für die Benutzergruppen (Tabelle `group`) - Reiter "Gruppen"
- * im Modul Admin.
+ * Backend interface for the user groups (table `group`) - tab "Groups"
+ * in module Admin.
  *
  * Einstiegspunkte (Scripte in backend/):
  *
- *     group_list.php    -> list()    Gruppenliste (Reiter neben der Admin-Liste)
- *     group_info.php    -> info()    Detailansicht mit allen Rechten
- *     group_edit.php    -> edit()    anlegen / kopieren / ändern / löschen
- *     group_access.php  -> access()  Reiter "Bereichsrechte" (alle Bereiche der Gruppe)
+ *     group_list.php    -> list()    group list (tab next to the admin list)
+ *     group_info.php    -> info()    detail view with all rights
+ *     group_edit.php    -> edit()    create / copy / change / delete
+ *     group_access.php  -> access()  tab "Area rights" (all areas of the group)
  *
- * NUR FÜR SUPERUSER
+ * SUPERUSER ONLY
  * --------------------
- * Wer Rechte vergibt, muss alles sehen dürfen: die drei Seiten sind für andere
+ * Whoever grants rights must be allowed to see everything: the three pages are for others
  * Gruppen gesperrt (Backend::isSuperuser(), Meldung admin.error_groups_denied).
- * Die Superuser-Gruppe selbst (1) hat eine Info-Seite, aber weder Formular noch
- * Löschen - Group::hookOnSave()/hookOnDelete() weisen das auch serverseitig ab.
+ * The superuser group itself (1) has an info page, but neither form nor
+ * delete - Group::hookOnSave()/hookOnDelete() reject that server-side too.
  *
- * DAS FORMULAR
+ * THE FORM
  * --------------------
  *     label         Bezeichnung (Snippet-Verweis erlaubt: "#group_label_editor")
- *     interfaces    je Oberfläche eine Checkbox: Backend, Kommandozeile, PHP-API
- *                   (Access::INTERFACES) - über welche sich Admins der Gruppe
- *                   anmelden dürfen
- *     modules       je gelistetem Modul eine Checkbox, darunter eingerückt die
- *                   Zusatzrechte aus dessen settings.php (Group::availableModules());
- *                   Javascript koppelt die Zusatzrechte an die Modul-Checkbox
+ *     interfaces    one checkbox per interface: backend, command line, PHP API
+ *                   (Access::INTERFACES) - through which admins of the group may
+ *                   log in
+ *     modules       one checkbox per listed module, below it indented the
+ *                   additional rights from its settings.php (Group::availableModules());
+ *                   JavaScript links the additional rights to the module checkbox
  *                   (Vorlagen group_module_row / group_module_right)
- *     instance_ids  je Instanz eine Checkbox - eine neu zugewiesene Instanz gibt
- *                   alle ihre Bereiche und Sprachen frei (Group::hookOnSaved())
+ *     instance_ids  one checkbox per instance - a newly assigned instance releases
+ *                   all its areas and languages (Group::hookOnSaved())
  *     languages     je Sprache zwei Checkboxes "lesen" / "schreiben" (plus Hiddenfeld 0,
- *                   damit auch abgewählte Sprachen ankommen); "schreiben" setzt
- *                   "lesen" mit (cApp.ui.groupLanguageRight()), ein Klick auf den
- *                   Spaltenkopf hakt die ganze Spalte an bzw. ab
- *     statuses      je Status eine Checkbox: darf ihn setzen (lesen dürfen alle)
+ *                   so that deselected languages also arrive); "write" sets
+ *                   "read" along (cApp.ui.groupLanguageRight()); a click on the
+ *                   column header ticks or unticks the whole column
+ *     statuses      one checkbox per status: may set it (everyone may read)
  *
- * Die Bereichsrechte (rel_group_area) haben einen eigenen Reiter "Bereichsrechte"
- * neben "Info" (access(): je Instanz eine Tabelle, Bearbeiten im selben Reiter) -
- * alle Bereiche, eine Gruppe. Der Reiter "Zugriff" eines Bereichs (Modul Area) ist
- * die andere Sicht: alle Gruppen, ein Bereich.
+ * The area rights (rel_group_area) have their own tab "Area rights"
+ * next to "Info" (access(): one table per instance, editing in the same tab) -
+ * all areas, one group. The "Access" tab of an area (module Area) is
+ * the other view: all groups, one area.
  *
  * @see Camindo\Core\Modules\Admin\Group
- * @see Camindo\Core\Modules\Admin\AdminBackend   Muster der Seiten
+ * @see Camindo\Core\Modules\Admin\AdminBackend   Model for the pages
  * @see Camindo\Core\Backend
  */
 namespace Camindo\Core\Modules\Admin;
@@ -74,8 +74,8 @@ class GroupBackend {
     }
 
     /**
-     * Reiterleiste des Moduls Admin: Administratoren | Gruppen. Den Reiter
-     * "Gruppen" sieht nur ein Superuser (auch AdminBackend::list() ruft das).
+     * Tab bar of module Admin: Admins | Groups. The tab
+     * "Groups" is seen only by a superuser (AdminBackend::list() also calls this).
      *
      * @param string $active  'admins' | 'groups'
      */
@@ -89,7 +89,7 @@ class GroupBackend {
     }
 
     /**
-     * Zugriff nur für Superuser - sonst Meldung und false.
+     * Access only for superusers - otherwise a message and false.
      */
     private function _allowed(): bool
     {
@@ -139,8 +139,8 @@ class GroupBackend {
             $instanceLabels = $this->instanceCache->instanceLabels();
             $tplRow = $this->backend->template('admin.group_table_row');
             $tableRows = '';
-            // fetch() läuft nicht durch hookOnLoaded() - die Instanzen je Gruppe
-            // kommen aus den Gruppendateien des Caches
+            // fetch() does not run through hookOnLoaded() - the instances per group
+            // come from the group files of the cache
             while ($data = $this->group->fetch()) {
                 $groupId = (int)$data['group_id'];
                 $isSuperuser = ($groupId === InstanceCache::SUPERUSER_GROUP_ID);
@@ -176,8 +176,8 @@ class GroupBackend {
     }
 
     /**
-     * Detailansicht (backend/group_info.php): Bezeichnung, Admins, Module mit
-     * Zusatzrechten, Instanzen, Sprachen und - je Instanz - die Bereichsrechte.
+     * Detail view (backend/group_info.php): name, admins, modules with
+     * additional rights, instances, languages and - per instance - the area rights.
      */
     public function info(): void
     {
@@ -246,7 +246,7 @@ class GroupBackend {
             return;
         }
 
-        // Oberflächen
+        // Interfaces
         $items = array_map(
             fn($interface) => $this->cms->snippet('admin.label_interface_' . $interface),
             Access::normalizeInterfaces(isset($data['details']['interfaces']) ? (array)$data['details']['interfaces'] : null)
@@ -297,7 +297,7 @@ class GroupBackend {
         foreach ($this->_languages() as $languageId => $language) {
             $level = (int)($data['languages'][$languageId] ?? Group::LANGUAGE_NONE);
             if ($level < Group::LANGUAGE_READ) continue;
-            // (kein teaser(): language_id 0 ist eine gültige Sprache, teaser() gibt für 0 nichts aus)
+            // (not teaser(): language_id 0 is a valid language, teaser() outputs nothing for 0)
             $items[] = $this->cms->textOrSnippet((string)$language['label']) . ' (' . $language['code'] . ')'
                 . ' <span class="c9-grey-50">' . $this->cms->snippet('admin.label_language_' . ($level >= Group::LANGUAGE_WRITE ? 'write' : 'read')) . '</span>';
         }
@@ -324,8 +324,8 @@ class GroupBackend {
     }
 
     /**
-     * Reiterleiste der Detailansicht: Info | Bereichsrechte (letztere nicht für
-     * die Superuser-Gruppe - sie hat keine Zeilen).
+     * Tab bar of the detail view: Info | Area rights (the latter not for
+     * the superuser group - it has no rows).
      *
      * @param string $active  'info' | 'areas'
      */
@@ -336,20 +336,20 @@ class GroupBackend {
         if (!$isSuperuser) {
             $this->backend->tabAdd('#admin.headline_group_areas', "cApp.layers.replace('Admin/group_access.php?id={$id}')", $active === 'areas');
         }
-        // "Änderungen" (Audit-Log der Gruppe) - aktiv nur mit tab=audit auf group_info.php
+        // "Changes" (audit log of the group) - active only with tab=audit on group_info.php
         $this->backend->auditTabAdd("Admin/group_info.php?id={$id}");
         return $this->backend->tabBar();
     }
 
     /**
      * Reiter "Bereichsrechte" (backend/group_access.php): je zugewiesener Instanz
-     * eine Tabelle der Bereiche mit den Rechten der Gruppe - alle Bereiche, eine
-     * Gruppe. Das Gegenstück je Bereich (alle Gruppen, ein Bereich) ist der Reiter
-     * "Zugriff" im Modul Area.
+     * a table of the areas with the rights of the group - all areas, one
+     * group. The counterpart per area (all groups, one area) is the tab
+     * "Access" in module Area.
      *
-     *     ''      Anzeige mit Häkchen, Buttons "Bearbeiten" und "Schließen"
+     *     ''      display with ticks, buttons "Edit" and "Close"
      *     edit    Checkboxen, darunter "Speichern"/"Abbrechen"
-     *     save    Group::saveAreaRights(), danach die Anzeige
+     *     save    Group::saveAreaRights(), then the display
      */
     public function access(): void
     {
@@ -410,9 +410,9 @@ class GroupBackend {
     }
 
     /**
-     * Je Instanz eine Tabelle der Bereiche (ohne Ordner) mit den Rechten der Gruppe -
-     * als Häkchen (Info) oder als Checkboxen data[areas][{area_id}][{recht}] (access()).
-     * Template-Bereiche kennen nur Lesen und Schreiben.
+     * Per instance a table of the areas (without folders) with the rights of the group -
+     * as ticks (Info) or as checkboxes data[areas][{area_id}][{right}] (access()).
+     * Template areas only know read and write.
      */
     private function _areaTables(int $groupId, array $instanceIds, bool $edit): void
     {
@@ -473,8 +473,8 @@ class GroupBackend {
     }
 
     /**
-     * Erstellen / kopieren / ändern / löschen (backend/group_edit.php) -
-     * Zustandsautomat wie AdminBackend::edit().
+     * Create / copy / change / delete (backend/group_edit.php) -
+     * state machine like AdminBackend::edit().
      */
     public function edit(): void
     {
@@ -491,7 +491,7 @@ class GroupBackend {
             return;
         }
 
-        // Die Superuser-Gruppe hat kein Formular
+        // The superuser group has no form
         if ($this->id === InstanceCache::SUPERUSER_GROUP_ID && $this->function !== 'copy') {
             echo $this->backend->template('alert_danger', ['{text}' => $this->cms->snippet('admin.error_group_superuser')]);
             echo $this->backend->template('container_footer');
@@ -537,19 +537,18 @@ class GroupBackend {
     }
 
     /**
-     * function=save: die Feldliste steht fest - nur diese Felder werden geschrieben.
-     * data[modules] (Formular) wird von Group::hookOnSave() nach details.modules
-     * übernommen.
+     * function=save: the field list is fixed - only these fields are written.
+     * data[modules] (form) is taken over by Group::hookOnSave() into details.modules.
      */
     private function _editSave(): void
     {
         $fields = ['label', 'details', 'instance_ids', 'languages', 'statuses'];
         $this->data['modules'] = (array)($this->data['modules'] ?? []);
-        // keine Checkbox angehakt = keine Oberfläche (nicht: die bisherigen behalten)
+        // no checkbox ticked = no interface (not: keep the previous ones)
         $this->data['interfaces'] = (array)($this->data['interfaces'] ?? []);
         $this->data['instance_ids'] = (array)($this->data['instance_ids'] ?? []);
         $this->data['languages'] = (array)($this->data['languages'] ?? []);
-        // keine Checkbox angehakt = kein Status setzbar
+        // no checkbox ticked = no status settable
         $this->data['statuses'] = (array)($this->data['statuses'] ?? []);
         if (!isset($this->data['details'])) $this->data['details'] = [];
 
@@ -584,9 +583,9 @@ class GroupBackend {
     }
 
     /**
-     * Das Formular - siehe Klassenkommentar. Nach einem Fehler ('errors') stehen
-     * die Eingaben noch als data[modules] usw. im Request und werden so wieder
-     * angezeigt; sonst kommen die Werte aus dem geladenen Datensatz.
+     * The form - see class comment. After an error ('errors') the
+     * inputs are still in the request as data[modules] etc. and are thus shown
+     * again; otherwise the values come from the loaded record.
      */
     private function _editForm(): void
     {
@@ -601,9 +600,9 @@ class GroupBackend {
             'id' => $this->id
         ]);
 
-        // Oberflächen
+        // Interfaces
         // --------------------
-        // aus dem Formular (data[interfaces]) oder aus details.interfaces
+        // from the form (data[interfaces]) or from details.interfaces
         if ($this->function === 'errors') {
             $interfaces = array_map('strval', (array)($this->data['interfaces'] ?? []));
         }
@@ -623,9 +622,9 @@ class GroupBackend {
         }
         $this->backend->formReplace('{data_interfaces}', $this->_formGroup('admin.field_group_interfaces', $rows, 'admin.tooltip_group_interfaces'));
 
-        // Module mit Zusatzrechten
+        // Modules with additional rights
         // --------------------
-        // Gewährte Rechte: aus dem Formular (data[modules]) oder aus details.modules
+        // Granted rights: from the form (data[modules]) or from details.modules
         if (isset($this->data['modules'])) {
             $granted = [];
             foreach ((array)$this->data['modules'] as $name => $entry) {
@@ -721,7 +720,7 @@ class GroupBackend {
     }
 
     /**
-     * Beschrifteter Block im Formular (Vorlagen group_label_tt + edit_form_block).
+     * Labeled block in the form (templates group_label_tt + edit_form_block).
      */
     private function _formGroup(string $labelSnippet, string $content, string $tooltipSnippet = ''): string
     {
@@ -740,15 +739,15 @@ class GroupBackend {
     }
 
     /**
-     * Löschen bestätigen. Hat die Gruppe noch (aktive) Benutzer, wählt man eine
-     * Ersatzgruppe, der sie zugewiesen werden (Group::deleteReplacing()); die
-     * Superuser-Gruppe steht nicht zur Wahl. Gelöschte Benutzer verlieren die
-     * Zuordnung ohne Rückfrage.
+     * Confirm deletion. If the group still has (active) users, one selects a
+     * replacement group to which they are assigned (Group::deleteReplacing()); the
+     * superuser group is not available for selection. Deleted users lose the
+     * assignment without a further prompt.
      */
     private function _editDeleteForm(): void
     {
         $replacement = '';
-        // Nur mit aktiven Benutzern - gelöschte verlieren die Zuordnung (Group::hookOnDelete())
+        // Only with active users - deleted ones lose the assignment (Group::hookOnDelete())
         if ($this->group->adminCount($this->id) > 0) {
             $options = ['' => $this->cms->snippet('admin.option_group_replacement')];
             foreach ($this->backend->getGroups() as $groupId => $label) {
@@ -772,8 +771,8 @@ class GroupBackend {
     }
 
     /**
-     * Alle Status in ihrer Reihenfolge: status_id => Icon und Beschriftung (HTML).
-     * (kein teaser(): status_id 0 ist ein gültiger Status)
+     * All statuses in their order: status_id => icon and label (HTML).
+     * (not teaser(): status_id 0 is a valid status)
      */
     private function _statuses(): array
     {
@@ -791,7 +790,7 @@ class GroupBackend {
     }
 
     /**
-     * Alle Sprachen in Backend-Reihenfolge: language_id => ['code', 'label'].
+     * All languages in backend order: language_id => ['code', 'label'].
      */
     private function _languages(): array
     {

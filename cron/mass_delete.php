@@ -1,31 +1,31 @@
 <?php
 /**
- * mass_delete.php - Massen-Löschung / -Wiederherstellung im Hintergrund
+ * mass_delete.php - mass deletion / restoration in the background
  *
- * Wird NICHT per Cronjob aufgerufen, sondern von Camindo\Core\MassDeletion gestartet,
- * wenn ein Vorgang im Backend mehr Datensätze umfasst als admin.mass_delete_threshold.
+ * NOT called by a cron job, but started by Camindo\Core\MassDeletion
+ * when an operation in the backend covers more records than admin.mass_delete_threshold.
  *
- * Das Skript ruft exakt dieselbe Dataset-Methode auf, die auch der Web-Request
- * verwenden würde:
+ * The script calls exactly the same Dataset method that the web request
+ * would use:
  *
  *     mode=delete   ->  $dataset->delete($id, $withChilds)     Soft-Delete
  *     mode=restore  ->  $dataset->restore($id, $withChilds)    Wiederherstellen
- *     mode=purge    ->  $dataset->purge($id, $withChilds)      endgültig löschen
+ *     mode=purge    ->  $dataset->purge($id, $withChilds)      delete permanently
  *
- * Es gibt also keinen zweiten Löschpfad - der Hintergrundprozess verlagert die Arbeit
- * nur aus dem Request heraus. Jeder betroffene Datensatz läuft einzeln durch seine
- * Hooks, genau wie im Vordergrund.
+ * So there is no second deletion path - the background process only moves the work
+ * out of the request. Every affected record runs individually through its
+ * hooks, exactly as in the foreground.
  *
- * Argumente (alle Pflicht außer --token):
- *     --table=area|record     Tabelle des angeklickten Datensatzes
- *     --id=123                dessen Id
+ * Arguments (all required except --token):
+ *     --table=area|record     table of the clicked record
+ *     --id=123                its ID
  *     --mode=delete|restore|purge
- *     --withchilds=0|1        Kind-Datensätze einbeziehen
- *     --admin=10              Id des auslösenden Administrators (landet in changed_by)
- *     --token=...             Token des bgproc-Eintrags, falls vorhanden
+ *     --withchilds=0|1        include child records
+ *     --admin=10              ID of the triggering administrator (ends up in changed_by)
+ *     --token=...             token of the bgproc entry, if present
  *
- * Rückmeldung an das Backend läuft über die Tabelle `bgproc` (Fortschrittsanzeige im
- * Header). Fehler landen zusätzlich in var/log/{Y-m-d}_massdelete-errors.log.
+ * Feedback to the backend runs via the table `bgproc` (progress display in the
+ * header). Errors also end up in var/log/{Y-m-d}_massdelete-errors.log.
  */
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Session;
@@ -34,7 +34,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Modules\Area\Area;
 use Camindo\Core\Modules\Record\Record;
 
-// Nur auf der Kommandozeile erreichbar, nicht per Webserver
+// Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("cli only\n");
@@ -48,11 +48,11 @@ ignore_user_abort(true);
 define ('CAMINDO_STARTED', true);
 define ('CAMINDO_CLI', true);
 
-// Bootstrap laden
+// Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 // --------------------
-// Argumente einlesen (--name=wert)
+// Read arguments (--name=value)
 
 $args = [];
 foreach (array_slice($argv, 1) as $argument) {
@@ -74,17 +74,17 @@ if (!in_array($table, ['area', 'record'], true)
     exit("usage: mass_delete.php --table=area|record --id=N --mode=delete|restore|purge --withchilds=0|1 --admin=N\n");
 }
 
-// Container bereitstellen
+// Provide the container
 $app = $GLOBALS['app'];
 
 $system = $app->get(System::class);
 $cms    = $app->get(Cms::class);
 $bgproc = $app->get(BackgroundProcess::class);
 
-// Auslösenden Administrator hinterlegen, damit changed_by stimmt
-$app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // Rechte des auslösenden Admins
+// Store the triggering administrator so that changed_by is correct
+$app->get(Session::class)->setCliAdmin($adminId, withAccess: true);   // rights of the triggering admin
 
-// Passendes Dataset holen
+// Get the matching dataset
 $dataset = ($table === 'area')
     ? $app->get(Area::class)
     : $app->get(Record::class);
@@ -106,7 +106,7 @@ try {
     $system->log('massdelete-errors', "{$mode} {$table} {$id}: " . $e->getMessage());
     echo "exception: " . $e->getMessage() . "\n";
 } finally {
-    // Eigenen bgproc-Eintrag abschließen, damit die Anzeige im Backend aufräumt
+    // Close own bgproc entry so that the display in the backend cleans up
     if ($token !== '') {
         $bgproc->setStatusByToken(
             $token,

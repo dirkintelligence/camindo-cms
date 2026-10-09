@@ -1,48 +1,48 @@
 <?php
 /**
- * Dateien in der Eingabemaske entfernen und auswählen (Erweiterung für RecordBackend).
+ * Remove and select files in the input mask (extension for RecordBackend).
  *
- * Einstiegspunkte (Scripte in backend/):
+ * Entry points (scripts in backend/):
  *
- *     ajax_file_remove.php  -> fileRemove()        x-Knopf neben der Vorschau
- *     ajax_file_select.php  -> fileServerSelect()  Datei aus dem Serververzeichnis wählen
+ *     ajax_file_remove.php  -> fileRemove()        x button next to the preview
+ *     ajax_file_select.php  -> fileServerSelect()  choose a file from the server directory
  *
- * WARUM DAS AUFWENDIGER IST, ALS ES AUSSIEHT
+ * WHY THIS IS MORE INVOLVED THAN IT LOOKS
  * --------------------
- * Gearbeitet wird nie am produktiven Datensatz, sondern an einer Arbeitskopie (tmp=1,
- * siehe TemporaryTrait). Eine Datei zu entfernen heißt deshalb dreierlei:
+ * Work is never done on the productive record, but on a working copy (tmp=1,
+ * see TemporaryTrait). Removing a file therefore means three things:
  *
- *  1. die physische Datei der Arbeitskopie löschen
- *  2. deren `data_fil`-Eintrag löschen - bliebe er stehen, würde promoteTmpFiles()
- *     ihn beim Speichern auf den produktiven Datensatz umschreiben, und der
- *     Vorschau-Link zeigte auf eine nicht mehr vorhandene Datei
- *  3. im Arbeitsstand (record_cache) der Arbeitskopie eine Löschmarkierung setzen.
- *     Nur daran erkennt promoteTmpFiles() beim Speichern, dass auch die am
- *     PRODUKTIVEN Datensatz hängende Datei wegfallen soll. Ein bloßes Fehlen des
- *     Eintrags ließe sich nicht von "nichts geändert" unterscheiden.
+ *  1. delete the physical file of the working copy
+ *  2. delete its `data_fil` entry - if it stayed, promoteTmpFiles() would
+ *     rewrite it to the productive record on save, and the preview link
+ *     would point to a file that no longer exists
+ *  3. set a deletion marker in the working state (record_cache) of the working copy.
+ *     Only this lets promoteTmpFiles() recognize on save that the file attached to the
+ *     PRODUCTIVE record must also be dropped. A mere absence of the entry
+ *     could not be told apart from "nothing changed".
  *
- * Der Eintrag behält dabei das Format ['file', [...]] - promoteTmpFiles() prüft den
- * Typ an Position 0 und würde eine anders geformte Markierung übersehen.
+ * The entry keeps the format ['file', [...]] - promoteTmpFiles() checks the
+ * type at position 0 and would overlook a marker of a different shape.
  *
- * THUMBNAILS HÄNGEN DARAN
+ * THUMBNAILS DEPEND ON IT
  * --------------------
- * Von einem Upload-Feld abgeleitete Thumbnail-Felder (type 'file', display_type
- * 'thumbnail', parent_field_id zeigt auf das Upload-Feld) verlieren mit ihrer Quelle
- * die Grundlage. _removeFiles() räumt sie deshalb rekursiv mit ab. Die Liste
- * $handled verhindert dabei eine Endlosschleife, falls sich zwei Felder gegenseitig
- * als parent_field_id eintragen.
+ * Thumbnail fields derived from an upload field (type 'file', display_type
+ * 'thumbnail', parent_field_id points to the upload field) lose their basis
+ * together with their source. _removeFiles() therefore removes them recursively as well.
+ * The list $handled prevents an endless loop in case two fields reference each other
+ * as parent_field_id.
  *
- * BERECHTIGUNGSPRÜFUNG
+ * PERMISSION CHECK
  * --------------------
- * _markFileDeleted() prüft dreifach, bevor es etwas löscht: der Datensatz muss eine
- * Arbeitskopie sein, das Feld muss ein Upload-Feld sein, und es muss zum Bereich
- * dieser Arbeitskopie gehören. Ohne die dritte Prüfung ließe sich über eine
- * untergeschobene field_id eine fremde Datei löschen.
+ * _markFileDeleted() checks three things before it deletes anything: the record must be a
+ * working copy, the field must be an upload field, and it must belong to the area
+ * of this working copy. Without the third check, a foreign file could be deleted
+ * via a smuggled field_id.
  *
- * @see Camindo\Core\TemporaryTrait                    Arbeitskopien, promoteTmpFiles()
- * @see Camindo\Core\VirtualFieldsTrait                Dateiablage und Thumbnails
- * @see Camindo\Core\Modules\Record\RecordBackendEdit  die Eingabemaske
- * @see Camindo\Core\Modules\Record\RecordBackendServerFile  der Dateibrowser
+ * @see Camindo\Core\TemporaryTrait                    working copies, promoteTmpFiles()
+ * @see Camindo\Core\VirtualFieldsTrait                file storage and thumbnails
+ * @see Camindo\Core\Modules\Record\RecordBackendEdit  the input mask
+ * @see Camindo\Core\Modules\Record\RecordBackendServerFile  the file browser
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -51,16 +51,16 @@ use Camindo\Core\DirectoryHelpers;
 class RecordBackendUpload extends RecordBackend {
 
     /**
-     * Entfernt eine hochgeladene Datei aus einer temporären Arbeitskopie
-     * (x-Button neben dem Preview-Link in der Eingabemaske).
+     * Removes an uploaded file from a temporary working copy
+     * (x button next to the preview link in the input mask).
      *
-     * Die Arbeit macht VirtualFieldsTrait::markFileDeleted() - dieselbe Routine
-     * nutzt CMS:USER_INPUT für den Parameter 'removefiles' (RecordUser).
+     * The work is done by VirtualFieldsTrait::markFileDeleted() - the same routine
+     * is used by CMS:USER_INPUT for the parameter 'removefiles' (RecordUser).
      *
-     * @param int $tmpId            Id der temporären Arbeitskopie
-     * @param int $fieldId          Id des Upload-Feldes
-     * @param int|null $languageId  Sprache der Datei bei mehrsprachigen Upload-Feldern
-     * @return bool                 true im Erfolgsfall
+     * @param int $tmpId            Id of the temporary working copy
+     * @param int $fieldId          Id of the upload field
+     * @param int|null $languageId  Language of the file for multilingual upload fields
+     * @return bool                 true on success
      */
     private function _markFileDeleted(int $tmpId, int $fieldId, ?int $languageId = null): bool
     {
@@ -68,25 +68,25 @@ class RecordBackendUpload extends RecordBackend {
     }
 
     /**
-     * Ajax: Datei aus einem Upload-Feld entfernen (x-Knopf neben der Vorschau).
+     * Ajax: remove a file from an upload field (x button next to the preview).
      *
-     * Die Arbeit macht _markFileDeleted(), einschließlich der Prüfungen. Endgültig
-     * wirksam wird das Entfernen erst beim Speichern des Datensatzes - bis dahin
-     * lässt es sich durch Abbrechen der Bearbeitung zurücknehmen.
+     * The work is done by _markFileDeleted(), including the checks. The removal only
+     * takes effect when the record is saved - until then it can be reverted by
+     * cancelling the edit.
      *
-     * Request: id (Arbeitskopie), field_id
+     * Request: id (working copy), field_id
      */
     public function fileRemove():void
     {
-        // Backend-Aktion "Datei entfernen" (x-Button) - schreibt, also nur POST
-        // (17-csrf.md §2.7)
+        // Backend action "remove file" (x button) - writes, so POST only
+        // (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
         }
-        $tmpId    = (int)$_REQUEST['id'];           // Id der Arbeitskopie
-        $fieldId  = (int)$_REQUEST['field_id'];     // field_id des Upload-Feldes
-        $lang     = $this->_langParam();             // Sprache (mehrsprachiges Feld)
+        $tmpId    = (int)$_REQUEST['id'];           // Id of the working copy
+        $fieldId  = (int)$_REQUEST['field_id'];     // field_id of the upload field
+        $lang     = $this->_langParam();             // language (multilingual field)
 
         if (!$this->_markFileDeleted($tmpId, $fieldId, $lang)) {
             $this->errors();
@@ -94,47 +94,47 @@ class RecordBackendUpload extends RecordBackend {
     }
 
     /**
-     * Ajax: eine Datei aus dem Serververzeichnis für ein Upload-Feld übernehmen.
+     * Ajax: take over a file from the server directory for an upload field.
      *
-     * Der Gegenpart zum Dateibrowser (RecordBackendServerFile). Anders als bei einem
-     * Upload wird die Datei hier NICHT kopiert - übernommen wird nur ihr Pfad, den ein
-     * verstecktes Feld im Formular trägt; verarbeitet wird sie erst beim Speichern.
+     * The counterpart to the file browser (RecordBackendServerFile). Unlike an
+     * upload, the file is NOT copied here - only its path is taken over, carried by a
+     * hidden field in the form; it is processed only on save.
      *
-     * Eine bereits im Feld liegende Datei wird vorher als gelöscht markiert, sonst
-     * blieben zwei Dateien für ein Feld übrig.
+     * A file already in the field is first marked as deleted, otherwise
+     * two files would remain for one field.
      *
-     * Der Pfad geht maskiert in die Vorlage; angezeigt wird nur der bereinigte
-     * Dateiname ohne Verzeichnisanteil.
+     * The path goes into the template escaped; only the sanitized
+     * file name without the directory part is displayed.
      *
-     * Daneben der Schalter "nach erfolgreichem Übernehmen löschen"
-     * (data[{name}][serverfile_delete]): die Datei in var/upload wird erst gelöscht,
-     * wenn der Datensatz gespeichert ist (VirtualFieldsTrait::promoteTmpFiles()) -
-     * bricht man die Bearbeitung ab, bleibt sie liegen.
+     * In addition, the switch "delete after successful takeover"
+     * (data[{name}][serverfile_delete]): the file in var/upload is only deleted
+     * once the record is saved (VirtualFieldsTrait::promoteTmpFiles()) -
+     * if the edit is cancelled, it remains.
      *
-     * Das versteckte Feld heißt data[{name}]... - bei einem eingebetteten Inhalt
-     * (Arbeitskopie an einem 'link'-Feld einer anderen Arbeitskopie, LinkTrait::
-     * isEmbedded()) embed[{id}][{name}]..., wo RecordBackendEdit::_embedSave() die
-     * Eingaben des Inhalts erwartet.
+     * The hidden field is named data[{name}]... - for embedded content
+     * (working copy on a 'link' field of another working copy, LinkTrait::
+     * isEmbedded()) embed[{id}][{name}]..., where RecordBackendEdit::_embedSave() expects
+     * the input of the content.
      *
-     * Request: id (Arbeitskopie), field_id, filename (relativ zu paths.upload_dir)
+     * Request: id (working copy), field_id, filename (relative to paths.upload_dir)
      */
     public function fileServerSelect():void
     {
-        // Markiert die bisherige Datei als gelöscht - nur POST (17-csrf.md §2.7)
+        // Marks the previous file as deleted - POST only (developer docs, chapter 14 (Security: web))
         if (!$this->backend->requirePost()) {
             echo $this->backend->access()->deniedHtml();
             return;
         }
-        $tmpId    = (int)$_REQUEST['id'];           // Id der Arbeitskopie
-        $fieldId  = (int)$_REQUEST['field_id'];     // field_id des Upload-Feldes
-        $lang     = $this->_langParam();             // Sprache (mehrsprachiges Feld)
-        $filename = (string)$_REQUEST['filename'];  // Dateiname inkl. relativem Pfad ab paths.upoad_dir
+        $tmpId    = (int)$_REQUEST['id'];           // Id of the working copy
+        $fieldId  = (int)$_REQUEST['field_id'];     // field_id of the upload field
+        $lang     = $this->_langParam();             // language (multilingual field)
+        $filename = (string)$_REQUEST['filename'];  // file name incl. relative path from paths.upoad_dir
 
-        // Evtl. gespeicherte Datei als gelöscht markieren
+        // Mark any stored file as deleted
         $this->_markFileDeleted($tmpId, $fieldId, $lang);
 
-        // Hiddenfeld mit Pfad erzeugen: data[{name}][serverfile] bzw. bei
-        // mehrsprachigen Feldern data[{name}][{language_id}][serverfile]
+        // Create hidden field with path: data[{name}][serverfile], or for
+        // multilingual fields data[{name}][{language_id}][serverfile]
         $fieldData = $this->record->fieldData($fieldId);
         $name = $fieldData['name'];
         $langKey = ($lang !== null && $this->cms->isMultilingualField($fieldData)) ? '[' . $lang . ']' : '';
@@ -151,8 +151,8 @@ class RecordBackendUpload extends RecordBackend {
     }
 
     /**
-     * Request-Parameter lang: Sprache der Datei bei mehrsprachigen Upload-Feldern,
-     * null wenn leer (einsprachiges Feld).
+     * Request parameter lang: language of the file for multilingual upload fields,
+     * null if empty (single-language field).
      */
     private function _langParam(): ?int
     {

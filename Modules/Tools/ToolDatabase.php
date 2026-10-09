@@ -1,48 +1,48 @@
 <?php
 /**
- * Datenbankpflege: Papierkorb leeren, Arbeitskopien verwerfen.
+ * Database maintenance: empty the trash, discard working copies.
  *
- * purgeTrash() entfernt Datensätze endgültig, die seit mindestens einer Anzahl Tagen
- * (Vorgabe admin.trash_retention_days, Standard 7) als gelöscht markiert sind. Das
- * ist die EINZIGE Stelle im System, die Inhalte unwiderruflich löscht - der
- * Administrator löscht immer nur soft.
+ * purgeTrash() permanently removes records that have been marked as deleted for at least a number of days
+ * (default admin.trash_retention_days, default 7). This is the
+ * ONLY place in the system that irrevocably deletes content - the
+ * administrator always deletes only softly.
  *
- * purgeTmp() entfernt Arbeitskopien (record.tmp = 1), die seit einer Anzahl Stunden
- * nicht mehr angefasst wurden - liegen gebliebene Bearbeitungen (Browser zu,
- * Sitzung abgelaufen). Mit ihnen fällt der Edit-Lock des Originals (getLock()
- * leitet ihn aus der Arbeitskopie ab).
+ * purgeTmp() removes working copies (record.tmp = 1) that have not been touched for a number of hours
+ * - left-over edits (browser closed, session expired).
+ * With them the edit lock of the original is released (getLock()
+ * derives it from the working copy).
  *
- * ZWEI EINSTIEGE, EIN CODE
+ * TWO ENTRY POINTS, ONE CODE
  * --------------------
- *     SchedulerRunner, Typ trash              Zeitplaner-Aufgabe (der Normalfall)
- *     Modules/Tools/backend/tool_delete.php   Reiter Datenbank: "älter als N Tage"
- *     Modules/Tools/backend/tool_tmp_delete.php  Reiter Datenbank: "älter als N Std."
- * Alle rufen dieselben Methoden; die Backend-Werkzeuge geben die Frist vor
- * (0 = alles), der Cronjob nimmt die Einstellung.
+ *     SchedulerRunner, type trash              scheduler task (the normal case)
+ *     Modules/Tools/backend/tool_delete.php   tab Database: "older than N days"
+ *     Modules/Tools/backend/tool_tmp_delete.php  tab Database: "older than N hours"
+ * All call the same methods; the backend tools specify the period
+ * (0 = everything), the cron job takes the setting.
  *
- * ADMINS BLEIBEN
+ * ADMINS REMAIN
  * --------------------
- * Verarbeitet werden nur `record` und `area`. Als gelöscht markierte Administratoren
- * (admin.deleted = 1) werden NIE endgültig entfernt - weder hier noch im Cronjob:
- * ihre Id steht in created_by/changed_by/owner_id der Inhalte und bleibt so
- * auflösbar.
+ * Only `record` and `area` are processed. Administrators marked as deleted
+ * (admin.deleted = 1) are NEVER finally removed - neither here nor in the cron job:
+ * their ID stands in created_by/changed_by/owner_id of the content and thus remains
+ * resolvable.
  *
- * ARBEITSWEISE
+ * HOW IT WORKS
  * --------------------
- * Verarbeitet wird paketweise (CHUNK_SIZE Datensätze je Runde), damit weder Speicher
- * noch Laufzeit aus dem Ruder laufen. Jeder Datensatz läuft EINZELN durch
- * Record::finalDelete() bzw. Area::finalDelete() - nur so laufen die Hooks, die die
- * Mediendateien aus var/deleted entfernen.
+ * Processing happens in batches (CHUNK_SIZE records per round), so that neither memory
+ * nor run time run out of control. Each record runs INDIVIDUALLY through
+ * Record::finalDelete() resp. Area::finalDelete() - only this way do the hooks run that
+ * remove the media files from var/deleted.
  *
- * REIHENFOLGE
+ * ORDER
  * --------------------
- * Erst die Datensätze (`record`), dann die Inhaltsbereiche (`area`). Ein Bereich, der
- * zur Löschung ansteht, räumt seine restlichen Datensätze in seinem eigenen
- * hookOnDelete() ohnehin mit ab; die getrennte Runde davor hält die Pakete klein und
- * erwischt auch Datensätze, deren Bereich noch existiert.
+ * First the records (`record`), then the content areas (`area`). An area that
+ * is due for deletion removes its remaining records in its own
+ * hookOnDelete() anyway; the separate round before it keeps the batches small and
+ * also catches records whose area still exists.
  *
- * Der Nested-Set-Baum wird je finalDelete()-Aufruf einmal neu berechnet. Das ist der
- * Preis für die Einzelverarbeitung und der Grund, warum das Werkzeug nachts läuft.
+ * The nested-set tree is recalculated once per finalDelete() call. That is the
+ * price of the individual processing and the reason why the tool runs at night.
  */
 namespace Camindo\Core\Modules\Tools;
 
@@ -56,10 +56,10 @@ use Camindo\Core\Modules\Area\Area;
 
 class ToolDatabase {
 
-    /** Datensätze je Runde - klein genug für Zeitlimit und Speicher */
+    /** Records per round - small enough for time limit and memory */
     private const CHUNK_SIZE = 60;
 
-    /** Sekunden, die eine Runde höchstens brauchen darf (Dateilöschungen können dauern) */
+    /** Seconds a round may take at most (file deletions can take a while) */
     private const CHUNK_TIME_LIMIT = 180;
 
     public function __construct(
@@ -74,25 +74,25 @@ class ToolDatabase {
     }
 
     /**
-     * Papierkorb leeren.
+     * Empty the trash.
      *
-     * @param int|null $days  Mindestalter der Markierung in Tagen; null: Einstellung
-     *                        admin.trash_retention_days; 0: alles, was als gelöscht
-     *                        markiert ist
+     * @param int|null $days  minimum age of the marking in days; null: setting
+     *                        admin.trash_retention_days; 0: everything that
+     *                        is marked as deleted
      * @return array          ['record' => int, 'area' => int, 'errors' => string[]]
-     *                        Anzahl endgültig gelöschter Datensätze je Tabelle
+     *                        number of permanently deleted records per table
      */
     public function purgeTrash(?int $days = null): array
     {
         if ($days === null) $days = $this->trashRetentionDays();
         if ($days < 0) $days = 0;
 
-        // Stichtag in UTC - changed_at wird ebenfalls in UTC gespeichert
+        // Cut-off date in UTC - changed_at is also stored in UTC
         $expirationDate = gmdate('Y-m-d H:i:s', time() - 86400 * $days);
 
         $result = ['record' => 0, 'area' => 0, 'errors' => []];
 
-        // Erst die Inhalte, dann ihre Bereiche
+        // First the content, then its areas
         $result['record'] = $this->purgeTable($this->record, $expirationDate, $result['errors']);
         $result['area']   = $this->purgeTable($this->area,   $expirationDate, $result['errors']);
 
@@ -100,13 +100,13 @@ class ToolDatabase {
     }
 
     /**
-     * Papierkorb EINES Frontend-Users sofort leeren (Reiter "Papierkorb eines Users",
-     * Zusatzrecht trash_user): sein Profil und alle Datensätze mit record.user_id =
-     * Profil, soweit sie im Papierkorb liegen - endgültig, samt Dateien. Offene
-     * Aufträge der Lösch-Policies (Audit-Log nach Frist) bleiben bestehen.
+     * Empty the trash of ONE frontend user immediately (tab "Trash of a user",
+     * additional right trash_user): their profile and all records with record.user_id =
+     * profile, as far as they lie in the trash - permanently, including files. Open
+     * orders of the deletion policies (audit log after the period) remain in place.
      *
-     * @param int $profileId  record_id des Profils (Bereich vom Typ 'profile')
-     * @return array|null     ['record' => int, 'errors' => string[]], null = kein Profil
+     * @param int $profileId  record_id of the profile (area of type 'profile')
+     * @return array|null     ['record' => int, 'errors' => string[]], null = no profile
      */
     public function purgeUserTrash(int $profileId): ?array
     {
@@ -115,7 +115,7 @@ class ToolDatabase {
             $this->db->query("SELECT 1 FROM `record` r JOIN `area` a ON a.`area_id` = r.`area_id`"
                 . " WHERE r.`record_id` = ? AND r.`tmp` = 0 AND a.`type` = 'profile'", 'i', [$profileId]);
             if (!$this->db->fetchNum()) return null;
-            // Blätter zuerst (rgt aufsteigend), wie purgeTable()
+            // Leaves first (rgt ascending), as in purgeTable()
             $this->db->query("SELECT `record_id` FROM `record` WHERE `deleted` = 1 AND `tmp` = 0"
                 . " AND (`record_id` = ? OR `user_id` = ?) ORDER BY `record_id` = ?, `rgt` ASC", 'iii', [$profileId, $profileId, $profileId]);
             $ids = array_map('intval', $this->db->fetchColumn());
@@ -138,8 +138,8 @@ class ToolDatabase {
     }
 
     /**
-     * Aufbewahrungsfrist des Papierkorbs (admin.trash_retention_days, Standard 7) -
-     * Vorgabe des Cronjobs und des Formulars im Reiter Datenbank.
+     * Retention period of the trash (admin.trash_retention_days, default 7) -
+     * default of the cron job and of the form in the Database tab.
      */
     public function trashRetentionDays(): int
     {
@@ -147,16 +147,16 @@ class ToolDatabase {
     }
 
     /**
-     * Arbeitskopien verwerfen, die seit mindestens $hours Stunden nicht mehr
-     * angefasst wurden (record.tmp = 1, changed_at älter als der Stichtag).
+     * Discard working copies that have not been touched for at least $hours hours
+     * (record.tmp = 1, changed_at older than the cut-off date).
      *
-     * Wie TemporaryTrait::cancel(), nur ohne Bindung an den Session-Admin: die
-     * hochgeladenen Dateien der Arbeitskopie (deleteRecordFiles()) und die Zeile
-     * selbst; record_cache und data_rel fallen per FK-Cascade. Arbeitskopien fest
-     * verknüpfter Inhalte (link) sind selbst tmp-Zeilen und kommen mit demselben
-     * Stichtag an die Reihe.
+     * Like TemporaryTrait::cancel(), only without binding to the session admin: the
+     * uploaded files of the working copy (deleteRecordFiles()) and the row
+     * itself; record_cache and data_rel fall away via FK cascade. Working copies of
+     * firmly linked contents (link) are themselves tmp rows and come up with the same
+     * cut-off date.
      *
-     * @param int $hours  Mindestalter in Stunden; 0: alle Arbeitskopien
+     * @param int $hours  minimum age in hours; 0: all working copies
      * @return array      ['record' => int, 'errors' => string[]]
      */
     public function purgeTmp(int $hours): array
@@ -210,18 +210,18 @@ class ToolDatabase {
     }
 
     /**
-     * Eine Tabelle abarbeiten.
+     * Process one table.
      *
-     * Holt paketweise die Ids abgelaufener Papierkorb-Einträge und schickt jede einzeln
-     * durch finalDelete(). Scheitert ein Datensatz, wird das protokolliert und mit dem
-     * nächsten weitergemacht - ein defekter Datensatz soll den nächtlichen Lauf nicht
-     * anhalten. Genau deshalb bekommt jeder Datensatz seine eigene Transaktion
-     * (finalDelete() öffnet sie selbst).
+     * Fetches the IDs of expired trash entries in batches and sends each one individually
+     * through finalDelete(). If a record fails, this is logged and processing continues with the
+     * next one - a defective record should not stop the nightly run. That is exactly why each
+     * record gets its own transaction (finalDelete() opens it itself).
      *
-     * @param Dataset $dataset         Record oder Area
-     * @param string  $expirationDate  Stichtag 'Y-m-d H:i:s' in UTC
-     * @param array   $errors          Sammelstelle für Fehlermeldungen (per Referenz)
-     * @return int                     Anzahl endgültig gelöschter Datensätze
+     *
+     * @param Dataset $dataset         Record or Area
+     * @param string  $expirationDate  cut-off date 'Y-m-d H:i:s' in UTC
+     * @param array   $errors          collection point for error messages (by reference)
+     * @return int                     number of permanently deleted records
      */
     private function purgeTable(Dataset $dataset, string $expirationDate, array &$errors): int
     {
@@ -231,23 +231,23 @@ class ToolDatabase {
         $hasTmp    = isset($dataset->getSchema()['tmp']);
         $deleted   = 0;
 
-        // Ids, die sich nicht löschen ließen: sie stünden sonst in jeder Runde wieder
-        // im Paket und würden eine Endlosschleife erzeugen.
+        // IDs that could not be deleted: otherwise they would be in the batch again in every round
+        // and create an endless loop.
         $failedIds = [];
 
         do {
             set_time_limit(self::CHUNK_TIME_LIMIT);
 
-            // Abgelaufene Papierkorb-Einträge holen.
-            // Bei Bäumen Blätter zuerst (rgt aufsteigend): finalDelete() eines Elternteils
-            // würde seine Kinder sonst per ON DELETE CASCADE an deren Hooks vorbei
-            // mitnehmen. Arbeitskopien stehen nie eigenständig an - sie hängen an ihrem
-            // Original und werden von finalDelete() mitgelöscht.
+            // Fetch expired trash entries.
+            // For trees, leaves first (rgt ascending): finalDelete() of a parent would
+            // otherwise take its children along via ON DELETE CASCADE past their hooks.
+            // Working copies never come up on their own - they hang on their original and
+            // are deleted with it by finalDelete().
             $sql = "SELECT `{$idField}` FROM `{$tableName}`"
                  . " WHERE `deleted` = 1 AND `changed_at` <= ?";
             if ($hasTmp) $sql .= " AND `tmp` = 0";
             if ($failedIds) {
-                // Ids sind hier immer Integer aus der Datenbank - keine Bindung nötig
+                // IDs here are always integers from the database - no binding needed
                 $sql .= " AND `{$idField}` NOT IN (" . implode(',', $failedIds) . ")";
             }
             if ($hasTree) $sql .= " ORDER BY `rgt` ASC";
@@ -255,7 +255,7 @@ class ToolDatabase {
 
             $this->db->pushResult();
             $this->db->query($sql, 's', [$expirationDate]);
-            $ids = $this->db->fetchAll(); // flaches Array
+            $ids = $this->db->fetchAll(); // flat array
             $this->db->popResult();
 
             $found = count($ids);
@@ -263,15 +263,15 @@ class ToolDatabase {
 
             foreach ($ids as $id) {
                 $id = (int)$id;
-                // Jeder Datensatz einzeln - so laufen seine Hooks
-                // (Record::hookOnDelete räumt die Mediendateien ab)
+                // Each record individually - so that its hooks run
+                // (Record::hookOnDelete() removes the media files)
                 $this->cms->errorsReset();
                 if ($dataset->finalDelete($id)) {
                     $deleted++;
                     continue;
                 }
-                // Gescheiterten Datensatz protokollieren und überspringen - ein
-                // defekter Eintrag soll den nächtlichen Lauf nicht anhalten
+                // Log the failed record and skip it - a defective entry
+                // should not stop the nightly run
                 $message = "{$tableName} {$id}: " . $this->cms->errorMsg(' | ');
                 $errors[]    = $message;
                 $failedIds[] = $id;

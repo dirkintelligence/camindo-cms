@@ -1,15 +1,15 @@
 <?php
 /**
- * Trigger für Hintergrundprozesse des Typs 'magick'.
+ * Trigger for background processes of type 'magick'.
  *
- * Fortschrittsformat: ImageMagick meldet mit "-monitor" nach stderr, deshalb wird die
- * Fortschrittsdatei beim Start als stderrFile mitgegeben. Die Chunks sehen so aus:
+ * Progress format: ImageMagick reports with "-monitor" to stderr, therefore the
+ * progress file is passed along at start as stderrFile. The chunks look like this:
  *
  *     Resize image [out.jpg]: 1500 of 3000, 50% complete
  *
- * Ein Abschluss-Marker fehlt, "100% complete" gilt als fertig.
+ * A completion marker is missing; "100% complete" counts as finished.
  *
- * @see Camindo\Core\cron\TriggerMedia  gemeinsamer Ablauf aller Medien-Trigger
+ * @see Camindo\Core\cron\TriggerMedia  common flow of all media triggers
  */
 namespace Camindo\Core\cron;
 
@@ -21,14 +21,14 @@ class TriggerMagick extends TriggerMedia {
     protected const PROGRESS_PREFIX    = 'magick-';
     protected const PROGRESS_EXTENSION = '.progress';
 
-    /** Eine Fortschrittszeile ist kurz, es genügt das äußerste Ende */
+    /** A progress line is short, the outermost end is sufficient */
     protected const TAIL_BYTES = 200;
 
     /**
-     * Fortschritt aus der magick-Fortschrittsdatei lesen.
+     * Read progress from the magick progress file.
      *
-     * magick hängt seine Meldungen fortlaufend an; gesucht wird deshalb die LETZTE
-     * Prozentangabe im gelesenen Puffer.
+     * magick appends its messages continuously; therefore the LAST percentage
+     * in the buffer read is searched for.
      */
     protected function readProgress(string $file, array $parts, int $previous): ?array
     {

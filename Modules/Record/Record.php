@@ -1,82 +1,82 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `record` - die Inhaltsdatensätze.
+ * Dataset subclass for the table `record` - the content records.
  *
- * Die zentrale Klasse des CMS und zugleich die kürzeste der Modul-Datasets. Das ist
- * kein Zufall: fast alles, was einen Datensatz ausmacht, steckt in den drei Traits
- * und in der Basisklasse. Hier bleibt nur, was `record` von allen anderen Tabellen
- * unterscheidet - und das sind die Mediendateien.
+ * The central class of the CMS and at the same time the shortest of the module datasets. This is
+ * no accident: almost everything that makes up a record lives in the three traits
+ * and in the base class. Here only what distinguishes `record` from all other tables
+ * remains - and that is the media files.
  *
- * DAS SCHEMA KOMMT VON AUSSEN
+ * THE SCHEMA COMES FROM OUTSIDE
  * --------------------
- * $this->schema = $this->cms->schema. Die Meta-Felder eines Datensatzes sind in
- * Cms::$schema definiert, nicht hier:
+ * $this->schema = $this->cms->schema. The meta fields of a record are defined in
+ * Cms::$schema, not here:
  *
- *     record_id area_id                 Zugehörigkeit
- *     online_at offline_at status_id    Sichtbarkeit im Frontend
+ *     record_id area_id                 belonging
+ *     online_at offline_at status_id    visibility in the frontend
  *     parent_id parent_ids position
- *     depth lft rgt                     Baumstruktur (zwei Verfahren parallel)
- *     template_id                       Darstellung
+ *     depth lft rgt                     tree structure (two procedures in parallel)
+ *     template_id                       display
  *     created_by changed_by
- *     created_at changed_at             Herkunft und Änderungsstand
- *     needs_review                      Gegenlese-Aufgabe (siehe UserBackend)
- *     tmp origin_id deleted             Arbeitskopie und Papierkorb
+ *     created_at changed_at             origin and state of change
+ *     needs_review                      review task (see UserBackend)
+ *     tmp origin_id deleted             working copy and trash
  *
- * Der Grund für die Auslagerung: Cms::select() muss die Meta-Felder kennen, um sie von
- * den benutzerdefinierten Feldern unterscheiden zu können - und Cms kommt ohne diese
- * Klasse aus, umgekehrt nicht.
+ * The reason for the separation: Cms::select() must know the meta fields in order to tell them apart
+ * from the user-defined fields - and Cms can do without this
+ * class, but not the other way round.
  *
- * ALLES ÜBRIGE IST BENUTZERDEFINIERT
+ * EVERYTHING ELSE IS USER-DEFINED
  * --------------------
- * Was ein Datensatz sonst noch enthält, legt der Redakteur je Inhaltsbereich selbst
- * fest (Tabelle `field`). Diese Inhalte stehen typgetrennt in den `data_*`-Tabellen und
- * werden von VirtualFieldsTrait gelesen und geschrieben - für den Aufrufer sehen sie
- * aus wie normale Felder.
+ * What a record otherwise contains is defined by the editor per content area
+ * (table `field`). This content is stored type-separated in the `data_*` tables and
+ * is read and written by VirtualFieldsTrait - for the caller they look
+ * like normal fields.
  *
- * VIER TRAITS
+ * FOUR TRAITS
  * --------------------
- *     TreeManagerTrait     Baumstruktur. Nested Set (lft/rgt) und Adjacency List
- *                          (parent_id/position/depth/parent_ids) werden parallel
- *                          geführt: das eine für Teilbaum-Abfragen in einem Rutsch,
- *                          das andere für günstiges Umsortieren.
- *     VirtualFieldsTrait   die benutzerdefinierten Felder aus den data_*-Tabellen,
- *                          einschließlich Dateiablage und Thumbnail-Erzeugung.
- *     TemporaryTrait       Arbeitskopien. Wer einen Datensatz bearbeitet, arbeitet
- *                          nicht am Original, sondern an einer Kopie mit tmp=1 und
- *                          origin_id; erst das Speichern (checkIn) überträgt sie.
- *                          Dadurch überstehen Eingaben eine fehlgeschlagene Prüfung,
- *                          und das Frontend sieht nie einen halbfertigen Stand.
- *     MoveTrait            Bereichswechsel. Ein Datensatz wird mit einer Abbildung
- *                          seiner Felder auf die des Zielbereichs über eine
- *                          Arbeitskopie neu gespeichert (moveToArea()).
- *     LinkTrait            Fest verknüpfte Inhalte (Felder vom Typ 'link'): die
- *                          Zieldatensätze gehören dem Quelldatensatz und werden mit
- *                          ihm ausgecheckt, eingecheckt, verworfen, gelöscht,
- *                          wiederhergestellt und kopiert.
+ *     TreeManagerTrait     tree structure. Nested set (lft/rgt) and adjacency list
+ *                          (parent_id/position/depth/parent_ids) are maintained in parallel:
+ *                          the one for subtree queries in one go,
+ *                          the other for cheap re-sorting.
+ *     VirtualFieldsTrait   the user-defined fields from the data_* tables,
+ *                          including file storage and thumbnail generation.
+ *     TemporaryTrait       working copies. Whoever edits a record does not work
+ *                          on the original but on a copy with tmp=1 and
+ *                          origin_id; only saving (checkIn) transfers it.
+ *                          This way inputs survive a failed check,
+ *                          and the frontend never sees a half-finished state.
+ *     MoveTrait            area change. A record is saved again via a working
+ *                          copy with a mapping of its fields onto those of the target area
+ *                          (moveToArea()).
+ *     LinkTrait            firmly linked contents (fields of type 'link'): the
+ *                          target records belong to the source record and are checked out,
+ *                          checked in, discarded, deleted,
+ *                          restored and copied together with it.
  *
- * DIE HOOKS HIER KÜMMERN SICH UM DIE DATEIEN
+ * THE HOOKS HERE TAKE CARE OF THE FILES
  * --------------------
- * Mediendateien liegen im Dateisystem (Core/public_master/media/{field_id}/{record_id}.{ext})
- * und nicht in der Datenbank - ein DELETE räumt sie also nicht mit ab. Deshalb sind
- * drei der Hooks belegt, und zwar spiegelbildlich zum dreistufigen Löschen:
+ * Media files lie in the file system (Core/public_master/media/{field_id}/{record_id}.{ext})
+ * and not in the database - a DELETE therefore does not remove them. That is why
+ * three of the hooks are occupied, mirroring the three-stage deletion:
  *
- *     hookOnSoftDelete   Dateien nach var/deleted verschieben  (Papierkorb)
- *     hookOnRestore      Dateien zurückholen
- *     hookOnDelete       Dateien endgültig entfernen           (nur Systemtool/Cron)
+ *     hookOnSoftDelete   move files to var/deleted  (trash)
+ *     hookOnRestore      fetch files back
+ *     hookOnDelete       remove files permanently   (only system tool/cron)
  *
- * Zusätzlich reicht jeder Hook sein Ereignis an das Trigger-Template des Bereichs
- * weiter (`rel_area_trigger`, siehe TriggerTemplates).
+ * In addition, each hook passes its event on to the trigger template of the area
+ * (`rel_area_trigger`, see TriggerTemplates).
  *
- * Die data_fil-Einträge bleiben beim Soft-Delete ausdrücklich stehen: ohne sie wären
- * Feld, Dateiendung und Version beim Wiederherstellen nicht mehr zu ermitteln.
+ * The data_fil entries deliberately remain on soft delete: without them the field,
+ * file extension and version could not be determined when restoring.
  *
  * @see Camindo\Core\Cms                            $schema, select(), fetch()
- * @see Camindo\Core\TreeManagerTrait               Baumverwaltung
- * @see Camindo\Core\VirtualFieldsTrait             data_*-Felder, Dateien, Thumbnails
- * @see Camindo\Core\TemporaryTrait                 Arbeitskopien (checkOut / checkIn)
- * @see Camindo\Core\Modules\Record\RecordBackend   Backend-Oberfläche
- * @see Camindo\Core\Modules\Area\Area              Inhaltsbereich mit der Felddefinition
- * @see docs/developers/02-datenmodell.md
+ * @see Camindo\Core\TreeManagerTrait               tree management
+ * @see Camindo\Core\VirtualFieldsTrait             data_* fields, files, thumbnails
+ * @see Camindo\Core\TemporaryTrait                 working copies (checkOut / checkIn)
+ * @see Camindo\Core\Modules\Record\RecordBackend   backend user interface
+ * @see Camindo\Core\Modules\Area\Area              content area with the field definition
+ * @see developer docs, chapter 02 (Data model)
  */
 namespace Camindo\Core\Modules\Record;
 
@@ -98,18 +98,18 @@ class Record extends Dataset {
     }
 
     /**
-     * Tabellendefinition.
+     * Table definition.
      *
-     * Das Schema wird nicht hier geschrieben, sondern aus Cms übernommen (siehe
-     * Klassenkommentar).
+     * The schema is not written here but taken over from Cms (see class
+     * comment).
      *
-     * Standardsortierung 'changed_at DESC' - zuletzt Bearbeitetes zuerst; das ist die
-     * Reihenfolge, in der ein Redakteur seine Datensätze sucht. Für die Anzeige im
-     * Bereich gilt stattdessen meist die dort eingestellte Sortierung
+     * Default sorting 'changed_at DESC' - most recently edited first; this is the
+     * order in which an editor searches for their records. For the display in the
+     * area, the sorting set there usually applies instead
      * (area.sort_field_id / sort_order).
      *
-     * $hasTmp schaltet die Arbeitskopien scharf: Dataset behandelt Datensätze mit
-     * tmp=1 danach als solche und löst sie beim Laden auf ihr Original auf.
+     * $hasTmp activates the working copies: Dataset then treats records with
+     * tmp=1 as such and resolves them to their original when loading.
      */
     protected function hookDefinition(): void
     {
@@ -121,18 +121,18 @@ class Record extends Dataset {
     }
 
     /**
-     * Vor dem Erstellen: Zugehörigkeit sicherstellen.
+     * Before creating: ensure belonging.
      *
-     * Ein Datensatz ohne Inhaltsbereich ergibt keinen Sinn - erst der Bereich sagt,
-     * welche Felder er hat. Deshalb ist area_id hier Pflicht, und init() lässt sich
-     * für `record` nicht ohne Vorgabe aufrufen.
+     * A record without a content area makes no sense - only the area says
+     * which fields it has. That is why area_id is mandatory here, and init() cannot
+     * be called for `record` without a default.
      *
-     * Die eigentliche Vorbelegung der benutzerdefinierten Felder übernimmt danach
-     * VirtualFieldsTrait aus den Defaults der Felddefinitionen.
+     * The actual preset of the user-defined fields is then taken care of by
+     * VirtualFieldsTrait from the defaults of the field definitions.
      */
     protected function hookOnCreate(array &$data): void
     {
-        // Default-Werte erstellen
+        // create default values
         $areaId = (int) $data['area_id'];
         if (empty($areaId)) {
             throw new \Exception('Error: Record::init needs parameter data[area_id]!');
@@ -140,13 +140,13 @@ class Record extends Dataset {
         $this->trigger($areaId, 'onCreate', $data);
     }
 
-    // hookOnLoaded() ist bewusst leer: Laden und Speichern der benutzerdefinierten
-    // Felder erledigt VirtualFieldsTrait, das Umschalten zwischen Arbeitskopie und
-    // Original TemporaryTrait - beides innerhalb von Dataset, ohne dass hier etwas zu
-    // ergänzen wäre. hookOnSave() und hookOnSaved() haben je eine Aufgabe, siehe dort.
+    // hookOnLoaded() is deliberately empty: loading and saving the user-defined
+    // fields is done by VirtualFieldsTrait, switching between working copy and
+    // original by TemporaryTrait - both within Dataset, without anything to
+    // add here. hookOnSave() and hookOnSaved() each have one task, see there.
 
     /**
-     * Nach dem Laden...
+     * After loading...
      */
     protected function hookOnLoaded(array &$data): void
     {
@@ -154,60 +154,58 @@ class Record extends Dataset {
     }
 
     /**
-     * Vor dem Speichern: leeren Slug füllen, reine Zahlen entschärfen.
+     * Before saving: fill an empty slug, defuse pure numbers.
      *
-     * 'slug' ist ein optionales virtuelles Feld - es existiert nur, wenn der
-     * Inhaltsbereich es angelegt hat. Der Grund für ein virtuelles statt eines
-     * Meta-Feldes: virtuelle Felder können später mehrsprachig geführt werden, die
-     * Spalten von `record` nicht.
+     * 'slug' is an optional virtual field - it only exists if the content area has
+     * created it. The reason for a virtual rather than a meta field: virtual fields can later be
+     * maintained multilingually, the columns of `record` cannot.
      *
-     * Lässt der Redakteur das Feld leer, entsteht der Slug aus dem Default-Feld des
-     * Bereichs (dem "Titel", area.default_field_id) über Cms::textToUri(): nur
-     * Wortzeichen und Slash bleiben stehen, gekürzt auf system.link_length.
+     * If the editor leaves the field empty, the slug is created from the default field of the
+     * area (the "title", area.default_field_id) via Cms::textToUri(): only
+     * word characters and slash remain, shortened to system.link_length.
      *
-     * Hat der Bereich kein Default-Feld oder ist dessen Inhalt leer, bleibt der Slug
-     * leer. Das ist kein Mangel: CMS:URL fällt dann auf die record_id zurück
-     * ("/42"), und Page::resolveRequest() löst einen rein numerischen Wert ohnehin
-     * direkt über die Id auf.
+     * If the area has no default field or its content is empty, the slug
+     * remains empty. This is not a defect: CMS:URL then falls back to the record_id
+     * ("/42"), and Page::resolveRequest() resolves a purely numeric value
+     * directly via the id in any case.
      *
-     * KEINE REINEN ZAHLEN
+     * NO PURE NUMBERS
      * --------------------
-     * Genau deshalb darf ein Slug nie eine reine Ziffernfolge sein: "/42" wäre sonst
-     * mehrdeutig - einmal die record_id 42, einmal der Datensatz mit dem Slug "42".
-     * Ein solcher Slug bekommt darum ein Minus vorangestellt: aus dem Titel "2024"
-     * wird "-2024". Das gilt für den erzeugten Slug ebenso wie für einen von Hand
-     * eingetragenen.
+     * That is exactly why a slug must never be a pure sequence of digits: otherwise "/42" would be
+     * ambiguous - once the record_id 42, once the record with the slug "42".
+     * Such a slug therefore gets a minus sign prepended: from the title "2024"
+     * "-2024" is made. This applies to the generated slug as well as to one entered by hand.
      *
-     * Ein von Hand eingetragener Slug wird genauso normalisiert wie der erzeugte
-     * (Cms::textToUri(): Kleinschreibung, Sonderzeichen zu "-", gekürzt). Bleibt
-     * dabei nichts übrig, wird er wie ein leeres Feld behandelt.
+     * A slug entered by hand is normalized in exactly the same way as the generated one
+     * (Cms::textToUri(): lowercase, special characters to "-", shortened). If
+     * nothing remains of it, it is treated like an empty field.
      *
-     * Geprüft wird auf reine Ziffern, nicht mit is_numeric() - das hielte auch das
-     * Ergebnis "-2024" wieder für eine Zahl und die Ausweichregel liefe ins Leere.
-     * Page::resolveRequest() unterscheidet Id und Slug nach derselben Regel.
+     * The check is for pure digits, not with is_numeric() - that would also consider the
+     * result "-2024" to be a number and the fallback rule would fail.
+     * Page::resolveRequest() distinguishes id and slug by the same rule.
      *
-     * Ein einmal gesetzter Slug wird NICHT nachgeführt, wenn sich der Titel später
-     * ändert - ein wandernder Slug macht jeden bereits geteilten Link ungültig.
-     * Wer ihn ändern will, leert das Feld und lässt es neu füllen.
+     * A slug once set is NOT updated when the title changes later -
+     * a moving slug would invalidate every link already shared. Anyone who wants to change it
+     * empties the field and lets it be filled again.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
-        // Trigger-Template zuerst: was es in $data setzt, durchläuft alles Weitere
-        // (Slug, Prüfung, Schreiben) wie eine Eingabe
+        // trigger template first: what it sets in $data runs through everything else
+        // (slug, check, writing) like an input
         $this->trigger((int)($data['area_id'] ?? $previousData['area_id'] ?? 0), 'onSave', $fields, $data, $previousData);
 
-        // Anmeldename eines Profils: user_* ist für anonymisierte Profile reserviert
-        // (Modul Privacy, Lösch-Policy) - erlaubt ist nur user_{record_id} dieses
-        // Datensatzes, also nicht bei der Registrierung
+        // sign-in name of a profile: user_* is reserved for anonymized profiles
+        // (module Privacy, deletion policy) - only user_{record_id} of this
+        // record itself is allowed, i.e. not at registration
         $this->checkReservedLoginName($fields, $data, $previousData);
 
         // instance_id
         // --------------------
-        // Kein Eingabefeld: der Datensatz gehört zu der Website, zu der sein
-        // Inhaltsbereich gehört. Der Wert wird bei JEDEM Speichern von dort geholt -
-        // so wandert ein Datensatz, der den Bereich wechselt, gleich mit.
-        // (Area::hookOnSaved() deckt den umgekehrten Fall ab: der Bereich selbst
-        //  wechselt die Instanz, seine Datensätze bleiben stehen.)
+        // Not an input field: the record belongs to the website to which its
+        // content area belongs. The value is fetched from there on EVERY save -
+        // so a record that changes area moves along with it.
+        // (Area::hookOnSaved() covers the reverse case: the area itself
+        //  changes the instance, its records remain.)
         $areaId = (int)($data['area_id'] ?? $previousData['area_id'] ?? 0);
         if ($areaId > 0) {
             $data['instance_id'] = $this->areaInstanceId($areaId);
@@ -216,14 +214,14 @@ class Record extends Dataset {
 
         // owner_id
         // --------------------
-        // Ändern nur mit dem Zusatzrecht "Owner anpassen" der Benutzergruppe im
-        // Bereich (Lookup-Feld am Ende der Maske, RecordBackendEdit). Ohne das
-        // Recht bleibt der gespeicherte Owner - beim Anlegen setzt Dataset::save()
-        // den Session-Admin (12-group-rights.md).
+        // Change only with the additional right "adjust owner" of the user group in the
+        // area (lookup field at the end of the mask, RecordBackendEdit). Without the
+        // right the saved owner remains - when creating, Dataset::save() sets
+        // the session admin (developer docs, chapter 11 (Permissions)).
         if (in_array('owner_id', $fields, true) && $areaId > 0) {
             $access = $this->container->get(\Camindo\Core\Access::class);
-            // (ein geleertes Lookup-Feld nimmt dem Datensatz nicht den Owner; ein
-            //  Nicht-Superuser darf nur Admins der eigenen Gruppe zum Owner machen)
+            // (an emptied lookup field does not take the owner from the record; a non-superuser
+            //  may only make admins of their own group the owner)
             $newOwnerId = (int)($data['owner_id'] ?? 0);
             $keep = $newOwnerId < 1;
             if (!$keep && $access->isLoaded() && !$access->isSuperuser()) {
@@ -239,15 +237,15 @@ class Record extends Dataset {
             }
         }
 
-        // Bereichswechsel (MoveTrait::moveToArea())
+        // area change (MoveTrait::moveToArea())
         // --------------------
-        // Die Inhalte in den Feldern des bisherigen Bereichs müssen weg, BEVOR
-        // saveVirtualFields() die Felder des neuen schreibt - siehe
-        // MoveTrait::removeAreaData(). Die Dateien folgen in hookOnSaved().
-        // Nur beim endgültigen Speichern: ein Einzelschritt (Reiterwechsel in der
-        // Eingabemaske einer verschobenen Arbeitskopie, Simulation) schreibt nur
-        // den Arbeitsstand der Kopie - das Original bleibt bis zum Check-in, wie
-        // es ist, und kann per Abbrechen unverändert zurückbleiben.
+        // The contents in the fields of the previous area must go BEFORE
+        // saveVirtualFields() writes the fields of the new one - see
+        // MoveTrait::removeAreaData(). The files follow in hookOnSaved().
+        // Only on the final save: a single step (tab switch in the input mask
+        // of a moved working copy, simulation) only writes the working state of the
+        // copy - the original remains until check-in, as it is, and can
+        // remain unchanged by cancelling.
         $recordId  = (int)($data['record_id'] ?? 0);
         $oldAreaId = (int)($previousData['area_id'] ?? 0);
         if (!$this->savingTemporary && $recordId > 0 && $oldAreaId > 0 && $areaId > 0 && $oldAreaId !== $areaId) {
@@ -256,20 +254,20 @@ class Record extends Dataset {
 
         // slug
         // --------------------
-        // Feld gar nicht im Spiel? (Bereich ohne Slug-Feld, oder nicht übermittelt)
+        // field not involved at all? (area without slug field, or not transmitted)
         if (!in_array('slug', $fields, true)) return;
 
-        // Mehrsprachiges Slug-Feld: je Sprache ein Slug (Array language_id => Wert,
-        // siehe Dataset::validateFieldValue()). Die Regeln gelten je Sprache; als
-        // Quelle dient das Default-Feld in derselben Sprache, sofern es mehrsprachig
-        // ist, sonst sein einziger Wert. Page::resolveRequest() löst einen Slug über
-        // Cms::select() in der angeforderten Sprache auf - jede Sprache findet also
-        // ihren eigenen.
+        // multilingual slug field: one slug per language (array language_id => value,
+        // see Dataset::validateFieldValue()). The rules apply per language; the
+        // source is the default field in the same language if it is multilingual,
+        // otherwise its only value. Page::resolveRequest() resolves a slug via
+        // Cms::select() in the requested language - so each language finds
+        // its own.
         $areaId = (int)($data['area_id'] ?? $previousData['area_id'] ?? 0);
         $isMultilingual = is_array($data['slug'] ?? null);
 
-        // Default-Feld des Bereichs suchen (area.default_field_id spiegelt sich in
-        // field.default_field, siehe Area::hookOnSaved())
+        // find the default field of the area (area.default_field_id is mirrored in
+        // field.default_field, see Area::hookOnSaved())
         $sourceName = '';
         if ($areaId > 0) {
             foreach ($this->virtualSchema($areaId, false) as $name => $colDef) {
@@ -283,33 +281,33 @@ class Record extends Dataset {
 
         $slugs = $isMultilingual ? $data['slug'] : [null => $data['slug'] ?? ''];
         foreach ($slugs as $languageId => $slug) {
-            // Ein von Hand eingetragener Slug durchläuft dieselbe Normalisierung wie
-            // der aus dem Default-Feld erzeugte; bleibt davon nichts übrig ("###"),
-            // gilt er als leer
+            // A slug entered by hand goes through the same normalization as the one
+            // generated from the default field; if nothing remains of it ("###"),
+            // it counts as empty
             $slug = trim((string)$slug);
             if ($slug !== '') $slug = $this->cms->textToUri($slug);
 
             if ($slug === '') {
-                // Eine weitere Sprache ohne Slug bleibt leer: dann gilt der Fallback
-                // aus der Hauptsprache (saveVirtualFields())
+                // A further language without slug remains empty: then the fallback
+                // from the primary language applies (saveVirtualFields())
                 if ($isMultilingual && (int)$languageId !== $primaryId) continue;
 
                 $source = ($sourceName !== '') ? ($data[$sourceName] ?? '') : '';
                 if (is_array($source)) {
-                    // mehrsprachiges Default-Feld: Wert derselben Sprache, sonst Hauptsprache
+                    // multilingual default field: value of the same language, otherwise primary language
                     $source = $source[$languageId] ?? $source[$primaryId] ?? (reset($source) ?: '');
                     if (is_array($source)) $source = '';
                 }
                 $source = trim((string)$source);
 
-                // Kein Default-Feld, leerer Titel oder ein Titel ganz ohne verwertbare
-                // Zeichen ("###") -> Slug bleibt leer, die URL läuft über die Id
+                // no default field, empty title or a title without any usable
+                // characters ("###") -> slug remains empty, the URL runs via the id
                 if ($source === '') continue;
                 $slug = $this->cms->textToUri($source);
                 if ($slug === '') continue;
             }
 
-            // Reine Ziffernfolge -> Minus voranstellen, siehe Kommentar oben
+            // pure digit sequence -> prepend a minus sign, see comment above
             if (preg_match('/^\d+$/', $slug)) $slug = '-' . $slug;
 
             if ($isMultilingual) $data['slug'][$languageId] = $slug;
@@ -318,29 +316,29 @@ class Record extends Dataset {
     }
 
     /**
-     * Eindeutigkeit eines Slugs (Flag 'unique', das Field::hookOnSave() dem Feld
-     * `slug` immer gibt) - aufgerufen aus Dataset::validateValue().
+     * Uniqueness of a slug (flag 'unique', which Field::hookOnSave() always gives the field
+     * `slug`) - called from Dataset::validateValue().
      *
-     * Eindeutig sein muss nicht der Wert, sondern der URL-Pfad: Slug-Präfix des
-     * Bereichs + Slug (Cms::recordUrl(), Cms::recordIdsBySlugPath()). Innerhalb der
-     * Instanz und der mit ihr zusammengeschalteten Instanzen (InstanceCache::
-     * uniqueScope()) gilt je Sprache:
+     * What must be unique is not the value but the URL path: slug prefix of the
+     * area + slug (Cms::recordUrl(), Cms::recordIdsBySlugPath()). Within the
+     * instance and the instances linked with it (InstanceCache::
+     * uniqueScope()) the following applies per language:
      *
-     *   1. Hat der Bereich in dieser Sprache keinen Präfix, darf der erste Pfadteil
-     *      des Slugs nicht der Präfix eines anderen Bereichs sein ("farben/gelb"
-     *      in einem Bereich ohne Präfix, während der Bereich Farben "farben" führt) -
-     *      der Aufruf /farben/gelb landete sonst im Bereich Farben.
-     *   2. Kein anderer Datensatz eines Bereichs mit demselben Präfix (bzw. ebenfalls
-     *      ohne) trägt denselben Slug. Gleiche Slugs in Bereichen mit verschiedenen
-     *      Präfixen sind erlaubt: /farben/rot und /rot.
+     *   1. If the area has no prefix in this language, the first path part of the
+     *      slug must not be the prefix of another area ("farben/gelb"
+     *      in an area without a prefix, while the area "Farben" has the prefix "farben") -
+     *      otherwise the call /farben/gelb would land in the area Farben.
+     *   2. No other record of an area with the same prefix (or likewise without one)
+     *      carries the same slug. Identical slugs in areas with different
+     *      prefixes are allowed: /farben/rot and /rot.
      *
-     * Sprachen: bei einem mehrsprachigen Feld die des Wertes, sonst alle Sprachen der
-     * Instanz (der Präfix kann je Sprache verschieden sein). Ein leerer Slug ist nie
-     * ein Konflikt - die URL läuft dann über die record_id.
+     * Languages: for a multilingual field those of the value, otherwise all languages of the
+     * instance (the prefix can differ per language). An empty slug is never
+     * a conflict - the URL then runs via the record_id.
      *
-     * @param int $excludeId  der Datensatz selbst (produktiv); eine Arbeitskopie
-     *                        fällt über tmp = 0 ohnehin heraus
-     * @return bool  false: Meldung steht in Cms::errors (unter $errName)
+     * @param int $excludeId  the record itself (productive); a working copy
+     *                        drops out via tmp = 0 anyway
+     * @return bool  false: message is in Cms::errors (under $errName)
      */
     protected function slugPathOk(string $slug, array $colDef, string $errName, string $label, int $excludeId, int $areaId, ?int $languageId, int $instanceId): bool
     {
@@ -352,7 +350,7 @@ class Record extends Dataset {
         $languageIds = ($languageId !== null) ? [$languageId] : $cache->languageIds($instanceId);
         $lower = fn(string $text): string => mb_strtolower($text, 'UTF-8');
 
-        // 1. reservierter Präfix
+        // 1. reserved prefix
         // --------------------
         $first = $lower(explode('/', $slug, 2)[0]);
         $prefixAreas = $cache->slugPrefixAreas($scope);
@@ -369,7 +367,7 @@ class Record extends Dataset {
             }
         }
 
-        // 2. derselbe Pfad
+        // 2. same path
         // --------------------
         $vf = $this->cms->resolveVirtualField('slug');
         $suffix = $this->cms->dataSuffix[(string)($colDef['type'] ?? 'chars')] ?? '';
@@ -399,7 +397,7 @@ class Record extends Dataset {
     }
 
     /**
-     * Beschriftung eines Bereichs für Meldungen: "Label (name)".
+     * Label of an area for messages: "Label (name)".
      */
     private function areaLabel(int $areaId): string
     {
@@ -412,8 +410,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Nach dem Speichern: Bereichswechsel - die Mediendateien der alten Felder
-     * löschen (Gegenstück zu hookOnSave(), siehe MoveTrait::removeAreaFiles()).
+     * After saving: area change - delete the media files of the old fields
+     * (counterpart to hookOnSave(), see MoveTrait::removeAreaFiles()).
      */
     protected function hookOnSaved(array &$fields, array &$data, array &$previousData): void
     {
@@ -422,8 +420,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Ereignis an die Trigger-Templates des Bereichs weitergeben
-     * (`rel_area_trigger`, siehe TriggerTemplates).
+     * Pass the event on to the trigger templates of the area
+     * (`rel_area_trigger`, see TriggerTemplates).
      */
     private function trigger(int $areaId, string $event, mixed &...$args): void
     {
@@ -431,14 +429,14 @@ class Record extends Dataset {
     }
 
     // ====================
-    // Rechte der Benutzergruppe (12-group-rights.md)
+    // Rights of the user group (developer docs, chapter 11 (Permissions))
 
     /**
-     * Sprachliste auf die lesbaren Sprachen der Benutzergruppe beschränken
-     * (Reiter der Detailansicht und Eingabemaske). Ohne geladene Rechte /
-     * Superuser unverändert; Reihenfolge bleibt die der Instanz.
+     * Restrict the language list to the readable languages of the user group
+     * (tabs of the detail view and input mask). Unchanged without loaded rights /
+     * superuser; order remains that of the instance.
      *
-     * @param array $languages  language_id => Sprachzeile (InstanceCache::languages())
+     * @param array $languages  language_id => language row (InstanceCache::languages())
      */
     public function readableLanguages(array $languages): array
     {
@@ -448,9 +446,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Darf die Gruppe die Zielbereiche ALLER Verknüpfungsfelder eines Bereichs
-     * lesen? Sonst lassen sich seine Datensätze nicht verschieben (die
-     * Verknüpfungen könnten nicht mitgenommen werden).
+     * May the group read the target areas of ALL link fields of an area?
+     * Otherwise its records cannot be moved (the links could not be taken along).
      */
     public function relationTargetsReadable(int $areaId): bool
     {
@@ -461,11 +458,11 @@ class Record extends Dataset {
     }
 
     /**
-     * Arbeitsstand einer Arbeitskopie - für die Eingabemaske, die daraus
-     * die Werte aller Sprachen holt (RecordBackendEdit::_editLanguageValues()).
+     * Working state of a working copy - for the input mask, which fetches
+     * the values of all languages from it (RecordBackendEdit::_editLanguageValues()).
      *
-     * @param int $tmpId  Id der Arbeitskopie
-     * @return array      Arbeitsstand-Format, siehe VirtualFieldsTrait::_loadTmpData()
+     * @param int $tmpId  id of the working copy
+     * @return array      working-state format, see VirtualFieldsTrait::_loadTmpData()
      */
     public function loadTmpData(int $tmpId): array
     {
@@ -473,16 +470,16 @@ class Record extends Dataset {
     }
 
     /**
-     * Datei- und Passwort-Eingaben an einer Arbeitskopie sichern, ohne zu speichern -
-     * das, was Dataset::save() vor der Eingabeprüfung tut (secureUploads(),
-     * securePasswords()). Für die VORLAGE der Stapelbearbeitung (RecordBackendBatch):
-     * sie wird nie selbst gespeichert, ihre Dateien (physisch unter ihrer Id, im
-     * Arbeitsstand mit 'temporary') und Passwort-Hashes wandern beim Ausführen in
-     * jeden Datensatz des Umfangs (RecordBatch::editJob()).
+     * Secure file and password inputs on a working copy without saving -
+     * what Dataset::save() does before the input check (secureUploads(),
+     * securePasswords()). For the TEMPLATE of the batch processing (RecordBackendBatch):
+     * it is never saved itself; its files (physically under its id, in the
+     * working state with 'temporary') and password hashes move into
+     * every record of the scope when running (RecordBatch::editJob()).
      *
-     * @param int   $tmpId  Arbeitskopie des Session-Admins
-     * @param array $data   Eingaben (data[...] der Maske; Uploads aus $_FILES)
-     * @return bool         false: Datei abgelehnt oder fremde Arbeitskopie (Cms::errors)
+     * @param int   $tmpId  working copy of the session admin
+     * @param array $data   inputs (data[...] of the mask; uploads from $_FILES)
+     * @return bool         false: file rejected or foreign working copy (Cms::errors)
      */
     public function secureInputs(int $tmpId, array $data): bool
     {
@@ -497,8 +494,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Sprachen der Instanz eines Datensatzes (Hauptsprache zuerst) - auch für
-     * Arbeitskopien, die tragen die instance_id ihres Bereichs.
+     * Languages of the instance of a record (primary language first) - also for
+     * working copies, which carry the instance_id of their area.
      *
      * @return int[]
      */
@@ -508,15 +505,15 @@ class Record extends Dataset {
     }
 
     /**
-     * Vor dem "gelöscht"-Markieren (Soft-Delete)
+     * Before marking as "deleted" (soft delete)
      *
-     * Schiebt die Mediendateien des Datensatzes in den Papierkorb var/deleted
-     * ({fieldId}_{recordId}_{version}.{ext}). Die `data_fil`-Einträge bleiben stehen -
-     * ohne sie wären Feld, Extension und Version beim Wiederherstellen nicht mehr
-     * zu ermitteln.
+     * Moves the media files of the record into the trash var/deleted
+     * ({fieldId}_{recordId}_{version}.{ext}). The `data_fil` entries remain -
+     * without them the field, extension and version could not be determined when
+     * restoring.
      *
-     * Läuft je Datensatz genau einmal, auch bei Massenlöschungen: Dataset::delete()
-     * schickt jeden Datensatz einzeln durch softDeleteOne().
+     * Runs exactly once per record, also with mass deletions: Dataset::delete()
+     * passes each record individually through softDeleteOne().
      */
     protected function hookOnSoftDelete(array $data): void
     {
@@ -524,14 +521,14 @@ class Record extends Dataset {
         if ($recordId < 1) return;
         $this->trigger((int)($data['area_id'] ?? 0), 'onSoftDelete', $data);
         $this->trashRecordFiles($recordId);
-        // Fest verknüpfte Inhalte (link) gehen mit in den Papierkorb
+        // firmly linked contents (link) go into the trash with it
         $this->cascadeDependents($recordId, 'delete');
     }
 
     /**
-     * Anmeldename eines Profil-Datensatzes prüfen (hookOnSave()): user_* ist den
-     * Profilen vorbehalten, die eine Lösch-Policy anonymisiert hat - erlaubt ist
-     * genau user_{record_id} des Datensatzes selbst (Arbeitskopie: des Originals).
+     * Check the sign-in name of a profile record (hookOnSave()): user_* is reserved for
+     * profiles that a deletion policy has anonymized - exactly user_{record_id} of the
+     * record itself is allowed (working copy: of the original).
      */
     private function checkReservedLoginName(array $fields, array $data, array $previousData): void
     {
@@ -555,7 +552,7 @@ class Record extends Dataset {
         foreach ($values as $value) {
             $value = trim((string)$value);
             if (!preg_match('/^user_/i', $value)) continue;
-            // unverändert (schon anonymisiert) oder genau der eigene Name
+            // unchanged (already anonymized) or exactly one's own name
             if (in_array($value, $previous, true) || ($prodId > 0 && $value === 'user_' . $prodId)) continue;
             $this->createFieldError('privacy.error_login_reserved', $name, (string)$field['label']);
             throw new \Exception('#' . $this->cms->errorMsgLast());
@@ -563,10 +560,10 @@ class Record extends Dataset {
     }
 
     /**
-     * Vor dem Wiederherstellen
+     * Before restoring
      *
-     * Gegenstück zu hookOnSoftDelete(): holt die Mediendateien aus dem Papierkorb
-     * zurück ins Medienverzeichnis.
+     * Counterpart to hookOnSoftDelete(): fetches the media files back from the trash
+     * into the media directory.
      */
     protected function hookOnRestore(array $data): void
     {
@@ -574,49 +571,49 @@ class Record extends Dataset {
         if ($recordId < 1) return;
         $this->trigger((int)($data['area_id'] ?? 0), 'onRestore', $data);
         $this->untrashRecordFiles($recordId);
-        // Offene Aufträge der Lösch-Policy (Modul Privacy) verfallen - der Datensatz lebt weiter
+        // open jobs of the deletion policy (module Privacy) lapse - the record lives on
         $this->container->get(\Camindo\Core\Modules\Privacy\PrivacyJobs::class)->cancel($recordId);
-        // Fest verknüpfte Inhalte (link) desselben Löschvorgangs kommen mit zurück
+        // firmly linked contents (link) of the same deletion come back with it
         $this->cascadeDependents($recordId, 'restore');
     }
 
     /**
-     * Vor dem endgültigen Löschen...
-     * Läuft nur beim endgültigen Löschen (Systemtool: deleted=1, älter als
-     * admin.trash_retention_days). Beim Soft-Delete greift stattdessen
-     * hookOnSoftDelete() - dort werden Dateien nur verschoben, nicht gelöscht.
+     * Before final deletion...
+     * Runs only on final deletion (system tool: deleted=1, older than
+     * admin.trash_retention_days). On soft delete hookOnSoftDelete() applies instead -
+     * there files are only moved, not deleted.
      *
-     * Muss hier im Hook geschehen, weil Dataset::finalDeleteOne() hookOnDelete() VOR
-     * dem DELETE der record-Zeile aufruft: danach fallen die data_fil-Einträge per
-     * FK-Cascade weg und Extension und Version wären nicht mehr ermittelbar.
-     * Tree-Kinder werden nicht beachtet - Dataset::purge() schickt jeden Datensatz
-     * des Teilbaums einzeln hier durch, Blätter zuerst.
+     * It must happen here in the hook, because Dataset::finalDeleteOne() calls hookOnDelete() BEFORE
+     * the DELETE of the record row: afterwards the data_fil entries are removed by
+     * FK cascade and extension and version could no longer be determined.
+     * Tree children are not taken into account - Dataset::purge() passes each record
+     * of the subtree individually through here, leaves first.
      */
     protected function hookOnDelete(array $data): void
     {
         // Dataset::finalDeleteOne() -> loadProductive() liefert hier immer den
-        // produktiven Datensatz (temporäre Id wurde bereits aufgelöst).
+        // productive record (temporary id has already been resolved).
         $recordId = (int)($data['record_id'] ?? 0);
         if ($recordId < 1) return;
         $this->trigger((int)($data['area_id'] ?? 0), 'onDelete', $data);
 
-        // Mediendateien endgültig entfernen - im Papierkorb (Normalfall, der Datensatz
-        // war soft-gelöscht) UND im Medienverzeichnis (falls das Verschieben beim
-        // Soft-Delete fehlschlug). Räumt auch die Dateien noch vorhandener
-        // Arbeitskopien mit ab: Dataset::finalDeleteOne() entfernt deren Zeilen im
-        // selben Vorgang per SQL, ohne eigenen hookOnDelete().
+        // permanently remove media files - in the trash (normal case, the record
+        // was soft-deleted) AND in the media directory (if moving during the
+        // soft delete failed). Also removes the files of any working copies still
+        // present: Dataset::finalDeleteOne() removes their rows in the
+        // same process via SQL, without its own hookOnDelete().
         $this->purgeRecordFiles($recordId);
-        // Gab es für den Datensatz nie Aufträge der Lösch-Policy (etwa vor ihrer
-        // Einführung gelöscht), behandelt die Policy des Bereichs wenigstens seinen
-        // Verlauf im Audit-Log (Blöcke des Auslösers 'area')
+        // If the record never had jobs of the deletion policy (e.g. deleted before its
+        // introduction), the policy of the area at least handles its history
+        // in the audit log (blocks of the trigger 'area')
         $this->container->get(\Camindo\Core\Modules\Privacy\PrivacyJobs::class)->scheduleWithoutPolicy($recordId);
-        // Fest verknüpfte Inhalte (link): endgültig mit löschen - VOR dem DELETE der
-        // Zeile, danach wären ihre Kanten per FK-Cascade weg
+        // firmly linked contents (link): delete them permanently too - BEFORE the DELETE of the
+        // row, afterwards their edges would be gone via FK cascade
         $this->cascadeDependents($recordId, 'purge');
     }
 
     /**
-     * Nach dem endgültigen Löschen: nur das Trigger-Template.
+     * After final deletion: only the trigger template.
      */
     protected function hookOnDeleted(array $data): void
     {
@@ -624,9 +621,9 @@ class Record extends Dataset {
     }
 
     /**
-     * Bearbeitung abbrechen (TemporaryTrait::cancel()) - mit den Arbeitskopien der
-     * fest verknüpften Inhalte (LinkTrait::cancelDependents()), bevor die Kanten
-     * mit der Arbeitskopie verschwinden.
+     * Cancel editing (TemporaryTrait::cancel()) - together with the working copies of the
+     * firmly linked contents (LinkTrait::cancelDependents()), before the edges
+     * disappear with the working copy.
      */
     public function cancel(int $tmpId): void
     {
@@ -638,20 +635,20 @@ class Record extends Dataset {
     }
 
     /**
-     * Alle offenen Arbeitskopien des Session-Admins verwerfen - beim Abmelden
-     * (StartBackend::_logout()). Damit fallen seine Bearbeitungssperren sofort und
-     * nicht erst nach admin.edit_lock_sec (TemporaryTrait::getLock()).
+     * Discard all open working copies of the session admin - on sign-out
+     * (StartBackend::_logout()). This releases his edit locks immediately instead
+     * of only after admin.edit_lock_sec (TemporaryTrait::getLock()).
      *
-     * Verworfen wird auch die Arbeitskopie eines noch nie gespeicherten neuen
-     * Datensatzes (ohne origin_id): nach dem Abmelden ist keine Maske mehr offen, die
-     * sie noch speichern könnte. Bereits ungültig gemachte Kopien (`deleted` = 1)
-     * sperren nichts mehr und bleiben dem Aufräumen im Modul Tools überlassen.
+     * The working copy of a new record that has never been saved (without origin_id) is also discarded:
+     * after signing out no mask is open any more that could still save it. Copies that have already
+     * been made invalid (`deleted` = 1) no longer lock anything and are left to the cleanup
+     * in the module Tools.
      *
-     * Die Kopien fest verknüpfter Inhalte hängen am selben Admin und fallen mit
-     * ihrer Quelle (cancel() -> cancelDependents()) oder, falls die schon weg ist,
-     * einzeln - cancel() übergeht eine bereits verworfene Id.
+     * The copies of firmly linked contents belong to the same admin and fall with
+     * their source (cancel() -> cancelDependents()) or, if that is already gone,
+     * individually - cancel() skips an id that has already been discarded.
      *
-     * @return int  Anzahl der gefundenen Arbeitskopien
+     * @return int  number of working copies found
      */
     public function cancelAll(): int
     {
@@ -659,11 +656,11 @@ class Record extends Dataset {
     }
 
     /**
-     * Die Arbeitskopien einer Session verwerfen (Session::registerWorkingCopy()) -
-     * beim Abmelden nur dieses Browsers. Masken, die derselbe Admin auf einem anderen
-     * Gerät offen hat, bleiben bestehen.
+     * Discard the working copies of a session (Session::registerWorkingCopy()) -
+     * on sign-out of this browser only. Masks that the same admin has open on another
+     * device remain.
      *
-     * @return int  Anzahl der gefundenen Arbeitskopien
+     * @return int  number of working copies found
      */
     public function cancelSession(string $sessionId): int
     {
@@ -672,15 +669,15 @@ class Record extends Dataset {
     }
 
     /**
-     * Die Arbeitskopien aller ANDEREN Sessions des Session-Admins verwerfen - bei
-     * "Alle anderen Sitzungen beenden" (AdminBackend::devices()), wie das Abmelden
-     * auf allen Geräten, nur ohne die eigene Session: deren offene Masken bleiben.
-     * Erfasst werden die Kopien, die einer anderen Session zugeordnet sind
-     * (Session::registerWorkingCopy()); Kopien fest verknüpfter Inhalte fallen mit
-     * ihrer Quelle. Vor Session::closeAllOf() aufrufen - das löscht die Zuordnungen.
+     * Discard the working copies of all OTHER sessions of the session admin - for
+     * "End all other sessions" (AdminBackend::devices()), like signing out
+     * on all devices, only without the own session: its open masks remain.
+     * The copies that are assigned to another session are captured
+     * (Session::registerWorkingCopy()); copies of firmly linked contents fall with
+     * their source. Call before Session::closeAllOf() - that deletes the assignments.
      *
-     * @param string $keepSessionId  die laufende Session
-     * @return int  Anzahl der gefundenen Arbeitskopien
+     * @param string $keepSessionId  the running session
+     * @return int  number of working copies found
      */
     public function cancelOtherSessions(string $keepSessionId): int
     {
@@ -689,8 +686,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Arbeitskopien des Session-Admins verwerfen: alle ($sessionId = null), die
-     * einer Session oder ($except) die aller übrigen Sessions.
+     * Discard working copies of the session admin: all ($sessionId = null), those
+     * of a session or ($except) those of all other sessions.
      */
     private function _cancelWorkingCopies(?string $sessionId, bool $except = false): int
     {
@@ -729,18 +726,18 @@ class Record extends Dataset {
     // Import (RecordImport)
 
     /**
-     * Speichern für den Import: wie save(), nur dass Werte aus einer Exportdatei
-     * bereits im Datenbankformat vorliegen können ($storedFields, siehe
-     * Dataset::$storedFormatFields) und Passwörter als fertiger Hash ($prehashed,
-     * siehe Dataset::$prehashedFields). Beide Listen gelten für diesen einen Aufruf.
+     * Save for the import: like save(), except that values from an export file
+     * may already be in database format ($storedFields, see
+     * Dataset::$storedFormatFields) and passwords as a finished hash ($prehashed,
+     * see Dataset::$prehashedFields). Both lists apply to this one call.
      *
-     * @param string[] $fields         wie save()
-     * @param array    $data           wie save()
-     * @param string[] $storedFields   Felder im Datenbankformat
-     * @param string[] $prehashed      Passwort-Felder, deren Wert der Hash ist
-     * @param bool     $stayTemporary  Simulation: prüfen, kein checkIn
-     * @param bool     $deferRelations erster Durchlauf: Anzahl-Prüfung der
-     *                                 Verknüpfungsfelder auslassen (Dataset::$deferRelationChecks)
+     * @param string[] $fields         as save()
+     * @param array    $data           as save()
+     * @param string[] $storedFields   fields in database format
+     * @param string[] $prehashed      password fields whose value is the hash
+     * @param bool     $stayTemporary  simulation: check, no checkIn
+     * @param bool     $deferRelations first pass: skip the count check of the
+     *                                 link fields (Dataset::$deferRelationChecks)
      */
     public function importSave(array $fields, array $data, array $storedFields = [], array $prehashed = [], bool $stayTemporary = false, bool $deferRelations = false): ?int
     {
@@ -758,12 +755,12 @@ class Record extends Dataset {
     }
 
     /**
-     * Eine record_id für den Import frei machen: belegt sie eine Arbeitskopie oder
-     * ein gelöschter Datensatz (Papierkorb), wird dieser endgültig entfernt - samt
-     * Dateien. Ein produktiver Datensatz bleibt unangetastet.
+     * Free a record_id for the import: if it is taken by a working copy or a
+     * deleted record (trash), this is removed permanently - including
+     * files. A productive record remains untouched.
      *
-     * @return string  'free' (Id ist frei bzw. wurde frei gemacht),
-     *                 'productive' (belegt), 'tmp'/'deleted' wenn das Entfernen scheiterte
+     * @return string  'free' (id is free or was made free),
+     *                 'productive' (taken), 'tmp'/'deleted' if the removal failed
      */
     public function freeRecordId(int $id): string
     {
@@ -774,7 +771,7 @@ class Record extends Dataset {
         $this->db->popResult();
         if (!$row) return 'free';
         if (!empty($row['tmp'])) {
-            // Arbeitskopie: Dateien weg, Zeile weg (record_cache und data_rel per FK)
+            // working copy: files gone, row gone (record_cache and data_rel via FK)
             $this->deleteRecordFiles($id);
             $this->db->pushResult();
             $this->db->query("DELETE FROM `record` WHERE `record_id` = ? AND `tmp` = 1", 'i', [$id]);
@@ -782,7 +779,7 @@ class Record extends Dataset {
             return $this->_recordExists($id) ? 'tmp' : 'free';
         }
         if (!empty($row['deleted'])) {
-            // Papierkorb: endgültig löschen wie die Zeitplaner-Aufgabe trash (mit Hooks)
+            // trash: delete permanently like the scheduler task trash (with hooks)
             $this->finalDelete($id);
             return $this->_recordExists($id) ? 'deleted' : 'free';
         }
@@ -799,26 +796,26 @@ class Record extends Dataset {
     }
 
     /**
-     * Ursprünglichen Dateinamen einer Datei ändern (Info-Seite, Stift hinter
-     * "Original filename") - ohne Arbeitskopie, direkt am produktiven Datensatz.
+     * Change the original file name of a file (info page, pencil behind
+     * "Original filename") - without a working copy, directly on the productive record.
      *
-     * Nur der Name vor der Endung ist wählbar; die Endung bleibt die der Datei
-     * (`data_fil`.extension). Geändert werden alle Zeilen, die dieselbe physische
-     * Datei beschreiben: bei einsprachigen Feldern die Zeilen aller Sprachen
-     * (file_language_id NULL), bei mehrsprachigen die eigene Zeile der Sprache
-     * samt der Fallback-Zeilen, die auf sie verweisen. `version` bleibt - die
-     * Datei selbst ist unverändert, und der Name im Verweis ändert sich ohnehin
-     * (Cms::cmsMedia()). Der Inhalts-Cache wird verworfen und beim nächsten
-     * Zugriff neu aufgebaut.
+     * Only the name before the extension can be chosen; the extension remains that of the file
+     * (`data_fil`.extension). All rows that describe the same physical
+     * file are changed: for single-language fields the rows of all languages
+     * (file_language_id NULL), for multilingual ones the language's own row
+     * together with the fallback rows that point to it. `version` remains - the
+     * file itself is unchanged, and the name in the link changes anyway
+     * (Cms::cmsMedia()). The content cache is discarded and rebuilt on the
+     * next access.
      *
-     * Abgelehnt, solange eine Arbeitskopie besteht (auch die eigene): ihr
-     * Check-in schriebe den alten Namen zurück.
+     * Rejected as long as a working copy exists (including one's own): its
+     * check-in would write the old name back.
      *
-     * @param int      $recordId        produktiver Datensatz
-     * @param int      $fieldId         field_id des Datei-Feldes
-     * @param ?int     $fileLanguageId  Sprache der Datei (null: einsprachiges Feld)
-     * @param string   $baseName        neuer Name ohne Endung
-     * @return ?string                  der gespeicherte Dateiname, null bei Fehler (cms->error)
+     * @param int      $recordId        productive record
+     * @param int      $fieldId         field_id of the file field
+     * @param ?int     $fileLanguageId  language of the file (null: single-language field)
+     * @param string   $baseName        new name without extension
+     * @return ?string                  the stored file name, null on error (cms->error)
      */
     public function renameFile(int $recordId, int $fieldId, ?int $fileLanguageId, string $baseName): ?string
     {
@@ -836,7 +833,7 @@ class Record extends Dataset {
             }
             $extension = (string)$row['extension'];
 
-            // Arbeitskopie vorhanden (nicht verwaist, siehe getLock())?
+            // working copy present (not orphaned, see getLock())?
             $outdatedAt = gmdate('Y-m-d H:i:s', time() - (int)$this->config->get('admin.edit_lock_sec'));
             $this->db->query(
                 'SELECT 1 FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ? AND `changed_at` >= ?',
@@ -847,7 +844,7 @@ class Record extends Dataset {
                 return null;
             }
 
-            // Endung abschneiden, falls mit eingegeben; dann säubern wie beim Upload
+            // cut off the extension if entered as well; then clean up as with an upload
             $baseName = trim($baseName);
             if ($extension !== '' && str_ends_with(strtolower($baseName), '.' . strtolower($extension))) {
                 $baseName = substr($baseName, 0, -strlen($extension) - 1);
@@ -864,9 +861,9 @@ class Record extends Dataset {
                 . ' WHERE `record_id` = ? AND `field_id` = ? AND `file_language_id` <=> ?',
                 'siii', [$filename, $recordId, $fieldId, $fileLanguageId]
             );
-            // Inhalts-Cache verwerfen: Cms::fetch() baut ihn aus den data_*-Zeilen neu auf
+            // discard the content cache: Cms::fetch() rebuilds it from the data_* rows
             $this->db->query('DELETE FROM `record_cache` WHERE `record_id` = ?', 'i', [$recordId]);
-            // Volltext: der Dateiname ist Quelle (Upload-Felder)
+            // full text: the file name is the source (upload fields)
             $this->affectedTextFieldIds = [$fieldId];
             $this->refreshAffectedFulltext($recordId);
             return $filename;
@@ -876,9 +873,9 @@ class Record extends Dataset {
     }
 
     /**
-     * Metadaten (`data_fil`) einer Datei: filename, extension, mime_type, size ...
+     * Metadata (`data_fil`) of a file: filename, extension, mime_type, size ...
      *
-     * @param ?int $fileLanguageId  Sprache der Datei (null: einsprachiges Feld)
+     * @param ?int $fileLanguageId  language of the file (null: single-language field)
      */
     public function fileRow(int $recordId, int $fieldId, ?int $fileLanguageId): ?array
     {
@@ -897,17 +894,17 @@ class Record extends Dataset {
     // Audit-Log
 
     /**
-     * Schnappschuss eines Datensatzes für das Audit-Log (siehe Dataset::auditSnapshot()):
-     * die Metafelder aus `record`, jedes Feld des Bereichs aus dem Inhalts-Cache -
-     * mehrsprachige Felder je Sprache (Schlüssel "{name}@{code}", ein nicht
-     * übersetzter Wert zählt als leer) - und die Verknüpfungen als Id-Liste.
+     * Snapshot of a record for the audit log (see Dataset::auditSnapshot()):
+     * the meta fields from `record`, each field of the area from the content cache -
+     * multilingual fields per language (key "{name}@{code}", a value not
+     * translated counts as empty) - and the links as an id list.
      *
-     *     password    Vergleich über den Hash aus data_pwd, nie ein Wert
-     *     encrypted   Geheimtext aus dem Cache, Vergleich über den HMAC des exakten
-     *                 Klartexts (AuditLog::encryptedEntry()) - nicht über
-     *                 data_enc.hash, der ist normalisiert (Cms::encryptedHash()) und
-     *                 sähe eine geänderte Groß-/Kleinschreibung nicht
-     *     file        "Dateiname (Größe, B×H)", Vergleich über Name, Größe, Version
+     *     password    comparison via the hash from data_pwd, never a value
+     *     encrypted   ciphertext from the cache, comparison via the HMAC of the exact
+     *                 plain text (AuditLog::encryptedEntry()) - not via
+     *                 data_enc.hash, which is normalized (Cms::encryptedHash()) and
+     *                 would not see a changed upper/lower case
+     *     file        "file name (size, W×H)", comparison via name, size, version
      */
     public function auditSnapshot(int $id): array
     {
@@ -926,21 +923,21 @@ class Record extends Dataset {
             $primaryId = (int)($langCtx['primary_id'] ?? 0);
             $codes = (array)($langCtx['codes'] ?? []);
             $cache = $this->_loadRecordCacheRows($id);
-            // Fehlende Sprachzeilen nachbauen: nach neuen Thumbnails verwirft
-            // writeDeferredThumbnails() den Cache (Aufbau sonst erst beim nächsten
-            // Lesen) - ohne ihn sähe der Schnappschuss lauter leere Felder
+            // rebuild missing language rows: after new thumbnails
+            // writeDeferredThumbnails() discards the cache (otherwise it is only built on the next
+            // read) - without it the snapshot would see nothing but empty fields
             $missing = array_diff(array_map('intval', $languageIds), array_keys($cache));
             if ($missing) {
-                // schreibt alle Sprachzeilen auf einmal
+                // writes all language rows at once
                 $this->cms->createRecordCache($id, $areaId, (int)$row['instance_id'], (int)reset($missing));
                 $cache = $this->_loadRecordCacheRows($id);
             }
 
-            // Passwort-Hashes
+            // password hashes
             $secrets = [];
             $this->db->query("SELECT `field_id`, `language_id`, `data` FROM `data_pwd` WHERE `record_id` = ?", 'i', [$id]);
             while ($r = $this->db->fetch()) $secrets[(int)$r['field_id']][(int)$r['language_id']] = hash('sha256', (string)$r['data']);
-            // Verknüpfungen je Feld in ihrer Reihenfolge
+            // links per field in their order
             $relations = [];
             $this->db->query("SELECT `field_id`, `dest_id` FROM `data_rel` WHERE `src_id` = ? ORDER BY `field_id`, `position`, `dest_id`", 'i', [$id]);
             while ($r = $this->db->fetch()) $relations[(int)$r['field_id']][] = (int)$r['dest_id'];
@@ -952,9 +949,9 @@ class Record extends Dataset {
         $auditLog = $this->container->get(\Camindo\Core\AuditLog::class);
         foreach ($schemaVirtual as $name => $colDef) {
             $name = (string)$name;
-            if (isset($this->cms->schema[$name])) continue;   // Metafeld, steht schon oben
+            if (isset($this->cms->schema[$name])) continue;   // meta field, already above
             $type = (string)($colDef['type'] ?? 'text');
-            if ($type === 'fulltext') continue;   // abgeleitet aus den Quellfeldern
+            if ($type === 'fulltext') continue;   // derived from the source fields
             $label = (string)(($colDef['label'] ?? '') ?: $name);
             $fieldId = (int)($colDef['field_id'] ?? 0);
 
@@ -1005,8 +1002,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Bezeichnung fürs Audit-Log: Inhalt des Default-Feldes des Bereichs
-     * (area.default_field_id) in der Hauptsprache.
+     * Label for the audit log: content of the default field of the area
+     * (area.default_field_id) in the primary language.
      */
     protected function auditLabel(int $id, array $snapshot): string
     {
@@ -1015,8 +1012,8 @@ class Record extends Dataset {
     }
 
     /**
-     * Bezeichnung aus einem Schnappschuss - '' ohne Default-Feld oder Inhalt
-     * (auch für RecordPersonalData).
+     * Label from a snapshot - '' without default field or content
+     * (also for RecordPersonalData).
      */
     public function auditLabelOf(int $id, array $snapshot): string
     {

@@ -2,14 +2,14 @@
 /**
  * scheduler list | defaults | run ID|TYPE
  *
- *     list      alle Aufgaben des Zeitplaners: Id, Typ, an/aus, Zeitplan, nächster Lauf,
- *               Ergebnis des letzten Laufs
- *     defaults  fehlende Vorgabe-Aufgaben anlegen (Scheduler::createDefaults()) - nur
- *               Typen, für die es noch keine Aufgabe gibt; der Installer ruft das
- *               ebenfalls auf
- *     run       eine Aufgabe jetzt im Vordergrund ausführen - per Id oder per Typ (die
- *               erste Aufgabe dieses Typs, etwa "run trash"); auch ausgeschaltete.
- *               Exit-Code 1, wenn der Lauf fehlschlägt
+ *     list      all tasks of the scheduler: id, type, on/off, schedule, next run,
+ *               result of the last run
+ *     defaults  create missing default tasks (Scheduler::createDefaults()) - only
+ *               types for which there is no task yet; the installer calls this
+ *               also on
+ *     run       run a task now in the foreground - by id or by type (the
+ *               first task of this type, e.g. "run trash"); also disabled ones.
+ *               exit code 1 if the run fails
  */
 namespace Camindo\Core\Cli;
 

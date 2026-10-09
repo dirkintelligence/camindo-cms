@@ -1,101 +1,101 @@
 <?php
 /**
- * Ausführung der zeitgesteuerten Aufgaben (Modul Scheduler).
+ * Execution of the time-controlled tasks (module Scheduler).
  *
- * Zwei Einstiege, beide über Core/cron/scheduler.php auf der Kommandozeile:
+ * Two entry points, both via Core/cron/scheduler.php on the command line:
  *
- *     dispatch()    ohne Argument - jede Minute von TriggerCron::tick1m() gestartet.
- *                   Sucht die fälligen Aufgaben (`enabled`, `next_run` erreicht) und
- *                   startet je Aufgabe einen eigenen Hintergrundprozess
- *                   (scheduler.php --id=N), damit eine lange Aufgabe die anderen
- *                   nicht aufhält. Vorher wird `next_run` schon weitergesetzt und
- *                   `last_status` auf "läuft" - so wird nichts doppelt gestartet.
- *     run($id)      --id=N - führt EINE Aufgabe aus und hält das Ergebnis fest
- *                   (`last_run`, `last_status`, `last_message`), bei gesetztem
- *                   `log` auch im System-Logfile var/log/{datum}_scheduler.log.
- *                   Mit --token=... wird zusätzlich der bgproc-Eintrag abgeschlossen
- *                   (Button "Jetzt ausführen" im Backend).
+ *     dispatch()    without argument - started every minute by TriggerCron::tick1m().
+ *                   Looks up the due tasks (`enabled`, `next_run` reached) and
+ *                   starts a background process for each task
+ *                   (scheduler.php --id=N), so that a long task does not hold up the others.
+ *                   Before that, `next_run` is already advanced and
+ *                   `last_status` set to "running" - so nothing is started twice.
+ *     run($id)      --id=N - runs ONE task and records the result
+ *                   (`last_run`, `last_status`, `last_message`), and with `log` set
+ *                   also in the system log file var/log/{date}_scheduler.log.
+ *                   With --token=... the bgproc entry is additionally closed
+ *                   (button "Run now" in the backend).
  *
- * UNTER WELCHEM ADMIN
+ * UNDER WHICH ADMIN
  * --------------------
- * Jede Aufgabe läuft unter ihrem Admin (`scheduler`.`admin_id`, Vorgabe der Admin
- * 'scheduler'): run() öffnet für ihn eine eigene Session (ApiSession::runAs(),
- * Oberfläche Kommandozeile, Kanal 'scheduler') und schließt sie danach. Es gelten
- * seine Rechte; im Audit-Log erscheint er mit der Herkunft 'scheduler', im Logfile
- * des Zeitplaners seine admin_id. Ein php-Script bekommt die Session als
- * CAMINDO_API_SESSION (runPhp()), ein Template arbeitet im selben Prozess darin.
- * Ist der Admin gelöscht, gesperrt oder darf seine Gruppe die Kommandozeile nicht
- * benutzen, scheitert der Lauf mit einer Meldung.
+ * Each task runs under its admin (`scheduler`.`admin_id`, default the admin
+ * 'scheduler'): run() opens its own session for it (ApiSession::runAs(),
+ * command-line interface, channel 'scheduler') and closes it afterwards. Its
+ * rights apply; in the audit log it appears with the origin 'scheduler', in the log file
+ * of the scheduler its admin_id. A PHP script gets the session as
+ * CAMINDO_API_SESSION (runPhp()); a template works in the same process within it.
+ * If the admin is deleted, locked, or its group may not use the command line,
+ * the run fails with a message.
  *
- * BERICHTE
+ * REPORTS
  * --------------------
- * Eine url- oder php-Aufgabe mit details.report ist ein wählbarer Bericht: Admins
- * der Gruppen in details.report_group_ids abonnieren ihn in ihren persönlichen
- * Einstellungen (settings.reports). Nach jedem ERFOLGREICHEN Lauf geht die Ausgabe
- * als interne Nachricht im HTML-Format an die Abonnenten (sendReport()).
+ * A url or php task with details.report is a selectable report: admins of the
+ * groups in details.report_group_ids subscribe to it in their personal settings
+ * (settings.reports). After every SUCCESSFUL run the output goes as an internal message in
+ * HTML format to the subscribers (sendReport()).
  *
- * ZEITÜBERSCHREITUNG
+ * TIME OVERRUN
  * --------------------
- * `max_minutes` ist die Obergrenze je Lauf: Kommandos laufen über Execute::execute()
- * mit Timeout, der URL-Abruf über CURLOPT_TIMEOUT. Eine Aufgabe, die trotzdem länger
- * als max_minutes + 5 als "läuft" steht, gilt für dispatch() als abgebrochen und
- * wird beim nächsten Termin wieder gestartet.
+ * `max_minutes` is the upper limit per run: commands run via Execute::execute()
+ * with timeout, the URL fetch via CURLOPT_TIMEOUT. A task that still shows as "running"
+ * for longer than max_minutes + 5 counts as aborted for dispatch() and
+ * is started again at the next due time.
  *
- * DIE AUFGABEN
+ * THE TASKS
  * --------------------
- *     url        curl-Abruf der Adresse, wahlweise mit HTTP-Auth (Basic); jeder
- *                HTTP-Status ab 400 ist ein Fehler. Die Antwort wird unter
- *                var/custom/html/{output_file} abgelegt oder verworfen.
- *     php        {paths.php} var/custom/php/{script} - Exit-Code ungleich 0 ist ein
- *                Fehler, die Ausgabe (stdout) wird abgelegt oder verworfen.
- *     dbbackup   mysqldump nach var/dbbackup/backup-1.sql. Vorher rücken die
- *                vorhandenen Sicherungen um eins (backup-1 -> backup-2 ...), was
- *                über `details.backups` hinausgeht, wird gelöscht. Höchstens EIN
- *                Lauf am Tag: liegt backup-1.sql von heute vor, passiert nichts.
- *                Das Kommando selbst steht in Camindo\Core\Backup (Passwort aus
- *                paths.sqlpwd_file, nie auf der Kommandozeile).
- *     logcleanup Logdateien var/log/{Y-m-d}_{name}.log löschen, deren Tag älter ist
- *                als `details.log_days` (Sicherheitsprotokolle Scheduler::SECURITY_LOGS:
- *                `details.security_days`), dazu die Zeilen in admin_login_attempt /
- *                user_login_attempt älter als `details.attempt_days` (Name + IP).
- *                Maßgeblich ist das Datum im Dateinamen, nicht filemtime().
- *     cachecleanup IncludeCache::cleanup() - abgelaufene Dateien des Ausgabe-Caches
- *                von CMS:INCLUDE unter var/cache/include löschen, dazu Dateien zu
- *                gelöschten oder geänderten Templates und liegen gebliebene Sperr-
- *                und temporäre Dateien. Keine Einstellungen.
- *     template   Page::renderScheduled() - ein Frontend-Template (Verwendung
- *                "zeitgesteuert") in der Umgebung seiner Instanz und der gewählten
- *                Sprache. Zeitfenster: vom Ende des letzten ERFOLGREICHEN Laufs
- *                (details.window_end, UTC) bis jetzt; beim ersten Lauf ist es leer
- *                (Beginn = Ende). Nach einem Fehler bleibt window_end stehen, der
- *                nächste Lauf holt das ganze Fenster nach. Meldungen des Templates
- *                (Cms-Fehler, z. B. von CMS:EMAIL) machen den Lauf zum Fehler.
- *                Die Ausgabe wird wie bei url/php abgelegt oder verworfen.
- *     fulltext   RecordService::rebuildFulltext() für details.area_ids (leer = alle
- *                Datensatzbereiche), mit details.only_stale nur die als veraltet
- *                markierten (FulltextState). Bereiche, die gerade ein anderer Prozess
- *                neu aufbaut, werden übersprungen. Reicht max_minutes nicht, bricht der Lauf
- *                ab und gilt als fehlgeschlagen - der nächste beginnt von vorn.
- *     trash      ToolDatabase::purgeTrash() mit admin.trash_retention_days; Sperre
- *                'trash' gegen parallele Läufe, Herkunft im Audit-Log 'trash'.
- *                Fehler einzelner Datensätze halten den Lauf nicht an, machen ihn
- *                aber zum Fehler (Meldung mit den ersten Fehlern).
- *     tmpcleanup var/tmp (älter als admin.tmp_retention_hours; *.lock, *.stamp und
- *                cron.log.txt bleiben) und var/export (RecordExport::cleanup()).
- *     privacy    PrivacyJobs::runDue() in Runden zu RUN_LIMIT Aufträgen, bis keine
- *                fälligen mehr da sind, max_minutes abläuft oder ein Auftrag scheitert
- *                (er bleibt fällig, der nächste Lauf versucht ihn erneut).
+ *     url        curl fetch of the address, optionally with HTTP auth (Basic); every
+ *                HTTP status from 400 on is an error. The response is stored under
+ *                var/custom/html/{output_file} or discarded.
+ *     php        {paths.php} var/custom/php/{script} - exit code not 0 is an
+ *                error, the output (stdout) is stored or discarded.
+ *     dbbackup   mysqldump to var/dbbackup/backup-1.sql. Before that the
+ *                existing backups move up by one (backup-1 -> backup-2 ...), whatever
+ *                goes beyond `details.backups` is deleted. At most ONE run per day:
+ *                if backup-1.sql of today exists, nothing happens.
+ *                The command itself is in Camindo\Core\Backup (password from
+ *                paths.sqlpwd_file, never on the command line).
+ *     logcleanup delete log files var/log/{Y-m-d}_{name}.log whose day is older
+ *                than `details.log_days` (security logs Scheduler::SECURITY_LOGS:
+ *                `details.security_days`), plus the rows in admin_login_attempt /
+ *                user_login_attempt older than `details.attempt_days` (name + IP).
+ *                What counts is the date in the file name, not filemtime().
+ *     cachecleanup IncludeCache::cleanup() - delete expired files of the output cache
+ *                of CMS:INCLUDE under var/cache/include, plus files of
+ *                deleted or changed templates and leftover lock and
+ *                temporary files. No settings.
+ *     template   Page::renderScheduled() - a frontend template (usage
+ *                "scheduled") in the environment of its instance and the chosen
+ *                language. Time window: from the end of the last SUCCESSFUL run
+ *                (details.window_end, UTC) until now; on the first run it is empty
+ *                (start = end). After an error, window_end stays, and the
+ *                next run catches up the whole window. Messages of the template
+ *                (CMS errors, e.g. from CMS:EMAIL) make the run an error.
+ *                The output is stored or discarded as with url/php.
+ *     fulltext   RecordService::rebuildFulltext() for details.area_ids (empty = all
+ *                record areas), with details.only_stale only those marked as stale
+ *                (FulltextState). Areas that another process is currently rebuilding
+ *                are skipped. If max_minutes is not enough, the run aborts and
+ *                counts as failed - the next one starts over.
+ *     trash      ToolDatabase::purgeTrash() with admin.trash_retention_days; lock
+ *                'trash' against parallel runs, origin in the audit log 'trash'.
+ *                Errors of individual records do not stop the run, but make it an
+ *                error (message with the first errors).
+ *     tmpcleanup var/tmp (older than admin.tmp_retention_hours; *.lock, *.stamp and
+ *                cron.log.txt remain) and var/export (RecordExport::cleanup()).
+ *     privacy    PrivacyJobs::runDue() in rounds of RUN_LIMIT orders, until none
+ *                are due, max_minutes expires or an order fails
+ *                (it remains due, the next run tries it again).
  *     retention  IpAnonymizer, AuditLog::purge(), Message::purgeExpired(),
- *                RecordUser::purgeUnconfirmed() - jeder Schritt für sich: ein Fehler
- *                hält die übrigen nicht auf, macht den Lauf aber zum Fehler.
- *     auditverify AuditLog::verifyAll() + storeVerifyResult(); Befunde = Fehler.
- *     updatecheck UpdateCheck::run(); ohne paths.composer: nichts zu tun.
- *     messagedigest MessageDigest::run() - "neu" sind Nachrichten seit dem vorigen
- *                Lauf ($task['last_run'] vor dem Start, ohne vorigen Lauf: 24 Stunden);
- *                ein gescheiterter Versand macht den Lauf zum Fehler.
+ *                RecordUser::purgeUnconfirmed() - each step on its own: an error
+ *                does not stop the others, but makes the run an error.
+ *     auditverify AuditLog::verifyAll() + storeVerifyResult(); findings = errors.
+ *     updatecheck UpdateCheck::run(); without paths.composer: nothing to do.
+ *     messagedigest MessageDigest::run() - "new" are messages since the previous
+ *                run ($task['last_run'] before the start; without a previous run: 24 hours);
+ *                a failed sending makes the run an error.
  *
- * @see Camindo\Core\Modules\Scheduler\Scheduler          Aufgaben, Cron-Rechnung
- * @see Camindo\Core\Modules\Scheduler\SchedulerBackend   "Jetzt ausführen"
+ * @see Camindo\Core\Modules\Scheduler\Scheduler          tasks, cron calculation
+ * @see Camindo\Core\Modules\Scheduler\SchedulerBackend   "Run now"
  * @see Camindo\Core\cron\TriggerCron
  */
 namespace Camindo\Core\Modules\Scheduler;
@@ -124,14 +124,14 @@ use Camindo\Core\Modules\Tools\ToolDatabase;
 
 class SchedulerRunner {
 
-    // Nachlauf, ab dem ein "laufender" Eintrag als abgebrochen gilt (Minuten)
+    // Grace period after which a "running" entry counts as aborted (minutes)
     private const STALE_MINUTES = 5;
 
-    // Größter Bericht, der als Nachricht verschickt wird (Bytes); darüber geht nur
-    // ein Hinweis hinaus
+    // Largest report that is sent as a message (bytes); above it only
+    // a note goes out
     private const REPORT_MAX_BYTES = 2 * 1024 * 1024;
 
-    /** Ausgabe des laufenden url-/php-Laufs - Inhalt eines Berichts (sendReport()) */
+    /** Output of the running url/php run - content of a report (sendReport()) */
     private ?string $output = null;
 
     public function __construct(
@@ -147,7 +147,7 @@ class SchedulerRunner {
     {}
 
     /**
-     * Absoluter Pfad des CLI-Scripts.
+     * Absolute path of the CLI script.
      */
     public function scriptPath(): string
     {
@@ -155,11 +155,11 @@ class SchedulerRunner {
     }
 
     /**
-     * Eine Aufgabe sofort als Hintergrundprozess des angemeldeten Admins starten
-     * ("Jetzt ausführen" in der Oberfläche, API scheduler.run).
+     * Start a task immediately as a background process of the logged-in admin
+     * ("Run now" in the UI, API scheduler.run).
      *
-     * @param string $error  Grund, wenn der Start scheitert
-     * @return ?string       Token des Hintergrundprozesses; null = nicht gestartet
+     * @param string $error  reason if the start fails
+     * @return ?string       token of the background process; null = not started
      */
     public function startNow(int $id, string &$error = ''): ?string
     {
@@ -169,9 +169,9 @@ class SchedulerRunner {
     }
 
     /**
-     * Fällige Aufgaben starten - je eine als eigener Hintergrundprozess.
+     * Start due tasks - one each as its own background process.
      *
-     * @return int  Anzahl gestarteter Aufgaben
+     * @return int  number of started tasks
      */
     public function dispatch(): int
     {
@@ -188,8 +188,8 @@ class SchedulerRunner {
             $id = (int)$task['scheduler_id'];
             if ($this->isRunning($task, $now)) continue;
 
-            // Nächsten Termin vormerken und als laufend kennzeichnen - BEVOR der
-            // Prozess startet, sonst fände der nächste Durchlauf dieselbe Aufgabe
+            // Note the next due time and mark as running - BEFORE the
+            // process starts, otherwise the next pass would find the same task
             $nextRun = $this->scheduler->nextRun($task, $now);
             $this->db->query(
                 "UPDATE `scheduler` SET `next_run` = ?, `last_run` = ?, `last_status` = ?, `last_message` = ''"
@@ -210,7 +210,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Läuft die Aufgabe gerade (und nicht schon verdächtig lange)?
+     * Is the task running right now (and not already suspiciously long)?
      */
     private function isRunning(array $task, int $now): bool
     {
@@ -223,11 +223,11 @@ class SchedulerRunner {
     }
 
     /**
-     * EINE Aufgabe ausführen und das Ergebnis festhalten.
+     * Run ONE task and record the result.
      *
      * @param int         $id     scheduler_id
-     * @param string|null $token  bgproc-Token, wenn aus dem Backend gestartet
-     * @return bool  true, wenn die Aufgabe ohne Fehler durchlief
+     * @param string|null $token  bgproc token if started from the backend
+     * @return bool  true if the task passed without errors
      */
     public function run(int $id, ?string $token = null): bool
     {
@@ -242,8 +242,8 @@ class SchedulerRunner {
         $timeout = max(60, (int)$task['max_minutes'] * 60);
         set_time_limit($timeout + 60);
 
-        // Unter dem Admin der Aufgabe: eigene Session (Oberfläche Kommandozeile,
-        // Kanal 'scheduler') - seine Rechte gelten, im Audit-Log erscheint er
+        // Under the admin of the task: own session (command-line interface,
+        // channel 'scheduler') - its rights apply, in the audit log it appears
         $apiSession = $this->container->get(ApiSession::class);
         $sessionId = '';
         try {
@@ -269,9 +269,9 @@ class SchedulerRunner {
                 default    => throw new \Exception('unknown type "' . $task['type'] . '"'),
             };
             $ok = true;
-            // Wählbarer Bericht: Ergebnis an die Abonnenten - noch in der Session der
-            // Aufgabe, ihr Admin ist der Absender. Ein Fehler beim Versand macht den
-            // Lauf nicht zum Fehler, er steht in der Meldung.
+            // Selectable report: result to the subscribers - still in the session of the
+            // task, its admin is the sender. An error when sending does not make the
+            // run an error; it is noted in the message.
             if ($this->output !== null) {
                 try {
                     $message .= $this->sendReport($task, $this->output);
@@ -296,7 +296,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Ergebnis eintragen und protokollieren.
+     * Enter and log the result.
      */
     private function finish(array $task, bool $ok, string $message): void
     {
@@ -314,11 +314,11 @@ class SchedulerRunner {
         }
     }
 
-    // Die Aufgaben
+    // The tasks
     // ====================
 
     /**
-     * URL-Aufruf mit curl.
+     * URL call with curl.
      */
     private function runUrl(array $task, int $timeout): string
     {
@@ -354,11 +354,11 @@ class SchedulerRunner {
     }
 
     /**
-     * PHP-Script aus var/custom/php auf der Kommandozeile. Das Script bekommt die Session
-     * der Aufgabe als Umgebungsvariable CAMINDO_API_SESSION und arbeitet damit über
-     * die API unter ihrem Admin:
+     * PHP script from var/custom/php on the command line. The script gets the session
+     * of the task as environment variable CAMINDO_API_SESSION and works with it via the
+     * API under its admin:
      *
-     *     require '/pfad/zum/projekt/load_camindo.php';
+ *     require '/path/to/project/load_camindo.php';
      *     $app->get(\Camindo\Core\Api\ApiSession::class)->resume(getenv('CAMINDO_API_SESSION'), 'scheduler');
      *     $result = $app->get(\Camindo\Core\Api\Api::class)->call('record.search', [...]);
      */
@@ -366,7 +366,7 @@ class SchedulerRunner {
     {
         $details = (array)($task['details'] ?? []);
         $script = (string)($details['script'] ?? '');
-        // aufgelöster Pfad innerhalb von var/custom/php (Scheduler::scriptFile())
+        // resolved path within var/custom/php (Scheduler::scriptFile())
         $path = $this->scheduler->scriptFile($script);
         if ($path === null) {
             throw new \Exception("script not found: $script");
@@ -384,7 +384,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Zeitgesteuertes Template (Typ template) - siehe Klassenkommentar.
+     * Time-controlled template (type template) - see class comment.
      */
     private function runTemplate(array $task): string
     {
@@ -397,7 +397,7 @@ class SchedulerRunner {
         $lastRun = $windowEnd !== '' ? (int)strtotime($windowEnd . ' UTC') : $thisRun;
         if ($lastRun <= 0 || $lastRun > $thisRun) $lastRun = $thisRun;
 
-        // Eigener Prozess je Aufgabe - die Fehlersammlung gehört diesem Lauf
+        // Own process per task - the error collection belongs to this run
         $cms = $this->container->get(Cms::class);
         $cms->errorsReset();
         $output = $this->container->get(Page::class)->renderScheduled(
@@ -405,7 +405,7 @@ class SchedulerRunner {
         );
         if ($cms->hasErrors) throw new \Exception('template: ' . $cms->errorMsg(' | '));
 
-        // Fenster erst nach Erfolg weiterschieben (direkt, ohne Maske und Audit)
+        // Only advance the window after success (directly, without mask and audit)
         $this->db->query(
             "UPDATE `scheduler` SET `details` = JSON_SET(COALESCE(`details`, '{}'), '$.window_end', ?) WHERE `scheduler_id` = ?",
             'si', [gmdate('Y-m-d H:i:s', $thisRun), (int)$task['scheduler_id']]
@@ -415,14 +415,14 @@ class SchedulerRunner {
     }
 
     /**
-     * Wählbarer Bericht (details.report, Typ url/php): die Ausgabe als interne
-     * Nachricht (Message::sendSystem(), nur im Posteingang) an jeden Abonnenten
-     * (Scheduler::reportSubscribers()). Die Ausgabe geht als HTML in die Nachricht:
-     * bei einem ganzen Dokument nur der Inhalt von <body>, aktiver Inhalt entfernt
-     * (HtmlSanitizer), Text ohne Tags vorformatiert. Größer als REPORT_MAX_BYTES:
-     * nur ein Hinweis.
+     * Selectable report (details.report, type url/php): the output as internal
+     * message (Message::sendSystem(), only in the inbox) to each subscriber
+     * (Scheduler::reportSubscribers()). The output goes as HTML into the message:
+     * for a whole document only the content of <body>, active content removed
+     * (HtmlSanitizer), text without tags preformatted. Larger than REPORT_MAX_BYTES:
+     * only a note.
      *
-     * @return string  Zusatz für die Meldung des Laufs ('' ohne Abonnenten)
+     * @return string  addition to the message of the run ('' without subscribers)
      */
     private function sendReport(array $task, string $output): string
     {
@@ -454,7 +454,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Ausgabe als HTML für die Nachricht (siehe sendReport()).
+     * Output as HTML for the message (see sendReport()).
      */
     private function reportHtml(string $output): string
     {
@@ -462,7 +462,7 @@ class SchedulerRunner {
         if (!preg_match('/<[a-z!\/][^>]*>/i', $output)) {
             return '<pre>' . htmlspecialchars($output) . '</pre>';
         }
-        // Ganzes Dokument: nur der Körper; Kopf und Stile gehören nicht ins Backend
+        // Whole document: only the body; head and styles do not belong in the backend
         if (preg_match('~<body\b[^>]*>(.*?)(?:</body>|$)~is', $output, $m)) $output = $m[1];
         $output = (string)preg_replace('~<(head|style|title)\b[^>]*>.*?</\1\s*>~is', '', $output);
         $output = (string)preg_replace('~<!doctype[^>]*>|</?(html|body)\b[^>]*>~i', '', $output);
@@ -470,11 +470,11 @@ class SchedulerRunner {
     }
 
     /**
-     * Ausgabe einer Aufgabe unter var/custom/html ablegen - oder verwerfen. Der
-     * Zielordner muss aufgelöst (realpath, nach dem Anlegen) innerhalb von
-     * var/custom/html liegen, die Datei selbst darf kein Symlink sein.
+     * Store a task's output under var/custom/html - or discard it. The target
+     * folder must resolve (realpath, after creation) within
+     * var/custom/html, the file itself must not be a symlink.
      *
-     * @return string  Zusatz für die Meldung
+     * @return string  addition to the message
      */
     private function saveOutput(array $details, string $content): string
     {
@@ -500,15 +500,15 @@ class SchedulerRunner {
     }
 
     /**
-     * Datenbank-Sicherung, einmal am Tag - das mysqldump-Kommando liegt in
-     * Camindo\Core\Backup (auch von camindo.php upgrade/component benutzt).
+     * Database backup, once a day - the mysqldump command is in
+     * Camindo\Core\Backup (also used by camindo.php upgrade/component).
      */
     private function runDbBackup(array $task, int $timeout): string
     {
         $details = (array)($task['details'] ?? []);
         $keep = max(1, (int)($details['backups'] ?? 7));
 
-        // Höchstens einmal am Tag
+        // At most once a day
         $first = $this->backup->dir() . '/backup-1.sql';
         if (is_file($first) && date('Y-m-d', (int)filemtime($first)) === date('Y-m-d')) {
             return 'skipped, backup-1.sql is from today';
@@ -519,28 +519,28 @@ class SchedulerRunner {
     }
 
     /**
-     * Volltext neu aufbauen (Typ fulltext) - siehe Klassenkommentar.
+     * Rebuild the full text (type fulltext) - see class comment.
      */
     private function runFulltext(array $task, int $timeout): string
     {
         $details = (array)($task['details'] ?? []);
         $areaIds = (array)($details['area_ids'] ?? []);
         if (!empty($details['only_stale'])) {
-            // nur die als veraltet markierten (der gewählten) Bereiche
+            // only those (of the selected) areas marked as stale
             $stale = $this->container->get(\Camindo\Core\FulltextState::class)->staleAreaIds();
             $areaIds = $areaIds ? array_values(array_intersect(array_map('intval', $areaIds), $stale)) : $stale;
             if (empty($areaIds)) return 'no outdated areas';
         }
         $result = $this->container->get(RecordService::class)->rebuildFulltext($areaIds, time() + $timeout);
         $message = sprintf('%d records in %d areas', $result['records'], $result['areas']);
-        // Bereiche, die gerade ein anderer Prozess neu aufbaut (FulltextState-Sperre)
+        // Areas that another process is currently rebuilding (FulltextState lock)
         if ($result['skipped']) $message .= ', skipped (already running): ' . implode(', ', $result['skipped']);
         if (!$result['complete']) throw new \Exception("timeout after $timeout s, $message done");
         return $message;
     }
 
     /**
-     * Ausgabe-Cache von CMS:INCLUDE aufräumen (Typ cachecleanup).
+     * Clean up the output cache of CMS:INCLUDE (type cachecleanup).
      */
     private function runCacheCleanup(): string
     {
@@ -553,7 +553,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Alte Protokolle löschen (Typ logcleanup) - siehe Klassenkommentar.
+     * Delete old logs (type logcleanup) - see class comment.
      */
     private function runLogCleanup(array $task): string
     {
@@ -599,11 +599,11 @@ class SchedulerRunner {
             $this->system->convertSize((float)$bytes), $attempts);
     }
 
-    // Wartungsaufgaben (Scheduler::MAINTENANCE_TYPES)
+    // Maintenance tasks (Scheduler::MAINTENANCE_TYPES)
     // ====================
 
     /**
-     * Papierkorb leeren (Typ trash) - siehe Klassenkommentar.
+     * Empty the trash (type trash) - see class comment.
      */
     private function runTrash(): string
     {
@@ -611,7 +611,7 @@ class SchedulerRunner {
         $auditLog = $this->container->get(AuditLog::class);
         $context = $auditLog->context();
         try {
-            // Audit-Log: endgültiges Löschen aus dem Papierkorb als 'trash' kennzeichnen
+            // Audit log: mark the final deletion from the trash as 'trash'
             $auditLog->setContext('trash');
             $result = $this->container->get(ToolDatabase::class)->purgeTrash();
         }
@@ -629,7 +629,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Temporäre Dateien und abgelaufene Exporte löschen (Typ tmpcleanup).
+     * Delete temporary files and expired exports (type tmpcleanup).
      */
     private function runTmpCleanup(): string
     {
@@ -638,13 +638,13 @@ class SchedulerRunner {
     }
 
     /**
-     * var/tmp aufräumen: alles, was älter ist als admin.tmp_retention_hours -
-     * liegen gebliebene Importverzeichnisse, Auftragsdateien, Fortschrittsdateien
-     * abgebrochener Prozesse. Sperrdateien (*.lock), Stempeldateien (*.stamp) und
-     * cron.log.txt bleiben - sie werden laufend benutzt (SystemHealth::checkTmp()
-     * zählt mit denselben Ausnahmen).
+     * Clean up var/tmp: everything older than admin.tmp_retention_hours -
+     * left-over import directories, job files, progress files of
+     * aborted processes. Lock files (*.lock), stamp files (*.stamp) and
+     * cron.log.txt remain - they are used continuously (SystemHealth::checkTmp()
+     * counts with the same exceptions).
      *
-     * @return int  Anzahl der entfernten Einträge
+     * @return int  number of removed entries
      */
     public function cleanupTmp(): int
     {
@@ -676,8 +676,8 @@ class SchedulerRunner {
     }
 
     /**
-     * Fällige Aufträge der Lösch-Policies (Typ privacy) - in Runden, bis keine mehr
-     * fällig sind oder die Zeit abläuft.
+     * Due orders of the deletion policies (type privacy) - in rounds, until none
+     * are due or the time runs out.
      */
     private function runPrivacy(int $timeout): string
     {
@@ -689,9 +689,9 @@ class SchedulerRunner {
             $result = $jobs->runDue();
             $done += $result['done'];
             $failed += $result['failed'];
-            // Weiter nur nach einer vollen Runde ohne Fehler: ein gescheiterter Auftrag
-            // bleibt fällig und käme sonst sofort wieder dran - seine Versuche
-            // (PrivacyJobs::MAX_ATTEMPTS) sollen sich auf mehrere Läufe verteilen
+            // Continue only after a full round without errors: a failed order
+            // remains due and would otherwise come up again immediately - its attempts
+            // (PrivacyJobs::MAX_ATTEMPTS) should be spread over several runs
         } while ($result['done'] >= PrivacyJobs::RUN_LIMIT && $result['failed'] === 0 && time() < $deadline);
         $message = sprintf('%d jobs done, %d failed', $done, $failed);
         if ($failed > 0) throw new \Exception($message . ' (details: log privacy)');
@@ -699,7 +699,7 @@ class SchedulerRunner {
     }
 
     /**
-     * Aufbewahrungsfristen (Typ retention) - jeder Schritt für sich.
+     * Retention periods (type retention) - each step on its own.
      */
     private function runRetention(): string
     {
@@ -718,8 +718,8 @@ class SchedulerRunner {
             },
             'messages' => fn() => sprintf('%d messages deleted', $this->container->get(Message::class)->purgeExpired()),
             'unconfirmed' => function () {
-                // in Runden: purgeUnconfirmed() nimmt höchstens PURGE_UNCONFIRMED_LIMIT,
-                // eine Runde mit Fehlern (weniger gelöscht) beendet die Schleife
+                // in rounds: purgeUnconfirmed() takes at most PURGE_UNCONFIRMED_LIMIT,
+                // a round with errors (fewer deleted) ends the loop
                 $users = $this->container->get(RecordUser::class);
                 $total = 0;
                 for ($round = 0; $round < 50; $round++) {
@@ -744,8 +744,8 @@ class SchedulerRunner {
     }
 
     /**
-     * Nachrichten per E-Mail zusammenfassen (Typ messagedigest). last_run steht in
-     * der Zeitzone des Systems, message.created_at in UTC.
+     * Summarize messages by e-mail (type messagedigest). last_run is in
+     * the time zone of the system, message.created_at in UTC.
      */
     private function runMessageDigest(array $task): string
     {
@@ -763,8 +763,8 @@ class SchedulerRunner {
     }
 
     /**
-     * Audit-Log prüfen (Typ auditverify) - das Ergebnis zeigt die Startseite
-     * (SystemHealth, Prüfung 'audit').
+     * Check the audit log (type auditverify) - the result is shown by the start page
+     * (SystemHealth, check 'audit').
      */
     private function runAuditVerify(): string
     {
@@ -778,8 +778,8 @@ class SchedulerRunner {
     }
 
     /**
-     * Nach Updates und Sicherheitslücken suchen (Typ updatecheck) - das Ergebnis
-     * zeigen die Info-Seite und die Startseite.
+     * Search for updates and security vulnerabilities (type updatecheck) - the result
+     * is shown by the info page and the start page.
      */
     private function runUpdateCheck(): string
     {

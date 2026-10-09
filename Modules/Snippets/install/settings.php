@@ -1,6 +1,6 @@
 <?php
-// Core-Modul Snippets: projekteigene Snippet-Sets der Websites unter
-// var/custom/snippets/{set}/lang - Präfix custom.{set} (Camindo\Core\SnippetCache).
+// Core module Snippets: project-specific snippet sets of the websites under
+// var/custom/snippets/{set}/lang - prefix custom.{set} (Camindo\Core\SnippetCache).
 return [
 
 'version' => '9.0.0',
@@ -9,7 +9,7 @@ return [
 'description' => '#snippets.module_description',
 'icon' => 'translate',
 'listed' => true,
-// Zusätzliche Modulrechte: keine - wer das Modul darf, darf alle Sets
+// Additional module permissions: none - whoever may use the module may use all sets
 'access' => [
 ]
 

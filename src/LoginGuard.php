@@ -2,53 +2,53 @@
 /**
  * class LoginGuard
  *
- * Brute-Force-Schutz der Backend-Anmeldung. Zählt fehlgeschlagene Versuche je
- * Anmeldename und sperrt den Namen, wenn es zu viele in zu kurzer Zeit werden.
+ * Brute-force protection of the backend login. Counts failed attempts per
+ * login name and blocks the name if there are too many in too short a time.
  *
- * Gezählt werden falsche Passwörter UND falsche Codes der zweiten Stufe (E-Mail,
- * Authenticator-App, Wiederherstellungscode - Admin::loginByCode(), AdminBackend::
- * totp()) auf denselben Namen. Geleert wird der Zähler erst nach der vollständigen
- * Anmeldung, nicht schon nach dem richtigen Passwort: sonst ließe sich ein
- * sechsstelliger TOTP-Code mit Passwort + Code im Wechsel beliebig oft raten.
+ * Counted are wrong passwords AND wrong codes of the second factor (email,
+ * authenticator app, recovery code - Admin::loginByCode(), AdminBackend::
+ * totp()) on the same name. The counter is only cleared after the complete
+ * login, not already after the correct password: otherwise a
+ * six-digit TOTP code could be guessed arbitrarily often by alternating password + code.
  *
- * WARUM AUCH UNBEKANNTE NAMEN GEZÄHLT WERDEN
+ * WHY UNKNOWN NAMES ARE COUNTED TOO
  * --------------------
- * Gezählt wird der eingegebene Name, nicht das gefundene Konto - auch ein Name, den
- * es gar nicht gibt, wandert in die Tabelle. Sonst verhielte sich die Anmeldung bei
- * einem existierenden Konto nach drei Versuchen anders als bei einem erfundenen, und
- * genau daran liesse sich ablesen, welche Konten es gibt. Aus demselben Grund nennt
- * Admin::loginByName() nie den Grund des Scheiterns.
+ * The entered name is counted, not the account found - even a name that does
+ * not exist at all ends up in the table. Otherwise the login would behave differently
+ * for an existing account after three attempts than for an invented one, and
+ * exactly that would reveal which accounts exist. For the same reason
+ * Admin::loginByName() never states the reason for the failure.
  *
- * DIE TABELLE BLEIBT VON SELBST SCHLANK
+ * THE TABLE KEEPS ITSELF LEAN
  * --------------------
- * Eine Zeile je Fehlversuch, kein Zähler-Feld. Vor jeder Auswertung fliegt alles
- * raus, was älter als admin.bruteforce_delay ist (purge()) - die Tabelle enthält
- * also immer nur das laufende Zeitfenster. Ein gleitendes Fenster ergibt sich damit
- * von selbst: ältere Versuche verfallen einzeln, die jüngeren zählen weiter.
+ * One row per failed attempt, no counter field. Before every evaluation everything
+ * older than admin.bruteforce_delay is removed (purge()) - the table therefore
+ * always contains only the running time window. A sliding window thus results
+ * by itself: older attempts expire individually, the newer ones keep counting.
  *
- * KONFIGURATION (.camindo.php, Defaults siehe Config)
+ * CONFIGURATION (.camindo.php, defaults see Config)
  * --------------------
- *     admin.bruteforce_max     Erlaubte Fehlversuche im Zeitfenster (3).
- *                              0 oder kleiner schaltet den Schutz ab.
- *     admin.bruteforce_delay   Länge des Zeitfensters in Sekunden (600).
- *     admin.bruteforce_ip      IP-Adresse mitschreiben und mitprotokollieren (false).
- *                              Standardmässig aus, weil die IP ein personenbezogenes
- *                              Datum ist - gezählt wird ohnehin je Name.
- *     user.bruteforce_*        dasselbe für die Frontend-Anmeldung (forUsers())
+ *     admin.bruteforce_max     allowed failed attempts in the time window (3).
+ *                              0 or less switches the protection off.
+ *     admin.bruteforce_delay   length of the time window in seconds (600).
+ *     admin.bruteforce_ip      also record and log the IP address (false).
+ *                              Off by default, because the IP is personal
+ *                              data - counting is done per name anyway.
+ *     user.bruteforce_*        the same for the frontend login (forUsers())
  *
- * WAS PROTOKOLLIERT WIRD
+ * WHAT IS LOGGED
  * --------------------
- * System::log('security', ...) bekommt eine Zeile, wenn eine Sperre EINSETZT - nicht
- * bei jedem abgewiesenen Versuch. Sonst könnte ein Angreifer das Logfile allein
- * dadurch volllaufen lassen, dass er weiter gegen die Sperre klopft.
+ * System::log('security', ...) gets a line when a block STARTS - not
+ * on every rejected attempt. Otherwise an attacker could fill the log file alone
+ * by continuing to knock against the block.
  *
- * ZWEI ANMELDUNGEN, EINE KLASSE
+ * TWO LOGINS, ONE CLASS
  * --------------------
- * Die Frontend-Anmeldung der Community (CMS:USER_LOGIN, RecordUser) braucht
- * denselben Schutz, führt ihre Fehlversuche aber in einer eigenen Tabelle
- * `user_login_attempt` mit eigenen Grenzwerten (user.bruteforce_*). forUsers()
- * liefert dafür eine zweite Instanz mit umgestellter Tabelle und Konfiguration;
- * der Code ist derselbe.
+ * The frontend login of the community (CMS:USER_LOGIN, RecordUser) needs
+ * the same protection, but keeps its failed attempts in a separate table
+ * `user_login_attempt` with its own limits (user.bruteforce_*). forUsers()
+ * returns a second instance with the switched table and configuration for this;
+ * the code is the same.
  *
  * @see Camindo\Core\Modules\Admin\Admin::loginByName()  Aufruferin (Backend)
  * @see Camindo\Core\Modules\Record\RecordUser::cmsLogin() Aufruferin (Frontend)
@@ -58,12 +58,12 @@ namespace Camindo\Core;
 
 class LoginGuard {
 
-    /** Tabelle mit den Fehlversuchen des laufenden Zeitfensters */
+    /** Table with the failed attempts of the running time window */
     private string $table = 'admin_login_attempt';
-    /** Konfigurationsabschnitt der Grenzwerte: 'admin' oder 'user' */
+    /** Configuration section of the limits: 'admin' or 'user' */
     private string $configSection = 'admin';
 
-    /** Spaltenbreite von `name` - längere Eingaben werden gekürzt, nicht abgewiesen */
+    /** Column width of `name` - longer input is truncated, not rejected */
     private const NAME_MAX = 64;
 
     public function __construct(
@@ -76,8 +76,8 @@ class LoginGuard {
     }
 
     /**
-     * Variante für die Frontend-Anmeldung: Tabelle `user_login_attempt`,
-     * Grenzwerte aus user.bruteforce_* (siehe Klassenkommentar).
+     * Variant for the frontend login: table `user_login_attempt`,
+     * limits from user.bruteforce_* (see class comment).
      */
     public function forUsers(): static
     {
@@ -88,18 +88,18 @@ class LoginGuard {
     }
 
     /**
-     * Ist dieser Name gerade gesperrt?
+     * Is this name currently blocked?
      *
-     * Wird VOR der Prüfung von Name und Passwort aufgerufen - eine Sperre soll gelten,
-     * ohne dass überhaupt noch einmal gegen die Zugangsdaten geprüft wird.
+     * Called BEFORE the check of name and password - a block should apply
+     * without checking the credentials at all.
      *
-     * @param string $name  Eingegebener Anmeldename, roh
-     * @return int          Verbleibende Sperrzeit in Sekunden, 0 = nicht gesperrt
+     * @param string $name  entered login name, raw
+     * @return int          remaining block time in seconds, 0 = not blocked
      */
     public function blockedFor(string $name): int
     {
         $max = $this->maxAttempts();
-        if ($max < 1) return 0;   // Schutz abgeschaltet
+        if ($max < 1) return 0;   // protection switched off
 
         $name = $this->normalizeName($name);
         if ($name === '') return 0;
@@ -109,15 +109,15 @@ class LoginGuard {
             $this->purge();
             $attempts = $this->countAttempts($name);
 
-            // Gesperrt wird erst OBERHALB der erlaubten Zahl: bei genau $max
-            // Fehlversuchen ist noch ein letzter Versuch frei (siehe Klassenkommentar
-            // von Admin und der Hinweis in loginByName()).
+            // Blocked only ABOVE the allowed number: at exactly $max
+            // failed attempts one last attempt is still free (see the class comment
+            // of Admin and the note in loginByName()).
             if ($attempts <= $max) return 0;
 
-            // Die Sperre endet, sobald so viele Zeilen verfallen sind, dass wieder
-            // höchstens $max übrig sind. Massgeblich ist also nicht die älteste Zeile,
-            // sondern die ($attempts - $max)-älteste - deren Verfall bringt den Zähler
-            // gerade auf $max herunter.
+            // The block ends as soon as so many rows have expired that at most
+            // $max remain. What matters is therefore not the oldest row
+            // but the ($attempts - $max)-oldest one - its expiry brings the counter
+            // down to exactly $max.
             $offset = $attempts - $max - 1;
             $this->db->query(
                 "SELECT TIMESTAMPDIFF(SECOND, `attempt_date`, UTC_TIMESTAMP()) AS `age`"
@@ -131,7 +131,7 @@ class LoginGuard {
 
             $remaining = $this->delaySeconds() - (int)$row['age'];
 
-            // Nie 0 zurückgeben, solange die Sperre steht: 0 heisst "frei".
+            // Never return 0 while the block is in place: 0 means "free".
             return $remaining > 0 ? $remaining : 1;
         }
         finally {
@@ -140,15 +140,15 @@ class LoginGuard {
     }
 
     /**
-     * Fehlversuch verbuchen.
+     * Record a failed attempt.
      *
-     * @param string $name  Eingegebener Anmeldename, roh
-     * @return int          Fehlversuche im Zeitfenster INKLUSIVE diesem
+     * @param string $name  entered login name, raw
+     * @return int          failed attempts in the time window INCLUDING this one
      */
     public function recordFailure(string $name): int
     {
         $max = $this->maxAttempts();
-        if ($max < 1) return 0;   // Schutz abgeschaltet
+        if ($max < 1) return 0;   // protection switched off
 
         $name = $this->normalizeName($name);
         if ($name === '') return 0;
@@ -169,8 +169,8 @@ class LoginGuard {
             $this->db->popResult();
         }
 
-        // Nur der Übergang wird protokolliert - der Versuch, der die Sperre auslöst.
-        // Jeder weitere prallt an blockedFor() ab und schreibt nichts mehr.
+        // Only the transition is logged - the attempt that triggers the block.
+        // Every further one bounces off blockedFor() and writes nothing more.
         if ($attempts == $max + 1) {
             $this->system->log('security', sprintf(
                 'Login blocked for %s seconds. Name: "%s", %d failed attempts within %d seconds.%s',
@@ -186,11 +186,11 @@ class LoginGuard {
     }
 
     /**
-     * Zähler eines Namens leeren - nach erfolgreicher Anmeldung (mit zweitem Faktor:
-     * erst nach dem richtigen Code).
+     * Clear the counter of a name - after a successful login (with a second factor:
+     * only after the correct code).
      *
-     * Ohne das bliebe jemand, der sich zweimal vertippt hat, bis zum Ablauf des
-     * Zeitfensters dicht an der Sperre.
+     * Without this, someone who has mistyped twice would stay close to the block
+     * until the time window expires.
      */
     public function clear(string $name): void
     {
@@ -207,12 +207,12 @@ class LoginGuard {
     }
 
     /**
-     * Fehlversuche eines Namens im laufenden Zeitfenster.
+     * Failed attempts of a name in the running time window.
      *
-     * Verlässt sich darauf, dass purge() die abgelaufenen Zeilen bereits entfernt hat -
-     * deshalb ohne eigene Zeitbedingung. Ruft der Aufrufer nur recordFailure() auf,
-     * ist der Zähler höchstens für die Dauer eines Requests zu gross, denn blockedFor()
-     * läuft bei jedem Anmeldeversuch als Erstes.
+     * Relies on purge() having already removed the expired rows -
+     * hence without its own time condition. If the caller only calls recordFailure(),
+     * the counter is at most too large for the duration of one request, because blockedFor()
+     * runs first on every login attempt.
      */
     private function countAttempts(string $name): int
     {
@@ -226,11 +226,11 @@ class LoginGuard {
     }
 
     /**
-     * Abgelaufene Fehlversuche löschen - für ALLE Namen, nicht nur den geprüften.
+     * Delete expired failed attempts - for ALL names, not only the one checked.
      *
-     * Das ist die einzige Aufräumstelle: die Tabelle hat keinen Cronjob und wächst
-     * sonst mit jedem Tippfehler weiter. Da bei jedem Anmeldeversuch einmal gelöscht
-     * wird, bleibt sie so gross wie das Zeitfenster - nicht grösser.
+     * This is the only cleanup point: the table has no cron job and would otherwise
+     * keep growing with every typo. Since one deletion happens on every login attempt,
+     * it stays as large as the time window - not larger.
      */
     private function purge(): void
     {
@@ -243,13 +243,13 @@ class LoginGuard {
     }
 
     /**
-     * Name in die Form bringen, in der er in der Tabelle steht.
+     * Bring the name into the form in which it is stored in the table.
      *
-     * Gekürzt wird auf die Spaltenbreite: ein überlanger Name soll nicht in einen
-     * SQL-Fehler laufen, sondern schlicht als Fehlversuch zählen. Kleinschreibung,
-     * weil die Spalte `admin`.`name` ohne Groß-/Kleinschreibung verglichen wird - sonst
-     * wären "Dirk" und "dirk" für die Anmeldung derselbe Benutzer, für die Sperre aber
-     * zwei verschiedene Namen.
+     * Truncated to the column width: an overlong name should not run into an
+     * SQL error but simply count as a failed attempt. Lowercase, because the column
+     * `admin`.`name` is compared case-insensitively - otherwise
+     * "Dirk" and "dirk" would be the same user for the login, but two different
+     * names for the block.
      */
     private function normalizeName(string $name): string
     {
@@ -259,11 +259,11 @@ class LoginGuard {
     }
 
     /**
-     * IP des Aufrufers - leer, wenn admin.bruteforce_ip nicht gesetzt ist.
+     * IP of the caller - empty if admin.bruteforce_ip is not set.
      *
-     * X-Forwarded-For zählt nur von Proxies aus security.trusted_proxies (ClientIp) -
-     * der Header ist frei wählbar, und wer ihn setzt, könnte sich sonst für jeden
-     * Versuch eine neue Herkunft ausdenken.
+     * X-Forwarded-For only counts from proxies in security.trusted_proxies (ClientIp) -
+     * the header can be set freely, and whoever sets it could otherwise invent a
+     * new origin for every attempt.
      */
     private function clientIp(): string
     {
@@ -271,13 +271,13 @@ class LoginGuard {
         return mb_substr($this->clientIp->ip(), 0, 45);
     }
 
-    /** Erlaubte Fehlversuche im Zeitfenster; kleiner als 1 schaltet den Schutz ab. */
+    /** Allowed failed attempts in the time window; less than 1 switches the protection off. */
     private function maxAttempts(): int
     {
         return (int)$this->config->get($this->configSection . '.bruteforce_max');
     }
 
-    /** Länge des Zeitfensters in Sekunden, mindestens 1. */
+    /** Length of the time window in seconds, at least 1. */
     private function delaySeconds(): int
     {
         $delay = (int)$this->config->get($this->configSection . '.bruteforce_delay');

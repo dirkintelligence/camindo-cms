@@ -4,21 +4,21 @@ namespace Camindo\Core\Modules\Area;
 class FieldEditBackend extends FieldBackend {
 
      /**
-     * Erstellen / Kopieren / Ändern / Löschen
-     * Nach Schritt 1 (Create) ist dies Schritt 2 
+     * Create / Copy / Change / Delete
+     * After step 1 (create) this is step 2 
      * (backend/field_edit.php).
      *
-     * Zustandsautomat über $_REQUEST['function'], wie in den anderen Modulen
-     * (docs/developers/03-backend-entwicklung.md): create, edit, copy, save, errors, skip,
+     * State machine via $_REQUEST['function'], as in the other modules
+     * (developer docs, chapter 05 (Backend development)): create, edit, copy, save, errors, skip,
      * delete, delete_confirm.
      *
-     * Zwei Besonderheiten vorweg, noch vor dem eigentlichen Ablauf:
+     * Two special cases up front, before the actual flow:
      *
-     *  - `name` und `type` kommen aus der URL (der Typ aus der Auswahl in create())
-     *    und werden hier hart auf [a-z0-9_-] gefiltert, bevor irgendetwas damit
-     *    geschieht - sie steuern die Wahl der Formularvorlage.
-     *  - Heißt das Feld wie eine feste Spalte aus Cms::$schema, ist es ein Meta-Feld;
-     *    dann gewinnt der im Schema hinterlegte Typ über den aus dem Request.
+     *  - `name` and `type` come from the URL (the type from the selection in create())
+     *    and are strictly filtered here to [a-z0-9_-] before anything is done with them
+     *    - they control the choice of the form template.
+     *  - If the field is named like a fixed column from Cms::$schema, it is a meta field;
+     *    then the type stored in the schema takes precedence over the one from the request.
      */
     public function edit(): void
     {
@@ -36,7 +36,7 @@ class FieldEditBackend extends FieldBackend {
 
         // type
         $type = preg_replace('![^a-z0-9_-]+!', '', (string) ($this->data['type'] ?? ''));
-        // Spezialfall: Metafeld, Typ ist festgelegt im Schema
+        // Special case: meta field, type is fixed in the schema
         if (isset($this->cms->schema[$name])) {
             $type = $this->cms->schema[$name]['type'];
         }
@@ -61,8 +61,8 @@ class FieldEditBackend extends FieldBackend {
             $this->_editLoad();
         }
 
-        // Zugehörigen Bereich laden
-        // (gibt Bereichsname aus)
+        // Load the associated area
+        // (outputs the area name)
         if ($this->function !== 'skip') {
             echo $this->_loadArea();
         }
@@ -75,7 +75,7 @@ class FieldEditBackend extends FieldBackend {
             $this->_editSave();
         }
 
-        // Zielbereiche mit Verknüpfungen abgewählt: Rückfrage
+        // Target areas with links deselected: confirmation prompt
         if ($this->function == 'confirm_links') {
             $this->_editConfirmLinksForm();
         }
@@ -90,7 +90,7 @@ class FieldEditBackend extends FieldBackend {
             $this->_editErrors();
         }
 
-        // Edit form ('back': aus der Rückfrage zurück, mit den eingegebenen Daten)
+        // Edit form ('back': back from the prompt, with the entered data)
         if (in_array($this->function, ['create', 'edit', 'copy', 'errors', 'back'], true)) {
             $this->_editForm();
         }
@@ -107,46 +107,46 @@ class FieldEditBackend extends FieldBackend {
     /**
      * function=create: Formular vorbelegen.
      *
-     * Bei einem Meta-Feld wird die Schema-Definition aus Cms::$schema als Vorbelegung
-     * übernommen (Typ, Beschriftung, Darstellung, Flags) - der Redakteur soll die
-     * feste Spalte nicht von Grund auf neu beschreiben müssen.
+     * For a meta field, the schema definition from Cms::$schema is taken over as the default
+     * (type, label, display, flags) - the editor should not have to
+     * describe the fixed column from scratch.
      *
-     * area_id muss gesetzt sein, bevor init() läuft: Field::hookOnCreate() berechnet
-     * daraus die nächste freie `position`.
+     * area_id must be set before init() runs: Field::hookOnCreate() calculates
+     * the next free `position` from it.
      */
     private function _editCreate() {
-        // Metafeld: Werte, die im Schema definert sind, als Standardwerte einsetzen
+        // Meta field: insert values defined in the schema as default values
         $name = $this->data['name'] ?? '';
         if (isset($this->cms->schema[$name])) {
             $this->data = $this->cms->schema[$this->data['name']];
             $this->data['name'] = $name;
         }
-        // area_id wird für Berechnung von position benötigt
+        // area_id is needed to calculate position
         $this->data['area_id'] = $this->areaId;
         $this->data = $this->field->init($this->data);
-        // Zusammenfassung der Sichtbarkeitsfelder in einem
+        // Combine the visibility fields into one
         $this->data['visibility'] = $this->_visibilitySerialize($this->data);
         $this->id   = 0;
     }
 
     /**
-     * function=edit|copy|delete|delete_confirm: Feld laden und für das Formular
+     * function=edit|copy|delete|delete_confirm: load the field and prepare it for the form
      * aufbereiten.
      *
-     * Zwei Umformungen für die Anzeige:
-     *   - die drei visibility-Spalten werden zum Pseudo-Feld 'visibility' gebündelt
-     *   - height 0 bedeutet "automatisch" und wird als '(auto)' angezeigt; beim
-     *     Speichern macht Field::hookOnSave() daraus per (int)-Cast wieder 0
+     * Two transformations for the display:
+     *   - the three visibility columns are combined into the pseudo field 'visibility'
+     *   - height 0 means "automatic" and is shown as '(auto)'; when
+     *     Saving turns it back into 0 via (int) cast in Field::hookOnSave()
      *
-     * Beim Kopieren wird die Id verworfen und die Position um eins erhöht, damit die
-     * Kopie hinter dem Original einsortiert wird.
+     * When copying, the id is discarded and the position is increased by one, so that the
+     * copy is sorted after the original.
      */
     private function _editLoad(): void
     {
         if ($this->data = $this->field->load($this->id)) {
             $this->areaId = (int)$this->data['area_id'];
 
-            // alle 3 visibility-Optionen in ein Pseudo-Feld schreiben
+            // write all 3 visibility options into one pseudo field
             if ($this->data['type'] != 'fulltext') {
                 $this->data['visibility'] = $this->_visibilitySerialize($this->data);
             }
@@ -162,7 +162,7 @@ class FieldEditBackend extends FieldBackend {
             $this->function = 'skip';
         }
 
-        // Wenn Daten kopiert werden sollen, dann jetzt Id zurücksetzen
+        // If data is to be copied, reset the id now
         if ($this->function == 'copy') {
             $this->id = 0;
             $this->data['position']++;
@@ -172,19 +172,19 @@ class FieldEditBackend extends FieldBackend {
     /**
      * function=save: speichern.
      *
-     * Vorher zwei Rückumwandlungen, die das Formular nötig macht:
-     *   - 'visibility' (eine Checkbox-Gruppe) zurück in drei Spalten
-     *   - beim `pattern` werden ^ und $ abgeschnitten. Im Formular stehen sie als
-     *     feste Prefix-/Suffix-Zierde neben dem Eingabefeld (siehe Schema), gespeichert
-     *     wird der Ausdruck ohne Anker.
+     * Before that, two reverse conversions that the form requires:
+     *   - 'visibility' (a checkbox group) back into three columns
+     *   - for `pattern` the ^ and $ are cut off. In the form they stand as
+     *     fixed prefix/suffix decoration next to the input field (see schema), stored
+     *     is the expression without anchors.
      *
-     * save([], ...) mit leerer Feldliste heißt: alle Schema-Felder schreiben, die in
+     * save([], ...) with an empty field list means: write all schema fields that are in
      * $data vorkommen.
      */
     private function _editSave(): void
     {
         if ($this->data['type'] != 'fulltext') {
-            // Visibility kommt aus Pseuo-Form - zurück in 3 Felder
+            // Visibility comes from the pseudo form - back into 3 fields
             list (
                 $this->data['visibility_input'],
                 $this->data['visibility_search'],
@@ -199,9 +199,9 @@ class FieldEditBackend extends FieldBackend {
         $pattern = rtrim($pattern, '$');
         $this->data['pattern'] = $pattern;
 
-        // pointer, link: Zielbereiche abgewählt, an denen noch Verknüpfungen hängen?
-        // -> erst nachfragen (_editConfirmLinksForm()); mit delete_links=1 kommt die
-        // Bestätigung, die Kanten fallen dann nach dem Speichern
+        // pointer, link: target areas deselected that still have links attached?
+        // -> ask first (_editConfirmLinksForm()); with delete_links=1 the
+        // confirmation comes, the edges are then dropped after saving
         $deleteLinks = !empty($_REQUEST['delete_links']);
         $isMultiArea = $this->id > 0 && in_array($this->data['type'], $this->cms->multiAreaTypes, true);
         if ($isMultiArea && !$deleteLinks) {
@@ -230,30 +230,30 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Das Eingabeformular - der eigentliche Umfang dieser Klasse.
+     * The input form - the actual scope of this class.
      *
      * Reihenfolge:
      *
-     *  1. Vorabprüfung für Thumbnails: ohne ein Upload-Feld im selben Bereich gibt es
-     *     nichts, wovon ein Thumbnail abgeleitet werden könnte -> Abbruch mit Hinweis.
-     *  2. HTML-Vorlage nach Typ wählen (area.field_form_*). Sie bestimmt Anordnung und
-     *     welche Platzhalter es überhaupt gibt.
+     *  1. Preliminary check for thumbnails: without an upload field in the same area there is
+     *     nothing a thumbnail could be derived from -> abort with a note.
+     *  2. Select HTML template by type (area.field_form_*). It determines the layout and
+     *     which placeholders exist at all.
      *  3. Immer vorhanden: type (fest), name, label, note, tooltip, position,
      *     display_type, Sichtbarkeit, default_field, min/max.
-     *  4. Typabhängig: prefix/suffix/pattern (Text, Zahl, Datum), height (Text),
-     *     custom_order und details.lookup_detailed (Relationen), Zielbereich(e)
+     *  4. Type-dependent: prefix/suffix/pattern (text, number, date), height (text),
+     *     custom_order and details.lookup_detailed (relations), target area(s)
  *     (relation/pointer), Mime-Typen
-     *     (file+upload), Quellfeld und Konverter (file+thumbnail), Quellfelder
+     *     (file+upload), source field and converter (file+thumbnail), source fields
      *     (fulltext).
-     *  5. Flags in zwei Gruppen: Verarbeitung (trim, lowercase, …) und Validierung
-     *     (not_empty, unique, …). Welche zulässig sind, sagt Backend::processingFlags()
-     *     bzw. Backend::$validationFlags je Typ.
+     *  5. Flags in two groups: processing (trim, lowercase, …) and validation
+     *     (not_empty, unique, …). Which are allowed is stated by Backend::processingFlags()
+     *     or Backend::$validationFlags per type.
      *
-     * $targetId ist ein Zufallsschlüssel, mit dem sich die vom display_type abhängigen
-     * Blöcke (Optionshinweis, custom_order) im DOM adressieren lassen; das Javascript
-     * blendet sie beim Wechsel der Auswahl ein und aus. Deshalb wird die
-     * display_type-Auswahl am Ende einmal per trigger('change') angestoßen - damit der
-     * Anfangszustand stimmt, ohne ihn hier serverseitig nachzubauen.
+     * $targetId is a random key with which the blocks that depend on display_type
+     * (option note, custom_order) can be addressed in the DOM; the JavaScript
+     * shows and hides them when the selection changes. Therefore the
+     * display_type selection is triggered once at the end via trigger('change') - so that the
+     * initial state is correct without rebuilding it here on the server.
      */
     private function _editForm(): void
     {
@@ -271,8 +271,8 @@ class FieldEditBackend extends FieldBackend {
         $type = $this->data['type'];
         $displayType = $this->data['display_type'];
                 
-        // Thubnail: Zuerst prüfen, ob Upload-Feld im Bereich verfügbar ist,
-        // ansonsten mit Fehlermeldung frühzeitig beenden
+        // Thumbnail: first check whether an upload field is available in the area,
+        // otherwise end early with an error message
         if ($displayType == 'thumbnail') {
             $sourceOptions = [];
             $sql = "SELECT `field_id`,`label` FROM `field`"
@@ -294,7 +294,7 @@ class FieldEditBackend extends FieldBackend {
                     ])
                 ]);
 
-                // Formular in diesem Fall nicht anzeigen
+                // do not show the form in this case
                 echo $this->backend->template('container_footer');
                 exit;
             }
@@ -319,7 +319,7 @@ class FieldEditBackend extends FieldBackend {
             else $templateId = 'area.field_form_thumbnail';
         }
         else {
-            // Alle anderen Typen
+            // All other types
             $templateId = 'area.field_form_' . $type;
         }
         $this->backend->formInit($templateId);
@@ -394,13 +394,13 @@ class FieldEditBackend extends FieldBackend {
 
         // position
         // --------------------
-        // Der Redakteur wählt den VORGÄNGER, gespeichert wird die Zielposition:
-        // deshalb position + 1 als Optionsschlüssel. Der Eintrag 0 heißt "an den
-        // Anfang". Das eigene Feld ist ausgeschlossen - es kann nicht sein eigener
-        // Vorgänger sein.
-        // Die Positionen müssen nicht lückenlos sein (z. B. 10, 14): vorausgewählt
-        // wird deshalb der tatsächliche Vorgänger (letztes Feld mit kleinerer
-        // Position), nicht der Schlüssel eigene Position.
+        // The editor selects the PREDECESSOR, the target position is saved:
+        // therefore position + 1 as option key. The entry 0 is called "at the
+        // start". The own field is excluded - it cannot be its own
+        // predecessor.
+        // The positions need not be gapless (e.g. 10, 14): preselected
+        // is therefore the actual predecessor (last field with a smaller
+        // position), not the key of its own position.
         $options = [0 => $this->cms->snippet('position_at_start')];
         $ownPosition = (int)($this->data['position'] ?? 0);
         $selected = 0;
@@ -415,7 +415,7 @@ class FieldEditBackend extends FieldBackend {
             }
         }
         if ($this->id <= 0) {
-            // neues/kopiertes Feld: position ist bereits die Zielposition
+            // new/copied field: position is already the target position
             $selected = $this->data['position'];
         }
         $this->backend->formField($this->field, [
@@ -427,11 +427,11 @@ class FieldEditBackend extends FieldBackend {
 
         // display_type
         // --------------------
-        // Id für abhängige Elemente (onchange)
+        // Id for dependent elements (onchange)
         $targetId = $this->crypt->randomKey(16);
 
         if ($type === 'file') {
-            // keine Display Type auswahl
+            // no display type selection
             $this->backend->formHidden('data[display_type]', $displayType);
         }
         else {
@@ -442,7 +442,7 @@ class FieldEditBackend extends FieldBackend {
                 $displayTypes = $this->backend->displayTypes['meta'] ?? [];
             }
             else {
-                // Display type anhand von Zuordnungstabelle
+                // Display type from the mapping table
                 $displayTypes = $this->backend->displayTypes[$type ?? ''] ?? [];
             }
             $options = [];
@@ -457,7 +457,7 @@ class FieldEditBackend extends FieldBackend {
                 'template' => 'area.edit_form_display_type' // spezielles Template
             ]);
             
-            // Platzhalter im speziellen Template ersetzen
+            // Replace placeholders in the special template
             // cApp.forms.updateElement({element}, {action})
             $this->backend->formReplace('{element}', $targetId);
             if (in_array($type, $this->cms->relationTypes, true)) {
@@ -468,16 +468,16 @@ class FieldEditBackend extends FieldBackend {
             }
         }
 
-        // Extension (13 §3.3)
+        // Extension (developer docs, chapter 08 (Components and extensions))
         // --------------------
-        // Eigener Abschnitt "Erweiterung" am Ende der Maske (area.field_extension_block):
-        // Auswahl der aktiven Extensions, die zum Feldtyp passen, darunter ihre
-        // Einstellungen im Fieldset (area.field_extension_options); das JavaScript
-        // (cApp.extensions.fieldForm) blendet je Display-Typ die passenden ein und
-        // lädt die Optionen der gewählten Extension nach (field_extension_options.php).
-        // Auch für Meta-Felder wie online_at - sie haben eine Zeile in `field`, und
-        // das virtuelle Schema liefert deren details an Backend::formField().
-        // Gibt es für den Feldtyp keine Extension, entfällt der Abschnitt ganz.
+        // Own section "Extension" at the end of the mask (area.field_extension_block):
+        // selection of the active extensions that match the field type, below them their
+        // settings in the fieldset (area.field_extension_options); the JavaScript
+        // (cApp.extensions.fieldForm) shows the matching ones per display type and
+        // loads the options of the selected extension (field_extension_options.php).
+        // Also for meta fields like online_at - they have a row in `field`, and
+        // the virtual schema supplies their details to Backend::formField().
+        // If there is no extension for the field type, the section is omitted entirely.
         $extensions = $this->backend->extensionsFor($type);
         $extensionOptionsId = $this->crypt->randomKey(16);
         if ($extensions) {
@@ -510,9 +510,9 @@ class FieldEditBackend extends FieldBackend {
         }
         $this->backend->formReplace('{extension_options_id}', $extensionOptionsId);
 
-        // note_default Hinweis zur Konfiguration wählebarer Optionen
+        // note_default note on configuring selectable options
         // --------------------
-        // Erklärt, wie man im Feld `default` die auswählbaren Optionen hinterlegt.
+        // Explains how to store the selectable options in the field `default`.
         $noteHtml = '';
         if(!in_array($type, $this->cms->relationTypes, true)
             && $type !== 'file'
@@ -530,10 +530,10 @@ class FieldEditBackend extends FieldBackend {
 
         // custom_order, details.lookup_detailed
         // --------------------
-        // Beide im Block {custom_order_id}, den das Javascript nur bei
+        // Both in the block {custom_order_id}, which the JavaScript only
         // display_type 'lookup' einblendet
         if (in_array($type, $this->cms->relationTypes, true)) {
-            // ('link' ist immer handsortiert, Field::hookOnSave() - kein Schalter)
+            // ('link' is always hand-sorted, Field::hookOnSave() - no switch)
             if (!in_array($type, $this->cms->dependentTypes, true)) {
                 $this->backend->formField($this->field, [
                     'name' => 'custom_order',
@@ -554,7 +554,7 @@ class FieldEditBackend extends FieldBackend {
         if ($type !== 'fulltext') {
             $colDef = $this->_visibilityColDef(); // (pseudo field 'visibility')
             if ($displayType == 'thumbnail') {
-                // Thumbnail-Feld keine Sichtbarkeit in der Eingabemaske 
+                // Thumbnail field: no visibility in the input mask 
             }
             $this->backend->formField($this->field, [
                 'colDef' => $colDef,
@@ -575,13 +575,13 @@ class FieldEditBackend extends FieldBackend {
 
         // multilingual
         // --------------------
-        // Nur bei Typen, deren Inhalte je Sprache geführt werden können, und nicht
-        // bei Feldern auf Metaspalten (Field::hookOnSave() setzt es dort zurück).
-        // Ohne das Feld bleibt der Platzhalter {data_multilingual} leer.
-        // Upload-Felder ja, Thumbnails nein - die erben es vom Upload-Feld.
-        // Umschalten lässt sich das Kennzeichen nur beim Anlegen (auch Kopie): bei
-        // einem bestehenden Feld ginge es an den Bestand (Übersetzungen) - das
-        // macht nur die ausdrückliche Umwandlung (convert()), hier steht es fest.
+        // Only for types whose contents can be kept per language, and not
+        // for fields on meta columns (Field::hookOnSave() resets it there).
+        // Without the field, the placeholder {data_multilingual} stays empty.
+        // Upload fields yes, thumbnails no - they inherit it from the upload field.
+        // The flag can only be switched when creating (also copies): for an
+        // existing field it would affect the stock (translations) - this
+        // is done only by the explicit conversion (convert()); here it is fixed.
         if (!$isMeta
             && (in_array($type, $this->cms->multilingualTypes, true)
                 || ($type === 'file' && $displayType === 'upload'))
@@ -647,7 +647,7 @@ class FieldEditBackend extends FieldBackend {
             $colDef = $this->fieldSchema['flags'];
             $colDef['label'] = '#area.headline_validation_flags';
 
-            // wenn global... in Flags, dann Hinweis einblenden
+            // if global... in flags, then show a note
             // (mittels speziellem inputField-Template)
             if (
                 isset($validationOptions['unique'])
@@ -667,8 +667,8 @@ class FieldEditBackend extends FieldBackend {
             ]);
         }
 
-        // Zielbereiche sammeln (sowohl für rel_area_id als auch rel_area_ids) -
-        // siehe _relAreaOptions()
+        // Collect target areas (for both rel_area_id and rel_area_ids) -
+        // see _relAreaOptions()
         // --------------------
         $relAreaOptions = [];
         if (in_array($type, $this->cms->relationTypes, true)) {
@@ -691,7 +691,7 @@ class FieldEditBackend extends FieldBackend {
         // --------------------
         if (in_array($type, $this->cms->multiAreaTypes, true)) {
             // Typ 'reltable' (Inhalt liegt in `rel_field_area`) - formField() behandelt
-            // ihn wie 'json', die Umbiegung des Typs ist deshalb nicht mehr nötig.
+            // it like 'json'; the type conversion is therefore no longer necessary.
             $colDef = $this->field->getSchema()['rel_area_ids'];
             $this->backend->formField($this->field, [
                 'name' => 'rel_area_ids',
@@ -763,11 +763,11 @@ class FieldEditBackend extends FieldBackend {
                 ]);
             }
 
-            // Authentifizierung (Upload und Thumbnail)
+            // Authentication (upload and thumbnail)
             // --------------------
-            // user_auth: Dateien nur über file.php an angemeldete Frontend-User
-            // aus den angehakten Profil-Bereichen (Instanz des Bereichs und ihre
-            // lesbaren Instanzen). Die Checkbox-Liste ist nur mit gesetztem
+            // user_auth: files only via file.php to logged-in frontend users
+            // from the ticked profile areas (instance of the area and its
+            // readable instances). The checkbox list is only with set
             // Schalter sichtbar (Script unten).
             if (in_array($displayType, ['upload', 'thumbnail'], true)) {
                 $this->backend->formField($this->field, [
@@ -797,9 +797,9 @@ class FieldEditBackend extends FieldBackend {
         if ($type === 'fulltext') {
             // source_fields
             // --------------------
-            // Textfelder und Upload-Felder (Dateiname), keine Thumbnails - des Bereichs
-            // und über seine link-/relation-Felder der Zielbereiche
-            // (Field::fulltextSourceOptions()); je Zielbereich eine Zwischenüberschrift
+            // Text fields and upload fields (file name), no thumbnails - of the area
+            // and via its link/relation fields of the target areas
+            // (Field::fulltextSourceOptions()); one subheading per target area
             $options = [];
             $group = '';
             foreach ($this->field->fulltextSourceOptions($this->areaId) as $key => $option) {
@@ -810,7 +810,7 @@ class FieldEditBackend extends FieldBackend {
                 $options[$key] = $option['label'];
             }
             if (empty($options)) {
-                // Hinweis: Es sind keine Textfelder im Bereich definiert
+                // Note: no text fields are defined in the area
                 $nothingFoundBlock = $this->backend->template('alert_warning', [
                     '{text}' => '{#area.no_text_fields_found}'
                 ]);
@@ -834,7 +834,7 @@ class FieldEditBackend extends FieldBackend {
                 ]);
             }
 
-            // visibility_search (speziell für 'fulltext')
+            // visibility_search (special for 'fulltext')
             // --------------------
             $this->backend->formField($this->field, [
                 'id' => $this->id,
@@ -855,12 +855,12 @@ class FieldEditBackend extends FieldBackend {
         echo $this->backend->form('form_save_cancel_note', removePlaceholders:true);
 
         // JavaScripte
-        // - Anweisung für growing textarea, nach Ajax-Load
+        // - instruction for growing textarea, after Ajax load
         $script = "cApp.ui._initTextareaGrow(\$('.c9-layer:last'));";
 
         // - display_type-Liste triggern
         $script .= "\$('.c9-layer:last select[name=\"data[display_type]\"]').trigger('change');";
-        // - Profil-Bereiche nur bei gesetztem user_auth zeigen
+        // - show profile areas only if user_auth is set
         if ($type === 'file' && in_array($displayType, ['upload', 'thumbnail'], true)) {
             $script .= "(function(){"
                 . "var \$l=\$('.c9-layer:last'),\$s=\$l.find('input[name=\"data[details][user_auth]\"]'),"
@@ -875,26 +875,26 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Auswahlliste der Zielbereiche für relation (select, rel_area_id) und
+     * Selection list of the target areas for relation (select, rel_area_id) and
      * pointer/link (multiselect, rel_area_ids).
      *
-     * Was erscheint:
+     * What appears:
      *
-     *     Instanz        die Instanz des Quellbereichs und deren lesbare Instanzen
-     *                    (Field::targetInstanceIds()) - Bereiche fremder Instanzen mit
+     *     instance        the instance of the source area and its readable instances
+     *                    (Field::targetInstanceIds()) - areas of foreign instances with
      *                    Zusatz "(Instanz)"
-     *     Gruppenrechte  nur Bereiche mit Leserecht der Benutzergruppe (Access::areaRead())
-     *     relation       der eigene Bereich bleibt sichtbar, aber gesperrt
-     *     link           nur ABHÄNGIGE Bereiche (area.dependent = 1), nicht der eigene;
-     *                    alles andere fehlt (Field::hookOnSave() prüft beim Speichern)
-     *     Ordner         gesperrt (keine Datensätze), und nur die, unter denen ein
-     *                    wählbarer Bereich liegt - die Einrückung entsteht aus `depth`,
-     *                    die Reihenfolge aus `lft`; Template-Bereiche fehlen
-     *     bereits gewählte Ziele erscheinen immer, auch außerhalb von Instanz und
-     *     Rechten - sonst würden sie beim Speichern stillschweigend abgewählt
+     *     group rights   only areas with read right for the user group (Access::areaRead())
+     *     relation       the own area stays visible, but locked
+     *     link           only DEPENDENT areas (area.dependent = 1), not the own one;
+     *                    everything else is missing (Field::hookOnSave() checks when saving)
+     *     folder          locked (no records), and only those under which a
+     *                    selectable area lies - the indentation comes from `depth`,
+     *                    the order from `lft`; template areas are missing
+     *     already selected targets always appear, even outside instance and
+     *     rights - otherwise they would be silently deselected when saving
      *
-     * Gesperrte Einträge tragen den Präfix 'disabled_' im Schlüssel und sind damit
-     * keine gültige Id mehr (Backend::formField() rendert sie als disabled).
+     * Locked entries carry the prefix 'disabled_' in the key and are thereby
+     * no longer a valid id (Backend::formField() renders them as disabled).
      *
      * @return array  area_id|'disabled_'.area_id => Label
      */
@@ -906,7 +906,7 @@ class FieldEditBackend extends FieldBackend {
         $isLink = in_array($type, $this->cms->dependentTypes, true);
         $isRelation = str_starts_with($type, 'relation');
 
-        // bereits gewählte Ziele (aus dem Formular bzw. der Felddefinition)
+        // already selected targets (from the form or the field definition)
         $currentIds = $isRelation
             ? $this->system->sanitizeIds([(int)($this->data['rel_area_id'] ?? 0)], true)
             : $this->system->sanitizeIds((array)($this->data['rel_area_ids'] ?? []), true);
@@ -918,9 +918,9 @@ class FieldEditBackend extends FieldBackend {
             ." ORDER BY `lft` ASC");
         $rows = $this->db->fetchAll();
 
-        // 1. Durchgang: wählbar / gesperrt / weg
+        // 1st pass: selectable / locked / removed
         $entries = [];      // [area_id, key, label, lft, rgt, isFolder]
-        $selectable = [];   // [lft, rgt] der wählbaren Bereiche (für die Ordner)
+        $selectable = [];   // [lft, rgt] of the selectable areas (for the folders)
         foreach ($rows as $areaData) {
             $areaId = (int)$areaData['area_id'];
             $isCurrent = in_array($areaId, $currentIds, true);
@@ -942,11 +942,11 @@ class FieldEditBackend extends FieldBackend {
                 continue;
             }
             elseif ($isRelation && $areaId === $this->areaId) {
-                // relation - eigener Content-Bereich kann nicht Zielbereich werden
+                // relation - own content area cannot become a target area
                 $key = 'disabled_' . $areaId;
             }
             elseif ($isLink && (empty($areaData['dependent']) || $areaId === $this->areaId)) {
-                // link - nur abhängige Bereiche, nicht der eigene
+                // link - only dependent areas, not the own one
                 continue;
             }
             else {
@@ -956,7 +956,7 @@ class FieldEditBackend extends FieldBackend {
             $entries[] = [$areaId, $key, $label, (int)$areaData['lft'], (int)$areaData['rgt'], false];
         }
 
-        // 2. Durchgang: Ordner nur, wenn darunter etwas Wählbares liegt
+        // 2nd pass: folders only if something selectable lies below them
         $options = [];
         foreach ($entries as [$areaId, $key, $label, $lft, $rgt, $isFolder]) {
             if ($isFolder) {
@@ -972,11 +972,11 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Alle Konverter als Optionen des sortierbaren Feldes converter_ids
-     * (converter_id => Bezeichnung mit Prozessor). Nicht nur die gewählten: das
-     * Formular muss weitere anbieten. Die gespeicherte Reihenfolge stellt
-     * Backend::formField() (display_type 'sortable') selbst her - die gewählten
-     * oben in der Reihenfolge von $value, der Rest darunter.
+     * All converters as options of the sortable field converter_ids
+     * (converter_id => label with processor). Not only the selected ones: the
+     * form must offer more. The stored order is produced
+     * by Backend::formField() (display_type 'sortable') itself - the selected ones
+     * at the top in the order of $value, the rest below.
      */
     private function _converterOptions(): array
     {
@@ -1029,14 +1029,14 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Rückfrage beim Speichern eines pointer-/link-Feldes: in abgewählten
-     * Zielbereichen hängen noch Verknüpfungen (Field::countRelationsOutside()).
+     * Confirmation prompt when saving a pointer/link field: in deselected
+     * target areas links are still attached (Field::countRelationsOutside()).
      *
-     * Zeigt je Bereich die Anzahl und lässt wählen: "Verknüpfungen löschen" schickt
-     * das Formular mit delete_links=1 erneut ab (_editSave() speichert und räumt mit
-     * Field::removeRelationsOutside() auf), "Abbrechen" führt mit den eingegebenen
-     * Daten zurück ins Formular (function 'back'). Die Formulardaten reisen dafür
-     * als Hidden-Felder mit.
+     * Shows the count per area and lets one choose: "Delete links" sends
+     * the form again with delete_links=1 (_editSave() saves and clears with
+     * Field::removeRelationsOutside()), "Cancel" leads back to the form with the entered
+     * data (function 'back'). The form data travels along for this
+     * as hidden fields.
      */
     private function _editConfirmLinksForm(): void
     {
@@ -1063,7 +1063,7 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Ein (verschachteltes) Array als Hidden-Felder name[key][sub]=… ins Formular.
+     * A (nested) array as hidden fields name[key][sub]=… in the form.
      */
     private function _formHiddenArray(string $name, array $data): void
     {
@@ -1077,7 +1077,7 @@ class FieldEditBackend extends FieldBackend {
 
 
     /**
-     * Wirklich löschen? Formular
+     * Really delete? Form
      */
     private function _editDeleteForm(): void
     {
@@ -1095,7 +1095,7 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Löschung durchführen
+     * Perform deletion
      */
     private function _editDeleteConfirm(): void
     {
@@ -1104,7 +1104,7 @@ class FieldEditBackend extends FieldBackend {
             $msg = $this->cms->snippet('area.message_field_deleted');
             $this->backend->balloon('success', $msg);
             
-            // Fenster schließen
+            // Close window
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();
@@ -1126,10 +1126,10 @@ class FieldEditBackend extends FieldBackend {
     }
 
     // ====================
-    // Hilfsfunktionen, um die Visibility Optionen als gemeinsames Pseudofeld zu behandeln
-    // In der Tabelle drei Bit-Spalten, im Formular eine Checkbox-Gruppe. Die
-    // Felddefinition dafür steht in keinem Schema - sie wird hier von Hand gebaut und
-    // per 'colDef' an formField() übergeben.
+    // Helper functions to treat the visibility options as a shared pseudo field
+    // Three bit columns in the table, a checkbox group in the form. The
+    // field definition for it is in no schema - it is built here by hand and
+    // passed to formField() via 'colDef'.
 
     private function _visibilityColDef() {
         return [
@@ -1141,12 +1141,12 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Welche der drei Sichtbarkeiten überhaupt zur Wahl stehen.
+     * Which of the three visibilities are available for selection at all.
      *
-     * Ein Thumbnail entsteht aus einem anderen Feld und wird nie eingegeben; es bleibt
-     * nur die Sichtbarkeit in der Datensatzliste.
+     * A thumbnail is created from another field and is never entered; only
+     * its visibility in the record list remains.
      *
-     * @param string $displayType  display_type, weil manche Felder keine Sichtbarkeit erlauben
+     * @param string $displayType  display_type, because some fields do not allow visibilityen
      */
     private function _visibilityOptions(string $displayType) {
         if ($displayType == 'thumbnail') {
@@ -1182,11 +1182,11 @@ class FieldEditBackend extends FieldBackend {
     }
 
     // ====================
-    // Hilfsfunktionen für Extensions
+    // Helper functions for extensions
 
     /**
      * Optionen einer Extension nachladen (backend/field_extension_options.php) -
-     * beim Wechsel der Extension-Auswahl in der Feld-Eingabemaske.
+     * when the extension selection changes in the field input mask.
      *
      * Request: extension, type (Feldtyp), data[details][extension_options] (bisherige Werte)
      */
@@ -1202,9 +1202,9 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Optionsblock einer Extension: {Extension}/backend/form.php rendert mit
-     * $backend/$cms Eingaben unter dem Namen $name[…] (13 §3.3); ohne form.php gibt
-     * es keine Optionen.
+     * Options block of an extension: {Extension}/backend/form.php renders with
+     * $backend/$cms inputs under the name $name[…] (developer docs, chapter 08 (Components and extensions)); without form.php there
+     * are no options.
      */
     private function _extensionOptionsHtml(string $extension, array $options): string
     {

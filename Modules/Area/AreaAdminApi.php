@@ -1,12 +1,12 @@
 <?php
 /**
- * API der Bereichsverwaltung (Modul Struktur): Einstellungen lesen, Bereiche anlegen
- * (auch aus einem Bauplan), ändern, kopieren, Bereichsrechte lesen und setzen.
+ * API for area administration (module Structure): read settings, create areas
+ * (also from a blueprint), change, copy, read and set area rights.
  *
- * Alles hier braucht den Zugriff auf das Modul Struktur (die Scripte area_edit.php
- * bzw. area_access.php) - anders als AreaApi, deren Lesemethoden jeder nutzen darf,
- * der die Datensätze eines Bereichs sieht. Anlegen, Ändern und Kopieren gehen über
- * AreaService bzw. Area::save(), also dieselben Prüfungen wie die Maske.
+ * Everything here requires access to module Structure (the scripts area_edit.php
+ * or area_access.php) - unlike AreaApi, whose read methods everyone may use,
+ * who sees the records of an area. Create, change and copy go via
+ * AreaService or Area::save(), i.e. the same checks as the mask.
  *
  * @see AreaService
  * @see Camindo\Core\Api\DatasetApi
@@ -31,14 +31,14 @@ class AreaAdminApi extends DatasetApi
         'trigger_template_ids', 'overview_template_id', 'login_name_field_id', 'login_password_field_id',
         'privacy_policy_id', 'details', 'access_group_ids',
     ];
-    /** Ändern: ohne Typ (steht seit dem Anlegen fest) und ohne access_group_ids (area.access_update) */
+    /** Change: without type (fixed since creation) and without access_group_ids (area.access_update) */
     protected const WRITABLE = [
         'instance_id', 'parent_id', 'name', 'label', 'icon', 'note', 'dependent',
         'default_field_id', 'sort_field_id', 'sort_order', 'default_template_id', 'list_template_id',
         'trigger_template_ids', 'overview_template_id', 'login_name_field_id', 'login_password_field_id',
         'privacy_policy_id', 'details',
     ];
-    /** Anlegen: dazu Typ und die Gruppen, die den Bereich gleich nutzen dürfen */
+    /** Create: plus type and the groups that may use the area right away */
     protected const CREATE_ONLY = ['type', 'access_group_ids'];
     protected const HINTS = ['type' => 'fixed since creation', 'access_group_ids' => 'change it with area.access_update',
         'position' => 'set it with previous_id'];
@@ -63,11 +63,11 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Alle Einstellungen eines Bereichs oder Ordners - die Werte, die area.update
-     * schreibt (Ids der Felder und Templates, details).
+     * All settings of an area or folder - the values that area.update
+     * writes (ids of fields and templates, details).
      *
-     * @param int  $areaId      Bereich oder Ordner
-     * @param bool $withSchema  dazu die Beschreibung der Felder
+     * @param int  $areaId      area or folder
+     * @param bool $withSchema  plus the description of the fields
      */
     #[ApiMethod('area.settings', '#area.api_settings')]
     public function settings(int $areaId, bool $withSchema = false): array
@@ -76,7 +76,7 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Die Baupläne eines Bereichstyps (vorbereitete Bereiche mit Feldern).
+     * The blueprints of an area type (prepared areas with fields).
      *
      * @param string $type  record | profile | ugc
      */
@@ -97,12 +97,12 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Einen Bereich oder Ordner anlegen, auf Wunsch aus einem Bauplan (samt Feldern).
+     * Create an area or folder, optionally from a blueprint (including fields).
      *
-     * @param array  $data       Feld => Wert; Pflicht: type, instance_id, name, label (siehe area.settings with_schema)
-     * @param string $blueprint  Bauplan des Typs (area.blueprints); leer = ohne Felder
-     * @param int    $previousId vorangehender Bereich im Baum (Position; 0 = an den Anfang)
-     * @param bool   $simulate   nur prüfen, nichts anlegen
+     * @param array  $data       field => value; required: type, instance_id, name, label (see area.settings with_schema)
+     * @param string $blueprint  blueprint of the type (area.blueprints); empty = without fields
+     * @param int    $previousId preceding area in the tree (position; 0 = at the start)
+     * @param bool   $simulate   only check, create nothing
      */
     #[ApiMethod('area.create', '#area.api_create', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function create(array $data, string $blueprint = '', int $previousId = 0, bool $simulate = false): array
@@ -129,12 +129,12 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Einstellungen eines Bereichs oder Ordners ändern.
+     * Change settings of an area or folder.
      *
-     * @param int   $areaId      Bereich oder Ordner
-     * @param array $data        Feld => Wert, nur die zu ändernden (siehe area.settings)
-     * @param int   $previousId  vorangehender Bereich (Position; -1 = unverändert, 0 = an den Anfang)
-     * @param bool  $simulate    nur prüfen, nichts ändern
+     * @param int   $areaId      area or folder
+     * @param array $data        field => value, only those to change (see area.settings)
+     * @param int   $previousId  preceding area (position; -1 = unchanged, 0 = at the start)
+     * @param bool  $simulate    only check, change nothing
      */
     #[ApiMethod('area.update', '#area.api_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function update(int $areaId, array $data, int $previousId = -1, bool $simulate = false): array
@@ -143,12 +143,12 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Einen Bereich kopieren: Einstellungen, Bereichsrechte und Eingabefelder (ohne
-     * Datensätze).
+     * Copy an area: settings, area rights and input fields (without
+     * records).
      *
      * @param int   $areaId    Original
      * @param array $data      label, name (Pflicht, eindeutig), icon, note, instance_id, parent_id, previous_id
-     * @param bool  $simulate  nur prüfen, nichts anlegen
+     * @param bool  $simulate  only check, create nothing
      */
     #[ApiMethod('area.copy', '#area.api_copy', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function copy(int $areaId, array $data, bool $simulate = false): array
@@ -170,8 +170,8 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Die Bereichsrechte: je Gruppe, die in Frage kommt, ob sie lesen darf und die
-     * übrigen Rechte.
+     * The area rights: per group that comes into question, whether it may read and the
+     * remaining rights.
      *
      * @param int $areaId  Bereich
      */
@@ -191,12 +191,12 @@ class AreaAdminApi extends DatasetApi
     }
 
     /**
-     * Bereichsrechte setzen - für die genannten Gruppen; nicht genannte bleiben, wie sie
-     * sind. Superuser dürfen immer alles.
+     * Set area rights - for the named groups; unnamed ones remain as they
+     * are. Superusers may always do everything.
      *
      * @param int   $areaId    Bereich
-     * @param array $access    group_id => {read, group_write, group_delete, other_write, other_delete, set_owner} (bool); read false = kein Zugriff
-     * @param bool  $simulate  nur prüfen, nichts ändern
+     * @param array $access    group_id => {read, group_write, group_delete, other_write, other_delete, set_owner} (bool); read false = no access
+     * @param bool  $simulate  only check, change nothing
      */
     #[ApiMethod('area.access_update', '#area.api_access_update', write: true, level: ApiMethod::LEVEL_ADMIN)]
     public function accessUpdate(int $areaId, array $access, bool $simulate = false): array

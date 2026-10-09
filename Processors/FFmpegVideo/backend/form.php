@@ -1,6 +1,6 @@
 <?php
 /** 
- * Wir befinden uns innerhalb der Datei Core/Modules/Converter/converter_edit.php
+ * We are inside the file Core/Modules/Converter/converter_edit.php
  * @var Camindo\Core\Modules\Converter\Converter $this->converter
  * @var Camindo\Core\Config $this->config
  * @var Camindo\Core\cms $this->cms
@@ -18,14 +18,14 @@ $this->backend->formReplace('{processor_fields}', $tplProcessorForm);
 
 $details = (array)($this->data['details'] ?? []);
 
-// Die erlaubten Werte stehen als Konstanten in der Prozessor-Klasse. So bleiben
-// Formular und Engine zwangsläufig beieinander, auch wenn später ein Codec
-// dazukommt oder wegfällt.
+// The allowed values are constants in the processor class. This keeps
+// form and engine necessarily together, even if a codec is added
+// or removed later.
 $proc = \Camindo\Core\Processors\FFmpegVideo\FFmpegVideo::class;
 
 /**
- * Baut aus einer Werteliste die Optionen für ein Auswahlfeld.
- * Die Beschriftung kommt jeweils aus dem Snippet proc.ffmpegvideo.option_{wert}.
+ * Builds the options for a select field from a list of values.
+ * The label comes from the snippet proc.ffmpegvideo.option_{value} in each case.
  */
 $options = function (array $values) use ($prefix): array {
     $result = [];

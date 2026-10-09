@@ -1,39 +1,39 @@
 <?php
 /**
- * Dataset-Kindklasse für die Tabelle `privacy_template` - Vorlagen der Datenauskunft
- * (Modul Privacy, Reiter "Vorlagen"). Aus ihr entsteht die Seite auskunft.html im Zip
- * des Datenexports (Camindo\Core\PrivacyTemplate::render()).
+ * Dataset child class for the table `privacy_template` - templates of the data disclosure
+ * (module Privacy, tab "Templates"). The page auskunft.html in the zip
+ * of the data export is created from it (Camindo\Core\PrivacyTemplate::render()).
  *
- * AUFBAU
+ * STRUCTURE
  * --------------------
- *     kind         user (Auskunft zu einem Website-User) oder admin (zu einem
- *                  Benutzer) - zwei getrennte Vorlagen, KINDS
- *     instance_id  Instanz, für deren Website-User bzw. Benutzer die Vorlage gilt
- *     scope_id     wofür genau: bei user ein Profil-Bereich der Instanz (area_id),
- *                  bei admin eine Benutzergruppe (group_id); 0 = alle. Beim Export
- *                  gewinnen die Vorlagen für den Bereich bzw. die Gruppe der Person,
- *                  sonst gelten die für alle (PrivacyBackend::_exportTemplates())
- *     language_id  Sprache - eine der Instanz; die Auskunft entsteht in dieser
- *                  Sprache (Snippets {#…} und Beschriftungen der Blöcke über
+ *     kind         user (disclosure about a website user) or admin (about a
+ *                  user) - two separate templates, KINDS
+ *     instance_id  instance for whose website users resp. users the template applies
+ *     scope_id     for exactly what: for user a profile area of the instance (area_id),
+ *                  for admin a user group (group_id); 0 = all. On export
+ *                  the templates for the area resp. the group of the person win,
+ *                  otherwise those for all apply (PrivacyBackend::_exportTemplates())
+ *     language_id  language - one of the instance; the disclosure is created in this
+ *                  language (snippets {#…} and labels of the blocks via
  *                  language.backend_code)
- *     content      die Vorlage: eine vollständige HTML-Seite mit Platzhaltern
- * Je Art, Instanz, Geltung und Sprache höchstens eine Vorlage
+ *     content      the template: a complete HTML page with placeholders
+ * At most one template per kind, instance, scope and language
  * (uniq_kind_instance_scope_language).
  *
- * Ohne passende Vorlage gibt es keinen Datenexport (PrivacyBackend::export()). Eine
- * neue Vorlage ist mit der des Core vorbelegt
- * (Core/install/privacy/privacy_{art}_{sprache}.html, sonst …_en_US.html).
+ * Without a matching template there is no data export (PrivacyBackend::export()). A
+ * new template is prefilled with the one of the core
+ * (Core/install/privacy/privacy_{art}_{sprache}.html, otherwise …_en_US.html).
  *
- * WER DARF WAS
+ * WHO MAY DO WHAT
  * --------------------
- * Ansehen darf jeder mit Zugang zum Modul (Vorlagen der lesbaren Instanzen); anlegen,
- * ändern und löschen, wer das Zusatzrecht template_edit hat und die Instanz
- * bearbeiten darf - der Superuser immer (canEdit()). Die Vorlage ist vertrauenswürdig
- * wie ein Template: kein HTML-Filter beim Speichern ($sanitizeHtml = false); Werte
- * aus der Datenbank setzt PrivacyTemplate nur maskiert ein.
+ * Everyone with access to the module may view (templates of the readable instances); whoever has the
+ * additional right template_edit and may edit the instance may create, change and
+ * delete - the superuser always (canEdit()). The template is trusted
+ * like a template: no HTML filter on saving ($sanitizeHtml = false); values
+ * from the database are only inserted masked by PrivacyTemplate.
  *
- * @see Camindo\Core\PrivacyTemplate                  Platzhalter und Bedingungen
- * @see Camindo\Core\Modules\Privacy\PrivacyBackend   Oberfläche
+ * @see Camindo\Core\PrivacyTemplate                  Placeholders and conditions
+ * @see Camindo\Core\Modules\Privacy\PrivacyBackend   Interface
  */
 namespace Camindo\Core\Modules\Privacy;
 
@@ -43,10 +43,10 @@ use Camindo\Core\InstanceCache;
 
 class ExportTemplate extends Dataset {
 
-    /** Arten: Auskunft zu einem Website-User bzw. zu einem Benutzer */
+    /** Kinds: disclosure about a website user resp. about a user */
     public const KINDS = ['user', 'admin'];
 
-    /** Vollständige HTML-Seite - der HTML-Filter würde sie zerlegen */
+    /** Complete HTML page - the HTML filter would break it apart */
     protected bool $sanitizeHtml = false;
 
     protected function hookDefinition(): void
@@ -103,7 +103,7 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Sprache muss zur Instanz gehören; je Instanz und Sprache nur eine Vorlage.
+     * Language must belong to the instance; only one template per instance and language.
      */
     protected function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
@@ -131,7 +131,7 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Sprachen einer Instanz zur Auswahl.
+     * Languages of an instance to choose from.
      *
      * @return array  language_id => Bezeichnung
      */
@@ -145,8 +145,8 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Wofür eine Vorlage gelten kann: bei user die Profil-Bereiche der Instanz, bei
-     * admin die Benutzergruppen - jeweils mit 0 = alle zuerst.
+     * What a template may apply to: for user the profile areas of the instance, for
+     * admin the user groups - each with 0 = all first.
      *
      * @return array  scope_id => Bezeichnung
      */
@@ -173,7 +173,7 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Backend-Sprache, in der die Auskunft entsteht (language.backend_code,
+     * Backend language in which the disclosure is created (language.backend_code,
      * Cms::resolveBackendLang()).
      */
     public function backendLang(int $instanceId, int $languageId): string
@@ -183,9 +183,9 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Vorlagen einer Art und Instanz (ohne Inhalt), nach Sprachposition.
+     * Templates of a kind and instance (without content), by language position.
      *
-     * @return array  Liste aus privacy_template_id, kind, instance_id, scope_id, language_id
+     * @return array  list of privacy_template_id, kind, instance_id, scope_id, language_id
      */
     public function forInstance(string $kind, int $instanceId): array
     {
@@ -205,7 +205,7 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Darf der angemeldete Admin Vorlagen dieser Instanz anlegen, ändern, löschen?
+     * May the logged-in admin create, change and delete templates of this instance?
      */
     public function canEdit(int $instanceId): bool
     {
@@ -215,8 +215,8 @@ class ExportTemplate extends Dataset {
     }
 
     /**
-     * Vorbelegung einer neuen Vorlage: die des Core für diese Art in der Sprache,
-     * sonst englisch.
+     * Prefill of a new template: the one of the core for this kind in the language,
+     * otherwise English.
      */
     public function defaultContent(string $kind, string $backendLang): string
     {

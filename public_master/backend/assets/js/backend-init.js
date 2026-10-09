@@ -1,19 +1,19 @@
 /*
- * backend-init.js – Zentrale Initialisierung
+ * backend-init.js – Central initialization
  *
- * Wird als letztes Script geladen.
- * Startet alle cApp-Module in der korrekten Reihenfolge.
+ * Loaded as the last script.
+ * Starts all cApp modules in the correct order.
  */
 $(document).ready(() => {
-    cApp.system.init  && cApp.system.init();     // Basis-Infrastruktur
-    cApp.forms.init   && cApp.forms.init();      // Formular-Tracking
-    cApp.ui.init      && cApp.ui.init();         // UI-Events
-    cApp.aside.init   && cApp.aside.init();      // Aside-Panel
-    cApp.ctxMenu.init && cApp.ctxMenu.init();    // Kontextmenüs
+    cApp.system.init  && cApp.system.init();     // Base infrastructure
+    cApp.forms.init   && cApp.forms.init();      // Form tracking
+    cApp.ui.init      && cApp.ui.init();         // UI events
+    cApp.aside.init   && cApp.aside.init();      // Aside panel
+    cApp.ctxMenu.init && cApp.ctxMenu.init();    // Context menus
     cApp.polling.init && cApp.polling.init();    // Polling
-    cApp.mail.init    && cApp.mail.init();       // Interne Nachrichten (Brief-Symbol)
-    cApp.polling.init && cApp.smartrows.init();  // Zeilenmanipuation in Formularen
-    cApp.embedded.init && cApp.embedded.init();  // eingebettete Inhalte (Feldtyp 'link')
-    cApp.extensions && cApp.extensions.fieldForm.init(); // Feld-Extensions: Auswahl in der Feldmaske
-    cApp.layers.init  && cApp.layers.init();     // Layer + Hash-Routing (zuletzt!)
+    cApp.mail.init    && cApp.mail.init();       // Internal messages (envelope icon)
+    cApp.polling.init && cApp.smartrows.init();  // Row manipulation in forms
+    cApp.embedded.init && cApp.embedded.init();  // Embedded content (field type 'link')
+    cApp.extensions && cApp.extensions.fieldForm.init(); // Field extensions: selection in the field mask
+    cApp.layers.init  && cApp.layers.init();     // Layers + hash routing (last!)
 });

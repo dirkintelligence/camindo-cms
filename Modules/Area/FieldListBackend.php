@@ -6,9 +6,9 @@ class FieldListBackend extends FieldBackend {
     /**
      * Feldliste eines Inhaltsbereichs (backend/field_list.php).
      *
-     * Sortiert nach `position` - das ist zugleich die Reihenfolge im Eingabeformular
-     * des Datensatzes. Die drei Sichtbarkeits-Spalten sind anklickbar und gehen über
-     * updateVisibility() per Ajax zurück, ohne die Seite neu zu laden.
+     * Sorted by `position` - this is also the order in the input form
+     * of the record. The three visibility columns are clickable and go via
+     * updateVisibility() back via Ajax, without reloading the page.
      *
      * Request: area_id
      */
@@ -26,8 +26,8 @@ class FieldListBackend extends FieldBackend {
         // Container header
         echo $this->backend->template('container_header');
 
-        // Zugehörigen Bereich laden
-        // (gibt Bereichsname aus)
+        // Load the associated area
+        // (outputs the area name)
         echo $this->_loadArea();
 
         // H1
@@ -64,8 +64,8 @@ class FieldListBackend extends FieldBackend {
         // 2. Results
         if ($this->db->num_rows > 0) {
 
-            // Der Tabellenkopf ist fix
-            // und daher in das Template area.field_table_with_head integriert
+            // The table header is fixed
+            // and therefore integrated into the template area.field_table_with_head
 
             // Tabellen-Zeilen
             $tplTableRow = $this->backend->template('area.field_table_row');
@@ -78,7 +78,7 @@ class FieldListBackend extends FieldBackend {
                 $type = $data['type'];
                 $displayType = $data['display_type'];
 
-                // default field: Sichtbarkeit 'list' ist immer gegeben
+                // default field: visibility 'list' is always given
                 $isDefaultField = (bool)($data['default_field'] ?? 0);
 
                 $tableRow = $tplTableRow;
@@ -96,7 +96,7 @@ class FieldListBackend extends FieldBackend {
                 // visibility input | search | list
                 foreach ($this->visibilityFields as $key) {
                     if ($type == 'fulltext') {
-                        // Volltextsuchfeld: Keine Sichtbarkeit in Liste und Eingabemaske
+                        // Full-text search field: no visibility in the list and input mask
                         if ($key === 'list') {
                             $tableRow = str_replace('{visibility_list}','',$tableRow);
                             continue;
@@ -107,7 +107,7 @@ class FieldListBackend extends FieldBackend {
                         }
                     }
                     if ($key === 'list' && $isDefaultField) {
-                        // Default-Feld: Immer sichtbar in der Liste
+                        // Default field: always visible in the list
                         $formCheck = strtr($tplCheckBoxDisabled, [
                             "{checked}" => ' checked'
                         ]);
@@ -116,7 +116,7 @@ class FieldListBackend extends FieldBackend {
                     elseif ($displayType === 'thumbnail'
                         && in_array($key, ['input','search'], true)
                     ) {
-                        // Thumbnail: Nie sichtbar in der Eingabeamske und Liste
+                        // Thumbnail: never visible in the input mask and list
                         $formCheck = strtr($tplCheckBoxDisabled, [
                             "{checked}" => ''
                         ]);

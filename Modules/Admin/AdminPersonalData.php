@@ -1,48 +1,48 @@
 <?php
 /**
- * Datenexport personenbezogener Daten eines Benutzers (Admin-Konto) - das Gegenstück
- * zu RecordPersonalData für Website-User. Erstellt im Modul Privacy
- * (PrivacyBackend::export(), Zusatzrecht export) von jemandem, der die Benutzer der
- * Gruppe sehen darf. Ein Teilauszug: für eine Auskunft nach Art. 15 DSGVO von Hand
- * zu ergänzen (Rechtsgrundlagen, Server-Logfiles, andere Systeme …).
- * Instanzname im Code: $adminPersonalData.
+ * Personal data export for a user (admin account) - the counterpart
+ * to RecordPersonalData for website users. Created in module Privacy
+ * (PrivacyBackend::export(), additional right export) by someone who may see the users of the
+ * group. A partial extract: for a data access request under Art. 15 GDPR it must be
+ * supplemented by hand (legal bases, server log files, other systems …).
+ * Instance name in code: $adminPersonalData.
  *
- * INHALT DES ZIPS
+ * CONTENTS OF THE ZIP
  * --------------------
- *     auskunft.html   für Menschen: eine eigenständige Seite (druckbar) aus der
- *                     Vorlage des Betreibers (PrivacyTemplate, Tabelle
- *                     privacy_template) in der Sprache der Vorlage
- *     daten.json      dieselben Daten maschinenlesbar (Datenübertragbarkeit)
+ *     auskunft.html   for people: a standalone page (printable) from the
+ *                     operator's template (PrivacyTemplate, table
+ *                     privacy_template) in the language of the template
+ *     daten.json      the same data in machine-readable form (data portability)
  *
- * WAS DAZUGEHÖRT
+ * WHAT IS INCLUDED
  * --------------------
- *     Konto           Anmeldename, Namen, E-Mail, Mobil, Telefon (im Klartext),
- *                     Gruppe, Status, letzte Anmeldung, Passwort nur "gesetzt am"
- *                     (gespeichert wird nur der Tag), persönliche Einstellungen
- *     Anmeldung       bekannte Geräte (login_device), Sitzungen (admin_session),
- *                     zweiter Faktor: Art, Datum, Passkeys mit Bezeichnung, Zahl der
- *                     Wiederherstellungscodes - nie Schlüssel, Codes oder Hashes
- *     Aktivitäten     was der Benutzer im Audit-Log getan hat (neueste MAX_ROWS, mit
- *                     IP-Adresse - es ist seine), dazu Änderungen an seinem Konto
- *     Anmeldungen     An-/Abmeldungen (nur mit audit.log_logins) und Fehlversuche
- *                     unter seinem Namen aus dem Audit-Log, je mit dem Tag der
- *                     Löschung (audit.retention_days_logins)
- *     Nachrichten     interne Nachrichten an ihn: Datum, Absender, Betreff
- *                     (gelöscht nach privacy.message_days)
- *     Inhalte         Zahl der Datensätze, die er angelegt, zuletzt geändert hat oder
- *                     besitzt (die Inhalte selbst gehören dem Betreiber)
- *     Speicherdauer   nach den Einstellungen dieser Installation
+ *     Account         login name, names, email, mobile, phone (in plain text),
+ *                     group, status, last login, password only "set on" date
+ *                     (only the day is stored), personal settings
+ *     Login           known devices (login_device), sessions (admin_session),
+ *                     second factor: kind, date, passkeys with label, number of
+ *                     recovery codes - never keys, codes or hashes
+ *     Activities      what the user did in the audit log (latest MAX_ROWS, with
+ *                     IP address - it is their own), plus changes to their account
+ *     Logins          logins/logouts (only with audit.log_logins) and failed attempts
+ *                     under their name from the audit log, each with the date of
+ *                     deletion (audit.retention_days_logins)
+ *     Messages        internal messages to them: date, sender, subject
+ *                     (deleted after privacy.message_days)
+ *     Contents        number of records they created, last changed or
+ *                     own (the contents themselves belong to the operator)
+ *     Retention       according to the settings of this installation
  *
- * Nicht enthalten: Zeilen der Logdateien unter var/log und die Zähltabelle der
- * Fehlversuche (admin_login_attempt) - sie lassen sich keinem Konto sicher zuordnen.
- * Gekürzte IP-Adressen erscheinen mit "xxx" für die entfernten Stellen.
+ * Not included: lines of the log files under var/log and the counter table of
+ * failed attempts (admin_login_attempt) - they cannot be reliably assigned to an account.
+ * Shortened IP addresses show "xxx" for the removed parts.
  *
- * Das Zip liegt in var/export unter personal-data-admin-{id}-{zufall}.zip, wird nach
- * dem Herunterladen gelöscht (PrivacyBackend::download()) und
- * sonst nach admin.export_retention_hours vom Cron (RecordExport::cleanup()). Jede
- * Auskunft steht im Audit-Log (Aktion 'export' am Admin-Konto).
+ * The zip is in var/export under personal-data-admin-{id}-{random}.zip, is deleted after
+ * downloading (PrivacyBackend::download()) and otherwise after
+ * admin.export_retention_hours by the cron (RecordExport::cleanup()). Every
+ * extract is recorded in the audit log (action 'export' on the admin account).
  *
- * @see Camindo\Core\Modules\Record\RecordPersonalData   Auskunft für Website-User
+ * @see Camindo\Core\Modules\Record\RecordPersonalData   Extract for website users
  */
 namespace Camindo\Core\Modules\Admin;
 
@@ -57,10 +57,10 @@ use Camindo\Core\System;
 
 class AdminPersonalData {
 
-    /** Obergrenze je Liste (Aktivitäten, Nachrichten) */
+    /** Upper limit per list (activities, messages) */
     public const MAX_ROWS = 1000;
 
-    /** Präfix der Zip-Datei; der Download prüft ihn gegen das Konto */
+    /** Prefix of the zip file; the download checks it against the account */
     public const PREFIX = 'personal-data-admin-';
 
     public function __construct(
@@ -79,10 +79,10 @@ class AdminPersonalData {
     {}
 
     /**
-     * Auskunft erstellen.
+     * Create the extract.
      *
-     * @return array  ['zip' => Dateiname in var/export, 'size' => Bytes]
-     * @throws \RuntimeException  kein Konto, Zip nicht schreibbar
+     * @return array  ['zip' => file name in var/export, 'size' => bytes]
+     * @throws \RuntimeException  no account, zip not writable
      */
     public function export(int $adminId, string $template, int $instanceId): array
     {
@@ -108,16 +108,16 @@ class AdminPersonalData {
         return ['zip' => $zipName, 'size' => (int)filesize($dir . '/' . $zipName)];
     }
 
-    /** Gehört die Zip-Datei $file zum Konto $adminId? (Download) */
+    /** Does the zip file $file belong to the account $adminId? (download) */
     public static function ownsFile(int $adminId, string $file): bool
     {
         return (bool)preg_match('/^' . preg_quote(self::PREFIX . $adminId . '-', '/') . '[0-9a-f]{24}\.zip$/', $file);
     }
 
     /**
-     * Alle Daten zum Konto zusammentragen (Aufbau siehe daten.json).
+     * Collect all data for the account (structure see daten.json).
      *
-     * @throws \RuntimeException  kein Konto
+     * @throws \RuntimeException  no account
      */
     public function collect(int $adminId): array
     {
@@ -203,7 +203,7 @@ class AdminPersonalData {
 
     // ====================
 
-    /** Zeilen einer Abfrage mit einem Platzhalter, optional umgeformt */
+    /** Rows of a query with one placeholder, optionally reshaped */
     private function rows(string $sql, int $id, ?callable $map = null): array
     {
         $this->db->query($sql, 'i', [$id]);
@@ -219,16 +219,16 @@ class AdminPersonalData {
     }
 
     /**
-     * An-/Abmeldungen des Kontos und Fehlversuche unter seinem Namen (Audit-Log), je
-     * mit dem Tag, an dem sie gelöscht werden.
+     * Logins/logouts of the account and failed attempts under its name (audit log), each
+     * with the date on which they are deleted.
      */
     private function logins(int $adminId, string $name): array
     {
         $days = $this->auditLog->loginRetentionDays() ?: (int)($this->config->get('audit.retention_days_changes') ?? 0);
         $this->db->query(
             "SELECT `created_at`, `action`, `origin`, `ip` FROM `audit_log` WHERE `object_type` = 'admin'"
-            // Fehlversuche stehen unter der admin_id des Kontos (AuditLog::login()),
-            // ältere noch unter Objekt 0 mit dem eingegebenen Namen
+            // Failed attempts are stored under the admin_id of the account (AuditLog::login()),
+            // older ones still under object 0 with the entered name
             . " AND (`object_id` = ? OR (`object_id` = 0 AND `action` = 'login_failed' AND `label` = ?))"
             . " AND `action` IN ('login', 'logout', 'login_failed')"
             . " ORDER BY `audit_id` DESC LIMIT " . self::MAX_ROWS,
@@ -246,7 +246,7 @@ class AdminPersonalData {
         return $rows;
     }
 
-    /** Feldnamen aus audit_log.fields (JSON ohne Werte) */
+    /** Field names from audit_log.fields (JSON without values) */
     private function fieldNames(string $json): string
     {
         $names = [];
@@ -256,14 +256,14 @@ class AdminPersonalData {
         return implode(', ', array_filter($names));
     }
 
-    /** Datum aus der Datenbank (UTC), '' für "nie" */
+    /** Date from the database (UTC), '' for "never" */
     private function date(string $date): string
     {
         return $date === '' || str_starts_with($date, '0000') ? '' : $date;
     }
 
     /**
-     * Speicherdauer - Einstellungen dieser Installation, als Sätze.
+     * Retention periods - settings of this installation, as sentences.
      *
      * @return string[]
      */
@@ -282,7 +282,7 @@ class AdminPersonalData {
         if ($f['messages_limited']) {
             $lines[] = strtr($this->cms->snippet('admin.gdpr_retention_messages'), ['{days}' => (string)$v['message_days']]);
         }
-        // Logdateien: Aufgabe "Logs aufräumen" des Zeitplaners
+        // Log files: task "Clean up logs" of the scheduler
         $lines[] = $f['logcleanup']
             ? strtr($this->cms->snippet('record.gdpr_retention_logs'), [
                 '{days}' => (string)$v['log_days'],
@@ -296,9 +296,9 @@ class AdminPersonalData {
     // ==== HTML ====
 
     /**
-     * Die lesbare Auskunft (auskunft.html) aus der Vorlage des Betreibers
-     * für Benutzer (PrivacyTemplate); Tabellen und Listen aus den Vorlagen
-     * der Profil-Auskunft (record.gdpr_*). Alle Werte über Backend::escape().
+     * The readable extract (auskunft.html) from the operator's template
+     * for users (PrivacyTemplate); tables and lists from the templates
+     * of the profile extract (record.gdpr_*). All values via Backend::escape().
      */
     private function html(string $template, array $data): string
     {
@@ -368,7 +368,7 @@ class AdminPersonalData {
             ],
             [
                 'account' => $this->backend->template('record.gdpr_record_table', ['{rows}' => $rows]),
-                // Fristen direkt unter Geräten und Sitzungen
+                // Retention periods directly below devices and sessions
                 'devices' => $this->table($data['devices'], [
                     'label' => 'record.gdpr_col_device', 'ip' => 'record.gdpr_col_ip', 'created_at' => 'record.gdpr_col_first', 'last_seen_at' => 'record.gdpr_col_last'])
                     . $note(strtr($s('record.gdpr_retention_devices'), ['{days}' => (string)$v['device_days']])),
@@ -392,9 +392,9 @@ class AdminPersonalData {
     }
 
     /**
-     * Tabelle aus Zeilen, ohne Zeilen: "keine".
+     * Table from rows; without rows: "none".
      *
-     * @param array $columns  Spalte in $rows => Snippet der Überschrift
+     * @param array $columns  column in $rows => snippet of the heading
      */
     private function table(array $rows, array $columns): string
     {
@@ -414,7 +414,7 @@ class AdminPersonalData {
         return $this->backend->template('record.gdpr_table', ['{head}' => $head, '{rows}' => $body]);
     }
 
-    /** Aufzählung, ohne Einträge: "keine" */
+    /** List; without entries: "none" */
     private function list(array $lines): string
     {
         if (!$lines) return $this->backend->template('record.gdpr_none');

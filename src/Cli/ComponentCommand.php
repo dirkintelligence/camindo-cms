@@ -6,9 +6,9 @@
  *           update NAME [--no-backup] | update --all [--no-backup]
  *           uninstall NAME [--purge] [--no-backup]
  *
- * Lebenszyklus der Zusatzkomponenten (ComponentManager, 14 §6.3-6.5). NAME ist der
- * Komponentenname ("Blog") oder mit Art ("modules/Blog"), wenn der Name nicht
- * eindeutig ist. Das Backend-Modul Component ruft dieselben Methoden.
+ * Lifecycle of the add-on components (ComponentManager, developer docs, chapter 09 (Installation and update)). NAME is the
+ * component name ("Blog") or with kind ("modules/Blog") if the name is not
+ * unique. The backend module Component calls the same methods.
  */
 namespace Camindo\Core\Cli;
 

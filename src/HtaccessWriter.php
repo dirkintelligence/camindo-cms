@@ -1,22 +1,22 @@
 <?php
 /**
- * Der generierte Block in public/.htaccess (Docroot).
+ * The generated block in public/.htaccess (docroot).
  *
- * Im Frontend läuft jede Anfrage über index.php - AUSSER sie zeigt auf eine echte
- * Datei oder in eines der Unterverzeichnisse des Docroots (media/, backend/, …).
- * Diese Ausnahmen stehen als RewriteCond-Zeilen im verwalteten Block zwischen
- * '## CAMINDO SYNTAX START' und '## CAMINDO SYNTAX END'; alles davor und dahinter
- * bleibt unangetastet (mergeManagedBlock()). Eine CRC32-Prüfsumme über die sortierte
- * Verzeichnisliste steht mit im Block - hasChanges() vergleicht sie mit dem
- * Dateisystem und sagt, ob die Datei veraltet ist.
+ * In the frontend every request runs through index.php - EXCEPT when it points to a real
+ * file or to one of the subdirectories of the docroot (media/, backend/, …).
+ * These exceptions are RewriteCond lines in the managed block between
+ * '## CAMINDO SYNTAX START' and '## CAMINDO SYNTAX END'; everything before and after
+ * stays untouched (mergeManagedBlock()). A CRC32 checksum over the sorted
+ * directory list is part of the block - hasChanges() compares it with the
+ * file system and tells whether the file is outdated.
  *
- * Vorlage: Core/backend/html/htaccess.html (Platzhalter {exclusions}, {checksum}) -
- * hier direkt gelesen, nicht über Backend::template(), damit die Klasse ohne
- * Backend läuft: camindo.php upgrade und der Installer schreiben die Datei genauso
- * wie der Reiter Server im Modul Tools (ToolServer).
+ * Template: Core/backend/html/htaccess.html (placeholders {exclusions}, {checksum}) -
+ * read directly here, not via Backend::template(), so the class runs without
+ * the backend: camindo.php upgrade and the installer write the file the same way
+ * as the Server tab in the Tools module (ToolServer).
  *
- * @see Camindo\Core\Modules\Tools\ToolServer  Backend-Oberfläche dazu
- * @see docs/developers/14-installation-und-update.md, 6.2 Schritt 8
+ * @see Camindo\Core\Modules\Tools\ToolServer  backend UI for this
+ * @see developer docs, chapter 09 (Installation and update) (step 8)
  */
 namespace Camindo\Core;
 
@@ -44,10 +44,10 @@ class HtaccessWriter {
     }
 
     /**
-     * Schreibt den verwalteten Block neu (überschreibt immer).
-     * Manuell gepflegte Zeilen außerhalb des Blocks bleiben erhalten.
+     * Rewrites the managed block (always overwrites).
+     * Manually maintained lines outside the block are kept.
      *
-     * @return bool  false, wenn die Datei nicht geschrieben werden konnte
+     * @return bool  false if the file could not be written
      */
     public function update(): bool
     {
@@ -65,8 +65,8 @@ class HtaccessWriter {
     }
 
     /**
-     * true, wenn sich die Verzeichnisstruktur gegenüber der in der .htaccess
-     * gespeicherten Prüfsumme geändert hat (oder noch keine .htaccess existiert).
+     * true if the directory structure has changed compared with the checksum
+     * stored in the .htaccess (or if no .htaccess exists yet).
      */
     public function hasChanges(): bool
     {
@@ -90,8 +90,8 @@ class HtaccessWriter {
     }
 
     /**
-     * Sortierte Liste der Unterverzeichnisse im Docroot. Punkt-Einträge werden
-     * übersprungen - echte Dateien darin liefert die !-f-Bedingung direkt aus.
+     * Sorted list of the subdirectories in the docroot. Dot entries are
+     * skipped - real files in there are handled directly by the !-f condition.
      *
      * @return string[]
      */
@@ -108,8 +108,8 @@ class HtaccessWriter {
     }
 
     /**
-     * RewriteCond-Zeilen, die reale Dateien (!-f) und die vorhandenen Verzeichnisse
-     * von der Umleitung auf index.php ausschließen. Endet immer mit Newline.
+     * RewriteCond lines that exclude real files (!-f) and the existing directories
+     * from the redirect to index.php. Always ends with a newline.
      */
     private function buildExclusions(array $dirs): string
     {
@@ -121,8 +121,8 @@ class HtaccessWriter {
     }
 
     /**
-     * 8-stellige CRC32-Prüfsumme über die sortierte Verzeichnisliste - kein
-     * Manipulationsschutz, nur "hat sich die Liste seit dem Schreiben geändert?".
+     * 8-digit CRC32 checksum over the sorted directory list - not tamper protection,
+     * only "has the list changed since it was written?".
      */
     private function directoryChecksum(array $dirs): string
     {
@@ -130,9 +130,9 @@ class HtaccessWriter {
     }
 
     /**
-     * Ersetzt den CAMINDO-Block in $current durch $block und behält alles außerhalb
-     * der Markierungen. Fehlt der Block, wird ein Grundgerüst (RewriteEngine/
-     * RewriteBase) erzeugt.
+     * Replaces the CAMINDO block in $current with $block and keeps everything outside
+     * the markers. If the block is missing, a basic skeleton (RewriteEngine/
+     * RewriteBase) is created.
      */
     private function mergeManagedBlock(string $current, string $block): string
     {

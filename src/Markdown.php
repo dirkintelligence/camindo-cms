@@ -1,39 +1,39 @@
 <?php
 /**
- * Markdown -> HTML für Frontend-Templates: Parsedown im Safe Mode (HTML im Markdown
- * wird maskiert, Link-Ziele wie javascript: entschärft) plus die Erweiterungen, die
- * die Extension MarkdownVisual schreibt.
+ * Markdown -> HTML for frontend templates: Parsedown in safe mode (HTML in the Markdown
+ * is masked, link targets such as javascript: are neutralized) plus the extensions that
+ * the MarkdownVisual extension writes.
  *
  *     $html = (new \Camindo\Core\Markdown())->toHtml($text);
- *     (CMS:TEXT text markdown=true)                        dasselbe als Template-Befehl
+ *     (CMS:TEXT text markdown=true)                        the same as a template command
  *
- * ERWEITERUNGEN GEGENÜBER PARSEDOWN
+ * EXTENSIONS TO PARSEDOWN
  * --------------------
- *     ++Text++              <u>Text</u> (Unterstrich)
- *     ::: center            Ausrichtung der eingeschlossenen Blöcke - left, center,
- *     …                     right; ergibt <div style="text-align: center;">, wie
- *     :::                   Parsedown die Spaltenausrichtung der Tabellen schreibt.
- *                           Verschachtelbar, ein unbekanntes Wort bleibt ohne Stil.
- *     <br> / <br />         Zeilenumbruch auch im Safe Mode - der einzige Weg zu einem
- *                           Umbruch in einer Tabellenzelle (GFM)
- *     &shy; &nbsp; &#8239;  Entities bleiben Entities (Parsedown maskiert sie im Safe
- *                           Mode zu &amp;shy;); Ergebnis ist nur ein einzelnes Zeichen
- *     \: \& \= \<           zusätzliche Escape-Zeichen (Zeile, die mit ":::" beginnt;
- *                           Text, der wie ein Entity oder ein Tag aussieht; Zeile nur
- *                           aus "=")
+ *     ++Text++              <u>Text</u> (underline)
+ *     ::: center            Alignment of the enclosed blocks - left, center,
+ *     …                     right; yields <div style="text-align: center;">, the way
+ *     :::                   Parsedown writes the column alignment of tables.
+ *                           Nestable, an unknown word stays without style.
+ *     <br> / <br />         Line break also in safe mode - the only way to a
+ *                           break within a table cell (GFM)
+ *     &shy; &nbsp; &#8239;  Entities stay entities (Parsedown masks them in safe
+ *                           mode to &amp;shy;); result is only a single character
+ *     \: \& \= \<           additional escape characters (line starting with ":::";
+ *                           text that looks like an entity or a tag; line consisting
+ *                           only of "=")
  *
- * Harte Zeilenumbrüche: zwei Leerzeichen am Zeilenende. Den Rückstrich am Zeilenende
- * (CommonMark) versteht Parsedown 1.8 nicht zuverlässig, MarkdownVisual schreibt ihn
- * deshalb nicht.
+ * Hard line breaks: two spaces at the end of the line. Parsedown 1.8 does not reliably
+ * understand the backslash at the end of the line (CommonMark), so MarkdownVisual does
+ * not write it.
  *
- * Die Syntax ist dieselbe wie in Extensions/MarkdownVisual/public/js/markdownvisual.ext.js
- * (Parser und Serializer im Editor) - wer sie ändert, ändert beide.
+ * The syntax is the same as in Extensions/MarkdownVisual/public/js/markdownvisual.ext.js
+ * (parser and serializer in the editor) - whoever changes it changes both.
  */
 namespace Camindo\Core;
 
 class Markdown extends \Parsedown
 {
-    /** Werte von ::: {wort}, die eine Ausrichtung ergeben */
+    /** Values of ::: {word} that yield an alignment */
     public const ALIGNMENTS = ['left', 'center', 'right'];
 
     public function __construct()
@@ -49,13 +49,13 @@ class Markdown extends \Parsedown
         $this->specialCharacters[] = '<';
     }
 
-    /** Markdown -> HTML; leerer Text ergibt '' */
+    /** Markdown -> HTML; empty text yields '' */
     public function toHtml(string $markdown): string
     {
         return trim($markdown) === '' ? '' : (string)$this->text($markdown);
     }
 
-    // ---- ::: ausrichtung … ::: ----
+    // ---- ::: alignment … ::: ----
 
     protected function blockAlign($Line)
     {
@@ -85,7 +85,7 @@ class Markdown extends \Parsedown
             for ($i = 0; $i < $Block['interrupted']; $i++) $Block['lines'][] = '';
             unset($Block['interrupted']);
         }
-        // Schließen nur ganz links - eingerückte ":::" gehören zu Code oder Listen
+        // Close only at the far left - indented ":::" belong to code or lists
         if ($Line['indent'] === 0 && preg_match('/^:::[ ]*([A-Za-z-]*)[ ]*$/', $Line['text'], $m)) {
             if ($m[1] !== '') {
                 $Block['depth']++;
@@ -108,7 +108,7 @@ class Markdown extends \Parsedown
         return $Block;
     }
 
-    // ---- ++unterstrichen++ ----
+    // ---- ++underlined++ ----
 
     protected function inlineUnderline($Excerpt)
     {
@@ -138,8 +138,8 @@ class Markdown extends \Parsedown
     // ---- Entities ----
 
     /**
-     * Wie Parsedown, aber auch im Safe Mode als Entity ausgegeben: das Muster lässt
-     * nur &name; &#123; &#x1F; durch - daraus wird im Browser höchstens ein Zeichen.
+     * Like Parsedown, but also output as an entity in safe mode: the pattern only lets
+     * &name; &#123; &#x1F; through - in the browser this becomes at most one character.
      */
     protected function inlineSpecialCharacter($Excerpt)
     {

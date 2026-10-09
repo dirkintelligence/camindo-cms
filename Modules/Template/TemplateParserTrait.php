@@ -3,84 +3,84 @@
 namespace Camindo\Core\Modules\Template;
 
 /**
- * Übersetzt CMS-Befehle der Form
+ * Translates CMS commands of the form
  *
  *     (cms:befehls_name parameter1 key=value key['sub'][] = "value" key[sub] >= 5 ...)
  *
- * in PHP-Code.
+ * into PHP code.
  *
- * ZUM AUFBAU
+ * STRUCTURE
  * --------------------
- * Ein Template ist normaler Text (HTML, gern auch roher PHP-Code), in dem CMS-Befehle
- * stehen. Der Parser ist deshalb kein Compiler im engeren Sinn: er lässt alles
- * unverändert stehen, was kein Befehl ist, und ersetzt nur die Befehle.
+ * A template is normal text (HTML, gladly also raw PHP code), in which CMS commands
+ * stand. The parser is therefore not a compiler in the strict sense: it leaves everything
+ * unchanged that is not a command, and only replaces the commands.
  *
- * Der Ablauf in parse() ist entsprechend schlicht - suche das nächste "(cms:",
- * übernimm den Text davor, lies den Befehl, erzeuge dafür PHP, mach hinter dem Befehl
- * weiter. Alles andere sind Hilfsmethoden dazu, in vier Gruppen:
+ * The flow in parse() is accordingly simple - search for the next "(cms:",
+ * take over the text before it, read the command, create PHP for it, continue after the command.
+ * Everything else are helper methods for this, in four groups:
  *
- *     Parsen        parseCmsCommand(), readParam(), readToken(), readSub()
- *                   und die Scanner-Helfer skipWs(), consumeQuoted(), consumeBraces()
- *     Validierung   validateCmsCommand() - gegen die Definition aus commands.php
- *     Erzeugung     generateCmsCommand(), paramPath(), normToken(), phpValueToken(),
+ *     Parsing       parseCmsCommand(), readParam(), readToken(), readSub()
+ *                   and the scanner helpers skipWs(), consumeQuoted(), consumeBraces()
+ *     Validation    validateCmsCommand() - against the definition from commands.php
+ *     Generation    generateCmsCommand(), paramPath(), normToken(), phpValueToken(),
  *                   emitFragments()
- *     Darstellung   renderStyledCode(), styleRawPhp(), styleCommandInner();
- *                   styleCode() liefert nur die Darstellung (Codebeispiele der Handbücher)
+ *     Display       renderStyledCode(), styleRawPhp(), styleCommandInner();
+ *                   styleCode() only provides the display (code examples of the manuals)
  *
- * DIE BEFEHLSDEFINITIONEN STEHEN WOANDERS
+ * THE COMMAND DEFINITIONS ARE ELSEWHERE
  * --------------------
- * commands.php liefert je Befehl, welche Parameter erlaubt sind und welcher PHP-Code
- * daraus entsteht. Der Parser selbst kennt keinen einzigen Befehl - ein neuer Befehl
- * bedeutet einen Eintrag dort, keine Änderung hier. Zusatzmodule bringen eigene
- * Befehle in einer eigenen Datei mit (settings.php['commands'], siehe loadCommands()).
+ * commands.php provides for each command which parameters are allowed and which PHP code
+ * results from it. The parser itself knows not a single command - a new command
+ * means an entry there, no change here. Add-on modules bring their own
+ * commands in a separate file (settings.php['commands'], see loadCommands()).
  *
- * ZEILENNUMMERN BLEIBEN ERHALTEN
+ * LINE NUMBERS ARE KEPT
  * --------------------
- * Das durchzieht die ganze Datei und erklärt manche Umständlichkeit. Der erzeugte
- * PHP-Code hat an jeder Stelle dieselbe Zeilennummer wie der CMS-Quelltext - ein
- * mehrzeiliger Befehl wird also zu ebenso vielen Zeilen PHP. Nur dadurch zeigt eine
- * PHP-Fehlermeldung aus var/php/{area_id}/{name}.php auf die richtige Zeile im Editor.
- * Deshalb führt der Scanner in $s['line'] eine relative Zeilenzählung mit, und deshalb
- * setzt emitFragments() den Code zeilenweise zusammen statt einfach zu verketten.
+ * This runs through the whole file and explains some clumsiness. The generated
+ * PHP code has the same line number as the CMS source code at every point - a
+ * multi-line command thus becomes as many lines of PHP. Only this way does a
+ * PHP error message from var/php/{area_id}/{name}.php point to the right line in the editor.
+ * Therefore the scanner keeps a relative line count in $s['line'], and therefore
+ * emitFragments() assembles the code line by line instead of simply concatenating it.
  *
- * FEHLER BRECHEN NICHT AB
+ * ERRORS DO NOT ABORT
  * --------------------
- * Unbekannte Befehle und ungültige Parameter werden gemeldet und übersprungen bzw. als
- * Rohtext übernommen; parse() liefert trotzdem ein Ergebnis. Ein halbfertiges Template
- * lässt sich damit zwischenspeichern (siehe Template::hookOnSave()).
+ * Unknown commands and invalid parameters are reported and skipped resp. taken over as
+ * raw text; parse() still returns a result. A half-finished template
+ * can thus be saved intermediately (see Template::hookOnSave()).
  *
- * DREI RÜCKGABEWERTE
+ * THREE RETURN VALUES
  * --------------------
- *     phpCode     das kompilierte Template
- *     styledCode  derselbe Quelltext als HTML mit Syntax-Einfärbung für den Editor
- *     errors      Meldungen mit Zeilennummern
+ *     phpCode     the compiled template
+ *     styledCode  the same source code as HTML with syntax coloring for the editor
+ *     errors      messages with line numbers
  *
- * @see Camindo\Core\Modules\Template\Template          benutzt den Trait in hookOnSave()
- * @see Camindo\Core\Modules\Template\TemplateBackend   Editor und Fehleranzeige
- * @see docs/developers/06-templates.md                               Befehlsreferenz
+ * @see Camindo\Core\Modules\Template\Template          uses the trait in hookOnSave()
+ * @see Camindo\Core\Modules\Template\TemplateBackend   editor and error display
+ * @see developer docs, chapter 06 (Template compiler)  command reference
  */
 trait TemplateParserTrait
 {
-    // Befehlsdefinitionen aus commands.php, geladen zu Beginn von parse().
+    // Command definitions from commands.php, loaded at the start of parse().
     protected array $commands = [];
-    // Bereich des Templates, das gerade übersetzt wird (für die Verweise im styledCode)
+    // Area of the template currently being translated (for the references in the styledCode)
     protected int $parseAreaId = 0;
 
     /**
-     * Befehlsdefinitionen zusammenstellen: die des Cores (commands.php) plus die der
-     * aktiven Zusatzmodule.
+     * Assemble command definitions: those of the core (commands.php) plus those of the
+     * active add-on modules.
      *
-     * Ein Modul nennt in install/settings.php['commands'] eine Datei relativ zu
-     * seinem Verzeichnis (z. B. 'commands.php'), die ein Array im selben Aufbau wie
-     * die Core-Datei zurückgibt. Die Befehlsnamen tragen sinnvollerweise den
-     * Modulnamen als Präfix ('pdf_page' -> CMS:PDF_PAGE); ein Name, den der Core
-     * schon vergibt, bleibt beim Core. Die in 'method' genannten Objekte
-     * ('pdf.cmsPdfPage' -> $this->pdf) stellt das Modul über settings.php['services']
-     * bereit, siehe Page::__construct().
+     * A module names in install/settings.php['commands'] a file relative to
+     * its directory (e.g. 'commands.php') that returns an array with the same structure as
+     * the core file. The command names sensibly carry the
+     * module name as prefix ('pdf_page' -> CMS:PDF_PAGE); a name that the core
+     * already assigns stays with the core. The objects named in 'method'
+     * ('pdf.cmsPdfPage' -> $this->pdf) are provided by the module via settings.php['services'],
+     * see Page::__construct().
      *
-     * Die Modulliste kommt aus Cms::$modules (Laufzeitliste des ComponentManagers).
-     * Ohne Cms-Instanz - der Trait läuft auch allein, etwa in einem Testscript -
-     * gibt es nur die Core-Befehle.
+     * The module list comes from Cms::$modules (runtime list of the ComponentManager).
+     * Without a Cms instance - the trait also runs on its own, for example in a test script -
+     * there are only the core commands.
      */
     protected function loadCommands(): array
     {
@@ -105,16 +105,16 @@ trait TemplateParserTrait
     }
 
     /**
-     * CMS-Quelltext übersetzen.
+     * Translate CMS source code.
      *
-     * Läuft einmal linear durch den Text (siehe Trait-Kommentar). Was kein gültiger
-     * Befehl ist, wandert unverändert in die Ausgabe - auch ein "(cms:" ohne
-     * schließende Klammer, dann allerdings mit Fehlermeldung. Der Durchlauf selbst
-     * steht in scan().
+     * Runs once linearly through the text (see trait comment). What is not a valid
+     * command passes unchanged into the output - also a "(cms:" without a
+     * closing parenthesis, though then with an error message. The run itself
+     * is in scan().
      *
-     * @param string $code     Quelltext in CMS-Syntax
-     * @param int    $area_id  Inhaltsbereich des Templates - manche Befehle lösen
-     *                         damit Feldnamen auf
+     * @param string $code     source code in CMS syntax
+     * @param int    $area_id  content area of the template - some commands resolve
+     *                         field names with it
      * @return array           ['phpCode' => string, 'styledCode' => string,
      *                          'errors' => string[]]
      */
@@ -127,8 +127,8 @@ trait TemplateParserTrait
         [$php, $segments] = $this->scan($code, $errors, true);
         $styled = $this->renderStyledCode($code, $segments);
 
-        // Script-Policy des Frontends (19-csp.md §9): Hinweise auf Scripts ohne
-        // (CMS:NONCE) und Inline-Handler, die sie blockieren würde
+        // Script policy of the frontend (developer docs, chapter 14 (Security: web)): notes on scripts without
+        // (CMS:NONCE) and inline handlers that it would block
         array_push($errors, ...$this->inlineHandlerWarnings($code));
 
         return [
@@ -139,13 +139,13 @@ trait TemplateParserTrait
     }
 
     /**
-     * Nur die eingefärbte Ansicht, ohne zu kompilieren - für Codebeispiele außerhalb
-     * des Template-Editors (Handbücher: ```cms-Blöcke, Docs::render()).
+     * Only the colored view, without compiling - for code examples outside
+     * the template editor (manuals: ```cms blocks, Docs::render()).
      *
-     * Dasselbe HTML wie 'styledCode' aus parse() (maskierter Text, <span class="c9-command">,
-     * <span class="c9-php">), aber ohne Template-Links - ein Beispiel verweist auf
-     * kein vorhandenes Template. Unbekannte oder unvollständige Befehle bleiben Text,
-     * Meldungen entfallen.
+     * The same HTML as 'styledCode' from parse() (escaped text, <span class="c9-command">,
+     * <span class="c9-php">), but without template links - an example refers to
+     * no existing template. Unknown or incomplete commands remain text,
+     * messages are omitted.
      */
     public function styleCode(string $code): string
     {
@@ -158,20 +158,20 @@ trait TemplateParserTrait
     }
 
     /**
-     * Der eigentliche Durchlauf von parse() und styleCode(): Text und Befehle
-     * trennen, mit $compile = true zugleich den PHP-Code erzeugen.
+     * The actual run of parse() and styleCode(): separate text and commands,
+     * and with $compile = true also create the PHP code.
      *
-     * Nebenbei entstehen die $segments: eine Liste aus Text- und Befehlsabschnitten,
-     * aus der renderStyledCode() am Ende die eingefärbte Ansicht baut. Sie wird
-     * hier mitgeführt, weil nur an dieser Stelle bekannt ist, welche Zeichen zu einem
-     * Befehl gehören und welche nicht.
+     * On the side the $segments are created: a list of text and command sections,
+     * from which renderStyledCode() builds the colored view at the end. It is
+     * carried along here, because only at this point is it known which characters belong to a
+     * command and which do not.
      *
      * @return array  [string $php, array $segments]
      */
     private function scan(string $code, array &$errors, bool $compile): array
     {
         $php      = '';
-        $segments = []; // Segmente für styledCode: 'text' | 'command'
+        $segments = []; // segments for styledCode: 'text' | 'command'
 
         $len = strlen($code);
         $pos = 0;
@@ -180,13 +180,13 @@ trait TemplateParserTrait
             $hit = stripos($code, '(cms:', $pos);
 
             if ($hit === false) {
-                // Rest ist normaler Text
+                // Rest is plain text
                 $this->addTextSegment($segments, $pos, $len);
                 $php .= substr($code, $pos);
                 break;
             }
 
-            // Text vor dem Befehl unverändert übernehmen
+            // Take over the text before the command unchanged
             if ($hit > $pos) {
                 $this->addTextSegment($segments, $pos, $hit);
                 $php .= substr($code, $pos, $hit - $pos);
@@ -195,7 +195,7 @@ trait TemplateParserTrait
             $cmd = $this->parseCmsCommand($code, $hit, $errors);
 
             if ($cmd === null) {
-                // strukturell kein gültiger Befehl: '(' übernehmen, dahinter weitersuchen
+                // structurally not a valid command: take over '(', keep searching after it
                 $this->addTextSegment($segments, $hit, $hit + 1);
                 $php .= '(';
                 $pos  = $hit + 1;
@@ -209,7 +209,7 @@ trait TemplateParserTrait
                 }
                 $segments[] = ['type' => 'command', 'cmd' => $cmd];
             } else {
-                // unbekannter Befehl: Quelltext unverändert lassen (Fehler wurde gemeldet)
+                // unknown command: leave the source code unchanged (error has been reported)
                 $this->addTextSegment($segments, $cmd['start'], $cmd['end']);
                 $php .= substr($code, $cmd['start'], $cmd['end'] - $cmd['start']);
             }
@@ -225,19 +225,19 @@ trait TemplateParserTrait
      * ===================================================================== */
 
     /**
-     * Hinweise für die Script-Policy des Frontends (19-csp.md §9) im HTML-Teil des
-     * Quelltexts (Token T_INLINE_HTML - PHP-Code bleibt außen vor):
+     * Notes for the script policy of the frontend (developer docs, chapter 14 (Security: web)) in the HTML part of the
+     * source code (token T_INLINE_HTML - PHP code stays out):
      *
-     *   - <script> ohne Nonce: ein Script im Template braucht <script(CMS:NONCE)>,
-     *     sonst blockiert es eine durchgesetzte Policy. Ausgenommen sind Scripts mit
-     *     relativem src (eigene Dateien, 'self') und Datenblöcke (type="application/
+     *   - <script> without nonce: a script in the template needs <script(CMS:NONCE)>,
+     *     otherwise it is blocked by an enforced policy. Exempt are scripts with a
+     *     relative src (own files, 'self') and data blocks (type="application/
      *     ld+json", "application/json", "text/template" …)
-     *   - Inline-Event-Handler (onclick="…") und javascript:-Links: die blockiert
-     *     die Policy immer, auch mit Nonce
+     *   - inline event handlers (onclick="…") and javascript: links: the policy
+     *     always blocks these, even with a nonce
      *
-     * Die Nonce setzt der Template-Programmierer selbst mit (CMS:NONCE); der Compiler
-     * ändert nichts. Nur Hinweise (error_text), das Speichern hindern sie nicht;
-     * höchstens zehn.
+     * The template programmer sets the nonce themselves (CMS:NONCE); the compiler
+     * changes nothing. Only notes (error_text), saving is not prevented by them;
+     * at most ten.
      *
      * @return string[]
      */
@@ -278,27 +278,26 @@ trait TemplateParserTrait
     }
 
     /* =====================================================================
-     * Referenzen (Export/Import von Template-Sätzen)
+     * References (export/import of template sets)
      * ===================================================================== */
 
     /**
-     * Referenzierende Parameterwerte umschreiben - ohne zu kompilieren.
+     * Rewrite referencing parameter values - without compiling.
      *
-     * Läuft mit demselben Scanner wie parse() über alle bekannten Befehle und ruft
-     * für jeden Parameter, der laut commands.php einen Verweis trägt ('ref':
-     * template | area | record), die Abbildung auf:
+     * Runs with the same scanner as parse() over all known commands and calls
+     * for each parameter that carries a reference according to commands.php ('ref':
+     * template | area | record), the mapping:
      *
-     *     $map(string $ref, string $value): ?string    null = unverändert lassen
+     *     $map(string $ref, string $value): ?string    null = leave unchanged
      *
-     * Bei 'record' wird jede Zahl im Wert einzeln übergeben (Kommalisten,
-     * Ausdrücke wie "123 OR >1000"), bei 'template' und 'area' der ganze Wert.
-     * Anführungszeichen bleiben stehen, der Aufruf sieht nur den Inhalt. Werte mit
-     * PHP-Anteil ({$...}, $var) werden übergangen - sie stehen erst zur Laufzeit
-     * fest. Unbekannte Befehle und strukturell unlesbare Stellen bleiben, wie sie
-     * sind.
+     * For 'record' each number in the value is passed individually (comma lists,
+     * expressions like "123 OR >1000"), for 'template' and 'area' the whole value.
+     * Quotation marks remain, the call sees only the content. Values with a
+     * PHP part ({$...}, $var) are skipped - they are only fixed at runtime.
+     * Unknown commands and structurally unreadable places remain as they are.
      *
-     * Der Export markiert damit Ids und Namen (<!-- CMS:REPLACE ... -->,
-     * RecordExport), der Import löst die Markierungen wieder auf (RecordImport).
+     * The export thus marks ids and names (<!-- CMS:REPLACE ... -->,
+     * RecordExport), the import resolves the markers again (RecordImport).
      */
     public function mapReferences(string $code, callable $map): string
     {
@@ -321,7 +320,7 @@ trait TemplateParserTrait
             $doParam = (string)($cmd['def']['do'] ?? '');
             foreach ($cmd['params'] as $param) {
                 $keyText = strtolower((string)$param['key']['text']);
-                // Wert ohne Schlüssel: gilt für den 'do'-Parameter
+                // Value without key: applies to the 'do' parameter
                 if ($param['standalone']) {
                     if ($doParam === '' || !isset($paramDefs[$doParam]['ref'])) continue;
                     $ref = $paramDefs[$doParam]['ref'];
@@ -333,7 +332,7 @@ trait TemplateParserTrait
                     $token = $param['value'];
                 }
                 if (is_array($ref)) {
-                    // Typ hängt am ersten Unterschlüssel (filter[area_id] ...)
+                    // Type depends on the first sub-key (filter[area_id] ...)
                     $sub = strtolower(trim((string)($param['subs'][0]['text'] ?? ''), "\"'"));
                     $ref = $ref[$sub] ?? null;
                     if ($ref === null) continue;
@@ -354,7 +353,7 @@ trait TemplateParserTrait
                 $spans[] = [$start, $start + strlen($inner), $mapped];
             }
         }
-        // von hinten ersetzen, damit die Offsets gültig bleiben
+        // Replace from the back so that the offsets stay valid
         usort($spans, fn($a, $b) => $b[0] <=> $a[0]);
         foreach ($spans as [$start, $end, $replacement]) {
             $code = substr($code, 0, $start) . $replacement . substr($code, $end);
@@ -363,23 +362,22 @@ trait TemplateParserTrait
     }
 
     /* =====================================================================
-     * Parsen eines einzelnen Befehls
+     * Parsing a single command
      * ===================================================================== */
 
     /**
-     * Liest einen Befehl ab Position $start ("(cms:...").
-     * Liefert null, wenn der Befehl strukturell nicht lesbar ist
-     * (z. B. fehlende schließende Klammer).
+     * Reads a command starting at position $start ("(cms:...").
+     * Returns null if the command is structurally unreadable
+     * (e.g. missing closing parenthesis).
      *
-     * Gelesen wird mit einem Scanner-Zustand $s (Quelltext, Länge, Position und die
-     * relative Zeile innerhalb des Befehls), der durch alle read*- und consume*-Helfer
-     * per Referenz weitergereicht wird - jeder von ihnen schiebt die Position weiter.
-     * Die mitgeführte Zeilenzählung ist nötig, damit Fehlermeldungen auf die richtige
-     * Zeile zeigen und der erzeugte Code die Zeilenzahl behält.
+     * Reading uses a scanner state $s (source code, length, position and the
+     * relative line within the command), which is passed by reference through all read* and consume* helpers -
+     * each of them advances the position. The carried line count is needed so that error messages point to the right line and
+     * line and the generated code keeps the line count.
      *
-     * Ein unbekannter Befehlsname ist kein struktureller Fehler: er wird gemeldet, das
-     * Ergebnis bekommt 'known' => false, und der Aufrufer übernimmt den Quelltext dann
-     * unverändert.
+     * An unknown command name is not a structural error: it is reported, the
+     * result gets 'known' => false, and the caller then takes over the source code
+     * unchanged.
      *
      * @return ?array  start, end, name, nameRaw, baseLine, lines, params, known, def
      */
@@ -394,7 +392,7 @@ trait TemplateParserTrait
         $nameRaw = $m[1];
         $name    = strtolower($nameRaw);
 
-        // Scanner-Zustand: Position + relative Zeile innerhalb des Befehls
+        // Scanner state: position + relative line within the command
         $s = [
             'code' => $code,
             'len'  => strlen($code),
@@ -436,7 +434,7 @@ trait TemplateParserTrait
             'name'     => $name,
             'nameRaw'  => $nameRaw,
             'baseLine' => $baseLine,
-            'lines'    => $s['line'],   // relative Zeile der ')'
+            'lines'    => $s['line'],   // relative line of the ')'
             'params'   => $params,
             'known'    => $known,
             'def'      => $this->commands[$name] ?? [],
@@ -444,11 +442,11 @@ trait TemplateParserTrait
     }
 
     /**
-     * Liest einen Parameter: key[sub][...] = value  |  key = value  |  standalone
+     * Reads a parameter: key[sub][...] = value  |  key = value  |  standalone
      *
-     * Statt '=' darf ein Vergleichsoperator zwischen Schlüssel und Wert stehen
-     * (filter[preis] >= 100, filter[titel] != "x"), siehe readOperator(). Er landet
-     * in 'op'; generateCmsCommand() stellt ihn dem Wert voran.
+     * Instead of '=' a comparison operator may stand between key and value
+     * (filter[preis] >= 100, filter[titel] != "x"), see readOperator(). It ends up
+     * in 'op'; generateCmsCommand() puts it in front of the value.
      */
     private function readParam(array &$s, int $baseLine, string $cmdName, array &$errors): ?array
     {
@@ -461,7 +459,7 @@ trait TemplateParserTrait
             return null;
         }
 
-        // Sub-Schlüssel: [..][..][] direkt hinter dem Schlüssel
+        // Sub-keys: [..][..][] directly after the key
         $subs = [];
         while ($s['pos'] < $s['len'] && $s['code'][$s['pos']] === '[') {
             $sub = $this->readSub($s, $baseLine, $cmdName, $errors);
@@ -471,7 +469,7 @@ trait TemplateParserTrait
             $subs[] = $sub;
         }
 
-        // optionales '=' bzw. Vergleichsoperator (auch über Zeilenumbrüche hinweg)
+        // optional '=' or comparison operator (also across line breaks)
         $this->skipWs($s);
 
         $opLine = null;
@@ -506,12 +504,12 @@ trait TemplateParserTrait
     }
 
     /**
-     * Liest den Operator zwischen Schlüssel und Wert: '=' (Zuweisung) oder einer der
-     * Vergleichsoperatoren ==, !=, !!, <=, >=, <<, >>, <, >, ! - der längste passende.
-     * Was danach folgt, gehört zum Wert: key=>5 ist '=' mit dem Wert ">5" (wie
-     * bisher), key==x dagegen der Operator '=='.
+     * Reads the operator between key and value: '=' (assignment) or one of the
+     * comparison operators ==, !=, !!, <=, >=, <<, >>, <, >, ! - the longest match.
+     * What follows belongs to the value: key=>5 is '=' with the value ">5" (as
+     * before), key==x on the other hand is the operator '=='.
      *
-     * @return ?string  null = kein Operator (Parameter ohne Wert)
+     * @return ?string  null = no operator (parameter without value)
      */
     private function readOperator(array &$s): ?string
     {
@@ -529,9 +527,9 @@ trait TemplateParserTrait
     }
 
     /**
-     * Liest ein Token (Schlüssel, Sub-Schlüssel oder Wert).
-     * Rückgabe: ['text','quote','start','line','php'] oder null.
-     * 'php' enthält absolute Offsets erkannter PHP-Anteile ({$...} bzw. $var).
+     * Reads a token (key, sub-key or value).
+     * Returns: ['text','quote','start','line','php'] or null.
+     * 'php' contains absolute offsets of recognized PHP parts ({$...} resp. $var).
      */
     private function readToken(array &$s, string $mode): ?array
     {
@@ -546,7 +544,7 @@ trait TemplateParserTrait
         $line  = $s['line'];
         $c     = $code[$s['pos']];
 
-        // Vollständig gequotetes Token
+        // Fully quoted token
         if ($c === '"' || $c === "'") {
             if (!$this->consumeQuoted($s)) {
                 return null;
@@ -557,13 +555,13 @@ trait TemplateParserTrait
                 'quote' => $c,
                 'start' => $start,
                 'line'  => $line,
-                // in einfachen Anführungszeichen interpoliert PHP nicht
+                // inside single quotes PHP does not interpolate
                 'php'   => $c === '"' ? $this->findPhpSpans($text, $start) : [],
             ];
         }
 
-        // Bare-Token: endet an Whitespace bzw. modusabhängigen Zeichen,
-        // darf aber {..}-Blöcke und eingebettete Strings enthalten
+        // Bare token: ends at whitespace resp. mode-dependent characters,
+        // but may contain {..} blocks and embedded strings
         $stop = match ($mode) {
             'key'   => " \t\r\n)=[",
             'sub'   => "]\n",
@@ -575,8 +573,8 @@ trait TemplateParserTrait
             if (strpos($stop, $c) !== false) {
                 break;
             }
-            // Schlüssel endet auch vor einem Vergleichsoperator (key<5, key!=x) -
-            // nicht am Token-Anfang (Wert ohne Schlüssel wie !x) und nicht im
+            // A key also ends before a comparison operator (key<5, key!=x) -
+            // not at the start of the token (value without key like !x) and not in
             // Objektzugriff $obj->name
             if ($mode === 'key' && $s['pos'] > $start && ($c === '<' || $c === '!'
                 || ($c === '>' && $code[$s['pos'] - 1] !== '-'))) {
@@ -613,7 +611,7 @@ trait TemplateParserTrait
     }
 
     /**
-     * Liest einen Sub-Schlüssel ab '[' bis ']' (auch leer: []).
+     * Reads a sub-key from '[' to ']' (also empty: []).
      */
     private function readSub(array &$s, int $baseLine, string $cmdName, array &$errors): ?array
     {
@@ -638,7 +636,7 @@ trait TemplateParserTrait
     }
 
     /**
-     * Überspringt Whitespace und zählt dabei Zeilenumbrüche mit.
+     * Skips whitespace and counts line breaks along the way.
      */
     private function skipWs(array &$s): void
     {
@@ -656,8 +654,8 @@ trait TemplateParserTrait
     }
 
     /**
-     * Konsumiert einen gequoteten String inkl. Anführungszeichen ("..." oder '...'),
-     * Backslash-Escapes und Zeilenumbrüche eingeschlossen.
+     * Consumes a quoted string including quotation marks ("..." or '...'),
+     * including backslash escapes and line breaks.
      */
     private function consumeQuoted(array &$s): bool
     {
@@ -685,7 +683,7 @@ trait TemplateParserTrait
     }
 
     /**
-     * Konsumiert einen balancierten {..}-Block (quote-sicher).
+     * Consumes a balanced {..} block (quote-safe).
      */
     private function consumeBraces(array &$s): bool
     {
@@ -720,8 +718,8 @@ trait TemplateParserTrait
     }
 
     /**
-     * Findet PHP-Anteile ({$...}-Blöcke und $variablen) innerhalb eines Token-Texts.
-     * Liefert absolute Offsets [start, end) im Gesamt-Code.
+     * Finds PHP parts ({$...} blocks and $variables) within a token text.
+     * Returns absolute offsets [start, end) in the overall code.
      */
     private function findPhpSpans(string $text, int $abs): array
     {
@@ -786,18 +784,18 @@ trait TemplateParserTrait
      * ===================================================================== */
 
     /**
-     * Parameter eines Befehls gegen seine Definition aus commands.php prüfen.
+     * Check the parameters of a command against its definition from commands.php.
      *
-     * Geprüft wird, ob es den Schlüssel überhaupt gibt, ob er hier stehen darf, ob er
-     * nur einmal vorkommt und ob er einen Vergleichsoperator statt '=' annimmt
-     * ('operator' in commands.php). "do" ist der Sonderfall: der Parameter ohne Schlüssel,
-     * den manche Befehle als erstes Argument erlauben - höchstens einer je Befehl.
+     * Checked is whether the key exists at all, whether it may stand here, whether it
+     * occurs only once and whether it accepts a comparison operator instead of '='
+     * ('operator' in commands.php). "do" is the special case: the parameter without key,
+     * which some commands allow as the first argument - at most one per command.
      *
-     * Fehlerhafte Parameter werden nicht entfernt, sondern mit 'drop' => true
-     * markiert; generateCmsCommand() überspringt sie dann. So bleiben Indizes und
-     * Zeilenzählung unverändert.
+     * Faulty parameters are not removed but marked with 'drop' => true
+     * marked; generateCmsCommand() then skips them. This keeps indices and
+     * line counting unchanged.
      *
-     * $cmd kommt per Referenz herein, weil genau diese Markierung gesetzt wird.
+     * $cmd comes in by reference, because exactly this marking is set.
      */
     private function validateCmsCommand(array &$cmd, array &$errors): void
     {
@@ -826,7 +824,7 @@ trait TemplateParserTrait
                 continue;
             }
 
-            // Statischen Schlüsselnamen ermitteln (nur ohne PHP-Anteile prüfbar)
+            // Determine the static key name (only checkable without PHP parts)
             $keyTok = $p['key'];
             $static = null;
             if (empty($keyTok['php'])) {
@@ -837,7 +835,7 @@ trait TemplateParserTrait
             $cmd['params'][$i]['staticKey'] = $static;
 
             if ($static === null) {
-                continue; // dynamischer Schlüssel: nicht validierbar
+                continue; // dynamic key: not validatable
             }
 
             if (!isset($def['params'][$static])) {
@@ -847,7 +845,7 @@ trait TemplateParserTrait
 
             $seen[$static] = true;
 
-            // Vergleichsoperator statt '=' nur bei Parametern mit 'operator' (filter)
+            // comparison operator instead of '=' only for parameters with 'operator' (filter)
             if ($p['op'] !== '=' && empty($def['params'][$static]['operator'])) {
                 $errors[] = "Line $line: Parameter '$static' of command '$upper' does not accept "
                     . "the comparison operator '{$p['op']}' - use '='.";
@@ -855,7 +853,7 @@ trait TemplateParserTrait
                 continue;
             }
 
-            // Sub-Parameter-Tiefe prüfen (leere [] zählen nicht als Hierarchie-Ebene)
+            // Check sub-parameter depth (empty [] do not count as a hierarchy level)
             $allowed = (int)($def['params'][$static]['subparam'] ?? 0);
             $depth   = count(array_filter($p['subs'], fn($sub) => empty($sub['empty'])));
             if ($depth > $allowed) {
@@ -872,7 +870,7 @@ trait TemplateParserTrait
             }
         }
 
-        // oneof: mindestens einer dieser Parameter muss angegeben sein
+        // oneof: at least one of these parameters must be given
         if (!empty($def['oneof'])) {
             $list  = array_map('trim', explode(',', (string)$def['oneof']));
             $found = false;
@@ -894,15 +892,15 @@ trait TemplateParserTrait
      * ===================================================================== */
 
     /**
-     * Erzeugt den PHP-Code eines Befehls. Die Anzahl der Zeilenumbrüche
-     * entspricht exakt dem ursprünglichen Befehl (Zeilennummern bleiben erhalten).
+     * Creates the PHP code of a command. The number of line breaks
+     * matches the original command exactly (line numbers are kept).
      */
     private function generateCmsCommand(array $cmd, array &$errors): string
     {
         $def  = $cmd['def'];
         $name = $cmd['name'];
 
-        // Gruppierung: identischer Schlüsselpfad mehrfach verwendet -> automatisches []
+        // Grouping: identical key path used several times -> automatic []
         $paths = [];
         $pathOf = [];
         foreach ($cmd['params'] as $i => $p) {
@@ -939,22 +937,22 @@ trait TemplateParserTrait
                 }
                 $left .= '[' . $this->normToken($sub) . ']';
             }
-            // mehrfach verwendete Pfade oder explizites [] -> Array-Anfügung
+            // repeatedly used paths or explicit [] -> array append
             if ($hasEmpty || $paths[$pathOf[$i]] > 1) {
                 $left .= '[]';
             }
 
             if ($p['standalone']) {
-                // Wert ist das Token selbst
+                // Value is the token itself
                 $frags[] = [
                     'line' => $p['key']['line'],
                     'text' => $left . ' = ' . $this->normToken($p['key']) . ';',
                 ];
             } else {
-                // Vergleichsoperator: dem Wert in Zweizeichen-Form voranstellen
-                // (siehe operatorPrefix()), sonst Zuweisung wie gehabt
+                // Comparison operator: prefix the value in two-character form
+                // (see operatorPrefix()), otherwise assignment as before
                 $prefix = $p['op'] === '=' ? null : $this->operatorPrefix($p['op']);
-                // 'php_value': eine einzelne Variable geht typtreu durch (Array, int …)
+                // 'php_value': a single variable passes through with its type (array, int …)
                 $static = $p['staticKey'] ?? null;
                 $value = ($prefix === null && $static !== null && !empty($def['params'][$static]['php_value']))
                     ? $this->phpValueToken($p['value'])
@@ -965,9 +963,9 @@ trait TemplateParserTrait
             }
         }
 
-        // Abschluss: php_prefix + Befehlsaufruf + php_suffix + schließendes PHP-Tag (letzte Zeile)
-        // 'buffer_set': die gesamte Ausgabe des Befehls (samt eingebundenem Template)
-        // landet mit set=… in $set statt auf der Seite - Cms::setBufferStart()/End()
+        // Ending: php_prefix + command call + php_suffix + closing PHP tag (last line)
+        // 'buffer_set': the entire output of the command (including the included template)
+        // ends up with set=… in $set instead of on the page - Cms::setBufferStart()/End()
         $bufferSet = !empty($def['buffer_set']);
         $tail = $bufferSet ? ['$this->cms->setBufferStart((string)($_a["set"] ?? ""));'] : [];
         $tail = array_merge($tail, $this->loadPhpSnippets($def['php_prefix'] ?? null, $name, $errors));
@@ -994,12 +992,12 @@ trait TemplateParserTrait
     }
 
     /**
-     * Vergleichsoperator zwischen Schlüssel und Wert -> Präfix vor dem Wert.
+     * Comparison operator between key and value -> prefix before the value.
      *
      * Immer zwei Zeichen ('<' -> '<<', '>' -> '>>', '!' -> '!='; laut
-     * Cms::extractOperator() gleichbedeutend): extractOperator() nimmt genau dieses
-     * Präfix ab, der Rest ist der reine Wert. key < ">2" vergleicht also mit ">2",
-     * und key < "=2" wird nicht zu "<=2".
+     * Cms::extractOperator() equivalent): extractOperator() takes exactly this
+     * prefix off, the rest is the pure value. key < ">2" thus compares with ">2",
+     * and key < "=2" does not become "<=2".
      */
     private function operatorPrefix(string $op): string
     {
@@ -1012,7 +1010,7 @@ trait TemplateParserTrait
     }
 
     /**
-     * Normalisierter Schlüsselpfad zur Erkennung mehrfach verwendeter Parameter.
+     * Normalized key path for detecting repeatedly used parameters.
      */
     private function paramPath(array $p): string
     {
@@ -1029,9 +1027,9 @@ trait TemplateParserTrait
     }
 
     /**
-     * Token -> PHP-Ausdruck: bereits gequotete Tokens bleiben unverändert,
-     * alles andere wird in doppelte Anführungszeichen gesetzt
-     * (PHP-Interpolation von {$...} und $var bleibt dadurch erhalten).
+     * Token -> PHP expression: already quoted tokens remain unchanged,
+     * everything else is enclosed in double quotation marks
+     * (PHP interpolation of {$...} and $var is thereby preserved).
      */
     private function normToken(array $tok): string
     {
@@ -1042,10 +1040,10 @@ trait TemplateParserTrait
     }
 
     /**
-     * Wert eines Parameters mit 'php_value' (commands.php): ein ungequotetes Token,
-     * das nur aus einer Variablen besteht - $params, $cms['id'], $set["a"]["b"],
-     * $obj->name oder dasselbe in {…} -, wird als PHP-Ausdruck übernommen statt in
-     * einen String interpoliert. Alles andere: null (übliche Behandlung, normToken()).
+     * Value of a parameter with 'php_value' (commands.php): an unquoted token
+     * that consists only of a variable - $params, $cms['id'], $set["a"]["b"],
+     * $obj->name or the same in {…} -, is taken over as a PHP expression instead of being
+     * interpolated into a string. Anything else: null (usual handling, normToken()).
      */
     private function phpValueToken(array $tok): ?string
     {
@@ -1062,8 +1060,8 @@ trait TemplateParserTrait
     }
 
     /**
-     * Setzt Fragmente zeilentreu zusammen: Fragmente derselben Zeile werden
-     * mit Leerzeichen verbunden, Zeilensprünge exakt mit Umbrüchen aufgefüllt.
+     * Assembles fragments line-faithfully: fragments of the same line are
+     * joined with spaces, line jumps padded exactly with line breaks.
      */
     private function emitFragments(array $frags): string
     {
@@ -1087,8 +1085,8 @@ trait TemplateParserTrait
     }
 
     /**
-     * Lädt PHP-Schnipsel aus ./php/<name>.php (php_prefix / php_suffix).
-     * $spec darf String, Array von Strings oder null sein.
+     * Loads PHP snippets from ./php/<name>.php (php_prefix / php_suffix).
+     * $spec may be a string, an array of strings or null.
      */
     private function loadPhpSnippets($spec, string $cmdName, array &$errors): array
     {
@@ -1105,10 +1103,10 @@ trait TemplateParserTrait
                 continue;
             }
             $src = (string)file_get_contents($file);
-            // öffnendes/schließendes PHP-Tag entfernen, da inline injiziert wird
+            // remove the opening/closing PHP tag, since it is injected inline
             $src = preg_replace('/^\s*<\?(php)?\s*/', '', $src);
             $src = preg_replace('/\s*\?>\s*$/', '', $src);
-            // Zeilenumbrüche in Leerzeichen wandeln
+            // convert line breaks into spaces
             $src = preg_replace('/[\r\n]+/', ' ', $src);
             $src = trim($src);
             if ($src !== '') {
@@ -1124,11 +1122,11 @@ trait TemplateParserTrait
      * ===================================================================== */
 
     /**
-     * Einen Textabschnitt für die Editor-Ansicht vormerken.
+     * Note a text section for the editor view.
      *
-     * Grenzt der neue Abschnitt unmittelbar an den vorherigen Textabschnitt, werden
-     * beide zusammengefasst - sonst entstünde für jedes einzeln übernommene Zeichen
-     * (etwa eine Klammer, die kein Befehl war) ein eigenes Segment.
+     * If the new section directly adjoins the previous text section, both are
+     * merged - otherwise every individually taken-over character
+     * (such as a parenthesis that was not a command) would get its own segment.
      */
     private function addTextSegment(array &$segments, int $start, int $end): void
     {
@@ -1145,13 +1143,13 @@ trait TemplateParserTrait
     }
 
     /**
-     * Die eingefärbte Editor-Ansicht aus den gesammelten Segmenten bauen.
+     * Build the colored editor view from the collected segments.
      *
-     * Textabschnitte werden maskiert (rohe PHP-Blöcke darin bekommen eine eigene
-     * Farbe), Befehle in ein <span class="c9-command"> gefasst und innen weiter
-     * ausgezeichnet. Das Ergebnis landet in template.styled_code und wird im Backend
-     * hinter dem Eingabefeld angezeigt - der Editor ist also kein Javascript-Highlighter,
-     * die Einfärbung entsteht beim Speichern auf dem Server.
+     * Text sections are escaped (raw PHP blocks in them get their own
+     * color), commands are wrapped in a <span class="c9-command"> and further
+     * marked up inside. The result ends up in template.styled_code and is shown in the backend
+     * after the input field - the editor is therefore not a JavaScript highlighter,
+     * the coloring is created on the server when saving.
      */
     private function renderStyledCode(string $code, array $segments, bool $links = true): string
     {
@@ -1169,7 +1167,7 @@ trait TemplateParserTrait
     }
 
     /**
-     * Text-Segment: htmlspecialchars, dabei rohe <?php ... ?>-Blöcke einfärben.
+     * Text segment: htmlspecialchars, coloring raw <?php ... ?> blocks along the way.
      */
     private function styleRawPhp(string $text): string
     {
@@ -1189,13 +1187,13 @@ trait TemplateParserTrait
     }
 
     /**
-     * Befehls-Inneres: PHP-Anteile einfärben, Template-Verweise verlinken.
+     * Command interior: color PHP parts, link template references.
      *
-     * Verlinkt wird jeder Parameter, der laut commands.php 'ref' => 'template'
-     * trägt - mit Schlüssel (template=header, resulttemplate="liste") ebenso wie
-     * der schlüssellose 'do'-Parameter ((CMS:INCLUDE header), (CMS:SELECT liste …)).
-     * Der Wert darf Id, Name oder "bereich.name" sein; aufgelöst wird er erst beim
-     * Klick in TemplateBackend::info(). Werte mit PHP-Anteil bleiben unverlinkt;
+     * Every parameter that carries 'ref' => 'template' according to commands.php is linked
+     * - with key (template=header, resulttemplate="liste") as well as
+     * the keyless 'do' parameter ((CMS:INCLUDE header), (CMS:SELECT liste …)).
+     * The value may be an id, name or "area.name"; it is resolved only on
+     * click in TemplateBackend::info(). Values with a PHP part remain unlinked;
      * $links = false (styleCode()) verlinkt gar nichts.
      */
     private function styleCommandInner(string $code, array $cmd, bool $links = true): string
@@ -1205,7 +1203,7 @@ trait TemplateParserTrait
         $doParam = (string)($cmd['def']['do'] ?? '');
 
         foreach ($cmd['params'] as $p) {
-            // PHP-Anteile aus allen Tokens sammeln
+            // Collect PHP parts from all tokens
             foreach ($p['key']['php'] as $span) {
                 $ranges[] = ['type' => 'php', 's' => $span[0], 'e' => $span[1]];
             }
@@ -1220,8 +1218,8 @@ trait TemplateParserTrait
                 }
             }
 
-            // Verlinkung: Parameter mit 'ref' => 'template', Wert ohne PHP-Code.
-            // Beim schlüssellosen Wert ist das Token selbst der Wert (do-Parameter).
+            // Linking: parameter with 'ref' => 'template', value without PHP code.
+            // For a value without key the token itself is the value (do parameter).
             if (!$links || !empty($p['drop'])) {
                 continue;
             }
@@ -1236,9 +1234,9 @@ trait TemplateParserTrait
             if ($id === '') {
                 continue;
             }
-            // Referenz "[bereich.]name" oder Id - der Bereich des verweisenden
-            // Templates geht als area_id mit, damit TemplateBackend::info() einen
-            // bloßen Namen, den es in mehreren Bereichen gibt, zuerst dort sucht
+            // Reference "[area.]name" or id - the area of the referencing
+            // template is passed along as area_id, so that TemplateBackend::info() can
+            // look up a bare name that exists in several areas first there
             $ranges[] = [
                 'type' => 'link',
                 's'    => $token['start'],
@@ -1254,15 +1252,15 @@ trait TemplateParserTrait
 
         foreach ($ranges as $r) {
             if ($r['s'] < $pos) {
-                continue; // Überschneidungen sicherheitshalber ignorieren
+                continue; // Ignore overlaps to be safe
             }
             $out  .= htmlspecialchars(substr($code, $pos, $r['s'] - $pos));
             $chunk = htmlspecialchars(substr($code, $r['s'], $r['e'] - $r['s']));
             if ($r['type'] === 'php') {
                 $out .= '<span class="c9-php">' . $chunk . '</span>';
             } else {
-                // id ist oben auf [0-9a-zA-Z_.] bereinigt: Id oder "[bereich.]name" -
-                // kein (int), sonst würde aus einem Namen 0 (= Startseite des Moduls)
+                // id is sanitized above to [0-9a-zA-Z_.]: id or "[area.]name" -
+                // not (int), otherwise a name would become 0 (= start page of the module)
                 $out .= '<a href="#"' . $this->container->get(\Camindo\Core\Backend::class)->on('js', "cApp.layers.replace('Template/template_info.php?id="
                     . $r['id'] . '&area_id=' . (int)$this->parseAreaId . "')") . '>' . $chunk . '</a>';
             }
