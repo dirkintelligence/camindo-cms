@@ -1,5 +1,9 @@
 # camindo CMS
 
+[![CI](https://github.com/dirkintelligence/camindo-cms/actions/workflows/ci.yml/badge.svg)](https://github.com/dirkintelligence/camindo-cms/actions/workflows/ci.yml)
+[![Packagist](https://img.shields.io/packagist/v/camindo/cms)](https://packagist.org/packages/camindo/cms)
+[![License: AGPL v3+](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
+
 camindo CMS manages all kinds of content – articles, products, addresses, images,
 appointments – in freely definable **content areas** and outputs it via **templates** on
 one or several websites, in as many languages as you need.

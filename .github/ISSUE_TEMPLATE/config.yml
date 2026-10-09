@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dirkintelligence/camindo-cms/security/advisories/new
+    about: Please report security issues privately – never as a public issue. See SECURITY.md.
+  - name: Manuals (editors, administrators, template programmers)
+    url: https://github.com/dirkintelligence/camindo-cms/tree/main/docs
+    about: Installation, configuration and the (CMS:…) template commands.
+  - name: Developer documentation
+    url: https://github.com/dirkintelligence/camindo-developer-docs
+    about: Writing modules, processors and extensions; architecture and APIs.
