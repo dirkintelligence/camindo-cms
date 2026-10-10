@@ -19,7 +19,7 @@ In the module “Templates”, you open a template area and edit its templates t
 | Name (internal) | name under which templates and addresses refer to the template. It only has to be unique within the template area; if it exists more than once, it is referred to as `areaname.name` |
 | Label | caption that appears in the record when a template is selected (optional) |
 | Standalone | the template may be called without a record, via the address `/0,name` – for example for a search page, a sitemap, or a contact form |
-| Usage | “Time-controlled (scheduler)”: the template only runs as a task of the [Scheduler](./10-modules.md#scheduler) and can never be called via an address (not even as a standalone template). Setting in the tab “Access” |
+| Usage | “Scheduled (scheduler)”: the template only runs as a task of the [Scheduler](./10-modules.md#scheduler) and can never be called via an address (not even as a standalone template). Setting in the tab “Access” |
 | Code | HTML with CMS commands and PHP |
 
 The detail view shows the code with color highlighting. ***Errors*** in the code – an unknown

@@ -8,11 +8,11 @@
  *
  * CONTENTS OF THE ZIP
  * --------------------
- *     auskunft.html   for people: a self-contained page (printable) from the
+ *     report.html     for people: a self-contained page (printable) from the
  *                     template of the operator (PrivacyTemplate, table
  *                     privacy_template) in the language of the template
- *     daten.json      the same data in machine-readable form (data portability)
- *     dateien/        the uploaded files under their original name
+ *     data.json       the same data in machine-readable form (data portability)
+ *     files/          the uploaded files under their original name
  *                     ({record_id}_{field}[_{language}]_{name})
  *
  * WHAT IS INCLUDED
@@ -120,15 +120,15 @@ class RecordPersonalData {
         $files = [];
         foreach ($data['files'] as $file) {
             if (is_file($file['path'])) {
-                $zip->addFile($file['path'], 'dateien/' . $file['name']);
+                $zip->addFile($file['path'], 'files/' . $file['name']);
                 $files[] = $file['name'];
             }
         }
         $json = $data;
         unset($json['files']);
         $json['files'] = $files;
-        $zip->addFromString('daten.json', (string)json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
-        $zip->addFromString('auskunft.html', $this->html($template, $data, $files));
+        $zip->addFromString('data.json', (string)json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
+        $zip->addFromString('report.html', $this->html($template, $data, $files));
         $zip->close();
 
         $this->auditLog->write('export', 'record', $profileId, (string)$data['profile']['label'], [],
@@ -138,7 +138,7 @@ class RecordPersonalData {
     }
 
     /**
-     * Collect all data on the profile (structure see daten.json).
+     * Collect all data on the profile (structure see data.json).
      *
      * @throws \RuntimeException  no profile record
      */
@@ -375,7 +375,7 @@ class RecordPersonalData {
     // ==== HTML ====
 
     /**
-     * The readable disclosure (auskunft.html) from the operator's template
+     * The readable disclosure (report.html) from the operator's template
      * for website users (PrivacyTemplate, table privacy_template) in their
      * language. The blocks are built from the templates record.gdpr_*; all values
      * via Backend::escape().
@@ -423,7 +423,7 @@ class RecordPersonalData {
                     'purpose' => 'gdpr_col_purpose', 'created_at' => 'gdpr_col_first']),
                 'basket' => $this->tableHtml($data['basket'], [
                     'record_id' => 'gdpr_col_product', 'quantity' => 'gdpr_col_quantity', 'changed_at' => 'gdpr_col_last']),
-                'files' => $this->listHtml(array_map(fn($file) => 'dateien/' . $file, $files)),
+                'files' => $this->listHtml(array_map(fn($file) => 'files/' . $file, $files)),
                 'audit' => $this->tableHtml($audit, ['time' => 'gdpr_col_time', 'action' => 'gdpr_col_action',
                     'object' => 'gdpr_col_object', 'by' => 'gdpr_col_by', 'fields' => 'gdpr_col_fields']),
                 // retention periods: always at least one line

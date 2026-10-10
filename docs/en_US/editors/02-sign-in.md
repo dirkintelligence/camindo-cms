@@ -16,7 +16,7 @@ https://subdomain.your-website.com/backend/
 
 Ask your administrator for the correct address.  
 Access always requires signing in. Enter your user name and password and click
-“Login”.
+“Submit”.
 
 ## Two-factor sign-in
 
@@ -158,8 +158,8 @@ operating system, IP address, and the time of the first and last sign-in.
   immediately. If someone signs in from there later, it counts as new again, and you
   receive an email. If you remove your own device, you are signed out.
 - ***“End all other sessions”*** signs you out everywhere else – for example if you
-  forgot to log out on a computer you do not own. Input forms still open there are
-  discarded, just as when you log out on all devices, and the records are released for
+  forgot to sign out on a computer you do not own. Input forms still open there are
+  discarded, just as when you sign out on all devices, and the records are released for
   others immediately. The forms in this window stay open.
 
 ## Blocked sign-in
@@ -236,7 +236,7 @@ same place – ***unsaved input remains in the input form.***
 
 Click the icon ![logout](../_/logout.svg) in the sidebar and confirm the prompt. Only this
 browser is signed out. Input forms that you have open on another device remain there.
-Frontend editing that you switched on “until logout” ends with it.
+Frontend editing that you switched on “until sign-out” ends with it.
 
 What the checkbox ***“Sign out on all devices”*** is good for:  
 It makes sure that all your sessions are ended and that records which were locked by

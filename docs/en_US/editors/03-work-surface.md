@@ -41,7 +41,7 @@ ones you see depends on the rights of your user group.
 
 | Module | Task | Manual |
 |---|---|---|
-| ![menu](../_/schedule.svg) Scheduler | Time-controlled tasks, e.g. database backups | [Administrators](../admins/10-modules.md#scheduler) |
+| ![menu](../_/schedule.svg) Scheduler | Scheduled tasks, e.g. database backups | [Administrators](../admins/10-modules.md#scheduler) |
 | ![menu](../_/build.svg) Tools | Maintenance of database, data and server | [Administrators](../admins/10-modules.md#tools) |
 | ![menu](../_/box.svg) Components | Install and update add-on modules | [Administrators](../admins/10-modules.md#components) |
 | ![menu](../_/receipt_long.svg) Log files | Review the system logs | [Administrators](../admins/10-modules.md#log-files) |
@@ -58,7 +58,7 @@ The sidebar can be reached from every page.
 | ![hourglass](../_/hourglass.svg) | ***Background processes*** – see below |
 | ![mail](../_/mail.svg) | ***Messages*** – the number on the symbol shows the unread messages |
 | ![settings](../_/settings.svg) | ***personal settings*** |
-| ![logout](../_/logout.svg) | ***Logout*** |
+| ![logout](../_/logout.svg) | ***Sign out*** |
 
 ## Manuals
 
@@ -253,9 +253,9 @@ answer is more detailed.
   an input form; it asks you to save or close the form first.
 - ***New chat:*** start a new chat with the symbol ![add_comment](../_/add_comment.svg)
   “New chat”.
-- ***Past chats:*** you find earlier chats with the symbol
-  ![view_headline](../_/view_headline.svg) “Past chats” and on the start page of the module
-  in the tab “Past chats”. There you can also continue an earlier chat or delete it.
+- ***Previous chats:*** you find earlier chats with the symbol
+  ![view_headline](../_/view_headline.svg) “Previous chats” and on the start page of the module
+  in the tab “Previous chats”. There you can also continue an earlier chat or delete it.
 - ***Close the side panel:*** the X symbol at the far right closes the side panel.
 
 Below the input field you see the model and the ***tokens*** used so far in the chat,

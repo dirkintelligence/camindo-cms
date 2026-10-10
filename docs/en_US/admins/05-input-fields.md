@@ -36,9 +36,9 @@ When creating, you choose what the field is to store:
 | | Exact decimal number | up to 10 digits before and 10 after the decimal point, exact |
 | ***Relation*** | Relation (bidirectional, n:1) | exactly one record of another area, e.g. the main category |
 | | Relation (bidirectional, n:m) | several records of another area, e.g. tags |
-| | Reference (unidirectional, n:1) | one-sided reference to exactly one record |
-| | Reference (unidirectional, n:m) | one-sided reference to several records, e.g. “Related articles” |
-| | Fixed-linked content (1:n) | exclusively assigned content, e.g. text-image blocks |
+| | Pointer (unidirectional, n:1) | one-sided pointer to exactly one record |
+| | Pointer (unidirectional, n:m) | one-sided pointer to several records, e.g. “Related articles” |
+| | Hard-linked content (1:n) | exclusively assigned content, e.g. text-image blocks |
 | | Embedded content (1:n) | as above, edited in the mask of the record |
 | ***File*** | File upload | upload field for files |
 | | File version (thumbnail) | automatically generated version of an uploaded file – generated preview image, reduced video … (see [chapter 8](./08-media.md)) |
@@ -85,7 +85,7 @@ relation takes over the label of the area and then also appears translated.
 | Setting | Meaning |
 |---|---|
 | Default value | value that is pre-filled in the input mask for new records (default value). For date fields, date functions are also allowed, [see below](#date-functions) |
-| Processing | the value entered in the record is processed according to the ticked rules (“Trim whitespace” removes spaces at the beginning and end; “Remove HTML tags” leaves only plain text) |
+| Processing | the value entered in the record is processed according to the ticked rules (“Trim whitespace” removes spaces at the beginning and end; “Strip HTML tags” leaves only plain text) |
 
 ### Date functions
 
@@ -151,7 +151,7 @@ Relation, password, and meta field are always single-language.
 | Setting | Meaning |
 |---|---|
 | Related content area | target area of a bidirectional relation |
-| Related content areas | target areas of a unidirectional reference or of fixed-linked content – also several |
+| Related content areas | target areas of a unidirectional pointer or of hard-linked content – also several |
 | Counter-field | For bidirectional relations, camindo CMS automatically creates the counter-field in the target area: if an article is linked with a tag, the tag knows the article |
 | Manual sorting | the editorial team determines the order of the linked records (for example the images of a gallery) |
 | Detailed list | in the lookup field, the preview of the linked records shows all fields that are also visible in the record list of the area instead of only the main field, but here one below the other |
@@ -164,15 +164,15 @@ A relation “n:1” is not merely a restriction to one record: templates can so
 very quickly by fields of the linked record. Choose this relation type where only one target
 makes sense in terms of content, for example a category for the article.
 
-### Fixed-linked and embedded content
+### Hard-linked and embedded content
 
-Fixed-linked content forms a ***page construction kit***: a page consists of blocks – text
+Hard-linked content forms a ***page construction kit***: a page consists of blocks – text
 block, image block, quote, gallery –, each block type is its own content area with its own
 fields.
 
 1. For each block type, create a content area and enable ***“Dependent area”*** there. Only
    dependent areas can be selected as a target.
-2. Give the page area a field “Embedded content” (or “Fixed-linked content” with a search
+2. Give the page area a field “Embedded content” (or “Hard-linked content” with a search
    window) and select the block areas as the target.
 
 Each block belongs to exactly one page. It is saved, copied, moved, and deleted together
@@ -207,7 +207,7 @@ available for selection. Below the fields of the area follow – each with the n
 target area and of the relation field as a heading – the fields of the target areas of its
 fields of the type:
 
-- ***“Fixed-linked content”***: this way, the search finds a product, for example, via the titles
+- ***“Hard-linked content”***: this way, the search finds a product, for example, via the titles
   of its images. If a linked content item changes, the full text of its record is updated
   immediately – the content belongs to the record after all.
 - ***“Relation”*** (bidirectional): this way, the search finds a product, for example, via the
@@ -216,7 +216,7 @@ fields of the type:
   areas, therefore, run the task [“Rebuild full text”](#rebuilding-the-full-text) regularly,
   for example at night.
 
-Fields behind a ***“Reference”*** are not available for selection: a reference is a loose,
+Fields behind a ***“Pointer”*** are not available for selection: a pointer is a loose,
 one-sided reference to external content, often in several areas – whose texts do not
 describe the record itself. The full-text field is updated automatically with every save and
 has no input of its own; it appears only in the search form. The content is created ***per
@@ -229,7 +229,7 @@ markup from formatted texts is not included. The search supports the syntax `+mu
 Each record area automatically has a ***full text*** across ***all*** fields of the type “Short
 text”, “Long text” and JSON as well as the file names of the upload fields – without you
 creating an input field for it. In addition, the same fields of the target areas of its fields
-of the type “Fixed-linked content” (one level deep) are included. New fields are added
+of the type “Hard-linked content” (one level deep) are included. New fields are added
 automatically, deleted fields are removed; encrypted fields and passwords are never included.
 It therefore does not appear in the field list of the area, but in every search form as the
 search field “Full text” – also in the [cross-area search](../editors/04-finding-content.md#cross-area-search).
@@ -248,21 +248,21 @@ source fields:
 - You create a full-text field or change its source fields,
 - a source field is deleted, receives another type, or changes between single-language and
   multilingual,
-- the target areas of a field of the type “Fixed-linked content” change or the field is deleted,
+- the target areas of a field of the type “Hard-linked content” change or the field is deleted,
 - an instance receives a language with different sorting rules, or the code of a language
   changes (this affects all areas of the instance).
 
 camindo CMS does ***not rebuild*** the full text immediately in these cases – for large areas,
 this would hold up ongoing operation, and with larger restructurings, it would be pointless
 after every step. Instead, the detail view and the field list of the area show the note
-***“The full text of this area is no longer up to date since …”***. Until it is updated, the
+***“The full text of this area has been outdated since …”***. Until it is updated, the
 search there may still find old content.
 
 - ***“Update now”*** in the note starts the rebuild as a background process. While it runs,
   ![hourglass](../_/hourglass.svg) “Background process ‘Update full text’ started” appears there;
   a second rebuild of the same area does not start.
 - Or leave it to the [Scheduler](./12-operation.md#scheduler): The task
-  ***“Rebuild full text”*** with the option ***“Only outdated areas”*** – set up during
+  ***“Rebuild full text”*** with the option ***“Outdated areas only”*** – set up during
   installation, every night – processes all marked areas. Without the option, it rebuilds the
   selected areas (without a selection: all) in any case. It skips an area that another process
   is currently rebuilding.
@@ -273,7 +273,7 @@ After a complete rebuild, the note disappears.
 text immediately – otherwise the plain text would remain in the search index until then.
 
 Content changes to records behind a “Relation” do not mark the full text as outdated. To
-pick them up, run the Scheduler task “Rebuild full text” ***without*** “Only outdated areas”.
+pick them up, run the Scheduler task “Rebuild full text” ***without*** “Outdated areas only”.
 
 ## Encrypted fields
 
@@ -292,13 +292,13 @@ editorial team can edit it, you add it to the mask as a ***meta field***:
 
 | Meta field | Meaning |
 |---|---|
-| Publication date | the record appears on the website on a time-controlled basis |
+| Publication date | the record appears on the website on a schedule |
 | Expiry date | the record disappears from the lists of the website at the specified time |
 | Design template | selection of one of the selectable templates |
-| Status | processing state; only “Released” appears on the website |
+| Status | processing state; only “Enabled” appears on the website |
 | Review required | marker for content that still needs to be reviewed |
 | Parent record | turns the area into a ***tree*** (pages with subpages) |
-| Position | order of the records (“Sort by …”) |
+| Position | order of the records (“Place after...”) |
 
 Without the meta field “Status”, new records are released immediately; without publication
 and expiry date, they are visible without limit.
@@ -316,7 +316,7 @@ only via ***“Change type”*** in the detail view. camindo CMS converts all ex
 in the process:
 
 - between text and number types, for example “Short text” ↔ “Integer” or “Currency amount”,
-- between “n:m” and “n:1” for relations and references,
+- between “n:m” and “n:1” for relations and pointers,
 - between single-language and multilingual.
 
 If a conversion can lose content (a text that is not a number; when switching to “n:1”, all

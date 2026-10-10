@@ -152,7 +152,7 @@ camindo CMS shows the record in your [preferred language version](./03-work-surf
 ### Full-text search
 
 Each content area has the search field ***“Full text”***: it searches all text fields of the
-area and the file names of uploaded files at once – including the texts of firmly linked
+area and the file names of uploaded files at once – including the texts of hard-linked
 content (for example the image title of a product) – in the language you are currently
 editing. Encrypted fields and passwords are not included. The system administrator can set up
 further full-text fields from selected fields – also from linked records, for example the

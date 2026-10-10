@@ -132,7 +132,7 @@ class PrivacyJobs {
 
         if (!$policy) {
             // Area without policy (created before the migration): to the trash as before
-            $this->system->log('privacy', "record $recordId: area {$row['area_id']} has no delete policy - moved to trash");
+            $this->system->log('privacy', "record $recordId: area {$row['area_id']} has no deletion policy - moved to trash");
             $status = $this->softDelete($recordId, $softDelete, $withChilds) === 'background' ? 'background' : 'deleted';
             foreach ($profileIds as $id) $this->triggerLinked($id);
             return $status;

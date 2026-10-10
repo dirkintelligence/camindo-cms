@@ -43,21 +43,21 @@ You create converters in the module “Media converters”:
 
 | Setting | Choice | Effect |
 |---|---|---|
-| Adjustment to the format | Fit entirely into the format | the whole image fits inside, one side may be shorter |
+| Fit to format | Fit the whole image into the format | the whole image fits inside, one side may be shorter |
 | | Fill the format completely and crop | fills the format; overhang is cropped at the center |
-| | Fill the format completely, let overhang remain | fills the format; one side may be longer (nothing is cropped) |
-| | Bring exactly to the format, ignore aspect ratio | width and height exact – the image is distorted in the process |
-| Change size | Always / Only reduce / Only enlarge | “Only reduce”: smaller images keep their size – a thumbnail 440 px wide is not scaled up from a 300 px wide image. “Only enlarge”: larger images keep their size |
-| Unit | Pixels / percent of the original | with percent, target width and height are percentage values, e.g. `50` for half the size (only with fit or distort) |
-| Maximum pixels | number | scales proportionally until width × height equals this value, e.g. `1000000` for one megapixel; applies after target width and height and likewise follows “Change size” – with “Only reduce”, only larger images are reduced, with “Always”, smaller ones are enlarged as well |
+| | Fill the format completely, let it overhang (^) | fills the format; one side may be longer (nothing is cropped) |
+| | Force the exact format, ignore the aspect ratio (!) | width and height exact – the image is distorted in the process |
+| Resize | Always / Shrink only / Enlarge only | “Shrink only”: smaller images keep their size – a thumbnail 440 px wide is not scaled up from a 300 px wide image. “Enlarge only”: larger images keep their size |
+| Unit | Pixels / Percent of the original (%) | with percent, target width and height are percentage values, e.g. `50` for half the size (only with fit or distort) |
+| Maximum number of pixels | number | scales proportionally until width × height equals this value, e.g. `1000000` for one megapixel; applies after target width and height and likewise follows “Resize” – with “Shrink only”, only larger images are reduced, with “Always”, smaller ones are enlarged as well |
 
 Fill, crop, and distort require both dimensions; if one is missing, fit applies.
-Cropping with “Only reduce” crops smaller images only to the target format at the center, as far
+Cropping with “Shrink only” crops smaller images only to the target format at the center, as far
 as the image extends – there is no border in the background color.
 
-***Differences with the GD library:*** Instead of “Adjustment to the format”, there is the
-setting “Crop” with only two choices: “Fit entirely into new format” and “Fill new format
-completely” (crops at the center). “Change size”, “Unit” and “Maximum pixels” work as with
+***Differences with the GD library:*** Instead of “Fit to format”, there is the
+setting “Crop” with only two choices: “Fit entirely into new dimensions” and “Fill new dimensions
+completely” (crops at the center). “Resize”, “Unit” and “Maximum number of pixels” work as with
 ImageMagick; percent applies only without cropping. One percentage value applies to both
 sides; two different percentage values scale width and height separately.
 
@@ -129,7 +129,7 @@ recreates the versions of all records of an area – in the background for many 
 |---|---|
 | Allowed file types | MIME types or extensions, one entry per line; empty = all permitted |
 | Multilingual | one file per language, for example a brochure in each language |
-| Only for signed-in frontend users | deliver the file only to signed-in frontend users (see [chapter 13](./13-community.md#protected-files)) |
+| Signed-in frontend users only | deliver the file only to signed-in frontend users (see [chapter 13](./13-community.md#protected-files)) |
 
 For security reasons, executable files (`.php`, `.phtml`, `.cgi`, `.sh`, `.htaccess` and others)
 are always forbidden, and camindo CMS checks whether the content of a file matches its extension –
@@ -154,7 +154,7 @@ visitors who save a file.
   the instances that may read them). This prevents files from being linked or displayed unintentionally
   via a foreign website. It is not an access control (see note below).
 - ***Trash:*** If a record is deleted, its files go with it into the trash and return when it is restored.
-- ***Protected fields:*** Files from fields with “Only for signed-in frontend users” are blocked in the
+- ***Protected fields:*** Files from fields with “Signed-in frontend users only” are blocked in the
   media directory and are delivered only after a check.
 
 > ***Important: the domain lock is not access protection.***

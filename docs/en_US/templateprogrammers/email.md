@@ -74,7 +74,7 @@ The process:
 Sending is done via the SMTP mailbox entered in the configuration (`email.smtp`), or
 alternatively via the PHP function `mail()` – like all emails of the CMS.
 If sending fails, the reason is stored in `var/log/{date}_mail.log` (module
-Log files, type “Unsent emails”).
+Log files, type “Undelivered emails”).
 
 ### What the command leaves behind
 

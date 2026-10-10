@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
     camindo CMS - template of the personal data export about a website user, file
-    auskunft.html in the zip (module Privacy). Minimal default from
+    report.html in the zip (module Privacy). Minimal default from
     Core/install/privacy. The export is a partial extract: complete it before handing
     it to the data subject (legal bases, server log files outside the CMS, accounting
     systems …).
@@ -35,7 +35,7 @@
         {devices} {sessions}   (each followed by its retention period)
         {login_attempts}  (failed logins and codes, with the day of deletion)
         {log_lines}       (lines of the security and mail logs naming the user)
-        {delete_policy}   (the delete policy of the profile area, one line per block)
+        {delete_policy}   (the deletion policy of the profile area, one line per block)
     Other persons appear only as "Admin", "User" or "System"; shortened IP addresses
     with "xxx" in place of the removed digits.
 -->
@@ -49,7 +49,7 @@ table{border-collapse:collapse;width:100%}th,td{text-align:start;vertical-align:
 th{width:30%}td{white-space:pre-wrap;word-break:break-word}.muted{color:#666}.badge{font-size:.8rem;border:1px solid #bbb;border-radius:4px;padding:0 .3rem}
 </style></head><body>
 <h1>Personal data stored about you</h1>
-<p class="muted">Art. 15 GDPR. daten.json contains the same data in machine-readable form (Art. 20 GDPR).</p>
+<p class="muted">Art. 15 GDPR. data.json contains the same data in machine-readable form (Art. 20 GDPR).</p>
 <table>
 <tr><th>Data subject</th><td>{subject} (#{subject_id})</td></tr>
 <tr><th>Controller</th><td>{domain}</td></tr>

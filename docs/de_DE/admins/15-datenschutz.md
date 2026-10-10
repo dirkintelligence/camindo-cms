@@ -421,8 +421,8 @@ der Nummer seines Profils (siehe [Anonym durch das Profil](#anonym-durch-das-pro
 ## Datenexport personenbezogener Daten
 
 Für ein Auskunftsersuchen (Art. 15 DSGVO) oder die Datenübertragbarkeit (Art. 20)
-erstellt camindo CMS einen ***Datenexport***: ein Zip mit `auskunft.html` zum Lesen
-und `daten.json` maschinenlesbar, bei Website-Usern zusätzlich `dateien/` mit ihren
+erstellt camindo CMS einen ***Datenexport***: ein Zip mit `report.html` zum Lesen
+und `data.json` maschinenlesbar, bei Website-Usern zusätzlich `files/` mit ihren
 hochgeladenen Dateien. Er ist ein ***Teilauszug*** – vor der Weitergabe an
 die betroffene Person ergänzen Sie ihn um alles, was camindo CMS nicht kennt:
 Rechtsgrundlagen, Server-Logfiles außerhalb des CMS, Daten in Buchhaltung, E-Mail und
@@ -496,7 +496,7 @@ Jeder Export steht im Audit-Log. Das Zip liegt bis zum Herunterladen in
 
 ### Die Vorlagen der Datenauskunft
 
-Wie `auskunft.html` aussieht und welcher Text um die Daten herum steht, bestimmt eine
+Wie `report.html` aussieht und welcher Text um die Daten herum steht, bestimmt eine
 HTML-Vorlage, die Sie selbst gestalten – etwa mit Ihrem Logo und dem Abschnitt
 „Speicherdauer“ Ihrer Datenschutzerklärung. Für ***Website-User*** und für
 ***Benutzer*** gibt es getrennte Vorlagen, jeweils ***je Instanz und je Sprache*** –
@@ -569,7 +569,7 @@ sich der Export mit.
 
 Lassen Sie einen Datenblock weg, fehlt er im Export – die Auskunft muss nach Art. 15
 DSGVO aber vollständig sein. Prüfen Sie eine geänderte Vorlage deshalb mit einem
-Export zu einem Testkonto. `daten.json` enthält unabhängig von der Vorlage immer alle
+Export zu einem Testkonto. `data.json` enthält unabhängig von der Vorlage immer alle
 Daten.
 
 ## Was außerhalb von camindo CMS liegt

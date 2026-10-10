@@ -4,14 +4,14 @@
 // Only scripts that change nothing when opened.
 return [
     'policy_list.php' => [
-        'description' => 'Privacy: delete policies of the content areas (what happens when a record is deleted, after how long).',
+        'description' => 'Privacy: deletion policies of the content areas (what happens when a record is deleted, after how long).',
     ],
     'policy_info.php' => [
-        'description' => 'Info page of a delete policy: label, instance, categories, areas using it, blocks.',
+        'description' => 'Info page of a deletion policy: label, instance, categories, areas using it, blocks.',
         'params'      => ['id' => 'int'],
     ],
     'policy_edit.php' => [
-        'description' => 'Edit form of a delete policy: label, instance, blocks of trigger source, delay, action and category. Without id: new policy.',
+        'description' => 'Edit form of a deletion policy: label, instance, blocks of trigger source, delay, action and category. Without id: new policy.',
         'params'      => ['id' => 'int'],
     ],
     'template_list.php' => [

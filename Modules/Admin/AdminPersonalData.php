@@ -9,10 +9,10 @@
  *
  * CONTENTS OF THE ZIP
  * --------------------
- *     auskunft.html   for people: a standalone page (printable) from the
+ *     report.html     for people: a standalone page (printable) from the
  *                     operator's template (PrivacyTemplate, table
  *                     privacy_template) in the language of the template
- *     daten.json      the same data in machine-readable form (data portability)
+ *     data.json       the same data in machine-readable form (data portability)
  *
  * WHAT IS INCLUDED
  * --------------------
@@ -99,8 +99,8 @@ class AdminPersonalData {
         if ($zip->open($dir . '/' . $zipName, \ZipArchive::CREATE | \ZipArchive::EXCL) !== true) {
             throw new \RuntimeException('could not create ' . $zipName);
         }
-        $zip->addFromString('daten.json', (string)json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
-        $zip->addFromString('auskunft.html', $this->html($template, $data));
+        $zip->addFromString('data.json', (string)json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
+        $zip->addFromString('report.html', $this->html($template, $data));
         $zip->close();
 
         $this->auditLog->write('export', 'admin', $adminId, (string)$data['account']['name']);
@@ -115,7 +115,7 @@ class AdminPersonalData {
     }
 
     /**
-     * Collect all data for the account (structure see daten.json).
+     * Collect all data for the account (structure see data.json).
      *
      * @throws \RuntimeException  no account
      */
@@ -296,7 +296,7 @@ class AdminPersonalData {
     // ==== HTML ====
 
     /**
-     * The readable extract (auskunft.html) from the operator's template
+     * The readable extract (report.html) from the operator's template
      * for users (PrivacyTemplate); tables and lists from the templates
      * of the profile extract (record.gdpr_*). All values via Backend::escape().
      */

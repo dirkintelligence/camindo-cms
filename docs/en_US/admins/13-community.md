@@ -8,7 +8,7 @@ Registered visitors are called ***frontend users*** in camindo CMS – in contra
 
 An area of the type ***PROFILE*** contains one record per frontend user. The blueprint “Members” creates such an area with the fields name, email and password. Further profile fields – avatar, address, interests – you add as usual.
 
-Under ***“Sign-in to the website”*** you define:
+Under ***“Website sign-in”*** you define:
 
 | Setting | Meaning |
 |---|---|
@@ -74,19 +74,19 @@ The templates for this ([CMS:USER_LOGIN_CODE](../templateprogrammers/user-login-
 
 ## Review and owner
 
-Everything that a frontend user creates or changes is marked with ***“Review required”*** and appears in the widget “Unchecked content of frontend users” of the editorial team (see the [manual for editors](../editors/10-visitor-contributions.md)). Create the meta field “Review required” in the profile and contribution areas, so that the editorial team can remove the marking after the review.
+Everything that a frontend user creates or changes is marked with ***“Needs review”*** and appears in the widget “Unreviewed content of frontend users” of the editorial team (see the [manual for editors](../editors/10-visitor-contributions.md)). Create the meta field “Needs review” in the profile and contribution areas, so that the editorial team can remove the marking after the review.
 
 Each record needs an ***owner*** in the backend (see [chapter 7](./07-users-and-rights.md#the-owner-principle)). For records of frontend users, the template names it (parameter `owner`) or the configuration (`user.default_owner_id`). If neither exists, the command cannot save. Via the user group of this owner you control which editorial team is responsible for the contents of the frontend users.
 
 ## Protected files
 
-Upload and thumbnail fields have a section ***“Authentication”***. With ***“Only for signed-in frontend users”*** and the selection of the eligible profile containers, the directory of the field is blocked on the server. The files are then delivered only to signed-in frontend users from these profile areas – for example member images, documents for course participants or downloads for customers. Everyone else receives a “not found” response.
+Upload and thumbnail fields have a section ***“Authentication”***. With ***“Signed-in frontend users only”*** and the selection of the eligible profile containers, the directory of the field is blocked on the server. The files are then delivered only to signed-in frontend users from these profile areas – for example member images, documents for course participants or downloads for customers. Everyone else receives a “not found” response.
 
 ## Data export and deletion
 
 If a website user requests information about their stored data (Art. 15 GDPR) or a copy to take along (Art. 20 GDPR), you create an ***export of personal data***: at the profile record in the menu on the right ![more_vert](../_/more_vert.svg) or in the module “Privacy” (see [chapter 15](./15-privacy.md#exporting-personal-data)). The export is a partial extract that you complete before passing it on. Website users cannot download their data themselves.
 
-***Deleting (Art. 17 GDPR):*** What happens when a profile and its contributions are deleted is determined by the ***deletion policy*** of the area – put into the trash, delete permanently, overwrite individual fields, also with a delay (see [chapter 15](./15-privacy.md#deleting-according-to-deletion-policy)). The contributions of the user are always deleted according to the policy of their own area (trigger “UGC: profile was deleted”). The deletion dialog shows what the policy does with the record. If the trash of a user must be emptied immediately: “Tools” → “Trash of a user” ([chapter 15](./15-privacy.md#emptying-a-website-users-trash-immediately)). If all data including the change history (audit log) must be removed: [`camindo.php audit delete`](./12-operation.md#the-command-line).
+***Deleting (Art. 17 GDPR):*** What happens when a profile and its contributions are deleted is determined by the ***deletion policy*** of the area – put into the trash, delete permanently, overwrite individual fields, also with a delay (see [chapter 15](./15-privacy.md#deleting-according-to-deletion-policy)). The contributions of the user are always deleted according to the policy of their own area (trigger “UGC: Profile was deleted”). The deletion dialog shows what the policy does with the record. If the trash of a user must be emptied immediately: “Tools” → “Trash of a user” ([chapter 15](./15-privacy.md#emptying-a-website-users-trash-immediately)). If all data including the change history (audit log) must be removed: [`camindo.php audit delete`](./12-operation.md#the-command-line).
 
 What camindo CMS stores in total about website users is described in [chapter 15](./15-privacy.md#website-users-community).
 

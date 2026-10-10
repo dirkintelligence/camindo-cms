@@ -23,7 +23,7 @@ Everything a frontend user creates or changes is marked with ***“Needs review�
 ![emergency](../_/emergency.svg)), provided your template programmer has set this up. This way you keep
 track of what still needs to be checked:
 
-- The widget ***“Unreviewed contents from frontend users”*** on the start page lists all marked records
+- The widget ***“Unreviewed content of frontend users”*** on the start page lists all marked records
   (set it up in your [personal settings](./03-work-surface.md#start-page-widgets)).
 - In the record list, the menu of the status column with “Unreviewed” shows only the marked records.
 
@@ -47,8 +47,8 @@ take with them (Article 20 GDPR), create a ***personal data export***:
    personal data report.”*** and click ***“Create personal data report”***.
 4. Download the zip file with ***“Download zip file”*** – the link works exactly once and for at most one day.
 
-The zip file contains `auskunft.html` (readable, for printing or sending), `daten.json` (the same data in
-machine-readable form) and the folder `dateien/` with the uploaded files. It includes all fields of the
+The zip file contains `report.html` (readable, for printing or sending), `data.json` (the same data in
+machine-readable form) and the folder `files/` with the uploaded files. It includes all fields of the
 profile, the contributions of the user by area, permanently deleted contributions that the change log still
 knows, records that refer to their profile (such as orders), devices and sessions with their retention
 period, failed sign-in attempts, the change log, the retention periods and what happens when the profile is
@@ -69,7 +69,7 @@ Good to know:
 
 ## Deleting a profile
 
-As with every record, the delete policy of the profile area determines what happens when a profile is
+As with every record, the deletion policy of the profile area determines what happens when a profile is
 deleted; the confirmation prompt shows this beforehand – including what happens to the contributions of the
 user. With the standard policy, the profile and contributions go to the trash and are permanently deleted
 after 7 days; known devices and sessions of the user are removed immediately. If the user requests immediate

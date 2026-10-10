@@ -79,7 +79,7 @@ The creation date of the records is retained. The import takes over the creator 
 Example: you run the website of an association and want to use the same structure for a second association.
 
 1. Create the new instance (module “[Instances](./03-instances-and-languages.md)”).
-2. Export the folder of the first website with “Export structure” and “Export contents” – this way the templates come along. To exclude records that should not be taken over, set their areas to IGNORE for the records when importing.
+2. Export the folder of the first website with “Export structure” and “Export content” – this way the templates come along. To exclude records that should not be taken over, set their areas to IGNORE for the records when importing.
 3. Import the file: instance = the new instance, mode INSERT. Area names only need to be unique within an instance and the instances that it may read or that read it. If the two websites are independent of each other, the areas keep their names, and the templates work unchanged. Otherwise, enter new names in the import form, for example `association2_dates` instead of `dates`.
 4. In the new instance, enter the start record and the start template.
 

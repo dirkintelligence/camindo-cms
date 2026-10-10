@@ -16,10 +16,10 @@ the list. The input/edit mask for this user appears.
 | Item | Meaning |
 |---|---|
 | User name | sign-in name: begins with a lowercase letter, followed by lowercase letters, digits, and `_`. New names must not begin with `admin_` – reserved for anonymized accounts |
-| Password | stored only as a check value (hash) and cannot be read; leave empty = unchanged. It must meet the [password policy](./extensions/password.md) – the requirements appear while you type. When creating, you assign a ***start password***. Only a superuser can change the password of another existing user |
+| Password | stored only as a check value (hash) and cannot be read; leave empty = unchanged. It must meet the [password policy](./extensions/password.md) – the requirements appear while you type. When creating, you assign a ***initial password***. Only a superuser can change the password of another existing user |
 | Previous password,<br>your password | only for superusers when changing an existing account: anyone who changes their ***own*** password enters the previous one; anyone who changes the password of ***another*** user confirms this with their own password – an open session is therefore not enough to take over an account. When creating, this field is omitted. Everyone else changes their password in the personal settings |
 | User group | user group with its rights |
-| Status | “Released” or “Deactivated” – a deactivated user cannot sign in |
+| Status | “Enabled” or “Disabled” – a disabled user cannot sign in |
 | Main (last) name,<br>Displayed name,<br>Sort value | names for lists and messages |
 | E-mail,<br>mobile,<br>landline number | contact data, stored encrypted. The e-mail address is required for the sign-in code of the two-factor sign-in |
 
@@ -35,7 +35,7 @@ deleted. To remove the name and contact data of a deleted user, use ***Anonymize
 [module “Privacy”, tab “Deleted users”](./10-modules.md#privacy)).
 
 ***Must change password:*** A password that another user has set must be changed at the first
-sign-in – for example the start password when creating the account, or one reset by a
+sign-in – for example the initial password when creating the account, or one reset by a
 superuser. The configuration setting `admin.password_retention_days` (0 = unlimited) likewise
 forces a password change after the set number of days. A new password must then differ from the
 previous one. The detail view shows under “Password” when it was last changed and whether a
@@ -79,8 +79,8 @@ parts, indented below them – without an additional right, the part remains blo
 
 | Module | Additional rights |
 |---|---|
-| Users | “Read user details: own user group” · “Read user details: other user groups” · “Create users: own user group (with start password)” · “Change and lock users: own user group (without password)” |
-| Privacy | “Create and change deletion policies” (only for accessible instances) · “Export personal data” (profiles from readable areas, users from visible user groups) · “Maintain templates for data disclosure” (accessible instances) · “Anonymize deleted users” (accessible user groups) – see [chapter 15](./15-privacy.md) |
+| Users | “Read user details: own user group” · “Read user details: other user groups” · “Create users: own user group (with initial password)” · “Change and lock users: own user group (without password)” |
+| Privacy | “Create and change deletion policies” (only for accessible instances) · “Export personal data” (profiles from readable areas, users from visible user groups) · “Maintain templates of the personal data report” (accessible instances) · “Anonymize deleted users” (accessible user groups) – see [chapter 15](./15-privacy.md) |
 | Content | “CSV import”, “Media import (ZIP file)”, “CSV export”, “DOCX import (translation)”, “DOCX export (translation)”, “Batch processing” |
 | Tools | one right each for the tabs “Server”, “Database”, “Data”, “Developer” and “Trash of a user” (“Permanently empty the trash of a website user”) |
 
@@ -94,8 +94,8 @@ would be allowed to delete in that area.
 ### 2. Instances
 
 Which instances (websites) the user group sees. If you assign an instance to a user group, it
-initially receives all areas of this instance with all rights (except “Adjust owner”). You can
-restrict this afterwards in the tab “[Area rights](#5-area-rights)”.
+initially receives all areas of this instance with all rights (except “Set owner”). You can
+restrict this afterwards in the tab “[Area permissions](#5-area-rights)”.
 
 ### 3. Languages
 
@@ -113,7 +113,7 @@ translator can read all languages but edit only French.
 One check box per status: the ticked statuses may be assigned to a record by users of the group.
 ***Reading*** is permitted for all statuses – only ***setting*** is restricted. In this way, you
 map a ***flat workflow***, for example: the editorial team may create posts and set them to
-“Pending review”, but may not release them – that is done by the editor-in-chief. Forwarding happens
+“For review”, but may not release them – that is done by the editor-in-chief. Forwarding happens
 via internal messages. There are two ways to set access rights here:
 (here) in the user group, you select all statuses for a group; in the module “Status”, you select
 all user groups for a status.
@@ -127,7 +127,7 @@ Status in the record input mask:
 
 ### 5. Area rights
 
-After a user group has been created, its info page shows the tab “Area rights”.
+After a user group has been created, its info page shows the tab “Area permissions”.
 Here it is listed what the users of this group may do with the records of different areas.
 Click the button “Edit” to make adjustments.
 
@@ -142,7 +142,7 @@ Template areas know only read and write. Folders have no rights of their own.
 
 You maintain the area rights at two equivalent places:
 
-- (here) in the module “Users”, tab “Area rights”: all areas for one user group,
+- (here) in the module “Users”, tab “Area permissions”: all areas for one user group,
 - in the module “Structure”, tab “Access”: all user groups for one area.
 
 ## The owner principle
@@ -154,7 +154,7 @@ group of the owner, the area rights distinguish between own and foreign content.
   may read all news items, but only write and delete those of their own user group.
 - ***Release by the editor-in-chief:*** the user group “Authors” may write their own articles but
   not delete them; the “Editor-in-chief” may write and delete all articles.
-- ***Handover:*** when an employee leaves the editorial team, a user with the right “Adjust owner” changes
+- ***Handover:*** when an employee leaves the editorial team, a user with the right “Set owner” changes
   the owner of their records.
 
 Records that frontend users create receive the owner that the template or the configuration
@@ -193,7 +193,7 @@ other content remains intact when saving.
   audit log with the name of the superuser. Make sure beforehand – for example by phone – that the
   request really comes from the account holder.
 - ***Switch back to the e-mail code:*** Anyone who no longer wants to use the authenticator app switches
-  back in their settings with “Switch back to the code by e-mail” (confirmed with a code from the app).
+  back in their settings with “Switch to code by email” (confirmed with a code from the app).
   If the e-mail code is not switched on for everyone, each user may switch it on for themselves.  
   (If the app is mandatory for all users by configuration, it cannot be switched back to the e-mail
   code.)
@@ -205,7 +205,7 @@ other content remains intact when saving.
   other sessions. A superuser can, in the detail view of another user, tab “Devices and sessions”,
   end all of their devices and sessions with “Remove all devices” – for example after a lost laptop.
   Both are recorded in the audit log. “Sign out” ends only the session in one's own browser.
-- ***Activities:*** A superuser sees what a user has changed in their detail view, tab “Activities” –
+- ***Activities:*** A superuser sees what a user has changed in their detail view, tab “Activity” –
   the recently edited records and all their entries in the [audit log](./10-modules.md#audit-log).
 - ***A new password ends other sessions:*** When a password is changed (by the user themselves or by the
   superuser), all other sessions of the account end.

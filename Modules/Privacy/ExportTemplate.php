@@ -1,7 +1,7 @@
 <?php
 /**
  * Dataset child class for the table `privacy_template` - templates of the data disclosure
- * (module Privacy, tab "Templates"). The page auskunft.html in the zip
+ * (module Privacy, tab "Templates"). The page report.html in the zip
  * of the data export is created from it (Camindo\Core\PrivacyTemplate::render()).
  *
  * STRUCTURE
