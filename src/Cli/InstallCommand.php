@@ -146,6 +146,7 @@ class InstallCommand extends Command {
         if (in_array('database', $steps, true)) {
             $this->out('database' . ($fixtures ? ' (with fixtures)' : ''));
             $installer->createDatabase($fixtures, $force);
+            $installer->createDefaultInstance();
         }
 
         // 8. First admin

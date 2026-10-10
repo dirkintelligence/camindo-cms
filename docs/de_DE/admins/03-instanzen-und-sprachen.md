@@ -18,7 +18,8 @@ separater camindo-Installationen erreicht, mit eigener Datenbank und eigenem `pu
 ### Die Standard-Instanz
 
 Nach der Installation gibt es eine ***Standard-Instanz*** im Modul „Instanzen“. Sie fängt
-alle Aufrufe auf, deren Domain keiner anderen Instanz zugeordnet ist. Sie lässt sich ändern,
+alle Aufrufe auf, deren Domain keiner anderen Instanz zugeordnet ist. Ihre Hauptsprache ist nach der Installation
+Englisch (en_US). Sie lässt sich ändern,
 aber nicht löschen. Wenn Sie nur eine Website mit camindo CMS verwalten, können Sie diese
 Instanz dafür verwenden. Wenn Sie mehrere Websites verwalten, legen Sie für jede Website
 eine eigene Instanz an.
@@ -33,7 +34,7 @@ Auswahlen des Backends ***immer an letzter Stelle*** – unabhängig von ihrer P
 | Label | Name der Instanz im Backend |
 | Position nach... | Die Reihenfolge im Backend wird geändert durch die Auswahl der vorangehenden Instanz. Die Standard-Instanz steht immer am Ende und ist als Vorgänger nicht wählbar |
 | ***Frontend-Sprachen*** | |
-| Haupt-Sprache | Sprache, die bei fehlender Übersetzung einspringt |
+| Haupt-Sprache | Sprache, die bei fehlender Übersetzung einspringt; bei einer neuen Instanz ist en_US vorausgewählt |
 | Weitere Sprachen | zusätzliche Sprachversionen; die Reihenfolge wird im Backend beibehalten und kann auch im Frontend verwendet werden |
 | ***Frontend-Domains*** | |
 | Haupt-Domain | die eigentliche Adresse der Website, ohne Protokoll, z. B. `www.example.com` |

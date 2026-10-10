@@ -110,9 +110,9 @@ camindo CMS offers several kinds of links for this:
 |---|---|
 | ***Relation, bidirectional (n:m)*** | article ↔ tags: the article knows its tags, the tag knows its articles |
 | ***Relation, bidirectional (n:1)*** | article → main category: exactly one category per article |
-| ***Reference, unidirectional (n:m or n:1)*** | “Related articles”, also from several areas |
-| ***Fixed-linked content (1:n)*** | text-image blocks of a page: they belong exclusively to their record and are copied, moved, and deleted with it |
-| ***Embedded content*** | like fixed-linked content, but edited directly in the input mask of the record – a flexible page construction kit |
+| ***Pointer, unidirectional (n:m or n:1)*** | “Related articles”, also from several areas |
+| ***Hard-linked content (1:n)*** | text-image blocks of a page: they belong exclusively to their record and are copied, moved, and deleted with it |
+| ***Embedded content*** | like hard-linked content, but edited directly in the input mask of the record – a flexible page construction kit |
 
 Templates can query records via their links and sort by fields of linked records – for
 example, articles by the name of their author.

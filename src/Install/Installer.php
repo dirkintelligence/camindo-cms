@@ -17,7 +17,8 @@
  *     4  writeConfigFile()     .camindo.php from templates/camindo.php.dist, 0600
  *     5  writeSqlpwdFile()     .sqlpwd for mysqldump, 0600
  *     6  createDirectories()   var/*, public/media/default, backend assets (copy or symlink)
- *     7  createDatabase()      schema.sql + seed.sql, with --fixtures schema.sql + dev.sql (--force: empty beforehand)
+ *     7  createDatabase()      schema.sql + seed.sql, with --fixtures schema.sql + dev.sql (--force: empty beforehand);
+ *                              createDefaultInstance() - instance 1, the catch-all for every domain
  *     8  createAdmin()         first admin, group 1; createSchedulerAdmin() - the
  *                              admin under which the scheduler tasks run
  *     9  registerCore()        system.core_version, installed_at
@@ -42,7 +43,9 @@ use Camindo\Core\Database;
 use Camindo\Core\HtaccessWriter;
 use Camindo\Core\HtmlCache;
 use Camindo\Core\InstanceCache;
+use Camindo\Core\MediaAccess;
 use Camindo\Core\Modules\Admin\Admin;
+use Camindo\Core\Modules\Instance\Instance;
 use Camindo\Core\SnippetCache;
 use Camindo\Core\System;
 use Camindo\Core\SystemState;
@@ -483,6 +486,36 @@ class Installer {
     }
 
     /**
+     * The default instance (Instance::DEFAULT_ID): catch-all for every domain that
+     * no other instance claims - without it the frontend has nothing to serve.
+     * seed.sql carries no instance; the development data (dev.sql) has its own.
+     * Main language = Cms::FALLBACK_LANG (en_US). No domain, no protocol: both
+     * come from the request. Repeatable: an existing instance 1 stays untouched.
+     *
+     * Plain SQL instead of Instance::save() - there is no admin yet; the
+     * instance cache and the media lock follow in buildRuntime().
+     */
+    public function createDefaultInstance(): void
+    {
+        $app = $this->boot();
+        $db = $app->get(Database::class);
+        $db->query('SELECT COUNT(*) FROM `instance` WHERE `instance_id` = ?', 'i', [Instance::DEFAULT_ID]);
+        if ((int)($db->fetchNum()[0] ?? 0) > 0) {
+            $this->log('default instance exists');
+            return;
+        }
+        $db->query('SELECT `language_id` FROM `language` WHERE `code` = ?', 's', [Cms::FALLBACK_LANG]);
+        $languageId = (int)($db->fetchNum()[0] ?? 0);
+        if ($languageId === 0) throw new \RuntimeException('default instance: no language ' . Cms::FALLBACK_LANG);
+        $db->query(
+            "INSERT INTO `instance` (`instance_id`, `label`, `position`, `primary_language_id`, `primary_domain`, `protocol`, `canonical`, `details`)"
+            . " VALUES (?, 'Default', 1, ?, '', '', 0, '{}')",
+            'ii', [Instance::DEFAULT_ID, $languageId]
+        );
+        $this->log('default instance created (language id ' . $languageId . ')');
+    }
+
+    /**
      * Does the database already contain an admin? (with --fixtures: yes, `claude` and `dirk`)
      */
     public function hasAdmin(): bool
@@ -621,6 +654,8 @@ class Installer {
         $this->log("html cache: {$r['files']} files");
         $app->get(InstanceCache::class)->rebuild();
         $this->log('instance cache: built');
+        $app->get(MediaAccess::class)->rebuildAll();
+        $this->log('media locks: written');
         foreach ($app->get(\Camindo\Core\Modules\Docs\Docs::class)->rebuildIndex() as $lang => $r) {
             $this->log("docs index $lang: {$r['sections']} sections");
         }

@@ -11,8 +11,8 @@ You switch frontend editing on in your [personal settings](./03-work-surface.md#
 | Setting | Effect |
 |---|---|
 | “off” | no markers |
-| “on - until logout or closing the browser” | markers until you sign out or close the browser |
-| “on - permanently, also after logout” | markers also after signing out |
+| “on - until sign-out or closing the browser” | markers until you sign out or close the browser |
+| “on - permanently, also after sign-out” | markers also after signing out |
 
 The setting only applies to the browser in which you made it. If your backend runs under a different
 address than the websites (for example `cms.example.com`), saving a changed setting transfers it to all

@@ -90,9 +90,9 @@ ist das der Titel oder Name.
 ## Status
 
 Der ***Status*** beschreibt den Bearbeitungszustand eines Datensatzes, zum Beispiel
-„Freigeschaltet“, „Gesperrt“ oder „Unvollständig“. Nur Datensätze mit Status „Freigeschaltet“
+„Freigeschaltet“, „Deaktiviert“ oder „Unvollständig“. Nur Datensätze mit Status „Freigeschaltet“
 können über das Frontend aufgerufen werden.  
-Die Standardinstallation wird mit den beiden Status „Freigeschaltet“ und „Gesperrt“
+Die Standardinstallation wird mit den beiden Status „Freigeschaltet“ und „Deaktiviert“
 ausgeliefert. Zusätzliche Status kann Ihr Administrator hinzufügen. Diese sind
 dann automatisch in allen Inhaltsbereichen mit Eingabefeld „Status“ wählbar.
 

@@ -45,7 +45,7 @@ for reuse in later projects.
 1. [Basics](01-basics.md) – how a page is created, addresses, syntax,
    lists, links, the concept “every record has a page”, filters,
    multilingualism, security headers (delivering CSS/JS/JSON, embedding in
-   partner websites), time-controlled templates, templates in the file system
+   partner websites), scheduled templates, templates in the file system
 2. [Template sets](02-template-sets.md) – encapsulating functions, keeping them portable,
    passing them on and adapting them
 3. [Trigger templates](03-trigger-templates.md) – PHP methods for the events of the

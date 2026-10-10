@@ -13,7 +13,7 @@ return [
 'listed' => true,
 // Additional rights (backend user groups): internal name => snippet of the label.
 'access' => [
-    // Create, change, delete policies - only for instances the group may edit
+    // Create, change, deletion policies - only for instances the group may edit
     // may; policies for all instances (default policies) only the superuser
     'policy_edit' => 'privacy.access_policy_edit',
     // Data export of personal data: website users from readable profile areas,

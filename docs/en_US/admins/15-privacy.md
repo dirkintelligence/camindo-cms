@@ -121,7 +121,7 @@ Which address is “the visitor’s address” is determined at all points by th
 
 ***Changing the setting later:*** If you raise `privacy.ip_v4_octets` from 1 to 2, the next run of the task “Apply retention periods” shortens all addresses that are already shortened further – in the database, the log files and the contents of the audit log (`203.0.113.0` → `203.0.0.0`, displayed as `203.0.xxx.xxx`). Lowering does not bring anything back: what has been zeroed remains so; the display continues to mark both digits.
 
-***Displayed*** are the shortened digits as `xxx` – in the data disclosure, in the research and in the tab “Changes” of the audit log and in the device list (`203.0.113.xxx`, `2001:db8:abcd:xxxx:xxxx:xxxx:xxxx:xxxx`). In this way nobody takes the zero for part of the address. Stored remains the address with zeros: only in this way is it still a valid IP address that can be compared and – after a change of `privacy.ip_v4_octets` – shortened further.
+***Displayed*** are the shortened digits as `xxx` – in the personal data report, in the research and in the tab “Changes” of the audit log and in the device list (`203.0.113.xxx`, `2001:db8:abcd:xxxx:xxxx:xxxx:xxxx:xxxx`). In this way nobody takes the zero for part of the address. Stored remains the address with zeros: only in this way is it still a valid IP address that can be compared and – after a change of `privacy.ip_v4_octets` – shortened further.
 
 The shortening is handled by the scheduler task ***“Apply retention periods”*** (set up by the installation, every night). Each run takes only the entries since the previous run and uses the indexes of the time columns. Log files are rewritten line by line; this keeps it fast even with large data holdings – under Linux as well as under Windows. The first run after the update passes once over the entire holdings, as does the first run after a change of `privacy.ip_v4_octets`.
 
@@ -150,16 +150,16 @@ A policy has a ***label*** (text or snippet), applies to an instance (or to all)
 
 | Category | Typical for |
 |---|---|
-| Move to the trash | the trash |
-| Remove data no longer strictly needed | overwriting individual fields (data minimization) |
-| Fully anonymize entry | overwriting fields in the audit log |
+| Move to trash | the trash |
+| Remove data that is no longer strictly needed | overwriting individual fields (data minimization) |
+| Fully anonymize the entry | overwriting fields in the audit log |
 | Delete permanently | permanent deletion, with the audit log; permanent deletion of the audit log |
 
 | Trigger | When |
 |---|---|
 | Record is deleted | regardless of the way: deletion dialog of the input form, batch processing, API `record.delete` or [CMS:USER_DELETE](../templateprogrammers/user-delete.md) in the frontend – also for the [sub-records](#sub-records) that are deleted with it |
-| UGC: profile was deleted | a profile was deleted – individually, by batch processing or with its whole profile area. This ***always and immediately*** triggers the policies of all records of this user (contributions, ratings …), each the policy of its own area. If it has no block with this trigger, the records remain. This cannot be undone: if the profile (or its area) is restored, you must retrieve contributions in the trash by hand |
-| Area was deleted | the whole content area was deleted; its records then already lie in the trash together with it. Therefore not for “Move to the trash” and “Overwrite individual fields”. Blocks that are due immediately also run only with the scheduler task “Apply deletion policies”; if the area is restored, they lapse |
+| UGC: Profile was deleted | a profile was deleted – individually, by batch processing or with its whole profile area. This ***always and immediately*** triggers the policies of all records of this user (contributions, ratings …), each the policy of its own area. If it has no block with this trigger, the records remain. This cannot be undone: if the profile (or its area) is restored, you must retrieve contributions in the trash by hand |
+| Area was deleted | the whole content area was deleted; its records then already lie in the trash together with it. Therefore not for “Move to trash” and “Overwrite individual fields”. Blocks that are due immediately also run only with the scheduler task “Apply deletion policies”; if the area is restored, they lapse |
 
 ***Time:*** immediately (0) or after a number of days or years, counted from the triggering.
 
@@ -167,13 +167,13 @@ The actions are grouped in the selection by what they concern:
 
 | Group | Action | What happens |
 |---|---|---|
-| Record | Move to the trash (permanently deleted after … days) | the record goes into the trash of the person deleting, and is permanently deleted after `admin.trash_retention_days` (default 7 days) – including media files. The selection names the set period |
+| Record | Move to trash (deleted permanently after … days) | the record goes into the trash of the person deleting, and is permanently deleted after `admin.trash_retention_days` (default 7 days) – including media files. The selection names the set period |
 | Record | Overwrite individual fields | fields of the record receive new values, for example `status_id = "4"`, `username = "user_{record_id}"`, `account_number = ""`. Multilingual fields receive the value in all languages. An upload field accepts only `""`: the file is removed from the server immediately, together with its thumbnails (also for multilingual uploads in all languages) |
 | Record | Apply trigger template to the record | the method `onPrivacyAction()` in the [trigger template](../templateprogrammers/03-trigger-templates.md#onprivacyaction-deletion-policies) of the area receives the record – multilingual fields per language – and can change it; changes are saved. For everything that “Overwrite individual fields” cannot express: linked records, multilingual texts per language, own rules |
 | Audit log | Overwrite fields in the audit log | in the history of the record (database and `var/audit/`), before and after of the named fields are replaced, for multilingual fields in all languages. Additionally: `_label` (designation of the entry) and `*` (all other fields – regardless of where the line stands). Later entries as well – for example the last state at permanent deletion – are written this way |
 | Audit log | Apply trigger template to the audit log | `onPrivacyAction()` in the trigger template receives each entry in the history of the record and can change the designation and the values before/after; changes are written back |
-| Audit log | Delete audit log permanently | the entire history of the record |
-| All | Delete permanently, including audit log | without trash: the record, its sub-records, their files and their entire history in the audit log are gone |
+| Audit log | Delete the audit log permanently | the entire history of the record |
+| Everything | Delete permanently, including the audit log | without trash: the record, its sub-records, their files and their entire history in the audit log are gone |
 
 You write the fields per line as `field = "value"`. Placeholders in the value: `{record_id}` (the record) and `{user_id}` (the user to whom the record belongs). A field that does not exist in the area is skipped; a thumbnail field alone cannot be emptied – it disappears with its upload field.
 
@@ -184,7 +184,7 @@ Regardless of any policy, when a ***profile*** is deleted – also with its area
 
 ### Sub-records
 
-Deleting a record also deletes its ***sub-records***: the ***children*** in the tree, if you delete “with sub-records” (otherwise they move up one level and remain untouched), and always the ***firmly linked contents*** (fields of the type “link”), also those of the children. Each sub-record receives the blocks of the policy of ***its own*** area for “Record is deleted” – with one exception: “Move to the trash” and “Delete permanently, including audit log” are handled for everyone by the main record. A sub-record for which a deletion is already running keeps its jobs.
+Deleting a record also deletes its ***sub-records***: the ***children*** in the tree, if you delete “with sub-records” (otherwise they move up one level and remain untouched), and always the ***hard-linked content*** (fields of the type “link”), also those of the children. Each sub-record receives the blocks of the policy of ***its own*** area for “Record is deleted” – with one exception: “Move to trash” and “Delete permanently, including the audit log” are handled for everyone by the main record. A sub-record for which a deletion is already running keeps its jobs.
 
 ### Anonymous via the profile
 
@@ -213,9 +213,9 @@ If a profile (for example because of orders) is to remain, but no longer reveal 
 | Record is deleted | immediately | Overwrite individual fields | `status_id = "4"` |
 | Record is deleted | 7 days | Overwrite individual fields | `username = "user_{record_id}"`, `name = ""`, `account_number = ""` |
 | Record is deleted | 7 days | Overwrite fields in the audit log | `_label = "user_{record_id}"`, `* = ""` |
-| Record is deleted | 1 year | Delete permanently, including audit log | |
+| Record is deleted | 1 year | Delete permanently, including the audit log | |
 
-The contributions of the user are deleted in this process according to the policy of their area with the trigger “UGC: profile was deleted”. If they are to remain, remove this trigger from their policy.
+The contributions of the user are deleted in this process according to the policy of their area with the trigger “UGC: Profile was deleted”. If they are to remain, remove this trigger from their policy.
 
 ### Note in the deletion dialog
 
@@ -243,7 +243,7 @@ When an entire ***area*** is deleted, its records go into the trash together wit
 
 ### Emptying a website user’s trash immediately
 
-If a website user requests immediate deletion, a user with the right ***“Permanently empty a website user’s trash”*** (module “Tools”) empties their trash: “Tools” → “Trash of a user”. You select the profile via the search across all profile areas that you may read or – if it is itself already deleted – from the list of profiles in the trash. Profile and contributions that lie in the trash are permanently deleted at once. Users empty their own trash as before, themselves.
+If a website user requests immediate deletion, a user with the right ***“Permanently empty the trash of a website user”*** (module “Tools”) empties their trash: “Tools” → “Trash of a user”. You select the profile via the search across all profile areas that you may read or – if it is itself already deleted – from the list of profiles in the trash. Profile and contributions that lie in the trash are permanently deleted at once. Users empty their own trash as before, themselves.
 
 ### Deleting the audit log manually
 
@@ -259,7 +259,7 @@ The entire history is deleted: the entries of the database, the files under `var
 
 ## Exporting personal data
 
-For a request for disclosure (Art. 15 GDPR) or for data portability (Art. 20), camindo CMS creates an ***export***: a zip file with `auskunft.html` for reading and `daten.json` machine-readable; for website users additionally `dateien/` with their uploaded files. It is a ***partial extract*** – before passing it on to the data subject, you complete it with everything that camindo CMS does not know: legal bases, server log files outside the CMS, data in accounting, email and other systems.
+For a request for disclosure (Art. 15 GDPR) or for data portability (Art. 20), camindo CMS creates an ***export***: a zip file with `report.html` for reading and `data.json` machine-readable; for website users additionally `files/` with their uploaded files. It is a ***partial extract*** – before passing it on to the data subject, you complete it with everything that camindo CMS does not know: legal bases, server log files outside the CMS, data in accounting, email and other systems.
 
 The export is created by whoever has the additional right ***“Export personal data”*** in the module “Privacy” (superusers always), under “Privacy” → “Data export”:
 
@@ -270,13 +270,13 @@ The export is created by whoever has the additional right ***“Export personal 
 
 Users cannot download their export themselves.
 
-***Before creating***, camindo CMS checks the [templates](#the-templates-for-data-disclosure):
+***Before creating***, camindo CMS checks the [templates](#templates-of-the-personal-data-report):
 
 - If there is ***no template for website users*** for the instance of the profile – neither for its profile area nor for all areas – (for a user: neither for their group nor for all groups), a notice appears and no button for creating – with the right to do so, you create one immediately via ***“Create template”***.
 - If there is ***exactly one***, it is used.
-- If there are templates in ***several languages***, you choose the ***language of the disclosure***. For users you choose among the user templates of all your instances.
+- If there are templates in ***several languages***, you choose the ***language of the report***. For users you choose among the user templates of all your instances.
 
-Below this, a warning notice appears: a data disclosure may only be created by an authorized person – as a rule the data protection officer. And: every data disclosure is logged; in every later disclosure, the data subject learns that one was created about them today. Only when you tick ***“I am authorized to create the data disclosure.”*** does the export come into being with ***“Create data disclosure”***.
+Below this, a warning notice appears: a personal data report may only be created by an authorized person – as a rule the data protection officer. And: every personal data report is logged; in every later disclosure, the data subject learns that one was created about them today. Only when you tick ***“I am authorized to create the personal data report.”*** does the export come into being with ***“Create personal data report”***.
 
 The export of a ***website user*** contains:
 
@@ -289,15 +289,15 @@ The export of a ***website user*** contains:
 - ***entries in log files*** that clearly belong to them: blocks after too many failed attempts (log `security`) and lines of the mail log with their email address, for example emails that could not be delivered,
 - the change log, the storage periods and the deletion policy of their profile area.
 
-***Names of other persons*** do not appear in the disclosure of a website user: who acted appears only as ***“You yourself”***, ***“Admin”***, ***“User”*** (another website user) or “System”. ***Shortened IP addresses*** appear with `xxx` instead of the zeroed digits (`203.0.113.xxx`), so that nobody takes the zero for part of the address.
+***Names of other persons*** do not appear in the report of a website user: who acted appears only as ***“You”***, ***“Admin”***, ***“User”*** (another website user) or “System”. ***Shortened IP addresses*** appear with `xxx` instead of the zeroed digits (`203.0.113.xxx`), so that nobody takes the zero for part of the address.
 
 The export of a ***user*** contains: account data (contact data in plain text, of the password only the day of the last change), devices and sessions with their storage period, second factor (without keys or codes), ***sign-ins*** (only with `audit.log_logins`) and failed sign-ins under their name – each with the day of their deletion –, their activities in the audit log with IP address (the latest 1000), changes to their account, internal messages to them (date, sender, subject), the number of records with their name and the storage periods.
 
 Every export is recorded in the audit log. The zip file lies in `var/export/` until it is downloaded, is deleted during the download, and is removed after `admin.export_retention_hours` (24 hours) at the latest.
 
-### The templates for data disclosure
+### Templates of the personal data report
 
-What `disclosure.html` looks like and which text surrounds the data is determined by an HTML template that you design yourself – for example with your logo and the section “Storage period” of your privacy statement. There are separate templates for ***website users*** and for ***users***, each ***per instance and per language*** – and, if you wish, ***per profile area*** or ***per user group***, for example:
+What `report.html` looks like and which text surrounds the data is determined by an HTML template that you design yourself – for example with your logo and the section “Storage period” of your privacy statement. There are separate templates for ***website users*** and for ***users***, each ***per instance and per language*** – and, if you wish, ***per profile area*** or ***per user group***, for example:
 
 | Type | Instance | Applies to | Language |
 |---|---|---|---|
@@ -307,11 +307,11 @@ What `disclosure.html` looks like and which text surrounds the data is determine
 | User | Shop | Editorial team | English |
 | User | Shop | All user groups | English |
 
-On export, the ***specific template wins***: for a profile in the area “Customers”, the templates for “Customers” apply; if there are none, the ones for all profile areas. For a user, the templates for their user group apply (from all your instances), otherwise those for all groups. You maintain the templates under “Privacy” → “Templates”; whoever has the additional right ***“Maintain data disclosure templates”*** and may edit the instance (superusers always) may create, change and delete them.
+On export, the ***specific template wins***: for a profile in the area “Customers”, the templates for “Customers” apply; if there are none, the ones for all profile areas. For a user, the templates for their user group apply (from all your instances), otherwise those for all groups. You maintain the templates under “Privacy” → “Templates”; whoever has the additional right ***“Maintain templates of the personal data report”*** and may edit the instance (superusers always) may create, change and delete them.
 
 With ***“New”*** you first choose ***type (website user or user) and instance***; in the form then ***“Applies to”*** (profile area or user group or all) and the ***language***. A second template for the same combination cannot be saved. The new template is pre-filled with the template of the core for this type (`Core/install/privacy/privacy_user_en_US.html` or `privacy_admin_en_US.html`, in English; they list all placeholders at the beginning). Without a template for website users, there is no data export for the website users of an instance; for a user you choose among the user templates of all your instances.
 
-The disclosure is created in the ***language of the template***: snippets and the labels of the tables appear in this language, regardless of your backend language. Because types, profile areas and user groups have separate templates, no distinction is needed within a template.
+The report is created in the ***language of the template***: snippets and the labels of the tables appear in this language, regardless of your backend language. Because types, profile areas and user groups have separate templates, no distinction is needed within a template.
 
 | Notation | Effect |
 |---|---|
@@ -330,7 +330,7 @@ The disclosure is created in the ***language of the template***: snippets and th
 
 ***Data in the template for users:*** `{account}`, `{devices}`, `{sessions}`, `{second_factor}`, `{logins}`, `{activity}`, `{activity_note}`, `{account_changes}`, `{messages}`, `{content_counts}`, `{retention}`.
 
-If you leave out a data block, it is missing from the export – but the disclosure must be complete under Art. 15 GDPR. Therefore check a changed template with an export for a test account. `daten.json` always contains all data, regardless of the template.
+If you leave out a data block, it is missing from the export – but the report must be complete under Art. 15 GDPR. Therefore check a changed template with an export for a test account. `data.json` always contains all data, regardless of the template.
 
 ## What lies outside camindo CMS
 
@@ -348,8 +348,8 @@ camindo CMS can shorten and delete only what it stores itself. On your list ther
 - [ ] scheduler task ***“Clean up logs”*** set up
 - [ ] `audit anonymize-ip` run once after the update
 - [ ] deletion policies checked: each content area has the appropriate one; data that must be retained (orders, invoices) not in the trash, but anonymized
-- [ ] templates of the data disclosure created (“Privacy” → “Templates”): for website users per instance with community (if needed per profile area), for users at least one (if needed per user group) – adjusted and checked with a test account
-- [ ] rights granted: “Export personal data”, “Create and change deletion policies”, “Maintain data disclosure templates” (module “Privacy”), “Permanently empty a website user’s trash” (module “Tools”)
+- [ ] templates of the personal data report created (“Privacy” → “Templates”): for website users per instance with community (if needed per profile area), for users at least one (if needed per user group) – adjusted and checked with a test account
+- [ ] rights granted: “Export personal data”, “Create and change deletion policies”, “Maintain templates of the personal data report” (module “Privacy”), “Permanently empty the trash of a website user” (module “Tools”)
 - [ ] decided whether successful sign-ins are recorded (`audit.log_logins`, default no) and how long sign-ins remain (`audit.retention_days_logins`)
 - [ ] period of the internal messages (`privacy.message_days`) determined; for former employees, messages deleted
 - [ ] access logs of the web server shortened or deleted at short notice

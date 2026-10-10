@@ -54,8 +54,8 @@ DSGVO), oder verlangt er eine Kopie zur Mitnahme (Art. 20 DSGVO), erstellen Sie 
 4. Laden Sie das Zip über ***„Herunterladen“*** – der Link gilt genau einmal und
    höchstens einen Tag.
 
-Das Zip enthält `auskunft.html` (lesbar, zum Ausdrucken oder Versenden), `daten.json`
-(dieselben Daten maschinenlesbar) und den Ordner `dateien/` mit den hochgeladenen
+Das Zip enthält `report.html` (lesbar, zum Ausdrucken oder Versenden), `data.json`
+(dieselben Daten maschinenlesbar) und den Ordner `files/` mit den hochgeladenen
 Dateien. Enthalten sind alle Felder des Profils, die Beiträge des Users nach Bereich,
 endgültig gelöschte Beiträge, die das Änderungsprotokoll noch kennt, Datensätze, die
 auf sein Profil verweisen (etwa Bestellungen), Geräte und Sitzungen samt

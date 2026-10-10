@@ -19,7 +19,8 @@ with separate camindo installations, each with its own database and its own `pub
 ### The default instance
 
 After installation, there is a ***default instance*** in the module “Instances”. It catches
-all requests whose domain is not assigned to any other instance. It can be changed, but
+all requests whose domain is not assigned to any other instance. Its main language after installation
+is English (en_US). It can be changed, but
 not deleted. If you manage only one website with camindo CMS, you can use this instance
 for it. If you manage several websites, create a separate instance for each website.
 
@@ -33,7 +34,7 @@ all lists and selections of the back end – regardless of its position.
 | Label | name of the instance in the back end |
 | Position after... | The order in the back end is changed by selecting the preceding instance. The default instance always stands at the end and cannot be selected as a predecessor |
 | ***Frontend languages*** | |
-| Main language | language that steps in when a translation is missing |
+| Primary language | language that steps in when a translation is missing; en_US is preselected for a new instance |
 | Additional languages | additional language versions; the order is kept in the back end and can also be used in the frontend |
 | ***Frontend domains*** | |
 | Main domain | the actual address of the website, without protocol, e.g. `www.example.com` |

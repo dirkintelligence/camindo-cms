@@ -66,9 +66,9 @@ Rules:
 - Only the first area in the file is evaluated; records in it are ignored. Label and note of
   the new area remain empty and are entered in the mask; name, icon, and sort direction come
   from the file.
-- Fields of the type ***Relation***, ***Reference*** or ***Fixed-linked content*** whose target
+- Fields of the type ***Relation***, ***Pointer*** or ***Hard-linked content*** whose target
   area is the area itself – for example “Related articles” in an article area – point to the
-  new area in the new area. Targets in ***other*** areas (for example a reference to an images
+  new area in the new area. Targets in ***other*** areas (for example a pointer to an images
   area) cannot be resolved: the field is created without this target area; add it afterwards
   in the settings of the field.
 
@@ -90,7 +90,7 @@ Back up `var/area_blueprints/` together with the other project data
 | Multilingual input | “All languages on one page” or “One tab per language” – how the input mask displays multilingual fields |
 | Slug prefix | optional first part of the address of all records of the area, per language (see [below](#slug-prefix)) |
 | Deletion policy | rule according to which records and audit logs of this area are handled; cf. [chapter 15](./15-privacy.md#deleting-according-to-deletion-policy). The policy applies to every deletion – in the back end, via the API and with CMS:USER_DELETE in the frontend. The standard policy for the area type is preselected (“Delete record”, “Delete profile”, “Delete user-generated content”) |
-| Dependent area | the records belong exclusively to one record each of another area (see [Fixed-linked and embedded content](./05-input-fields.md#fixed-linked-and-embedded-content)). The area then does not appear in the area list of the module “Content” |
+| Dependent area | the records belong exclusively to one record each of another area (see [Hard-linked and embedded content](./05-input-fields.md#hard-linked-and-embedded-content)). The area then does not appear in the area list of the module “Content” |
 | Default template | template with which each record of the area is output in the frontend, as long as no other is selected in the record |
 | Selectable templates | templates that editors may choose alternatively in the record (meta field “Design template”) |
 | URL override templates | templates that may be called via the address of a record instead of the assigned one – for example the print version of a content item or the output in another format (`/news,xml_rss`) |
@@ -123,7 +123,7 @@ occur in different areas of an instance:
   of the area, if one is assigned.
 
 The address as a whole must be unique – within the instance and within the instances that
-are linked with it via “Readable instances”:
+are linked with it via “Readable other instances”:
 
 - Two areas cannot have the same prefix.
 - A record of an area ***without*** a prefix must not begin with a prefix: the slug `colors/yellow`
@@ -181,7 +181,7 @@ together with the blocks for the trigger “Area was deleted” (see
 [chapter 15](./15-privacy.md#structure-of-a-policy)), with the periods calculated from the
 deletion – with the standard policies, the history in the audit log is deleted after 1 year.
 If it is a profile area, the contributions of the users are deleted immediately according to
-their own policies (trigger “UGC: profile was deleted”) – this does not undo a restoration of
+their own policies (trigger “UGC: Profile was deleted”) – this does not undo a restoration of
 the area.
 
 ## Instances

@@ -29,7 +29,7 @@ profile. In the latter case, all sessions and known devices of the user are remo
 
 What “delete” means is determined by the ***deletion policy*** of the area, with its blocks for the
 trigger “record is deleted”. This is the same as when deleting in the back end: into the trash,
-permanently, or overwriting individual fields (for example setting the status to “deactivated” and
+permanently, or overwriting individual fields (for example setting the status to “Disabled” and
 the sign-in name to `user_{record_id}`), also with a time delay. If the user deletes their profile,
 all of their contributions are deleted at the same time according to their policy (trigger “UGC:
 profile was deleted”). If the policy has no block for this trigger, the command outputs an error

@@ -359,6 +359,13 @@ class InstanceBackend {
     {
         $this->data = $this->instance->init();
         $this->id = 0;
+        // primary language: en_US preselected - otherwise the browser takes the first
+        // option of the list (sorted by position, e.g. ar_SA)
+        $this->db->pushResult();
+        $this->db->query("SELECT `language_id` FROM `language` WHERE `code` = 'en_US' LIMIT 1");
+        $languageId = (int)($this->db->fetchNum()[0] ?? 0);
+        $this->db->popResult();
+        if ($languageId > 0) $this->data['primary_language_id'] = $languageId;
     }
 
     /**

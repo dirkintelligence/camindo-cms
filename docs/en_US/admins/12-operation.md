@@ -8,7 +8,7 @@ camindo CMS needs ***one*** cron job of the web server user (for the setup see [
 |---|---|---|
 | `Core/cron/cron.php` | every minute | background conversion of videos and images, comparison of the template files and the due tasks of the [scheduler](#scheduler) – among them all maintenance tasks |
 
-If `cron.php` does not run, time-controlled tasks stand still, template files that were changed in the file system do not reach the backend, and videos are not converted. Superusers see this on the start page: beneath the module tiles a notice then appears (see [operating notices](#operating-notices-on-the-start-page)).
+If `cron.php` does not run, scheduled tasks stand still, template files that were changed in the file system do not reach the backend, and videos are not converted. Superusers see this on the start page: beneath the module tiles a notice then appears (see [operating notices](#operating-notices-on-the-start-page)).
 
 ## Scheduler
 
@@ -19,7 +19,7 @@ The ***scheduler*** performs recurring and demanding work in the background, wit
 | Task | Default | What it does |
 |---|---|---|
 | ***Database backup*** | daily at 2:00 | backup to `var/dbbackup/`, 7 rotating. Recommendation: additionally store it outside the server (see [data backup](#data-backup)) |
-| ***Delete temporary files*** | hourly at :10 | clean up `var/tmp/` and expired export files (including data disclosures) |
+| ***Delete temporary files*** | hourly at :10 | clean up `var/tmp/` and expired export files (including personal data reports) |
 | ***Empty trash*** | daily at 2:20 | permanently delete entries that have been in the trash longer than `admin.trash_retention_days` |
 | ***Apply deletion policies*** | daily at 2:30 | due jobs of the [deletion policies](./15-privacy.md#deleting-according-to-deletion-policy) |
 | ***Apply retention periods*** | daily at 2:45 | shorten IP addresses, delete expired entries of the audit log, old internal messages and registrations that were never confirmed ([chapter 15](./15-privacy.md)) |
@@ -48,7 +48,7 @@ Missing maintenance tasks – for example after an accidental deletion – are c
 
 Deleted records and areas are first only marked as deleted; their files move to `var/deleted/`. Whether a record ends up in the trash at all is determined by the [deletion policy](./15-privacy.md#deleting-according-to-deletion-policy) of its area. Permanent deletion takes place after the ***retention period*** (`admin.trash_retention_days`, default 7 days) through the scheduler task “Empty trash” (every night) – or immediately via “Tools” → “Database” → “Empty trash”. Deleted users are always retained.
 
-Within the period, restoring takes place – including sub-records, firmly linked contents and files:
+Within the period, restoring takes place – including sub-records, hard-linked content and files:
 
 - ***Records*** every user restores from their own [trash](./10-modules.md#trash) themselves.
 - ***Areas*** are restored by a superuser from the trash. Their sub-areas and all records that were deleted together with them come back with the area.
@@ -521,7 +521,7 @@ Who changed what in the backend is not stated in the log files, but in the [audi
 
 ## Operating notices on the start page
 
-Superusers see a block ***“Operating notices”*** beneath the module tiles on the start page as soon as something is wrong in operation. If everything is in order, it does not appear.
+Superusers see a block ***“Operational notices”*** beneath the module tiles on the start page as soon as something is wrong in operation. If everything is in order, it does not appear.
 
 | Notice | Meaning |
 |---|---|
@@ -554,7 +554,7 @@ A click on “Open” leads, where possible, directly to the place where the not
 - [ ] Email dispatch set up, two-factor sign-in switched on, all users with an email address (sign-in code and notice of new devices)
 - [ ] Superusers with an authenticator app – on live systems `security.admin_2fa = 'totp_required'`
 - [ ] Password fields in the frontend with the extension “Password policy”
-- [ ] Shops and member areas: second factor in the profile area at least “Code for new device” ([chapter 13](./13-community.md#second-factor))
+- [ ] Shops and member areas: second factor in the profile area at least “Code on a new device” ([chapter 13](./13-community.md#second-factor))
 - [ ] Script policy of the website first “Report only”, after a clean log “Enforce” ([chapter 3](./03-instances-and-languages.md#script-policy))
 - [ ] fixed backend domain entered (`admin.backend_domain`), own subdomain with HTTPS
 - [ ] behind a proxy or load balancer: `security.trusted_proxies` set
@@ -567,7 +567,7 @@ A click on “Open” leads, where possible, directly to the place where the not
 - [ ] no operating notices on the start page
 - [ ] `.camindo.key` secured in a safe place (or the content of `CAMINDO_KEY`)
 - [ ] write permissions of the web server only on `var/` and `public/media/`
-- [ ] instances with “canonical calls” for search engines
+- [ ] instances with “Canonical requests” for search engines
 
 ## License
 

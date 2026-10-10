@@ -12,11 +12,11 @@ They are installed with the core and are always active.
 |---|---|---|
 | [Calendar](./extensions/calendar.md) (“Calendar”) | Date/time, time / single line | the date and time selection of the browser next to the field; preselected for new date fields (also those created by the AI assistant) – “by field type”, minute step 1 |
 | [Datepicker](./extensions/datepicker.md) | Date/time / single line | calendar in the language and date format of the user |
-| [IconPicker](./extensions/iconpicker.md) (“Icon selection”) | all / single line | selection of a symbol with preview, browsable categories and search by name and keywords; default for the icon of an area |
+| [IconPicker](./extensions/iconpicker.md) (“Icon picker”) | all / single line | selection of a symbol with preview, browsable categories and search by name and keywords; default for the icon of an area |
 | [Markdown (visual)](./extensions/markdownvisual.md) (“MarkdownVisual”) | Short/long text / multiline | Markdown editor that edits in the formatted view; source text via the button <> |
 | [HTML (visual)](./extensions/htmlvisual.md) (“HTMLVisual”) | Short/long text / multiline | HTML editor that edits in the formatted view; source text via the button <>. Like Markdown (visual), but stores HTML |
 | [Password](./extensions/password.md) (“Password policy”) | Password / password | requirements as a speech bubble, strength as a bar; the server checks the same rules. Default for the passwords of the users |
-| [Snippets](./extensions/snippets.md) (“Snippet selection”) | all / single line | selection of a text block (snippet) via a search window; writes a reference `#prefix.key` into the field, which appears in the respective backend language. Also used in the backend for “Label” fields |
+| [Snippets](./extensions/snippets.md) (“Snippet picker”) | all / single line | selection of a text block (snippet) via a search window; writes a reference `#prefix.key` into the field, which appears in the respective backend language. Also used in the backend for “Label” fields |
 
 ## Additional extensions
 
@@ -31,7 +31,7 @@ php Core/cron/camindo.php component install {Name} --activate
 |---|---|---|---|
 | TinyMCE | `camindo/extension-tinymce` | Short/long text / multiline | WYSIWYG editor, writes HTML |
 
-Each additional component brings its own manual. After installation, you find it in the overview of the manuals under “Manuals for add-on components”.
+Each additional component brings its own manual. After installation, you find it in the overview of the manuals under “Manuals of add-on components”.
 
 ## Custom stylesheets for editors
 

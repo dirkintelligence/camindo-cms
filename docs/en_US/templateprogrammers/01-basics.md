@@ -472,7 +472,7 @@ Typical division:
 | ***List templates*** | run through the hits of a `CMS:SELECT` |
 | ***Building blocks*** | header, footer, navigation, teaser – included via `CMS:INCLUDE` |
 | ***Standalone templates*** | pages without a record: search, sitemap, forms |
-| ***Time-controlled templates*** | run as a task of the scheduler, without visitors (see below) |
+| ***Scheduled templates*** | run as a task of the scheduler, without visitors (see below) |
 | ***List templates (back end)*** | design the record list of the editorial team (see below) |
 
 ## Caching
@@ -574,9 +574,9 @@ code editor and manage it with Git. camindo CMS applies changes every minute (or
 in the file system, a rename counts as deleting and creating anew, and the assignments are lost.
 Error messages appear in the widget “Template messages”.
 
-## Time-controlled templates
+## Scheduled templates
 
-A template with the ***usage “Time-controlled (scheduler)”*** (tab “Access” of the template) does
+A template with the ***usage “Scheduled (scheduler)”*** (tab “Access” of the template) does
 not run as a page, but as a task of the ***scheduler*** (task type “Template”; see
 [Handbook for administrators](../admins/10-modules.md#scheduler)). It can never be reached via an
 address.

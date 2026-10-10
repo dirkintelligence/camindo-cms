@@ -44,8 +44,8 @@ restore it by hand.
 - ***Editing:*** in the detail view, click ![edit](../_/edit.svg) “Edit”, or choose “Edit” from the
   right-click menu in the list.
 - ***Copying:*** ![content_copy](../_/content_copy.svg) “Copy” opens the input form with all contents of
-  the original, including files and relations. The copy is placed directly after the original. Firmly
-  linked content (such as text-image blocks) is copied along with it. In manually sorted lists, the
+  the original, including files and relations. The copy is placed directly after the original. Hard-linked
+content (such as text-image blocks) is copied along with it. In manually sorted lists, the
   copy goes to the end.  
   Important: other records that point to the original will point to the copy afterwards as well. Relations
   that allow only one linked record are excluded.
@@ -183,7 +183,7 @@ the file type and the properties of the file (name, size, dimensions).
 
 Very large files, such as videos, are often too large for an upload through the browser. Have them transferred
 to the ***upload directory*** of the server via FTP and select them with “![folder_open](../_/folder_open.svg)
-Select file on the server”. With the switch ***“Delete after successful save”*** below the selected file, it
+Select file on the server”. With the switch ***“delete after successful transfer”*** below the selected file, it
 disappears from the upload directory as soon as the record is saved; if you cancel the editing, it remains there.
 
 camindo CMS automatically generates further versions from an uploaded file – for example scaled-down images,
@@ -253,11 +253,11 @@ Depending on the setup, the input form contains some of the following fields:
 | Status | editing state. Only **enabled** records appear on the website |
 | Publication date | the record appears on the website only from this point in time |
 | Expiration date | from this point in time the record no longer appears in the lists of the website; it remains reachable via its address |
-| Design template | template for this record, if it is to be displayed differently than usual. “(Standard)” uses the default template of the area |
+| Design template | template for this record, if it is to be displayed differently than usual. “(Default)” uses the default template of the area |
 | Parent dataset | parent record in areas with a tree structure, for example the page above a subpage |
 | Position after... | allows manual sorting: the preceding record is selected |
 | Needs review | marks content that still needs to be reviewed |
-| Owner | the user to whom the record belongs (only with the right “Adjust owner”) |
+| Owner | the user to whom the record belongs (only with the right “Set owner”) |
 
 If the area has a field for the ***web address*** (slug) and it is left empty, camindo CMS fills it in when
 saving, from the main field (for example the title). From “Our company party 2026” the slug becomes
@@ -286,7 +286,7 @@ moved. To move many records at once, use [batch processing](./07-batch-processin
 ## Deleting
 
 ![delete](../_/delete.svg) “Delete” removes a record after a confirmation prompt. If it has subordinate records, you
-choose whether these are deleted as well or moved up one level. Firmly linked content (embedded blocks) is always
+choose whether these are deleted as well or moved up one level. Hard-linked content (embedded blocks) is always
 deleted along with the record.
 
 If the record is linked to other records, the confirmation prompt states their number (***linked records***, for
@@ -294,10 +294,10 @@ example “This record is linked to 3 other records”). All links are counted �
 input form, such as the articles of a category. “Details” shows these records across areas in a list of results; check
 there before deleting whether the links are still needed.
 
-What exactly happens when deleting is determined by the ***delete policy*** of the content area; the confirmation prompt
+What exactly happens when deleting is determined by the ***deletion policy*** of the content area; the confirmation prompt
 tells you beforehand, for example:
 
-> Delete policy “Delete record” – The record is moved to your trash.
+> Deletion policy “Delete record” – The record is moved to your trash.
 > After 7 days: permanent deletion
 
 Usually, deleted records first go to the ***trash*** and are only removed permanently after the retention period
@@ -318,12 +318,12 @@ the top. For each entry you see:
 | Column | Content |
 |---|---|
 | Deleted on | time of deletion |
-| Record | title and number (ID) of the record; “with n subordinate records” if subordinate records were deleted along with it |
+| Record | title and number (ID) of the record; “with n child records” if subordinate records were deleted along with it |
 | Area | content area from which the record comes |
 | Permanently deleted from | from this point on, the nightly cleanup run removes the entry irrevocably |
 
 ![restore_from_trash](../_/restore_from_trash.svg) “Restore” brings the record back after a confirmation prompt – with
-its files, firmly linked content and relations, to its old place.
+its files, hard-linked content and relations, to its old place.
 
 ***Branches are restored as a whole.*** If you deleted a record together with its subordinate records, only the top record
 of the branch appears in the list. When restoring, all subordinate records that were deleted together with it come back as

@@ -12,11 +12,11 @@ In the module “Status” you define the processing states that records can hav
 | Disabled | does not appear on the website |
 | Unconfirmed | for registrations of frontend users, until the confirmation link has been clicked |
 
-On the website, by default only records with the status “Enabled” appear. The default for blocked records is the status “Disabled”. All further statuses correspond to this – they only serve to map editorial workflows, for example “Draft”, “To be proofread”, “Ready to enable”, “To be revised” …
+On the website, by default only records with the status “Enabled” appear. The default for blocked records is the status “Disabled”. All further statuses correspond to this – they only serve to map editorial workflows, for example “Draft”, “For review”, “Ready to enable”, “To be revised” …
 
 [CMS:SELECT](../templateprogrammers/select.md#state) only finds enabled records. Only for internal views is it possible to pass the parameter `filter[state]` to the command, in order to list records with a particular or any status.
 
-In the input form of a status, you define under ***“Allowed to set”*** which user groups may give records this status (multiple selection; superusers may always set all statuses). A new status can initially be set by all user groups. The same setting can be found in the form of each user group – see [users and rights](./07-users-and-rights.md#4-set-status).
+In the input form of a status, you define under ***“May be set by”*** which user groups may give records this status (multiple selection; superusers may always set all statuses). A new status can initially be set by all user groups. The same setting can be found in the form of each user group – see [users and rights](./07-users-and-rights.md#4-set-status).
 
 When you delete a status, you choose a ***replacement status***; all records with the previous status are switched over. The prepared statuses “Enabled” and “Disabled” cannot be deleted.
 
@@ -125,7 +125,7 @@ The ***scheduler*** runs tasks on a time schedule. It requires the cron job `cro
 | ***Check audit log*** | checks the files of the [audit log](#audit-log) for manipulation; findings appear on the start page. No settings |
 | ***Check for updates*** | looks for newer versions and known security vulnerabilities (see [updates](./12-operation.md#updates)). No settings |
 | ***Summarize messages by email*** | sends users who have chosen it in their personal settings a summary of their new internal messages (see [messages](#messages)). New are the messages since the previous run – run it once a day. No settings |
-| ***Template*** | runs a frontend template with the use “Time-controlled”, in one language of its website – for example for emails about the expiry of a blocking period, reminders or a feed. The template learns which period has passed since the last successful run; if a run fails, the next one covers that period. The output is saved or discarded as with the URL call. If the template reports an error (for example an email without a valid recipient), the run counts as failed |
+| ***Template*** | runs a frontend template with the use “Scheduled”, in one language of its website – for example for emails about the expiry of a blocking period, reminders or a feed. The template learns which period has passed since the last successful run; if a run fails, the next one covers that period. The output is saved or discarded as with the URL call. If the template reports an error (for example an email without a valid recipient), the run counts as failed |
 
 The ***time control*** follows the cron notation with six values: minute, hour, day, month, year, weekday (0 = Sunday). For each value: `*` for every value, a number, a range `1-5`, a step `*/10` or a list `1,15,30`. The task runs when all six values match. Example for daily at 3:30 a.m.: minute `30`, hour `3`, all others `*`. The times apply in the time zone of the system.
 
@@ -151,7 +151,7 @@ camindo CMS renews the caches itself after changes. The tools on the tab “Deve
 
 ## Template messages (widget)
 
-The module “Templates” brings a ***widget*** for the start page (personal settings, “Start page widgets”): it lists every template with its parser messages – errors in red, notes in yellow – and opens it with a click. This is helpful above all when templates are edited in the file system (`var/templates`) and nobody sees the editor. The notice always says that every script in a template needs `<script(CMS:NONCE)>` so that it runs under the script policy of the website ([chapter 3](./03-instances-and-languages.md#script-policy)). It is visible to user groups with access to the module “Templates”; only template areas that the user group may read are shown.
+The module “Templates” brings a ***widget*** for the start page (personal settings, “Dashboard widgets”): it lists every template with its parser messages – errors in red, notes in yellow – and opens it with a click. This is helpful above all when templates are edited in the file system (`var/templates`) and nobody sees the editor. The notice always says that every script in a template needs `<script(CMS:NONCE)>` so that it runs under the script policy of the website ([chapter 3](./03-instances-and-languages.md#script-policy)). It is visible to user groups with access to the module “Templates”; only template areas that the user group may read are shown.
 
 ## Log files
 
@@ -184,13 +184,13 @@ When changes are made, ***all fields*** are compared, including meta fields such
 
 ***Tab “Changes”:*** In the detail view of each record, the tab “Changes” shows the last ten entries of its history, newest change first; the complete history is shown by the module “Audit log”. The tab does not exist in selection windows (relation fields). For each field, before and after are displayed side by side. Texts are compared paragraph by paragraph: unchanged paragraphs are gray, removed ones red, new ones green; in changed paragraphs the individual words are marked. Everyone who may read the area can see the tab; the IP address only superusers.
 
-The same tab ***“Changes”*** is available in the detail views of areas, input fields, templates, statuses, instances, languages, converters, scheduler tasks, components and user groups – in each case for everyone who may open the detail view. For users, only superusers see it; it shows what was changed on the account (including sign-ins), while the tab “Activities” beside it shows what the user did themselves. For templates, the source text is compared; the colored view that results from it does not appear in the log.
+The same tab ***“Changes”*** is available in the detail views of areas, input fields, templates, statuses, instances, languages, converters, scheduler tasks, components and user groups – in each case for everyone who may open the detail view. For users, only superusers see it; it shows what was changed on the account (including sign-ins), while the tab “Activity” beside it shows what the user did themselves. For templates, the source text is compared; the colored view that results from it does not appear in the log.
 
 ***Module “Audit log”*** (superusers only): searches the entire log by period, user, action, object type, ID, designation, name or IP address and by changed fields (for example `status_id`), page by page like the other lists. A click on an entry opens the comparison; “Full history” shows all entries for this object.
 
 ***Research via the API and the AI assistant:*** The same entries can be searched and read via the programming interface – so the [AI assistant](#add-on-ai-assistant) can also answer questions such as “Who deleted article X yesterday?” or “How has this record changed since it was created?”, even if the record is in the trash or has been permanently deleted. Superusers see the entire log; everyone else – as in the tab “Changes” – only the entries for records in areas they may read, and no IP addresses.
 
-***Tab “Activities”:*** In the detail view of a user (module “Users”), the tab “Activities” shows only superusers what this user has left in the audit log: at the top the ***recently edited records*** – for each record the last action with the time and the number of its entries, a click on it opens the history – below, ***all actions*** page by page, including sign-ins and changes to areas or fields. “Open in audit log” leads into the module, pre-filtered for this user.
+***Tab “Activity”:*** In the detail view of a user (module “Users”), the tab “Activity” shows only superusers what this user has left in the audit log: at the top the ***recently edited records*** – for each record the last action with the time and the number of its entries, a click on it opens the history – below, ***all actions*** page by page, including sign-ins and changes to areas or fields. “Open in audit log” leads into the module, pre-filtered for this user.
 
 ***Retention:*** Settings in `.camindo.php` (see [configuration](./12-operation.md#configuration)):
 
@@ -212,7 +212,7 @@ The module “Privacy” has these tabs:
 | Tab | Content | Additional right |
 |---|---|---|
 | “Deletion policies” | define what happens when a record is deleted – put into the trash, permanently delete immediately or with a delay, overwrite individual fields, overwrite or delete the history in the audit log, run your own rules in the trigger template – also for sub-records, the contributions of a deleted profile and the records of a deleted area. Every content area has one policy | “Create and change deletion policies” – for the instances to which the user group has access |
-| “Templates” | templates of the data disclosure for each instance, type (website user or user) and language – see [chapter 15](./15-privacy.md#the-templates-for-data-disclosure) | “Maintain data disclosure templates” – for the instances to which the user group has access |
+| “Templates” | templates of the personal data report for each instance, type (website user or user) and language – see [chapter 15](./15-privacy.md#templates-of-the-personal-data-report) | “Maintain templates of the personal data report” – for the instances to which the user group has access |
 | “Data export” | export of personal data of a website user or a user as a zip file | “Export personal data” – for profiles of the readable areas and users of the visible user groups |
 | “Deleted users” | list of deleted users with user group and deletion date – only from the user groups whose users you may see in the module “Users”. A click leads to the info page of the user in the module “Users”; if the user has not yet been anonymized, the button “Anonymize” appears there. See [chapter 15](./15-privacy.md#anonymizing-deleted-users) | tab: access to the module “Users”. Anonymize: “Anonymize deleted users” – for users of the visible user groups |
 
@@ -239,7 +239,7 @@ The ***files*** of a component are always fetched and removed by Composer on the
 
 Every user has the module “Trash”, regardless of their user group; it appears as a button on the start page and as a widget that shows the number of entries. How editors work with it is described in the [manual for editors](../editors/05-editing-records.md#trash).
 
-Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; firmly linked contents and the records of a deleted area do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash.
+Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; hard-linked content and the records of a deleted area do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash.
 
 | Who | Sees |
 |---|---|
@@ -256,7 +256,7 @@ Each user can have a daily ***summary by email*** sent in their personal setting
 
 ## Add-on modules
 
-***Add-on modules*** are separate packages that you fetch via Composer and install as a component (see [installing add-on components](./01-quick-start-installation.md#install-additional-components)). Each brings its own manual: after installation it appears in the overview of the manuals under “Manuals for add-on components” – with setup, settings and all details.
+***Add-on modules*** are separate packages that you fetch via Composer and install as a component (see [installing add-on components](./01-quick-start-installation.md#install-additional-components)). Each brings its own manual: after installation it appears in the overview of the manuals under “Manuals of add-on components” – with setup, settings and all details.
 
 ### Add-on PDF
 

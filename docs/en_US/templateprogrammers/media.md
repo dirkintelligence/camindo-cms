@@ -84,7 +84,7 @@ No image uploaded? `ifempty` provides the replacement – `prefix`/`suffix` are 
 upload fields, the command delivers the file of the current language, or that of the
 main language as a fallback (`1977_2,beach.jpg`).
 
-***Protected files*** (field option “Only for signed-in frontend users”): the link points
+***Protected files*** (field option “Signed-in frontend users only”): the link points
 automatically to `/file.php`, which checks the frontend session. `auth=true` forces this
 route also for unprotected fields, `download="name"` offers the file for download.
 
@@ -149,7 +149,7 @@ route as the protected original:
 <p>Preview: (CMS:MEDIA thumb)</p>
 <p>Original (signed-in only): (CMS:MEDIA image auth=true)</p>
 ```
-For fields with the option “Only for signed-in frontend users”, this applies automatically.
+For fields with the option “Signed-in frontend users only”, this applies automatically.
 
 ### `download`
 

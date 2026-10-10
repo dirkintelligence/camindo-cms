@@ -1,6 +1,6 @@
 <?php
 /**
- * Template of the personal data export - the page auskunft.html in the zip
+ * Template of the personal data export - the page report.html in the zip
  * from RecordPersonalData (website users) and AdminPersonalData (users), created in
  * the Privacy module. A partial extract that the operator completes before handing it
  * to the data subject (legal bases, server logfiles …).
@@ -49,7 +49,7 @@ class PrivacyTemplate {
     {}
 
     /**
-     * Build auskunft.html - in the current snippet language (Cms::getLang()).
+     * Build report.html - in the current snippet language (Cms::getLang()).
      *
      * @param string $content  the template (privacy_template.content)
      * @param array  $values   Placeholder => text (will be escaped)

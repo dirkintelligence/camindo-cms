@@ -13,7 +13,7 @@ https://subdomain.ihre-website.com/backend/
 
 Fragen Sie Ihren Administrator nach der richtigen Adresse.  
 Der Zugang erfordert immer eine Anmeldung. Tragen Sie Ihren Benutzernamen und Ihr
-Passwort ein und klicken Sie auf „Anmelden“.
+Passwort ein und klicken Sie auf „Absenden“.
 
 ## Zwei-Faktor-Anmeldung
 
