@@ -416,6 +416,6 @@ class InstallCommand extends Command {
         $backendDomain = (string)$installer->boot()->get(\Camindo\Core\Config::class)->get('admin.backend_domain');
         $this->out('  backend:        https://' . ($backendDomain !== '' ? $backendDomain : '{host}') . '/backend/');
         $this->out('  cron job:       * * * * *  php ' . $dir . '/Core/cron/cron.php   (the only one)');
-        $this->out('  next:           php Core/cron/camindo.php status');
+        $this->out('  next:           php ' . $dir . '/Core/cron/camindo.php status');
     }
 }
