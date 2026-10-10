@@ -48,6 +48,14 @@ class InstallCommand extends Command {
     private const STEPS = ['requirements', 'key', 'config', 'sqlpwd', 'dirs', 'database', 'admin', 'core',
         'components', 'runtime', 'tasks', 'finish'];
 
+    private const BANNER = [
+        '==============================================',
+        ' ▗▛▀ ▄▀▚▖▐▙ ▗█ █ █▖ █ █▀▚▖▗▛▀▙  ▗▛▀ █▖ ▟▌▗▛▀▘',
+        ' ▐▌  █▄▟▌▐▌▜▘█ █ █▝▙█ █ ▐▌▐▌ █  ▐▌  █▝▛▐▌ ▀▙▖',
+        ' ▝▙▄ █ ▐▌▐▌  █ █ █  █ █▄▞▘▝▙▄▛  ▝▙▄ █  ▐▌ ▄▄▛',
+        '==============================================',
+    ];
+
     private array $options = [];
     private bool $interactive = true;
 
@@ -73,6 +81,10 @@ class InstallCommand extends Command {
         if (!$force && in_array($step, ['database', 'admin'], true) && $installer->isInstalled()) {
             return $this->usage("step $step on an installed system needs --force");
         }
+
+        $this->out('');
+        foreach (self::BANNER as $line) $this->out(' ' . $line);
+        $this->out('');
 
         $steps = $step === '' ? self::STEPS : [$step];
         // Backend assets: copy (default) or symlink for development on the core
@@ -105,10 +117,6 @@ class InstallCommand extends Command {
         catch (\RuntimeException $e) {
             $this->err($e->getMessage());
             return Cli::USAGE;
-        }
-        if ($needConfig) {
-            $installer->testDatabase($answers['db'], !empty($options['create-db']));
-            $this->out('  database connection ok');
         }
 
         // 3-5. Dot files
@@ -191,7 +199,9 @@ class InstallCommand extends Command {
     // ==== Fragen ====
 
     /**
-     * Database, time zone, locale, programs - connection test immediately.
+     * Database, time zone, locale, programs. The connection is tested right after
+     * the database questions; if it fails, the database questions are asked again
+     * (interactive, with the previous answers as defaults).
      *
      * @return array  values for Installer::writeConfigFile()
      */
@@ -207,6 +217,31 @@ class InstallCommand extends Command {
         ];
         // From the environment (and not via --db-pass-file): stays there, .camindo.php stays empty
         $db['pass_from_env'] = !is_string($this->options['db-pass-file'] ?? null) && Config::env('CAMINDO_DB_PASS') !== null;
+        while (true) {
+            try {
+                $installer->testDatabase($db, !empty($this->options['create-db']));
+                $this->out('  database connection ok');
+                break;
+            }
+            catch (\RuntimeException $e) {
+                if (!$this->interactive) throw $e;
+                $this->out('  ' . $e->getMessage() . ' - again');
+            }
+            // Ask directly: a wrong option or environment variable would otherwise repeat itself
+            $db = [
+                'host' => $this->ask('Database host', $db['host']),
+                'port' => $this->ask('Database port', $db['port']),
+                'name' => $this->ask('Database name', $db['name']),
+                'user' => $this->ask('Database user', $db['user']),
+                'pass' => $this->askHidden('Database password'),
+                'pass_from_env' => false,
+            ];
+            // Config::ENV_SECRETS: in operation the variable wins over .camindo.php
+            if (Config::env('CAMINDO_DB_PASS') !== null) {
+                $this->out('  WARNING: environment variable CAMINDO_DB_PASS is set - in operation it takes');
+                $this->out('  precedence over the password entered here; correct or remove it');
+            }
+        }
         $timezone = $this->value('timezone', 'CAMINDO_TIMEZONE', 'Time zone', 'Europe/Berlin');
         if (!in_array($timezone, timezone_identifiers_list(), true)) {
             throw new \RuntimeException("unknown time zone '$timezone'");
@@ -247,7 +282,7 @@ class InstallCommand extends Command {
     }
 
     /**
-     * First admin: name, email, password (hidden, twice), backend language.
+     * First admin: name, password (hidden, twice), email, backend language.
      */
     private function askAdmin(array $answers): array
     {
@@ -255,10 +290,6 @@ class InstallCommand extends Command {
         $name = $this->value('admin-name', 'CAMINDO_ADMIN_NAME', 'Admin name', 'admin');
         if (!preg_match('/^[a-z0-9_-]+$/', $name)) {
             throw new \RuntimeException("admin name: lowercase letters, digits, _ and - only ('$name')");
-        }
-        $email = $this->value('admin-email', 'CAMINDO_ADMIN_EMAIL', 'Admin e-mail', '', false);
-        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new \RuntimeException("invalid e-mail '$email'");
         }
         // Password policy as when saving (security.password_policy; the
         // .camindo.php of the new installation names none of its own, the defaults apply)
@@ -279,6 +310,10 @@ class InstallCommand extends Command {
                 throw new \RuntimeException('admin password: ' . $hint);
             }
             $this->out('  admin password: ' . $hint . ' - again');
+        }
+        $email = $this->value('admin-email', 'CAMINDO_ADMIN_EMAIL', 'Admin e-mail', '', false);
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException("invalid e-mail '$email'");
         }
         // Backend languages = files in Core/backend/lang (en_US, de_DE, ar_SA …)
         $available = Cms::scanLanguages(dirname(__DIR__, 2) . '/backend/lang');

@@ -55,7 +55,8 @@ EXIT;
 
 Unter ***MariaDB*** heißt die Sortierung `utf8mb4_uca1400_ai_ci` (ab 10.10), bei älteren
 Versionen `utf8mb4_unicode_ci`. Die Installation passt die Tabellen selbst an den
-Server an.
+Server an; einen Index für die Suche in Listenfeldern, den nur MySQL kennt, lässt sie unter
+MariaDB weg.
 
 ## Schritt 2 – Dateien holen
 
@@ -101,13 +102,13 @@ Dann stellt er Fragen. In eckigen Klammern steht die Vorgabe – `Enter` überni
 | Database port `[3306]` | `Enter` |
 | Database name `[camindo]` | Name Ihrer Datenbank |
 | Database user `[camindo]` | Name Ihres Datenbank-Benutzers |
-| Database password | das Passwort (wird nicht angezeigt) |
+| Database password | das Passwort (wird nicht angezeigt). Danach prüft der Installer sofort die Verbindung; schlägt sie fehl, nennt er den Grund und fragt die Datenbank-Angaben erneut ab |
 | Time zone `[Europe/Berlin]` | Ihre Zeitzone |
 | Locale `[de_DE]` | Land/Sprache für Datums- und Zahlenformate |
 | Will the site be served over HTTPS? `[y]` | `Enter`, wenn die Seite über `https://` läuft. **`n` nur für einen lokalen Test ohne SSL** – siehe [Lokal ohne HTTPS testen](#lokal-ohne-https-testen) |
 | Admin name `[admin]` | Ihr Anmeldename im Backend (Kleinbuchstaben, Ziffern, `_`, `-`) |
-| Admin e-mail | Ihre E-Mail-Adresse (darf leer bleiben, wird aber für den Anmelde-Code benötigt) |
 | Admin password | nach der Passwort-Richtlinie (standardmäßig mindestens 12 Zeichen mit Groß- und Kleinbuchstaben und einem Sonderzeichen), zweimal eingeben |
+| Admin e-mail | Ihre E-Mail-Adresse (darf leer bleiben, wird aber für den Anmelde-Code benötigt) |
 | Backend language (ar_SA\|bn_BD\|de_DE\|en_US\|…) `[en_US]` | `de_DE` für ein deutsches Backend. Zur Wahl stehen `ar_SA`, `bn_BD`, `de_DE`, `en_US`, `es_ES`, `fr_FR`, `hi_IN`, `ja_JP`, `ko_KR`, `pt_BR`, `ur_PK`, `zh_CN`; die Sprache lässt sich später in den persönlichen Einstellungen ändern |
 
 Danach läuft alles automatisch: Schlüsseldatei, Konfiguration, Verzeichnisse,

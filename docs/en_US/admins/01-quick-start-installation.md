@@ -55,7 +55,8 @@ EXIT;
 
 In ***MariaDB***, the collation is called `utf8mb4_uca1400_ai_ci` (from version 10.10); in
 older versions, it is `utf8mb4_unicode_ci`. The installation adjusts the tables to the
-server itself.
+server itself; an index for searching list fields that only MySQL supports is left out on
+MariaDB.
 
 ## Step 2 – Get the files
 
@@ -102,13 +103,13 @@ accept it.
 | Database port `[3306]` | `Enter` |
 | Database name `[camindo]` | the name of your database |
 | Database user `[camindo]` | the name of your database user |
-| Database password | the password (not displayed) |
+| Database password | the password (not displayed). The installer then tests the connection right away; if it fails, it names the reason and asks for the database details again |
 | Time zone `[Europe/Berlin]` | your time zone |
 | Locale `[de_DE]` | country/language for date and number formats |
 | Will the site be served over HTTPS? `[y]` | `Enter` if the site runs on `https://`. **`n` only for a local test without SSL** – see [Test locally without HTTPS](#test-locally-without-https) |
 | Admin name `[admin]` | your sign-in name in the back end (lowercase letters, digits, `_`, `-`) |
-| Admin e-mail | your e-mail address (may be left empty, but it is required for the sign-in code) |
 | Admin password | according to the password policy (by default at least 12 characters with uppercase and lowercase letters and a special character), enter it twice |
+| Admin e-mail | your e-mail address (may be left empty, but it is required for the sign-in code) |
 | Backend language (ar_SA\|bn_BD\|de_DE\|en_US\|…) `[en_US]` | `de_DE` for a German back end. The available options are `ar_SA`, `bn_BD`, `de_DE`, `en_US`, `es_ES`, `fr_FR`, `hi_IN`, `ja_JP`, `ko_KR`, `pt_BR`, `ur_PK`, `zh_CN`; the language can be changed later in the personal settings |
 
 After that, everything runs automatically: key file, configuration, directories, database

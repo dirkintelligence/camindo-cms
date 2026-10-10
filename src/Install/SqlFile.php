@@ -13,7 +13,9 @@
  * procedures, triggers) - use a .php migration for that.
  *
  * If the server does not know the collation utf8mb4_0900_ai_ci (MariaDB), it is replaced before
- * execution by its neutral equivalent (Collation::portable()).
+ * execution by its neutral equivalent (Collation::portable()). MariaDB has no multi-valued
+ * indexes (KEY … ((cast(… as char(32) array)))) - they are left out there
+ * (withoutMultiValuedIndexes()); JSON_CONTAINS then works without the index.
  *
  * @see developer docs, chapter 09 (Installation and update)
  */
@@ -44,6 +46,9 @@ class SqlFile {
         if (str_contains($sql, 'utf8mb4_0900_ai_ci')) {
             $sql = Collation::portable($sql, Collation::available($this->db));
         }
+        if (stripos($sql, ' array)') !== false && $this->isMariaDb()) {
+            $sql = self::withoutMultiValuedIndexes($sql);
+        }
         $count = 0;
         foreach ($this->split($sql) as $statement) {
             $count++;
@@ -59,6 +64,29 @@ class SqlFile {
             if ($logger) $logger($this->excerpt($statement));
         }
         return $count;
+    }
+
+    /**
+     * Remove multi-valued index lines from CREATE TABLE statements (MySQL 8 only),
+     * including a comma that would then precede the closing parenthesis.
+     */
+    public static function withoutMultiValuedIndexes(string $sql): string
+    {
+        $stripped = (string)preg_replace('/^[ \t]*(?:UNIQUE[ \t]+)?KEY[ \t]+`[^`]+`[ \t]*\(\(cast\(.*\barray\)\)\),?[ \t]*\r?\n/mi', '', $sql);
+        if ($stripped === $sql) return $sql;
+        $sql = $stripped;
+        return (string)preg_replace('/,(\s*\r?\n\)[ \t]*ENGINE)/i', '$1', $sql);
+    }
+
+    private function isMariaDb(): bool
+    {
+        $this->db->pushResult();
+        try {
+            $this->db->query('SELECT VERSION()');
+            return stripos((string)($this->db->fetchNum()[0] ?? ''), 'mariadb') !== false;
+        } finally {
+            $this->db->popResult();
+        }
     }
 
     /**
