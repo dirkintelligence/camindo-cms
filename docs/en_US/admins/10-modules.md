@@ -141,7 +141,7 @@ The module “Tools” has five tabs; each has its own additional right.
 
 | Tab | Tools |
 |---|---|
-| “Server” | versions of camindo CMS, operating system, web server, database and PHP; check and renewal of the `.htaccess` file; MySQL configuration; availability of ImageMagick and ffmpeg; PHP info |
+| “Server” | versions of camindo CMS, operating system, web server, database and PHP; check and renewal of the `.htaccess` file; “Clear record cache” – for all websites, one website or one area; MySQL configuration; availability of ImageMagick and ffmpeg; PHP info |
 | “Database” | “Empty trash” – permanent deletion of records and areas that have been in the trash for more than *n* days (0 = everything); “Discard working copies” – remove leftover working copies older than *n* hours and release the originals again |
 | “Data” | “Regenerate thumbnails” for all records of an area (see [chapter 8](./08-media.md#regenerating-thumbnails)); “Normalize tree” – checks and repairs the order in areas with a tree structure, for example if it has become mixed up through direct database changes; the existing order is retained |
 | “Trash of a user” | immediately delete permanently the profile and contributions of a website user that are in the trash – for example at the user’s request (see [chapter 15](./15-privacy.md#emptying-a-website-users-trash-immediately)) |

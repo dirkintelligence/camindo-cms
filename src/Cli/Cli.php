@@ -37,6 +37,7 @@ class Cli {
         'api'         => ApiCommand::class,
         'fulltext'    => FulltextCommand::class,
         'scheduler'   => SchedulerCommand::class,
+        'htaccess'    => HtaccessCommand::class,
     ];
 
     private bool $quiet = false;
@@ -106,12 +107,15 @@ class Cli {
           backup        [--reason=…] | list | prune [--keep=N]
           schema        export                           schema.sql / seed.sql / dev.sql from the database
           cache         snippets|html|docs|templates|include|instances|all [--prefix=… | --remove=…] | list
+                        records [--instance=ID] [--area=ID,…]   clear the content cache record_cache
+                                                         (not part of "all"; rebuilt on access)
           component     list [--json]                    state of modules, processors, extensions
                         install NAME|--all [--activate] | activate NAME | deactivate NAME [--force]
                         update NAME|--all | uninstall NAME [--purge]              [--no-backup]
           refresh       [components]                     directories -> table component, runtime lists
                         snippets | html [--prefix=…]     rebuild snippet cache (+ translations, blueprints)
                                                          or HTML template cache - like Tools > Developer
+                        records [--instance=ID] [--area=ID,…]   same as "cache records"
           admin         password NAME [--pass-file=…]    set a backend password (or CAMINDO_ADMIN_PASS)
                         sign                             re-sign admin, group and rights rows (key change, fixtures)
           key           status | rotate [--invalidate-passwords] [--no-backup] | retire KID [--force]
@@ -127,6 +131,8 @@ class Cli {
                                                          the given ones or the outdated ones)
           scheduler     list | defaults | run ID|TYPE    scheduler tasks: list, add missing default
                                                          tasks, run one now (e.g. "run trash")
+          htaccess      [status] | renew                 managed block of public/.htaccess - like Tools > Server
+                                                         (status: exit code 1 if outdated)
 
           --quiet   no output except errors
         TXT);

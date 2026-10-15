@@ -1,6 +1,7 @@
 <?php
 /**
  * cache snippets|html|docs|templates|include|instances|all [--prefix=NAME | --remove=NAME] | list
+ * cache records [--instance=ID] [--area=ID[,ID…]]
  *
  * snippet cache var/cache/lang (SnippetCache) and HTML template cache var/cache/html
  * (HtmlCache) - the same as Tools > Developer in the backend, without session. Prefix of the
@@ -15,6 +16,10 @@
  * instances: file cache of the instances, domains, languages, areas and group permissions
  * (InstanceCache::rebuild(), var/cache/instances.php, instance-*.php, group-*.php) -
  * after a change to its structure; otherwise the hooks of the modules write it.
+ * records: discard the content cache record_cache (RecordCache::clear()) - all of it, of
+ * one instance or of single areas; Cms::fetch() rebuilds the rows on access, working
+ * copies stay. Not part of 'all': on a large installation the rebuild costs, and
+ * code changes do not make the rows outdated.
  * snippets first converts snippet sets of the instances in the earlier PHP format
  * (var/custom/snippets/{id}/lang/*.php) into .ini files (Snippets::convertLegacy()).
  */
@@ -23,6 +28,7 @@ namespace Camindo\Core\Cli;
 use Camindo\Core\HtmlCache;
 use Camindo\Core\IncludeCache;
 use Camindo\Core\InstanceCache;
+use Camindo\Core\RecordCache;
 use Camindo\Core\SnippetCache;
 use Camindo\Core\Modules\Docs\Docs;
 use Camindo\Core\Modules\Snippets\Snippets;
@@ -39,8 +45,12 @@ class CacheCommand extends Command {
             $this->out('html:     ' . implode(', ', array_map(fn($p) => $p === '' ? 'core' : $p, $this->get(HtmlCache::class)->prefixes())));
             return Cli::OK;
         }
+        if ($what === 'records') {
+            return $this->records($options);
+        }
         if (!in_array($what, ['snippets', 'html', 'docs', 'templates', 'include', 'instances', 'all'], true)) {
-            return $this->usage('usage: cache snippets|html|docs|templates|include|instances|all [--prefix=NAME | --remove=NAME] | list');
+            return $this->usage('usage: cache snippets|html|docs|templates|include|instances|all [--prefix=NAME | --remove=NAME] | list'
+                . ' | records [--instance=ID] [--area=ID,…]');
         }
         $remove = is_string($options['remove'] ?? null) ? $options['remove'] : null;
         $prefix = is_string($options['prefix'] ?? null) ? $options['prefix'] : null;
@@ -122,6 +132,29 @@ class CacheCommand extends Command {
                 $this->out("html: {$result['files']} files written" . ($prefix !== null ? " for '$prefix'" : ''));
             }
         }
+        return Cli::OK;
+    }
+
+    /**
+     * cache records [--instance=ID] [--area=ID[,ID…]]
+     */
+    private function records(array $options): int
+    {
+        $instanceId = is_string($options['instance'] ?? null) ? (int)$options['instance'] : 0;
+        $areaIds = is_string($options['area'] ?? null)
+            ? array_values(array_filter(array_map('intval', explode(',', $options['area']))))
+            : [];
+        if (isset($options['instance']) && $instanceId <= 0 || isset($options['area']) && !$areaIds) {
+            return $this->usage('usage: cache records [--instance=ID] [--area=ID,…]');
+        }
+        try {
+            $rows = $this->get(RecordCache::class)->clear($instanceId, $areaIds);
+        }
+        catch (\InvalidArgumentException $e) {
+            return $this->usage('records: ' . $e->getMessage());
+        }
+        $scope = $areaIds ? 'area ' . implode(', ', $areaIds) : ($instanceId > 0 ? "instance $instanceId" : 'all instances');
+        $this->out("records: $rows cache rows deleted ($scope)");
         return Cli::OK;
     }
 }

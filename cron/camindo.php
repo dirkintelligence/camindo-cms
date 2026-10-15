@@ -9,10 +9,12 @@
  *     php Core/cron/camindo.php backup | backup prune --keep=5
  *     php Core/cron/camindo.php schema export
  *     php Core/cron/camindo.php cache snippets [--prefix=… | --remove=…] | list
+ *     php Core/cron/camindo.php cache records [--instance=ID] [--area=ID,…]
  *     php Core/cron/camindo.php component list | install NAME | activate NAME | deactivate NAME
  *                                        | update NAME | uninstall NAME [--purge]
  *     php Core/cron/camindo.php refresh [components]
- *     php Core/cron/camindo.php refresh snippets | html [--prefix=…]
+ *     php Core/cron/camindo.php refresh snippets | html [--prefix=…] | records [--instance=ID] [--area=ID,…]
+ *     php Core/cron/camindo.php htaccess [status] | renew
  *     php Core/cron/camindo.php api login --admin=NAME | call METHOD '{…}' --session=ID | logout
  *
  * Commands: Camindo\Core\Cli\Cli (dispatcher) and Camindo\Core\Cli\{Name}Command.

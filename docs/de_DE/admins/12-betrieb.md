@@ -238,6 +238,12 @@ cache include
 Ausgabe-Cache der Templates (`CMS:INCLUDE … caching=…`) leeren – etwa damit eine Inhaltsänderung sofort sichtbar wird
 
 ```
+cache records [--instance=ID] [--area=ID,…]
+refresh records [--instance=ID] [--area=ID,…]
+```
+***Datensatz-Cache*** leeren – alle Websites, eine Website (`--instance`) oder einzelne Bereiche (`--area`, mehrere durch Kommas getrennt). Nötig etwa nach Änderungen direkt in der Datenbank. Die Einträge entstehen beim nächsten Abruf neu, offene Arbeitskopien bleiben unberührt. Nicht Teil von `cache all`. Dasselbe im Backend unter „Werkzeuge“ → „Server“ → „Datensatz-Cache leeren“
+
+```
 refresh
 ```
 Komponenten mit der Datenbank abgleichen
@@ -310,6 +316,12 @@ Die API auf der Kommandozeile: `login` legt eine Sitzung für den Benutzer an un
 cache instances
 ```
 den Zwischenspeicher für Websites, Sprachen, Bereiche und Gruppenrechte neu schreiben (auch Teil von `cache all`)
+
+```
+htaccess
+htaccess renew
+```
+***.htaccess*** prüfen bzw. erneuern – wie die Schaltfläche „Erneuern“ unter „Werkzeuge“ → „Server“. Ohne Zusatz meldet der Befehl, ob die Datei zur Verzeichnisstruktur passt (Exit-Code 1, wenn nicht); `renew` schreibt den von camindo CMS verwalteten Abschnitt neu, Zeilen außerhalb bleiben erhalten. `upgrade` erneuert die Datei ohnehin
 
 
 ### Schlüssel wechseln

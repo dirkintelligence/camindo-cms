@@ -1,0 +1,20 @@
+<h4 class="mt-4">{#tools.headline_record_cache}</h4>
+<p class="c9-grey-50">{#tools.note_record_cache}</p>
+<form action="Tools/index_server.php" method="post">
+<input type="hidden" name="function" value="clear_record_cache">
+<div class="row mt-2 mb-2">
+    <div class="c9-col-1 pt-1"><label for="c9-record-cache-scope">{#tools.label_record_cache_scope}</label></div>
+    <div class="c9-col-2">
+        <select class="form-select" id="c9-record-cache-scope" name="scope">
+            {options}
+        </select>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="c9-col-1"></div>
+    <div class="c9-col-2">
+        <button type="submit" class="btn btn-secondary"><span class="icon" aria-hidden="true">delete_sweep</span> {#tools.button_record_cache_clear}</button>
+    </div>
+</div>
+</form>
+<br>

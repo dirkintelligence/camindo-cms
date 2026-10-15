@@ -235,7 +235,7 @@ Das Modul „Werkzeuge“ hat fünf Reiter; für jeden gibt es ein eigenes Zusat
 
 | Reiter | Werkzeuge |
 |---|---|
-| „Server“ | Versionen von camindo CMS, Betriebssystem, Webserver, Datenbank und PHP; Prüfung und Erneuerung der `.htaccess`-Datei; MySQL-Konfiguration; Verfügbarkeit von ImageMagick und ffmpeg; PHP-Info |
+| „Server“ | Versionen von camindo CMS, Betriebssystem, Webserver, Datenbank und PHP; Prüfung und Erneuerung der `.htaccess`-Datei; „Datensatz-Cache leeren“ – für alle Websites, eine Website oder einen Bereich; MySQL-Konfiguration; Verfügbarkeit von ImageMagick und ffmpeg; PHP-Info |
 | „Datenbank“ | „Papierkorb leeren“ – endgültiges Löschen von Datensätzen und Bereichen, die älter als *n* Tage im Papierkorb liegen (0 = alles); „Arbeitskopien verwerfen“ – liegen gebliebene Arbeitskopien älter als *n* Stunden entfernen und die Originale wieder freigeben |
 | „Daten“ | „Thumbnails neu erzeugen“ für alle Datensätze eines Bereichs (siehe [Kapitel 8](./08-medien.md#thumbnails-neu-erzeugen)); „Baum normalisieren“ – prüft und repariert die Reihenfolge in Bereichen mit Baumstruktur, falls sie etwa durch direkte Datenbankeingriffe durcheinandergeraten ist; die bestehende Reihenfolge bleibt erhalten |
 | „Papierkorb eines Users“ | Profil und Beiträge eines Website-Users, die im Papierkorb liegen, sofort endgültig löschen – etwa auf Verlangen des Users (siehe [Kapitel 15](./15-datenschutz.md#papierkorb-eines-website-users-sofort-leeren)) |
