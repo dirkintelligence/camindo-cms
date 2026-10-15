@@ -263,7 +263,7 @@ php Core/cron/camindo.php key rotate
 
 The command backs up the database, switches on maintenance mode, re-encrypts everything with the new key, re-signs (including the checksum chain of the audit log, after the old one has been checked) and signs out all users. It can be run at most once every 24 hours – a second call so soon afterwards would be a mistake; `key status` names the earliest possible time. The old key remains as a ***retired key*** in `.camindo.key.retired`: passwords cannot be converted, because camindo CMS does not know them – they remain valid and are switched automatically to the new key at the next sign-in. Recovery codes and known devices remain valid as well.
 
-***File permissions of the key:*** The new `.camindo.key` and `.camindo.key.retired` receive the same permissions as the previous `.camindo.key` – even if you have deliberately set permissions other than `0600`, for example because the web server can read the file on your system only through the group. If there is no `.camindo.key`, because the key comes from the environment variable `CAMINDO_KEY`, the setting `permissions.key_file` in `.camindo.php` applies (default `0600`). `key status` warns if the permissions of the file deviate from it.
+***File permissions of the key:*** The new `.camindo.key` and `.camindo.key.retired` receive the same permissions as the previous `.camindo.key` – even if you have deliberately set permissions other than `0600`, for example because the web server can read the file on your system only through the group. If there is no `.camindo.key`, because the key comes from the environment variable `CAMINDO_KEY`, the setting `permissions.key_file` in `.camindo.php` applies (default `0600`). `key status` warns if the permissions of the file deviate from it. If you run the change as `root`, both files also keep the owner of the previous `.camindo.key` – otherwise the web server could no longer read them afterwards.
 
 `key status` shows the current key, retired keys with the deadline `security.key_password_grace_days` (default 90 days) and how many passwords still depend on the old key. Once the deadline has passed, remove the old key with `key retire KID --force`: whoever has not signed in by then needs a new password (user: `admin password NAME`, frontend user: “Forgot password”), and recovery codes from before the change no longer apply.
 
@@ -363,7 +363,7 @@ Passwords and the key need not be in files in the project directory. If your hos
 | `CAMINDO_DB_PASS` | `db.pass` | variable before `.camindo.php` |
 | `CAMINDO_SMTP_PASS` | `email.smtp.pass` | variable before `.camindo.php` |
 | `CAMINDO_AI_API_KEY` | `ai.api_key` (add-on AI assistant) | variable before `.camindo.php` |
-| `CAMINDO_KEY` | the key file `.camindo.key` (exactly its content) | **file before variable** – so that after a [key change](#changing-the-key) the new key applies until you have updated the variable |
+| `CAMINDO_KEY` | the key file `.camindo.key` (exactly its content) | **file before variable** – so that after a [key change](#changing-the-key) the new key applies until you have updated the variable. If the file exists but is not readable, camindo CMS aborts instead of taking the variable |
 
 An empty variable counts as not set. camindo CMS does **not** read an `.env` file – the variables must reach the environment of PHP from outside, both for the web server and for the cron jobs and the command line.
 

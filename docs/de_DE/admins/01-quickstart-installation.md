@@ -131,6 +131,16 @@ tut nichts.
 | `.camindo.key` | Schlüssel für verschlüsselte Felder und Passwörter | **nicht ersetzbar** – ohne ihn sind verschlüsselte Inhalte verloren. Bitte Kopie an einem sicheren Ort aufbewahren! |
 | `.sqlpwd` | Passwort für `mysqldump` | neu anlegen mit `install --step=sqlpwd` |
 
+Alle drei Dateien erhalten die Rechte `0600`, nur ihr Eigentümer kann sie lesen. Das passt,
+wenn Kommandozeile und Webserver unter demselben Benutzer laufen – bei den meisten
+Hosting-Angeboten mit eigenem PHP-Benutzer je Kunde ist das so. Führen Sie den Installer
+dagegen als `root` aus (etwa in einem Docker-Container oder mit `sudo`), übergibt er die
+Dateien an den ***Webserver-Benutzer***: an den mit `--web-user=NAME` genannten (oder in
+der Umgebungsvariablen `CAMINDO_WEB_USER`), sonst an den Eigentümer des
+Projektverzeichnisses. Ist keiner von beiden bekannt, gehören die Dateien `root`, und der
+Installer warnt – holen Sie die Übergabe dann mit
+`php Core/cron/camindo.php install --step=key --web-user=NAME` nach.
+
 Passwörter und Schlüssel aus diesen Dateien können alternativ auch in ***Umgebungsvariablen***
 stehen, wenn Ihr Server das anbietet; mehr dazu siehe
 [Zugangsdaten aus Umgebungsvariablen](./12-betrieb.md#zugangsdaten-aus-umgebungsvariablen).
@@ -277,7 +287,8 @@ das Modul „[Komponenten](./10-module.md#komponenten)“ im Backend.
 | „503 – Wartung“ nach einem Update | → `php Core/cron/camindo.php upgrade` ausführen (Datenbank nachziehen) |
 | Anmeldung scheitert ohne Fehlermeldung,<br>im Anmeldedialog steht ein Hinweis zu HTTPS | Sie rufen das Backend über `http://` auf, `cookie_secure` ist aber `true` → siehe [Lokal ohne HTTPS testen](#lokal-ohne-https-testen) |
 | Anmelde-Code kommt nicht an | → E-Mail-Postfach in `.camindo.php` einrichten (siehe [Betrieb](./12-betrieb.md#e-mail-versand)) |
-| Fehler 500 im Frontend und im Backend,<br>auf der Kommandozeile:<br>`CONFIGURATION ERROR:`<br>`paths.key_file -`<br>`file not found or not readable` | Die Schlüsseldatei `.camindo.key` fehlt oder der Benutzer, unter dem Webserver bzw. Cronjob laufen, darf sie nicht lesen → Eigentümer und Rechte prüfen (`chmod 600 .camindo.key`; kann der Webserver die Datei auf Ihrem System nur über die Gruppe lesen, `chmod 640`). Fehlt die Datei, holen Sie sie aus Ihrer [Datensicherung](./12-betrieb.md#datensicherung) zurück – **nicht neu erzeugen**: `install --step=key` schriebe einen neuen Schlüssel, verschlüsselte Inhalte und Passwörter wären dann unbrauchbar. Kommt der Schlüssel aus der Umgebungsvariablen `CAMINDO_KEY`, prüfen Sie, ob sie für Webserver **und** Cronjob gesetzt ist |
+| Fehler 500 im Frontend und im Backend,<br>auf der Kommandozeile:<br>`CONFIGURATION ERROR:`<br>`.camindo.key exists but is not readable` | Der Benutzer, unter dem Webserver bzw. Cronjob laufen, darf die Schlüsseldatei nicht lesen – meist, weil der Installer oder ein Schlüsselwechsel als `root` lief → `php Core/cron/camindo.php status` nennt die betroffenen Dateien; als `root` übergibt `install --step=key --web-user=NAME` sie an den Webserver-Benutzer (sonst `chown`; kann der Webserver die Datei auf Ihrem System nur über die Gruppe lesen, `chmod 640`). camindo CMS weicht in diesem Fall bewusst **nicht** auf die Umgebungsvariable `CAMINDO_KEY` aus. Dasselbe gilt für `.camindo.key.retired` |
+| Fehler 500 im Frontend und im Backend,<br>auf der Kommandozeile:<br>`CONFIGURATION ERROR:`<br>`paths.key_file -`<br>`file not found` | Die Schlüsseldatei `.camindo.key` fehlt. Holen Sie sie aus Ihrer [Datensicherung](./12-betrieb.md#datensicherung) zurück – **nicht neu erzeugen**: `install --step=key` schriebe einen neuen Schlüssel, verschlüsselte Inhalte und Passwörter wären dann unbrauchbar. Kommt der Schlüssel aus der Umgebungsvariablen `CAMINDO_KEY`, prüfen Sie, ob sie für Webserver **und** Cronjob gesetzt ist |
 | Etwas anderes | → `php Core/cron/camindo.php status` zeigt den Zustand des Systems; `var/log/` enthält die Details |
 
 Einzelne Schritte des Installers lassen sich wiederholen, ohne die Datenbank

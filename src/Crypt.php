@@ -8,7 +8,10 @@
  * key applies until the variable is updated by hand. If both are missing, it
  * throws immediately - deliberately no silent fallback, otherwise undecryptable
  * data would result. Likewise if the variable alone contains a retired
- * key (file removed after the rotation, variable not updated).
+ * key (file removed after the rotation, variable not updated), and if the file
+ * (or {key_file}.retired) exists but cannot be read - typically owner or mode
+ * not matching the web server user: falling back to the variable would then
+ * encrypt under whatever key it happens to hold.
  *
  * WARNING: if .camindo.key is lost, all contents of encrypted fields
  * (type `encrypted`, table data_enc) are irrecoverably lost. The file belongs in the
@@ -128,8 +131,8 @@ class Crypt {
         if (empty($keyFile)) {
             throw new \RuntimeException('CONFIGURATION ERROR: paths.key_file is empty!');
         }
-        if ((!file_exists($keyFile) || !is_readable($keyFile)) && Config::env(Config::ENV_KEY) === null) {
-            throw new \RuntimeException('CONFIGURATION ERROR: paths.key_file - file not found or not readable, and no ' . Config::ENV_KEY . ' set!');
+        if (!file_exists($keyFile) && Config::env(Config::ENV_KEY) === null) {
+            throw new \RuntimeException('CONFIGURATION ERROR: paths.key_file - file not found, and no ' . Config::ENV_KEY . ' set!');
         }
 
         $this->reloadKeys();
@@ -142,8 +145,10 @@ class Crypt {
     public function reloadKeys(): void
     {
         $keyFile = (string)$this->config->get('paths.key_file');
-        if (is_file($keyFile) && is_readable($keyFile)) {
-            $this->key = (string)file_get_contents($keyFile);
+        self::assertReadable($keyFile);
+        self::assertReadable($keyFile . '.retired');
+        if (is_file($keyFile)) {
+            $this->key = (string)@file_get_contents($keyFile);
             $this->keySource = 'file';
         }
         else {
@@ -169,6 +174,28 @@ class Crypt {
             throw new \RuntimeException('CONFIGURATION ERROR: ' . Config::ENV_KEY . ' holds the retired key '
                 . $this->keyId . ' - set it to the current key (or restore ' . basename($keyFile) . ')');
         }
+    }
+
+    /**
+     * A key file that exists must be readable - no fallback to CAMINDO_KEY or to
+     * "no retired keys" (Installer::secretOwnershipWarnings() explains the cause on the CLI).
+     */
+    private static function assertReadable(string $file): void
+    {
+        if (file_exists($file) && !is_readable($file)) {
+            throw new \RuntimeException('CONFIGURATION ERROR: ' . basename($file) . ' exists but is not readable'
+                . ' (owner/mode, running as ' . self::processUser() . ')');
+        }
+    }
+
+    /** Name of the user this process runs as (for error messages) */
+    public static function processUser(): string
+    {
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $info = posix_getpwuid(posix_geteuid());
+            if (is_array($info)) return (string)$info['name'];
+        }
+        return get_current_user();
     }
 
     /** Is the key in {key_file}.retired? (ids there whose line was skipped included) */
