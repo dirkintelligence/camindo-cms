@@ -34,7 +34,7 @@ ausgeschaltet, erscheint ein [Betriebshinweis](#betriebshinweise-auf-der-startse
 | ***Temporäre Dateien löschen*** | stündlich :10 | `var/tmp/` und abgelaufene Exportdateien (auch Datenauskünfte) aufräumen |
 | ***Papierkorb leeren*** | täglich 2:20 | Einträge endgültig löschen, die länger als `admin.trash_retention_days` im Papierkorb liegen |
 | ***Lösch-Policies anwenden*** | täglich 2:30 | fällige Aufträge der [Lösch-Policies](./15-datenschutz.md#löschen-nach-lösch-policy) |
-| ***Aufbewahrungsfristen anwenden*** | täglich 2:45 | IP-Adressen kürzen, abgelaufene Einträge des Audit-Logs, alte interne Nachrichten und nie bestätigte Registrierungen löschen ([Kapitel 15](./15-datenschutz.md)) |
+| ***Aufbewahrungsfristen anwenden*** | täglich 2:45 | IP-Adressen kürzen, abgelaufene Einträge des Audit-Logs, alte interne Nachrichten und nie bestätigte Registrierungen löschen ([Kapitel 15](./15-datenschutz.md)), dazu die Fristen installierter Zusatzmodule – etwa gelöschte Chats des KI-Assistenten |
 | ***Logs aufräumen*** | täglich 3:00 | alte Logdateien und Anmeldeversuche löschen (siehe [Protokolle](#protokolle)) |
 | ***Frontend-Cache aufräumen*** | täglich 3:10 | abgelaufene Dateien des Ausgabe-Caches. Nutzen Templates `caching` mit kurzen Fristen, sollte diese Aufgabe stündlich eingerichtet werden. |
 | ***Volltext neu aufbauen*** | täglich 3:20, nur veraltete Bereiche | baut die Bereiche neu auf, deren Volltext nach einer Strukturänderung als nicht mehr aktuell markiert ist. Nutzen Volltextfelder Quellen hinter einer „Verknüpfung“, ist für diese Bereiche eine zusätzliche Aufgabe sinnvoll. Ohne diese Option reicht wöchentlich oder manuell (siehe [Volltext neu aufbauen](./05-eingabefelder.md#volltext-neu-aufbauen)) |

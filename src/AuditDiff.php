@@ -191,10 +191,11 @@ class AuditDiff {
      * per field field, label, language, before, after. Passwords only as ***,
      * encrypted values decrypted.
      *
-     * @param int $truncate  truncate values from this many characters (0 = never); truncated
-     *                       changes carry truncated = true
+     * @param int  $truncate       truncate values from this many characters (0 = never); truncated
+     *                             changes carry truncated = true
+     * @param bool $maskEncrypted  encrypted values only as "[encrypted]" (ApiContext::maskEncrypted())
      */
-    public function plainChanges(array $changes, int $truncate = 0): array
+    public function plainChanges(array $changes, int $truncate = 0, bool $maskEncrypted = false): array
     {
         $list = [];
         foreach ($changes as $change) {
@@ -204,6 +205,10 @@ class AuditDiff {
             if ($type === 'password') {
                 $before = $before === '' ? '' : '***';
                 $after = $after === '' ? '' : '***';
+            }
+            elseif ($type === 'encrypted' && $maskEncrypted) {
+                $before = $before === '' ? '' : \Camindo\Core\Api\ApiContext::ENCRYPTED_PLACEHOLDER;
+                $after = $after === '' ? '' : \Camindo\Core\Api\ApiContext::ENCRYPTED_PLACEHOLDER;
             }
             elseif ($type === 'encrypted') {
                 $before = $this->auditLog->decryptValue($before);

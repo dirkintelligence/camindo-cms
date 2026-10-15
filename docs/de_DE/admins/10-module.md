@@ -195,7 +195,7 @@ temporäre Dateien, Fristen, Logs, Prüfungen – legt die Installation an (sieh
 | ***Papierkorb leeren*** | löscht Datensätze und Inhaltsbereiche endgültig, die länger als `admin.trash_retention_days` (Vorgabe 7 Tage) im Papierkorb liegen. Keine Einstellungen |
 | ***Temporäre Dateien löschen*** | räumt `var/tmp/` auf (`admin.tmp_retention_hours`) und löscht abgelaufene Exportdateien (`admin.export_retention_hours`). Keine Einstellungen. Empfohlen: stündlich |
 | ***Lösch-Policies anwenden*** | führt die fälligen Aufträge der [Lösch-Policies](./15-datenschutz.md#löschen-nach-lösch-policy) aus. Keine Einstellungen |
-| ***Aufbewahrungsfristen anwenden*** | kürzt IP-Adressen, löscht abgelaufene Einträge des Audit-Logs, alte interne Nachrichten und nie bestätigte Registrierungen – nach den Fristen der Konfiguration. Keine Einstellungen |
+| ***Aufbewahrungsfristen anwenden*** | kürzt IP-Adressen, löscht abgelaufene Einträge des Audit-Logs, alte interne Nachrichten und nie bestätigte Registrierungen – nach den Fristen der Konfiguration; dazu die Fristen installierter Zusatzmodule, etwa gelöschte Chats des KI-Assistenten. Keine Einstellungen |
 | ***Audit-Log prüfen*** | prüft die Dateien des [Audit-Logs](#audit-log) auf Manipulation; Befunde erscheinen auf der Startseite. Keine Einstellungen |
 | ***Nach Updates suchen*** | sucht neuere Versionen und bekannte Sicherheitslücken (siehe [Updates](./12-betrieb.md#updates)). Keine Einstellungen |
 | ***Nachrichten per E-Mail zusammenfassen*** | schickt Benutzern, die es in ihren persönlichen Einstellungen gewählt haben, eine Zusammenfassung ihrer neuen internen Nachrichten (siehe [Nachrichten](#nachrichten)). Neu sind die Nachrichten seit dem vorigen Lauf – einmal täglich ausführen. Keine Einstellungen |

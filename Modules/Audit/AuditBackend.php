@@ -354,9 +354,16 @@ class AuditBackend {
         ]);
     }
 
+    /**
+     * Label of an object type; types of additional modules ("{module}_…", e.g. ai_chat)
+     * from the snippet {module}.audit_type_{type} of the module, otherwise the type itself.
+     */
     private function _typeLabel(string $type): string
     {
-        return isset(self::TYPE_LABELS[$type]) ? $this->cms->snippet(self::TYPE_LABELS[$type]) : $type;
+        if (isset(self::TYPE_LABELS[$type])) return $this->cms->snippet(self::TYPE_LABELS[$type]);
+        $key = strtok($type, '_') . '.audit_type_' . $type;
+        $label = preg_match('/^[a-z0-9]+_[a-z0-9_]+$/', $type) ? $this->cms->snippet($key) : $key;
+        return $label !== $key ? $label : $type;
     }
 
     /**

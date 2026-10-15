@@ -20,6 +20,16 @@
  * logged-in admin. Only then are there preview links (they hang on a
  * backend session, FrontendHandover), and logout() does not end the session.
  *
+ * ENCRYPTED FIELDS MASKED
+ * --------------------
+ * maskEncrypted(true) - e.g. the assistant of the module Ai with ai.decrypt = false:
+ * the API outputs the content of fields of type encrypted only as ENCRYPTED_PLACEHOLDER
+ * (ApiValues, record lists and labels, before/after in the audit history). Only the
+ * output is masked - reading and saving inside work with the real values. Sending the
+ * placeholder back leaves the stored value unchanged (RecordApi, DatasetWriter).
+ * Searching by the value of an encrypted field still works (comparison via the HMAC,
+ * the content does not come back). end() switches it off.
+ *
  * @see Camindo\Core\Api\ApiSession   establishes the state
  * @see Camindo\Core\Api\Api          checks it before each call (require())
  */
@@ -35,8 +45,12 @@ class ApiContext
 {
     public const CHANNELS = ['llm', 'tool', 'scheduler', 'cli', 'php'];
 
+    /** Output of an encrypted value with maskEncrypted() */
+    public const ENCRYPTED_PLACEHOLDER = '[encrypted]';
+
     private string $channel = '';
     private bool $attached = false;
+    private bool $maskEncrypted = false;
     private array $warnings = [];
 
     public function __construct(
@@ -75,7 +89,29 @@ class ApiContext
     {
         $this->channel = '';
         $this->attached = false;
+        $this->maskEncrypted = false;
         $this->auditLog->setContext('');
+    }
+
+    /** Output encrypted values only as ENCRYPTED_PLACEHOLDER (see class comment) */
+    public function maskEncrypted(bool $mask = true): void
+    {
+        $this->maskEncrypted = $mask;
+    }
+
+    public function masksEncrypted(): bool
+    {
+        return $this->maskEncrypted;
+    }
+
+    /**
+     * Masked output of an encrypted value: empty stays empty, otherwise the
+     * placeholder (also per language).
+     */
+    public function maskedValue(mixed $value): mixed
+    {
+        if (is_array($value)) return array_map(fn($item) => $this->maskedValue($item), $value);
+        return ($value === null || $value === '') ? $value : self::ENCRYPTED_PLACEHOLDER;
     }
 
     public function active(): bool

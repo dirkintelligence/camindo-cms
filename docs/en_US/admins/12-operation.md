@@ -22,7 +22,7 @@ The ***scheduler*** performs recurring and demanding work in the background, wit
 | ***Delete temporary files*** | hourly at :10 | clean up `var/tmp/` and expired export files (including personal data reports) |
 | ***Empty trash*** | daily at 2:20 | permanently delete entries that have been in the trash longer than `admin.trash_retention_days` |
 | ***Apply deletion policies*** | daily at 2:30 | due jobs of the [deletion policies](./15-privacy.md#deleting-according-to-deletion-policy) |
-| ***Apply retention periods*** | daily at 2:45 | shorten IP addresses, delete expired entries of the audit log, old internal messages and registrations that were never confirmed ([chapter 15](./15-privacy.md)) |
+| ***Apply retention periods*** | daily at 2:45 | shorten IP addresses, delete expired entries of the audit log, old internal messages and registrations that were never confirmed ([chapter 15](./15-privacy.md)), plus the periods of installed add-on modules – such as deleted chats of the AI assistant |
 | ***Clean up logs*** | daily at 3:00 | delete old log files and sign-in attempts (see [logs](#logs)) |
 | ***Clean up frontend cache*** | daily at 3:10 | expired files of the output cache. If templates use `caching` with short periods, this task should be set up hourly. |
 | ***Rebuild full text*** | daily at 3:20, only outdated areas | rebuilds the areas whose full text is marked as no longer current after a structural change. If full-text fields use sources behind a “link”, an additional task makes sense for these areas. Without this option, weekly or manual suffices (see [rebuild full text](./05-input-fields.md#rebuilding-the-full-text)) |
