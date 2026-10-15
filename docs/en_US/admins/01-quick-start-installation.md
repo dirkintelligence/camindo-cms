@@ -177,6 +177,11 @@ At your hosting provider, set the target directory of the domain in the customer
 (Let's Encrypt, the certificate of your host) – camindo CMS does not require anything
 special for this.
 
+As a precaution, the project directory itself contains an ***`.htaccess` that blocks access***:
+if the domain accidentally points to the project directory instead of `public/`, Apache
+answers every request with 403. The website in `public/` is not affected, because its own
+`.htaccess` lifts the block. Do not delete the file.
+
 ### Test locally without HTTPS
 
 camindo CMS is set to HTTPS by default: the sign-in cookies for the back end and for
