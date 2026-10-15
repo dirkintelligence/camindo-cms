@@ -165,6 +165,12 @@ cache include
 Empty the output cache of the templates (`CMS:INCLUDE … caching=…`) – for example so that a content change becomes visible immediately
 
 ```
+cache records [--instance=ID] [--area=ID,…]
+refresh records [--instance=ID] [--area=ID,…]
+```
+Clear the ***record cache*** – all websites, one website (`--instance`) or single areas (`--area`, several separated by commas). Needed for example after changes made directly in the database. The entries are rebuilt on the next access, open working copies are not affected. Not part of `cache all`. The same in the backend under “Tools” → “Server” → “Clear record cache”
+
+```
 refresh
 ```
 Compare components with the database
@@ -237,6 +243,12 @@ The API on the command line: `login` creates a session for the user and outputs 
 cache instances
 ```
 Rewrite the buffer for websites, languages, areas and group rights (also part of `cache all`)
+
+```
+htaccess
+htaccess renew
+```
+Check or renew the ***.htaccess*** – like the “Renew” button under “Tools” → “Server”. Without an argument the command reports whether the file matches the directory structure (exit code 1 if not); `renew` rewrites the section managed by camindo CMS, lines outside it are kept. `upgrade` renews the file anyway
 
 
 ### Changing the key

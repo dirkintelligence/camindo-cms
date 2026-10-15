@@ -1,6 +1,7 @@
 <?php
 /**
- * Content of the "Server" tab in the toolbox - and the maintenance of the .htaccess.
+ * Content of the "Server" tab in the toolbox - the maintenance of the .htaccess and
+ * clearing the content cache record_cache.
  *
  * Entry points (scripts in backend/):
  *
@@ -18,8 +19,14 @@
  * These exceptions appear as RewriteCond lines in a managed block of the
  * public/.htaccess; a checksum over the directory list reveals whether the file is
  * outdated. Creating and checking is done by Camindo\Core\HtaccessWriter - the same
- * class is used by camindo.php upgrade and the installer. Here: the button and the
- * display of the state.
+ * class is used by camindo.php upgrade and the installer (and camindo.php htaccess).
+ * Here: the button and the display of the state.
+ *
+ * RECORD CACHE
+ * --------------------
+ * Discards `record_cache` of all instances, of one instance or of one area
+ * (Camindo\Core\RecordCache, also camindo.php cache records); the rows are rebuilt on
+ * access. One selection without script: "i:{id}" = instance, "a:{id}" = area, "" = all.
  *
  * @see Camindo\Core\Modules\Tools\ToolVersions  versions of the external programs
  * @see Camindo\Core\Modules\Tools\ToolsBackend  frame with the tabs
@@ -32,6 +39,8 @@ use Camindo\Core\System;
 use Camindo\Core\Backend;
 use Camindo\Core\Cms;
 use Camindo\Core\HtaccessWriter;
+use Camindo\Core\InstanceCache;
+use Camindo\Core\RecordCache;
 
 class ToolServer {
 
@@ -43,6 +52,8 @@ class ToolServer {
         private Cms $cms,
         private ToolVersions $toolVersions,
         private HtaccessWriter $htaccess,
+        private RecordCache $recordCache,
+        private InstanceCache $instanceCache,
     )
     {
     }
@@ -50,15 +61,16 @@ class ToolServer {
     /**
      * Output server overview.
      *
-     * Three sections: server components as an info table, the state of the two
-     * command-line tools, and the state of the .htaccess with the button for the
-     * rebuild.
+     * Four sections: server components as an info table, the state of the two
+     * command-line tools, the state of the .htaccess with the button for the
+     * rebuild, and the form for clearing the record cache.
      *
      * The button sends function=renew_htaccess back to the same page - the
      * evaluation therefore sits in the middle of the method, before the state check, so that
      * the message afterwards shows the NEW state.
      *
-     * Request: function = renew_htaccess (optional)
+     * Request: function = renew_htaccess | clear_record_cache (optional),
+     *          scope = '' | 'i:{instance_id}' | 'a:{area_id}' (with clear_record_cache)
      */
     public function list() {
         // Additional right "server" (backend user groups; without session - cache bootstrap, CLI - everything applies)
@@ -166,6 +178,75 @@ class ToolServer {
 
         echo $this->backend->buttonBar('button_bar_vertical');
 
+        // Record cache
+        // --------------------
+        $scope = (string)($_REQUEST['scope'] ?? '');
+        if ($function === 'clear_record_cache') {
+            // Deletes - only via POST, like renew_htaccess
+            if ($this->backend->requirePost()) {
+                $this->clearRecordCache($scope);
+            }
+            else {
+                echo $this->backend->access()->deniedHtml();
+            }
+        }
+        $this->recordCacheForm($scope);
+    }
+
+    /**
+     * Clear the record cache for the selection and report the number of rows.
+     *
+     * @param string $scope  '' all, 'i:{id}' instance, 'a:{id}' area
+     */
+    private function clearRecordCache(string $scope): void
+    {
+        $instanceId = 0;
+        $areaIds = [];
+        if (preg_match('/^([ia]):(\d+)$/', $scope, $m)) {
+            if ($m[1] === 'i') $instanceId = (int)$m[2];
+            else $areaIds = [(int)$m[2]];
+        }
+        try {
+            $rows = $this->recordCache->clear($instanceId, $areaIds);
+        }
+        catch (\InvalidArgumentException) {
+            echo $this->backend->template('alert_danger', [
+                '{text}' => htmlspecialchars($this->cms->snippet('tools.error_record_cache_scope'))
+            ]);
+            return;
+        }
+        echo $this->backend->template('alert_success', [
+            '{text}' => htmlspecialchars($this->cms->snippet('tools.record_cache_summary', ['rows' => $rows]))
+        ]);
+    }
+
+    /**
+     * The form: one selection "all / instance / area" (areas with records, grouped by
+     * instance; with only one instance without the instance entries).
+     */
+    private function recordCacheForm(string $scope): void
+    {
+        $option = fn(string $value, string $label) => '<option value="' . $value . '"'
+            . ($value === $scope ? ' selected' : '') . '>' . htmlspecialchars($label) . '</option>' . "\n";
+
+        $multi = $this->instanceCache->hasMultipleInstances();
+        $instances = $this->instanceCache->instanceLabels();
+        $areas = $this->recordCache->areaOptions($this->cms);
+
+        $options = $option('', $this->cms->snippet($multi ? 'tools.option_record_cache_all' : 'tools.option_record_cache_all_areas'));
+        foreach ($instances as $instanceId => $label) {
+            $label = $this->cms->_strip_tags($this->cms->textOrSnippet($label));
+            if ($multi) {
+                $options .= '<optgroup label="' . htmlspecialchars($label) . '">' . "\n"
+                    . $option('i:' . $instanceId, str_replace('{instance}', $label, $this->cms->snippet('tools.option_record_cache_instance')));
+            }
+            foreach ($areas[$instanceId] ?? [] as $areaId => $areaLabel) {
+                $options .= $option('a:' . $areaId, $areaLabel);
+            }
+            if ($multi) $options .= '</optgroup>' . "\n";
+        }
+
+        echo $this->backend->template('tools.record_cache_form', ['{options}' => $options]);
     }
 
     /**
