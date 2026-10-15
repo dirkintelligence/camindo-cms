@@ -2,7 +2,7 @@
     "name": "camindo/project",
     "description": "camindo CMS project skeleton: composer create-project camindo/project mysite",
     "type": "project",
-    "license": "proprietary",
+    "license": "AGPL-3.0-or-later",
     "require": {
         "php": ">=8.3",
         "camindo/composer-plugin": "^1.0",
