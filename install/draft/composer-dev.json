@@ -2,7 +2,7 @@
     "name": "camindo/project-dev",
     "description": "camindo CMS development project: Core/ is a git checkout, not a composer package (replace)",
     "type": "project",
-    "license": "proprietary",
+    "license": "AGPL-3.0-or-later",
     "replace": {
         "camindo/cms": "9.x-dev"
     },
