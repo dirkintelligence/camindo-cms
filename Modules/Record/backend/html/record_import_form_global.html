@@ -40,13 +40,13 @@
 <div class="table-responsive c9-import-scope">
 <table class="table table-sm align-middle">
 <thead class="text-nowrap"><tr>
-<th>{#area.field_area_label}</th>
-<th>{#area.field_area_type}</th>
-<th style="min-width:80px">{#area.field_area_name}</th>
-<th>{#record.column_import_target}</th>
-<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_structure} <span class="icon" aria-hidden="true"more_vert</span></a><ul class="dropdown-menu" data-column="structure">{column_items}</ul></div></th>
-<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_records} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="records">{column_items}</ul></div></th>
-<th><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_templates} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="templates">{column_items}</ul></div></th>
+<th scope="col">{#area.field_area_label}</th>
+<th scope="col">{#area.field_area_type}</th>
+<th scope="col" style="min-width:80px">{#area.field_area_name}</th>
+<th scope="col">{#record.column_import_target}</th>
+<th scope="col"><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_structure} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="structure">{column_items}</ul></div></th>
+<th scope="col"><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_records} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="records">{column_items}</ul></div></th>
+<th scope="col"><div class="dropdown"><a href="#" class="text-decoration-none text-reset" data-bs-toggle="dropdown" aria-expanded="false">{#record.label_import_templates} <span class="icon" aria-hidden="true">more_vert</span></a><ul class="dropdown-menu" data-column="templates">{column_items}</ul></div></th>
 </tr></thead>
 <tbody>
 {rows}

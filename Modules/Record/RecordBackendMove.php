@@ -272,7 +272,7 @@ class RecordBackendMove extends RecordBackendEdit {
             }
             $errorHtml = '';
             foreach (array_unique($errorTexts) as $text) {
-                $errorHtml .= $this->backend->template('form_error', ['{text}' => $text]);
+                $errorHtml .= $this->backend->template('form_error', ['{id}' => 'c9-error-' . bin2hex(random_bytes(4)), '{text}' => $text]);
             }
 
             $multilingual = $this->cms->isMultilingualField($colDef)

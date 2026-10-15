@@ -13,16 +13,18 @@ $modeOptions = [];
 foreach (['auto', 'datetime', 'date'] as $value) {
     $modeOptions[$value] = $cms->snippet('ext.datepicker.option_mode_' . $value);
 }
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.datepicker.option_mode'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.datepicker.option_mode'), '{class}' => '']),
     '{class}' => '',
-    '{field}' => $backend->template('ext.datepicker.field_mode', ['{name}' => $name, '{options}' => $backend->options($modeOptions, $mode)]),
+    '{field}' => $backend->template('ext.datepicker.field_mode', ['{id}' => $fieldId, '{name}' => $name, '{options}' => $backend->options($modeOptions, $mode)]),
 ]);
 foreach (['buttons' => 1, 'week_numbers' => 0] as $option => $default) {
     $checked = (int)($options[$option] ?? $default) === 1 ? ' checked' : '';
+    $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
     echo $backend->template('edit_form_block', [
-        '{label}' => $cms->snippet('ext.datepicker.option_' . $option),
+        '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.datepicker.option_' . $option), '{class}' => '']),
         '{class}' => '',
-        '{field}' => $backend->template('ext.datepicker.field_switch', ['{name}' => $name, '{option}' => $option, '{checked}' => $checked]),
+        '{field}' => $backend->template('ext.datepicker.field_switch', ['{id}' => $fieldId, '{name}' => $name, '{option}' => $option, '{checked}' => $checked]),
     ]);
 }

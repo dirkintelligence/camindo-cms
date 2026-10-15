@@ -10,8 +10,8 @@ this manual clarifies the connections and presents the functions that are easy t
    status, template
 2. [Signing in and out](./02-sign-in.md) – sign-in, sign-in code, language, date format,
    time zone
-3. [The work surface](./03-work-surface.md) – start page, layers, background processes,
-   messages, AI assistant, personal settings, widgets
+3. [The work surface](./03-work-surface.md) – start page, layers, keyboard operation,
+   background processes, messages, AI assistant, personal settings, widgets
 4. [Finding content](./04-finding-content.md) – folder tree, record list, search form,
    search operators, cross-area search
 5. [Editing records](./05-editing-records.md) – creating, editing, copying, moving, deleting,

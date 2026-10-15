@@ -6,12 +6,14 @@
       id="{dropdown_id}" 
       data-bs-toggle="dropdown" 
       aria-expanded="false"
-      aria-haspopup="true">
+      aria-haspopup="true"
+      title="{#more}"
+      aria-label="{#more}">
       <span class="icon" aria-hidden="true">more_vert</span>
     </button>
     
     <ul class="dropdown-menu" aria-labelledby="{dropdown_id}">
-      <li><a class="dropdown-item" href="javascript:cApp.layers.replace(cApp.layers.base() + 'filter[status_id]=0')"><span class="icon" arial-hidden="true">check</span> {#status.status_enabled}</a></li>
-      <li><a class="dropdown-item" href="javascript:cApp.layers.replace(cApp.layers.base() + 'filter[status_id]=1')"><span class="icon" arial-hidden="true">block</span> {#status.status_disabled}</a></li>
+      <li><a class="dropdown-item" href="javascript:cApp.layers.replace(cApp.layers.base() + 'filter[status_id]=0')"><span class="icon" aria-hidden="true">check</span> {#status.status_enabled}</a></li>
+      <li><a class="dropdown-item" href="javascript:cApp.layers.replace(cApp.layers.base() + 'filter[status_id]=1')"><span class="icon" aria-hidden="true">block</span> {#status.status_disabled}</a></li>
     </ul>
   </div>

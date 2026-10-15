@@ -1,7 +1,7 @@
 <form action="Admin/totp.php" method="post">
 <p>{#admin.text_passkey_create}</p>
 <p><span class="icon" aria-hidden="true">passkey</span> <strong>{label}</strong></p>
-<div class="alert alert-danger d-none" data-c9-passkey-error
+<div class="alert alert-danger d-none" role="alert" data-c9-passkey-error
      data-cancelled="{#admin.error_passkey_cancelled}" data-failed="{#admin.error_passkey_failed}"
      data-unsupported="{#admin.error_passkey_unsupported}"></div>
 <input type="hidden" name="function" value="passkey_add">

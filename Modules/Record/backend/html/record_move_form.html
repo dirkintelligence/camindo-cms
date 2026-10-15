@@ -2,8 +2,8 @@
 {instance_warning}
 <table class="table table-striped">
 <thead class="text-nowrap"><tr>
-    <th>{#record.headline_move_source}{#colon} {source_area}</th>
-    <th>{#record.headline_move_target}{#colon} {target_area} <a href="javascript:cApp.layers.replace('Record/record_move.php?{params}&id={id}')" class="ms-2 small fw-normal">{#record.link_move_change_area}</a></th>
+    <th scope="col">{#record.headline_move_source}{#colon} {source_area}</th>
+    <th scope="col">{#record.headline_move_target}{#colon} {target_area} <a href="javascript:cApp.layers.replace('Record/record_move.php?{params}&id={id}')" class="ms-2 small fw-normal">{#record.link_move_change_area}</a></th>
 </tr></thead>
 <tbody>{table_rows}</tbody>
 </table>

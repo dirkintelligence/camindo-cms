@@ -2,20 +2,20 @@
 <table class="table table-sm c9-access-table">
 <thead class="text-nowrap text-center">
 <tr>
-    <th></th>
-    <th></th>
-    <th colspan="2">{#admin.access_own_group}</th>
-    <th colspan="2">{#admin.access_other_group}</th>
-    <th></th>
+    <th scope="col"></th>
+    <th scope="col"></th>
+    <th scope="colgroup" colspan="2">{#admin.access_own_group}</th>
+    <th scope="colgroup" colspan="2">{#admin.access_other_group}</th>
+    <th scope="col"></th>
 </tr>
 <tr>
-    <th class="text-start">{first_column}</th>
-    <th style="width:1%">{#admin.access_read}</th>
-    <th style="width:1%">{#admin.access_write}</th>
-    <th style="width:1%">{#admin.access_delete}</th>
-    <th style="width:1%">{#admin.access_write}</th>
-    <th style="width:1%">{#admin.access_delete}</th>
-    <th style="width:1%" data-bs-toggle="tooltip" data-bs-placement="top" title="{#admin.tooltip_access_extended}">{#admin.access_extended}<span class="icon icon-note ms-1" aria-hidden="true">question_mark</span></th>
+    <th scope="col" class="text-start">{first_column}</th>
+    <th scope="col" style="width:1%">{#admin.access_read}</th>
+    <th scope="col" style="width:1%">{#admin.access_write}</th>
+    <th scope="col" style="width:1%">{#admin.access_delete}</th>
+    <th scope="col" style="width:1%">{#admin.access_write}</th>
+    <th scope="col" style="width:1%">{#admin.access_delete}</th>
+    <th tabindex="0" scope="col" style="width:1%" data-bs-toggle="tooltip" data-bs-placement="top" title="{#admin.tooltip_access_extended}">{#admin.access_extended}<span class="icon icon-note ms-1" aria-hidden="true">question_mark</span></th>
 </tr>
 </thead>
 <tbody>{table_rows}</tbody>

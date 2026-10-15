@@ -327,7 +327,7 @@ class RecordBackendList extends RecordBackend {
 
         if (empty($this->areaId)) {
             // Mehrere Bereiche -> Default-Feld als Spalte
-            $headColumns .= '<td>' . $this->cms->snippet('record.field_default') . "</td>\n";
+            $headColumns .= '<th scope="col">' . $this->cms->snippet('record.field_default') . "</th>\n";
         }
         else {
             // one column per visible field - link fields only if the
@@ -355,13 +355,13 @@ class RecordBackendList extends RecordBackend {
                         '{column_label}' => $headColumn,
                         '{items}' => implode("\n", $statusItems)
                     ]);
-                    $headColumns .= '<td style="width:1px">' . $statusLabelDropdown . '</td>';
+                    $headColumns .= '<th scope="col" style="width:1px">' . $statusLabelDropdown . '</th>';
                 }
                 else {
-                    $headColumns .= '<td>' . $headColumn . "</td>\n";
+                    $headColumns .= '<th scope="col">' . $headColumn . "</th>\n";
                 }
             }
-            if ($hasListTemplate) $headColumns .= "<td></td>\n";
+            if ($hasListTemplate) $headColumns .= "<td></td>\n"; // column without a header
         }
 
         // tree display only if the area has a hierarchy at all -

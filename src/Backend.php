@@ -978,10 +978,14 @@ class Backend {
         }
 
         $sortIcon = '';
+        $sortSpoken = '';
         $newOrder = 'ASC';
         if ($sort[0] == $sortName || $sort[1] == $sortName) {
             // sorting is by this column
             $sortIcon = 'sort_icon_' . strtolower($order[0]);
+            // the icon is hidden from screen readers - the state as text (WCAG 1.3.1)
+            $sortSpoken = '<span class="visually-hidden"> ('
+                . $this->cms->snippet($order[0] === 'DESC' ? 'speak_sorted_desc' : 'speak_sorted_asc') . ')</span>';
             if ($sort[0] == $sortName) {
                 // even as the first
                 $sortIcon .= '_primary';
@@ -1002,7 +1006,8 @@ class Backend {
         // The URL comes from the request - a ' in it (browsers do not encode it in the
         // query string) would otherwise end the JS string
         $script = 'cApp.layers.replace(' . $this->jsString("{$linkWithoutSort}sort={$sortName}&order={$newOrder}") . ')';
-        return '<a' . $this->on('click', $script) . ">{$tplSortIcon}{$colLabel}</a>";
+        // href: reachable with the keyboard ('js' prevents the default action)
+        return '<a href="#"' . $this->on('js', $script) . ">{$tplSortIcon}{$colLabel}{$sortSpoken}</a>";
     }
 
     /**
@@ -1590,7 +1595,9 @@ class Backend {
                         '{color_class}' => $keyClass,
                         '{icon}' => $keyIcon
                     ]);
-                    return $label ? $iconHtml . ' ' . $labelText : $iconHtml;
+                    // icon only: the label stays readable for screen readers (WCAG 1.1.1)
+                    return $label ? $iconHtml . ' ' . $labelText
+                        : $iconHtml . '<span class="visually-hidden">' . $labelText . '</span>';
                 }
                 // else
                 return $labelText;
@@ -1967,6 +1974,8 @@ class Backend {
 
         // unique ID for=..., aria-labeled-by=...
         $uid = $this->crypt->randomKey(16);
+        // ids for aria-describedby: prefix/suffix, note, error message (WCAG 1.3.1, 3.3.1)
+        $describedBy = [];
 
         // Prefix, Suffix
         $inputGroup = '{group_content}';
@@ -1988,7 +1997,8 @@ class Backend {
                 $templateId = 'input_group_prefix_suffix';
                 $idPrefix = $this->crypt->randomKey(16);
                 $idSuffix = $this->crypt->randomKey(16);
-                $attr[] = "aria-describedby=\"$idPrefix $idSuffix\"";
+                $describedBy[] = $idPrefix;
+                $describedBy[] = $idSuffix;
                 
             }
             elseif ($prefix !== '') {
@@ -1999,12 +2009,12 @@ class Backend {
                 // remain as aria-describedby="{id_prefix}".
                 $templateId = 'input_group_prefix';
                 $idPrefix = $this->crypt->randomKey(16);
-                $attr[] = "aria-describedby=\"$idPrefix\"";
+                $describedBy[] = $idPrefix;
             }
             else {
                 $templateId = 'input_group_suffix';
                 $idSuffix = $this->crypt->randomKey(16);
-                $attr[] = "aria-describedby=\"$idSuffix\"";
+                $describedBy[] = $idSuffix;
             }
             $inputGroup = $this->template($templateId, [
                 '{prefix}' => $this->cms->textOrSnippet($prefix),
@@ -2097,6 +2107,8 @@ class Backend {
                 default                       => 'input_label'
             };
         }
+        // The note under the label (id "{uid}-note" in the label template) describes the field
+        if ($note != '') $describedBy[] = $uid . '-note';
         if (!empty($param['primary'])) $labelClass = ' c9-label-primary';
         else $labelClass = '';
         $labelHtml = $this->template($templateId, [
@@ -2477,6 +2489,31 @@ class Backend {
         // so output \n first, so that user input with a leading break stays possible
         if ($displayType == 'textarea') $valueHtml = "\n" . $valueHtml;
         
+        // Error message (from class Dataset)
+        // For multilingual fields Dataset::validateFieldValue() registers the
+        // error under "name.{langId}" - only the input field of this language is
+        // highlighted. The field gets aria-invalid and is described by the message.
+        $errorFields = $this->cms->getErrorFields();
+        $errorKey = ($langId !== null) ? $paramName . '.' . $langId : $paramName;
+        $errorKey = (string)($param['errorPrefix'] ?? '') . $errorKey;
+        if (in_array($errorKey, $errorFields, true)) {
+            $groupClass = ' c9-invalid';
+            $errorId = $uid . '-error';
+            $errorMsg = $this->template('form_error', [
+                '{id}' => $errorId,
+                '{text}' => $this->cms->errors[$errorKey]['text'] ?? ''
+            ]);
+            $attr[] = 'aria-invalid="true"';
+            $describedBy[] = $errorId;
+        }
+        else {
+            $groupClass = '';
+            $errorMsg = '';
+        }
+        if (!empty($describedBy)) {
+            $attr[] = 'aria-describedby="' . implode(' ', $describedBy) . '"';
+        }
+
         // Replacements - all types
         // --------------------
         $replacements = [
@@ -2522,24 +2559,6 @@ class Backend {
 
         // c9-col1 + 2
         // --------------------
-        // Error message (from class Dataset)
-        // For multilingual fields Dataset::validateFieldValue() registers the
-        // error under "name.{langId}" - only the input field of this language is
-        // highlighted
-        $errorFields = $this->cms->getErrorFields();
-        $errorKey = ($langId !== null) ? $paramName . '.' . $langId : $paramName;
-        $errorKey = (string)($param['errorPrefix'] ?? '') . $errorKey;
-        if (in_array($errorKey, $errorFields, true)) {
-            $groupClass = ' c9-invalid';
-            $errorMsg = $this->template('form_error', [
-                '{text}' => $this->cms->errors[$errorKey]['text'] ?? ''
-            ]);
-        }
-        else {
-            $groupClass = '';
-            $errorMsg = '';
-        }
-        
         // additional class of the field block (e.g. 'warning' for a temporarily
         // added search field, RecordBackendSearch)
         $blockClass = preg_replace('/[^a-z0-9_ -]/i', '', (string)($param['blockClass'] ?? ''));

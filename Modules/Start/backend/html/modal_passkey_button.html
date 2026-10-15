@@ -2,7 +2,7 @@
       <div class="col-sm-9 offset-sm-3">
         <button type="button" id="login-passkey" class="btn btn-primary" data-options="{options}"
                 onclick="cApp.ui.passkeyLogin(this)"><span class="icon" aria-hidden="true">passkey</span> {#start.button_login_passkey}</button>
-        <div class="alert alert-danger mt-2 mb-0 d-none" data-c9-passkey-error
+        <div class="alert alert-danger mt-2 mb-0 d-none" role="alert" data-c9-passkey-error
              data-cancelled="{#start.error_passkey_cancelled}" data-failed="{#start.error_passkey_failed}"
              data-unsupported="{#start.error_passkey_unsupported}"></div>
       </div>
