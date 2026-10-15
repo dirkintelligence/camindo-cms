@@ -1,0 +1,6 @@
+# camindo/project - fallback in case the web server serves the project root instead of public/:
+# every request here is refused (403). Rewrite instead of "Require all denied", because it needs
+# no AllowOverride beyond what public/ needs anyway. public/.htaccess has its own
+# "RewriteEngine On" and therefore does not inherit this rule.
+RewriteEngine On
+RewriteRule ^ - [F]

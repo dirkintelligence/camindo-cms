@@ -176,6 +176,11 @@ Beim Hoster stellen Sie im Kundenmenü das Zielverzeichnis der Domain (oft „Do
 Root“ oder „Webroot“) auf `mysite/public`. HTTPS richten Sie wie gewohnt ein (Let's
 Encrypt, Zertifikat des Hosters) – camindo CMS braucht dafür nichts Besonderes.
 
+Zur Sicherheit liegt im Projektverzeichnis selbst eine ***`.htaccess` mit Zugriffssperre***:
+Zeigt die Domain versehentlich auf das Projektverzeichnis statt auf `public/`, beantwortet
+Apache jede Anfrage mit 403. Die Website unter `public/` ist davon nicht betroffen, weil
+deren eigene `.htaccess` die Sperre aufhebt. Löschen Sie die Datei nicht.
+
 ### Lokal ohne HTTPS testen
 
 camindo CMS ist ab Werk auf HTTPS eingestellt: Die Anmelde-Cookies für das Backend

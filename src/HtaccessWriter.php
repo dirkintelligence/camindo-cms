@@ -15,6 +15,10 @@
  * the backend: camindo.php upgrade and the installer write the file the same way
  * as the Server tab in the Tools module (ToolServer).
  *
+ * The file must keep its own 'RewriteEngine On' (mergeManagedBlock() ensures it):
+ * that is what keeps the block of the project root's .htaccess (RewriteRule ^ - [F])
+ * from being inherited by public/ (developer docs, chapter 01 (Architecture)).
+ *
  * @see Camindo\Core\Modules\Tools\ToolServer  backend UI for this
  * @see developer docs, chapter 09 (Installation and update) (step 8)
  */
