@@ -132,6 +132,15 @@ nothing.
 | `.camindo.key` | key for encrypted fields and passwords | **cannot be replaced** – without it, encrypted content is lost. Please keep a copy in a safe place! |
 | `.sqlpwd` | password for `mysqldump` | recreate it with `install --step=sqlpwd` |
 
+All three files receive the permissions `0600`; only their owner can read them. That fits
+when the command line and the web server run as the same user – which is the case with most
+hosting offers that have a PHP user of their own per customer. If you run the installer as
+`root`, however (for example in a Docker container or with `sudo`), it hands the files to
+the ***web server user***: the one named with `--web-user=NAME` (or in the environment
+variable `CAMINDO_WEB_USER`), otherwise the owner of the project directory. If neither is
+known, the files belong to `root` and the installer warns – catch up on the handover with
+`php Core/cron/camindo.php install --step=key --web-user=NAME`.
+
 As an alternative, the passwords and keys from these files can also be stored in
 ***environment variables***, if your server supports this; for more details, see
 [Access data from environment variables](./12-operation.md#access-data-from-environment-variables).
@@ -278,7 +287,8 @@ the module “[Components](./10-modules.md#components)” in the back end.
 | “503 – Maintenance” after an update | → run `php Core/cron/camindo.php upgrade` (brings the database up to date) |
 | Sign-in fails without an error message,<br>the sign-in dialog shows a note about HTTPS | You access the back end via `http://`, but `cookie_secure` is `true` → see [Test locally without HTTPS](#test-locally-without-https) |
 | Sign-in code does not arrive | → set up an e-mail mailbox in `.camindo.php` (see [Operation](./12-operation.md#email-dispatch)) |
-| Error 500 in the frontend and back end,<br>on the command line:<br>`CONFIGURATION ERROR:`<br>`paths.key_file -`<br>`file not found or not readable` | The key file `.camindo.key` is missing, or the user under which the web server or cron job runs is not allowed to read it → check owner and permissions (`chmod 600 .camindo.key`; if the web server can only read the file through the group on your system, `chmod 640`). If the file is missing, restore it from your [data backup](./12-operation.md#data-backup) – **do not generate a new one**: `install --step=key` would write a new key, and encrypted content and passwords would then be unusable. If the key comes from the environment variable `CAMINDO_KEY`, check that it is set for the web server **and** the cron job |
+| Error 500 in the frontend and back end,<br>on the command line:<br>`CONFIGURATION ERROR:`<br>`.camindo.key exists but is not readable` | The user under which the web server or cron job runs is not allowed to read the key file – usually because the installer or a key change ran as `root` → `php Core/cron/camindo.php status` names the affected files; as `root`, `install --step=key --web-user=NAME` hands them to the web server user (otherwise `chown`; if the web server can only read the file through the group on your system, `chmod 640`). In this case camindo CMS deliberately does **not** fall back to the environment variable `CAMINDO_KEY`. The same applies to `.camindo.key.retired` |
+| Error 500 in the frontend and back end,<br>on the command line:<br>`CONFIGURATION ERROR:`<br>`paths.key_file -`<br>`file not found` | The key file `.camindo.key` is missing. Restore it from your [data backup](./12-operation.md#data-backup) – **do not generate a new one**: `install --step=key` would write a new key, and encrypted content and passwords would then be unusable. If the key comes from the environment variable `CAMINDO_KEY`, check that it is set for the web server **and** the cron job |
 | Something else | → `php Core/cron/camindo.php status` shows the state of the system; `var/log/` contains the details |
 
 Individual steps of the installer can be repeated without touching the database:

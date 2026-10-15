@@ -356,7 +356,9 @@ andere als `0600` gesetzt haben, etwa weil der Webserver die Datei auf Ihrem Sys
 über die Gruppe lesen kann. Gibt es keine `.camindo.key`, weil der Schlüssel aus der
 Umgebungsvariablen `CAMINDO_KEY` kommt, gilt die Einstellung `permissions.key_file` in
 `.camindo.php` (Vorgabe `0600`). `key status` warnt, wenn die Rechte der Datei davon
-abweichen.
+abweichen. Rufen Sie den Wechsel als `root` auf, behalten beide Dateien außerdem den
+Eigentümer der bisherigen `.camindo.key` – sonst könnte der Webserver sie danach nicht
+mehr lesen.
 
 `key status` zeigt den aktuellen Schlüssel, abgelöste Schlüssel mit der Frist
 `security.key_password_grace_days` (Vorgabe 90 Tage) und wie viele Passwörter noch am
@@ -478,7 +480,7 @@ Anbieter – bleibt in `.camindo.php`.
 | `CAMINDO_DB_PASS` | `db.pass` | Variable vor `.camindo.php` |
 | `CAMINDO_SMTP_PASS` | `email.smtp.pass` | Variable vor `.camindo.php` |
 | `CAMINDO_AI_API_KEY` | `ai.api_key` (Zusatzmodul KI-Assistent) | Variable vor `.camindo.php` |
-| `CAMINDO_KEY` | die Schlüsseldatei `.camindo.key` (genau ihr Inhalt) | **Datei vor Variable** – damit nach einem [Schlüsselwechsel](#schlüssel-wechseln) der neue Schlüssel gilt, bis Sie die Variable nachgezogen haben |
+| `CAMINDO_KEY` | die Schlüsseldatei `.camindo.key` (genau ihr Inhalt) | **Datei vor Variable** – damit nach einem [Schlüsselwechsel](#schlüssel-wechseln) der neue Schlüssel gilt, bis Sie die Variable nachgezogen haben. Ist die Datei vorhanden, aber nicht lesbar, bricht camindo CMS ab, statt die Variable zu nehmen |
 
 Eine leere Variable zählt als nicht gesetzt. Eine `.env`-Datei liest camindo CMS
 **nicht** – die Variablen müssen von außen in die Umgebung von PHP gelangen, und zwar

@@ -29,7 +29,8 @@
  *  2. maintenance mode on (unless already on)
  *  3. password hashes without identifier get that of the old key
  *  4. old key -> {key_file}.retired, new one -> key_file (both with the rights
- *     of the previous key_file, without a file permissions.key_file - keyFileMode()); from here on
+ *     of the previous key_file, without a file permissions.key_file - keyFileMode(); as root
+ *     also its owner - SecretFile::copyOwner()); from here on
  *     Crypt decrypts with both, so an abort loses nothing - rotate()
  *     can simply be called again (then with another key)
  *  5. re-encrypt everything reversible, renew data_enc.hash
@@ -153,6 +154,12 @@ class KeyRotation {
             $mode = $this->keyFileMode();
             $this->appendRetired($oldKey);
             $this->writeSecret($keyFile . '.new', $newKey, $mode);
+            // as root (sudo, docker exec) the new file would belong to root - keep the owner
+            // (key from CAMINDO_KEY: owner of the project directory, SecretFile::guessWebUser())
+            if (is_file($keyFile)) SecretFile::copyOwner($keyFile . '.new', $keyFile);
+            elseif (SecretFile::isRoot() && ($user = SecretFile::guessWebUser(dirname($keyFile))) !== null) {
+                SecretFile::chown($keyFile . '.new', $user);
+            }
             if (!@rename($keyFile . '.new', $keyFile)) throw new \RuntimeException("cannot replace $keyFile");
             $this->crypt->reloadKeys();
             $newId = $this->crypt->currentKeyId();
@@ -557,7 +564,12 @@ class KeyRotation {
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $line = "# rotated $now\n" . Crypt::keyId($key) . ' ' . trim($key) . ' ' . $now . "\n";
         $content = is_file($file) ? (string)file_get_contents($file) : '';
+        $new = !is_file($file);
         $this->writeSecret($file, $content . $line, $this->keyFileMode());
+        if ($new && is_file($this->keyFile())) SecretFile::copyOwner($file, $this->keyFile());
+        elseif ($new && SecretFile::isRoot() && ($user = SecretFile::guessWebUser(dirname($file))) !== null) {
+            SecretFile::chown($file, $user);
+        }
     }
 
     private function removeRetired(string $kid): void

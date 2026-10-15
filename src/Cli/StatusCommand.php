@@ -5,7 +5,7 @@
  * Files against database: core version of the files (CAMINDO_VERSION), state of the
  * database (system.core_version), version stamp (var/config/core.php),
  * maintenance mode, pending core migrations, components with a pending update,
- * .htaccess and assets symlink.
+ * .htaccess and assets symlink, secret files the web server cannot read (SecretFile).
  *
  * --after-composer: the Composer hook. Without a reachable database (build server,
  * CI, create-project before the installer) only a note, exit code 0. Never writes.
@@ -91,6 +91,15 @@ class StatusCommand extends Command {
         } catch (\Throwable $e) {
             $info['actions'][] = $e->getMessage();
         }
+
+        // Secret files the web server probably cannot read (installation or key rotation as root)
+        $keyFile = (string)$config->get('paths.key_file');
+        $projectDir = dirname((string)$config->get('paths.core_dir'));
+        $info['secret_files'] = \Camindo\Core\SecretFile::ownershipWarnings(
+            [$keyFile, $keyFile . '.retired', $projectDir . '/.camindo.php', (string)$config->get('paths.sqlpwd_file')],
+            \Camindo\Core\SecretFile::guessWebUser($projectDir)
+        );
+        foreach ($info['secret_files'] as $warning) $info['actions'][] = $warning;
 
         // Empfehlungen
         if (in_array($info['key_env'], ['retired', 'other'], true)) {

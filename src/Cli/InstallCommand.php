@@ -3,7 +3,7 @@
  * install [--no-interaction] [--fixtures] [--create-db] [--symlink-assets] [--force --yes]
  *         [--step=NAME] [--db-host=… --db-port=… --db-name=… --db-user=… --db-pass-file=…]
  *         [--admin-name=… --admin-email=… --admin-pass-file=… --admin-lang=…]
- *         [--timezone=… --locale=…] [--https=y|n] [--backend-domain=…] [--dev]
+ *         [--timezone=… --locale=…] [--https=y|n] [--backend-domain=…] [--web-user=…] [--dev]
  *
  * The installer (Install\Installer) - asks what it does not know, and runs through the
  * steps 1-12 (developer docs, chapter 09 (Installation and update)). If var/install.lock exists, it ends immediately with
@@ -20,6 +20,13 @@
  *                                            --locale           CAMINDO_LOCALE
  *                                            --https            CAMINDO_HTTPS (y/n)
  *                                            --backend-domain   CAMINDO_BACKEND_DOMAIN
+ *                                            --web-user         CAMINDO_WEB_USER
+ *
+ * --web-user only matters when the installer runs as root (Docker, sudo): the
+ * secret files (0600) are then handed to that user - including existing ones, so
+ * `install --step=key --web-user=www-data` repairs the owner. Without the option
+ * the owner of the project directory is taken if it is not root, otherwise only a
+ * warning appears (SecretFile). Never asked.
  *
  * Passwords come from files (--*-pass-file, e.g. /run/secrets/…) or the
  * environment variables CAMINDO_DB_PASS / CAMINDO_ADMIN_PASS, never as an argument.
@@ -81,6 +88,15 @@ class InstallCommand extends Command {
         if (!$force && in_array($step, ['database', 'admin'], true) && $installer->isInstalled()) {
             return $this->usage("step $step on an installed system needs --force");
         }
+        $webUser = is_string($options['web-user'] ?? null) ? $options['web-user'] : (string)getenv('CAMINDO_WEB_USER');
+        if ($webUser !== '') {
+            try {
+                $installer->setWebUser($webUser);
+            }
+            catch (\RuntimeException $e) {
+                return $this->usage($e->getMessage());
+            }
+        }
 
         $this->out('');
         foreach (self::BANNER as $line) $this->out(' ' . $line);
@@ -141,6 +157,10 @@ class InstallCommand extends Command {
                 $pass = $answers['db']['pass'] ?? (string)($installer->boot()->get(Config::class)->get('db.pass') ?? '');
                 $installer->writeSqlpwdFile($pass);
             }
+        }
+        // --web-user: also existing files (repair after an installation as root)
+        if ($installer->hasExplicitWebUser()) {
+            foreach ($installer->secretFiles() as $file) $installer->adoptOwner($file);
         }
         foreach ($installer->checkSecretPermissions() as $warning) $this->out('  WARNING: ' . $warning);
 

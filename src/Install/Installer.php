@@ -16,6 +16,7 @@
  *     3  writeKeyFile()        .camindo.key, 0600
  *     4  writeConfigFile()     .camindo.php from templates/camindo.php.dist, 0600
  *     5  writeSqlpwdFile()     .sqlpwd for mysqldump, 0600
+ *                              as root: owner = web server user (SecretFile, setWebUser())
  *     6  createDirectories()   var/*, public/media/default, backend assets (copy or symlink)
  *     7  createDatabase()      schema.sql + seed.sql, with --fixtures schema.sql + dev.sql (--force: empty beforehand);
  *                              createDefaultInstance() - instance 1, the catch-all for every domain
@@ -46,6 +47,7 @@ use Camindo\Core\InstanceCache;
 use Camindo\Core\MediaAccess;
 use Camindo\Core\Modules\Admin\Admin;
 use Camindo\Core\Modules\Instance\Instance;
+use Camindo\Core\SecretFile;
 use Camindo\Core\SnippetCache;
 use Camindo\Core\System;
 use Camindo\Core\SystemState;
@@ -68,6 +70,9 @@ class Installer {
     private string $camindoDir;
     private string $coreDir;
     private ?ContainerInterface $app = null;
+
+    /** Web server user given explicitly (--web-user), SecretFile::user() format */
+    private ?array $webUser = null;
 
     /**
      * @param Closure $log  function(string $line): void
@@ -96,6 +101,49 @@ class Installer {
     public function sqlpwdFile(): string
     {
         return $this->camindoDir . '/.sqlpwd';
+    }
+
+    /** The secret files: key, retired keys, configuration, mysqldump password */
+    public function secretFiles(): array
+    {
+        return [$this->keyFile(), $this->keyFile() . '.retired', $this->configFile(), $this->sqlpwdFile()];
+    }
+
+    /**
+     * Web server user for the secret files (--web-user / CAMINDO_WEB_USER).
+     *
+     * @throws \RuntimeException  unknown user
+     */
+    public function setWebUser(string $name): void
+    {
+        $user = SecretFile::user($name);
+        if ($user === null) throw new \RuntimeException("web user: unknown user '$name'");
+        $this->webUser = $user;
+    }
+
+    public function hasExplicitWebUser(): bool
+    {
+        return $this->webUser !== null;
+    }
+
+    /** Web server user: given explicitly, otherwise derived (SecretFile::guessWebUser()) */
+    public function webUser(): ?array
+    {
+        return $this->webUser ?? SecretFile::guessWebUser($this->camindoDir);
+    }
+
+    /**
+     * As root: hand a secret file to the web server user. Without root nothing to do
+     * (the file belongs to the user running the CLI); without a known user
+     * secretOwnershipWarnings() reports it. Never aborts.
+     */
+    public function adoptOwner(string $file): void
+    {
+        if (!is_file($file) || !SecretFile::isRoot()) return;
+        $user = $this->webUser();
+        if ($user === null || $user['uid'] === 0) return;
+        if (SecretFile::chown($file, $user)) $this->log(basename($file) . ": owner {$user['name']}");
+        else $this->log('WARNING: ' . basename($file) . ": chown {$user['name']} failed");
     }
 
     public function lockFile(): string
@@ -303,10 +351,12 @@ class Installer {
             throw new \RuntimeException("cannot write $file");
         }
         @chmod($file, 0600);
+        $this->adoptOwner($file);
     }
 
     /**
-     * Warning if a dot file is readable by others.
+     * Warnings on the dot files: readable by others, or probably not readable by the
+     * web server (SecretFile::ownershipWarnings()).
      *
      * @return string[]
      */
@@ -318,7 +368,7 @@ class Installer {
                 $warnings[] = basename($file) . ' is readable by others - chmod 600 ' . basename($file);
             }
         }
-        return $warnings;
+        return array_merge($warnings, SecretFile::ownershipWarnings($this->secretFiles(), $this->webUser()));
     }
 
     // ==== 6 Directories ====
