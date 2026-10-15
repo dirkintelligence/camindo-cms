@@ -286,6 +286,13 @@ Textantwort in Kursivschrift. Die endgültige Antwort ist ausführlicher.
   eine gefilterte Liste, eine Eingabemaske oder eine andere Ansicht, die Sie öffnen
   dürfen –, öffnet er es als Ebene neben dem Chat. Was er nicht selbst erledigen kann,
   öffnet er ebenso und sagt Ihnen Schritt für Schritt, was zu tun ist.
+- ***Was Sie gerade geöffnet haben:*** Mit jeder Nachricht erfährt der Assistent, welche
+  Ebenen Sie geöffnet haben – etwa die Liste eines Bereichs und darüber einen Datensatz –
+  und bei der obersten Ebene auch Ihre Suchkriterien. Sie können deshalb einfach „Hilf
+  mir bei diesem Artikel“ oder „Warum finde ich hier den Artikel X nicht?“ schreiben.
+  Übermittelt werden Bezeichnungen und Kennungen, keine Inhalte; Suchwerte in
+  verschlüsselten Feldern erscheinen nur als `[encrypted]`. Was Sie in einer offenen
+  Eingabemaske eingegeben, aber noch nicht gespeichert haben, sieht er nicht.
 - ***Fragen zur Bedienung:*** „Wie ändere ich effizient ein Wort in 100 Datensätzen?“ –
   der Assistent schlägt in den Handbüchern nach und öffnet Ihnen auf Wunsch die passende Seite.
 - ***Offene Masken:*** Einen Datensatz, den Sie gerade in einer Eingabemaske geöffnet
@@ -293,8 +300,9 @@ Textantwort in Kursivschrift. Die endgültige Antwort ist ausführlicher.
   schließen.
 - ***Neuer Chat:*** Einen neuen Chat beginnen Sie über das Symbol ![add_comment](../_/add_comment.svg) „Neuer Chat“.
 - ***Bisherige Chats:*** Frühere Chats finden Sie über das Symbol ![view_headline](../_/view_headline.svg)
-  „Bisherige Chats“ und auf der Startseite des Moduls im Reiter „Bisherige Chats“. Dort setzen Sie auch
-  einen früheren Chat fort oder löschen ihn.
+  „Bisherige Chats“ und auf der Startseite des Moduls im Reiter „Bisherige Chats“. Ein Klick auf eine
+  Zeile setzt den Chat im Seitenpanel fort; über das Kontextmenü (rechte Maustaste) löschen Sie ihn.
+  Je nach Einstellung bleibt ein gelöschter Chat noch einige Tage für Superuser lesbar.
 - ***Seitenpanel schließen:*** Das X-Symbol rechts außen schließt das Seitenpanel.
 
 Unter dem Eingabefeld stehen das Modell und die bisher verbrauchten ***Tokens*** des

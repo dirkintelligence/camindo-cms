@@ -121,7 +121,7 @@ The ***scheduler*** runs tasks on a time schedule. It requires the cron job `cro
 | ***Empty trash*** | permanently deletes records and content areas that have been in the trash for longer than `admin.trash_retention_days` (default 7 days). No settings |
 | ***Delete temporary files*** | cleans up `var/tmp/` (`admin.tmp_retention_hours`) and deletes expired export files (`admin.export_retention_hours`). No settings. Recommended: hourly |
 | ***Apply deletion policies*** | carries out the due jobs of the [deletion policies](./15-privacy.md#deleting-according-to-deletion-policy). No settings |
-| ***Apply retention periods*** | shortens IP addresses, deletes expired entries of the audit log, old internal messages and registrations that were never confirmed – according to the periods of the configuration. No settings |
+| ***Apply retention periods*** | shortens IP addresses, deletes expired entries of the audit log, old internal messages and registrations that were never confirmed – according to the periods of the configuration; plus the periods of installed add-on modules, such as deleted chats of the AI assistant. No settings |
 | ***Check audit log*** | checks the files of the [audit log](#audit-log) for manipulation; findings appear on the start page. No settings |
 | ***Check for updates*** | looks for newer versions and known security vulnerabilities (see [updates](./12-operation.md#updates)). No settings |
 | ***Summarize messages by email*** | sends users who have chosen it in their personal settings a summary of their new internal messages (see [messages](#messages)). New are the messages since the previous run – run it once a day. No settings |

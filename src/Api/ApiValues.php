@@ -14,6 +14,7 @@
  *     json, reltable      array
  *     text, chars …       text as stored (HTML fields: sanitized HTML)
  *     password            never (null)
+ *     encrypted           plain text; with ApiContext::maskEncrypted() only "[encrypted]"
  *     file                metadata: filename, mime_type, extension, size, width,
  *                         height, language (code for multilingual files)
  *
@@ -50,6 +51,7 @@ class ApiValues
         $type = (string)($colDef['type'] ?? 'text');
         if ($type === 'password' || ($colDef['display_type'] ?? '') === 'password') return null;
         if ($value === null) return null;
+        if ($type === 'encrypted' && $this->context->masksEncrypted()) return $this->context->maskedValue((string)$value);
 
         switch ($type) {
             case 'integer':
@@ -187,7 +189,8 @@ class ApiValues
         $value = $entry[1] ?? null;
         $type = (string)($colDef['type'] ?? '');
         if ($type === 'encrypted' && is_string($value) && $value !== '') {
-            $value = $this->crypt->decrypt($value, '', false);
+            // masked: not even decrypted
+            $value = $this->context->masksEncrypted() ? ApiContext::ENCRYPTED_PLACEHOLDER : $this->crypt->decrypt($value, '', false);
         }
         elseif ($type === 'timestampl' && is_string($value) && $this->isDate($value)) {
             // in the cache UTC - converted like Cms::fetch() to the time zone of the admin

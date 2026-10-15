@@ -274,9 +274,9 @@ class RecordApi
                 else {
                     $defaultField = $this->backend->getDefaultField((int)$row['area_id']);
                     $defaultName = (string)($defaultField['name'] ?? 'record_id');
-                    $values['_default'] = $this->context->plain(
-                        $this->backend->backendValue($row[$defaultName] ?? '', $defaultField, id: (int)$row['record_id'])
-                    );
+                    $values['_default'] = $this->maskedField($defaultField)
+                        ? $this->context->maskedValue((string)($row[$defaultName] ?? ''))
+                        : $this->context->plain($this->backend->backendValue($row[$defaultName] ?? '', $defaultField, id: (int)$row['record_id']));
                 }
                 $entry = ['record_id' => (int)$row['record_id'], 'area_id' => (int)$row['area_id']];
                 if ($isTree) $entry['depth'] = (int)($row['depth'] ?? 0);
@@ -317,6 +317,7 @@ class RecordApi
             return $text;
         }
         if ($name === 'needs_review') return !empty($row['needs_review']) ? '1' : '0';
+        if ($this->maskedField($schemaVirtual[$name] ?? [])) return (string)$this->context->maskedValue((string)($row[$name] ?? ''));
         if ((string)($schemaVirtual[$name]['type'] ?? '') === 'file') {
             // the list shows a preview image - the file name as text
             $file = $this->values->file($row[$name] ?? null);
@@ -1040,6 +1041,11 @@ class RecordApi
             }
             $label = $this->label($colDef, $name);
             $isMultilingual = $this->cms->isMultilingualField($colDef);
+            if ($this->maskedField($colDef) && $this->onlyPlaceholder($data[$name])) {
+                // the masked value sent back: stays as it is
+                $this->context->warn("{$name}: \"" . ApiContext::ENCRYPTED_PLACEHOLDER . "\" left unchanged - encrypted values are hidden here");
+                continue;
+            }
             $values = $this->byLanguage($data[$name], $isMultilingual && !($type === 'json' && array_is_list((array)$data[$name])), $instanceId, $primaryId, $name, $label);
             if ($values === null) continue;
             $stored = false;
@@ -1420,7 +1426,7 @@ class RecordApi
 
         return [
             'record_id'       => $recordId,
-            'label'           => $this->plainTeaser('record', $recordId),
+            'label'           => $this->recordLabel($recordId, $areaId),
             'area'            => $this->areaRef($areaId),
             'instance_id'     => (int)$data['instance_id'],
             'status'          => ['status_id' => (int)$data['status_id'], 'label' => $this->plainTeaser('status', (int)$data['status_id'])],
@@ -1502,7 +1508,7 @@ class RecordApi
                 'action'   => (string)$row['action'],
                 'actor'    => $this->auditDiff->actorLabel($row),
                 'origin'   => (string)$row['origin'],
-                'changes'  => $this->auditDiff->plainChanges((array)($row['changes'] ?? []), $truncate),
+                'changes'  => $this->auditDiff->plainChanges((array)($row['changes'] ?? []), $truncate, $this->context->masksEncrypted()),
             ];
             if ($superuser) $entry['ip'] = (string)$row['ip'];
             $entries[] = $entry;
@@ -1543,7 +1549,46 @@ class RecordApi
 
     private function recordRef(int $recordId): ?array
     {
-        return $recordId > 0 ? ['record_id' => $recordId, 'label' => $this->plainTeaser('record', $recordId)] : null;
+        return $recordId > 0 ? ['record_id' => $recordId, 'label' => $this->recordLabel($recordId)] : null;
+    }
+
+    /**
+     * Label of a record as text: the teaser = default field (Backend::teaser()) -
+     * masked if it is encrypted (ApiContext::maskEncrypted()).
+     *
+     * @param int $areaId  area of the record, if known (0 = look it up)
+     */
+    private function recordLabel(int $recordId, int $areaId = 0): string
+    {
+        $label = $this->plainTeaser('record', $recordId);
+        if ($label === '' || !$this->context->masksEncrypted()) return $label;
+        if ($areaId < 1) {
+            $this->db->pushResult();
+            try {
+                $this->db->query("SELECT `area_id` FROM `record` WHERE `record_id` = ?", 'i', [$recordId]);
+                $areaId = (int)($this->db->fetchNum()[0] ?? 0);
+            }
+            finally {
+                $this->db->popResult();
+            }
+        }
+        return $areaId > 0 && $this->maskedField($this->backend->getDefaultField($areaId)) ? ApiContext::ENCRYPTED_PLACEHOLDER : $label;
+    }
+
+    /** The placeholder of a masked value (also per language) and nothing else */
+    private function onlyPlaceholder(mixed $value): bool
+    {
+        if (is_array($value)) {
+            $values = array_filter($value, fn($item) => $item !== null && $item !== '');
+            return $values && count(array_filter($values, fn($item) => $item === ApiContext::ENCRYPTED_PLACEHOLDER)) === count($values);
+        }
+        return $value === ApiContext::ENCRYPTED_PLACEHOLDER;
+    }
+
+    /** Is the field encrypted and the output masked (ApiContext::maskEncrypted())? */
+    private function maskedField(array $colDef): bool
+    {
+        return ($colDef['type'] ?? '') === 'encrypted' && $this->context->masksEncrypted();
     }
 
     private function adminRef(int $adminId): ?array

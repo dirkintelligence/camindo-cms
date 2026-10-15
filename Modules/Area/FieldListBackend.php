@@ -71,6 +71,7 @@ class FieldListBackend extends FieldBackend {
             $tplTableRow = $this->backend->template('area.field_table_row');
             $tplFormCheck = $this->backend->template('list_checkbox');
             $tplCheckBoxDisabled = $this->backend->template('list_checkbox_disabled');
+            $tplFlag = $this->backend->template('area.icon_field_multilingual');
             
             $tableRows = '';
             while ($data = $this->field->fetch()) {
@@ -82,6 +83,7 @@ class FieldListBackend extends FieldBackend {
                 $isDefaultField = (bool)($data['default_field'] ?? 0);
 
                 $tableRow = $tplTableRow;
+                $flag = !empty($data['multilingual']) ? $tplFlag : '';
 
                 // name | label | type | subtype | visibility
                 $label = $this->cms->textOrSnippet($data['label']);
@@ -89,7 +91,7 @@ class FieldListBackend extends FieldBackend {
                     '{data_id}' => $data['field_id'],
                     '{data_name}' => $data['name'],
                     '{data_label}' => $label . ($isDefaultField ? '*' : ''),
-                    '{data_type}' => $type,
+                    '{data_type}' => $type . $flag,
                     '{data_subtype}' => $data['subtype'],
                 ]) ."\n";   
                 

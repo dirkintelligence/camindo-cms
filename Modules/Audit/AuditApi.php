@@ -159,7 +159,7 @@ class AuditApi
                 'action'   => (string)$row['action'],
                 'actor'    => $this->auditDiff->actorLabel($row),
                 'origin'   => (string)$row['origin'],
-                'changes'  => $this->auditDiff->plainChanges((array)$row['changes'], max(0, $truncate)),
+                'changes'  => $this->auditDiff->plainChanges((array)$row['changes'], max(0, $truncate), $this->context->masksEncrypted()),
             ];
             if ($superuser) $entry['ip'] = (string)$row['ip'];
             if (!empty($row['content_missing'])) $entry['content_missing'] = true;

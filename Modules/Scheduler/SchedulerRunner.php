@@ -86,7 +86,9 @@
  *                are due, max_minutes expires or an order fails
  *                (it remains due, the next run tries it again).
  *     retention  IpAnonymizer, AuditLog::purge(), Message::purgeExpired(),
- *                RecordUser::purgeUnconfirmed() - each step on its own: an error
+ *                RecordUser::purgeUnconfirmed(), then the retention of the active
+ *                modules (settings.php 'retention': ['Class::method'], method without
+ *                parameters returning a summary) - each step on its own: an error
  *                does not stop the others, but makes the run an error.
  *     auditverify AuditLog::verifyAll() + storeVerifyResult(); findings = errors.
  *     updatecheck UpdateCheck::run(); without paths.composer: nothing to do.
@@ -730,6 +732,16 @@ class SchedulerRunner {
                 return sprintf('%d unconfirmed registrations deleted', $total);
             },
         ];
+        // modules: 'retention' => ['Class::method'] in settings.php (class relative to the
+        // namespace of the module)
+        foreach ($this->container->get(Cms::class)->modules as $name => $settings) {
+            $namespace = (string)($settings['namespace'] ?? '');
+            foreach ((array)($settings['retention'] ?? []) as $callable) {
+                [$class, $method] = array_pad(explode('::', (string)$callable, 2), 2, '');
+                if ($namespace === '' || $class === '' || $method === '') continue;
+                $steps[$name . ':' . $method] = fn() => (string)$this->container->get($namespace . '\\' . trim($class, '\\'))->$method();
+            }
+        }
         foreach ($steps as $name => $step) {
             try {
                 $parts[] = $step();

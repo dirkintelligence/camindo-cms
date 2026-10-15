@@ -89,6 +89,7 @@ class ComponentManager {
         'superuser',     // module: true = superusers only, regardless of the group rights
         'widget',        // module: start page widget, ['class','method','label','icon'] (Camindo\Core\Widgets)
         'api',           // module: API classes relative to the module namespace (Camindo\Core\Api\Api)
+        'retention',     // module: ['Class::method'] run by the scheduler task "apply retention periods" (SchedulerRunner)
         'display_types', 'field_types',  // extensions (developer docs, chapter 08 (Components and extensions))
         'assets',        // extension: editor files; module: JS/CSS that every backend page loads
         'options_provider', // extension: class with clientOptions(array): array (Backend::fieldExtension())

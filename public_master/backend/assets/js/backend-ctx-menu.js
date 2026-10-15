@@ -1,6 +1,11 @@
 /*
  * cApp.ctxMenu – Context menu logic
  * Left click and right click on .c9-ctx-row
+ *
+ * Row click opens data-path of the table as a layer ("#" = data-id of the row). Instead
+ * of a layer, data-event on the table (row click) or on a menu entry triggers a jQuery
+ * event on document with the id - for actions of a module script, e.g.
+ * data-event="c9:ai-open" -> $(document).on('c9:ai-open', (e, id) => …).
  */
 (function (cApp) {
     'use strict';
@@ -25,8 +30,10 @@
                 const $table = $(this).closest('table');
                 const path   = $table.data('path');
                 const id     = $tr.data('id');
-                
-                cApp.layers.add(path.replace('#', id));
+                const event  = $table.data('event');
+
+                if (event) $(document).trigger(String(event), [id]);
+                else cApp.layers.add(path.replace('#', id));
             });
         },
 
@@ -102,6 +109,13 @@
                 const dataId = $menu.data('current-id');
 
                 if (!dataId) return;
+
+                const event = $(this).data('event');
+                if (event) {
+                    $menu.fadeOut(100);
+                    $(document).trigger(String(event), [dataId]);
+                    return;
+                }
 
                 const url = action.replace('#', dataId);
                 if (target) {

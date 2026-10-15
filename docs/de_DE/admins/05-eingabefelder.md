@@ -23,6 +23,7 @@ Beim Anlegen wählen Sie, was das Feld speichern soll:
 |---|---|---|
 | ***Text*** | Kurzer Text | bis 255 Zeichen; optimal für Sortierung und Suche (Titel, Namen, Kennungen) |
 | | Langer Text | Fließtext bis 16 Millionen Zeichen |
+| | Verschlüsselter Text | Text bis 16 Millionen Zeichen, verschlüsselt gespeichert; Suche nur nach exakter Übereinstimmung (siehe [unten](#verschlüsselte-felder)) |
 | | Text mit Mehrfachauswahl | mehrere Werte aus einer festen Liste (Checkboxen) |
 | | Volltext | sammelt den Text anderer Felder für die Volltextsuche (siehe [unten](#volltext)) |
 | | Passwort | nicht umkehrbar verschlüsselt (gehasht) |
@@ -282,7 +283,7 @@ aufbauen“ ***ohne*** „Nur veraltete Bereiche“ nach.
 
 ## Verschlüsselte Felder
 
-Mit „Inhalt verschlüsselt speichern“ liegt der Inhalt verschlüsselt in der Datenbank –
+Beim Typ ***„Verschlüsselter Text“*** liegt der Inhalt verschlüsselt in der Datenbank –
 geeignet für personenbezogene Daten wie Telefonnummern oder E-Mail-Adressen. Selbst
 wer Zugriff auf die Datenbank oder eine Datenbanksicherung hat, kann ihn ohne die
 Schlüsseldatei `.camindo.key` nicht lesen.
@@ -290,6 +291,9 @@ Schlüsseldatei `.camindo.key` nicht lesen.
 Der Preis: Verschlüsselte Felder lassen sich nur nach dem exakten Wert durchsuchen,
 nicht mit Platzhaltern, und nicht sinnvoll sortieren. Im CSV-Export erscheinen sie im
 Klartext.
+
+Sie wählen den Typ beim Anlegen des Feldes oder wandeln ein bestehendes Textfeld
+nachträglich um (siehe [Typ ändern](#typ-ändern)).
 
 ## Metafelder
 

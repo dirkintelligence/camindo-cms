@@ -23,6 +23,7 @@ When creating, you choose what the field is to store:
 |---|---|---|
 | ***Text*** | Short text | up to 255 characters; optimal for sorting and searching (titles, names, identifiers) |
 | | Long text | running text up to 16 million characters |
+| | Encrypted text | text up to 16 million characters, stored encrypted; search only by exact match (see [below](#encrypted-fields)) |
 | | Text with multiple selection | several values from a fixed list (check boxes) |
 | | Full text | collects the text of other fields for the full-text search (see [below](#full-text)) |
 | | Password | stored encrypted irreversibly (hashed) |
@@ -277,13 +278,16 @@ pick them up, run the Scheduler task “Rebuild full text” ***without*** “Ou
 
 ## Encrypted fields
 
-With “Store content encrypted”, the content is stored encrypted in the database –
+With the type ***“Encrypted text”***, the content is stored encrypted in the database –
 suitable for personal data such as phone numbers or e-mail addresses. Even someone who has
 access to the database or a database backup cannot read it without the key file
 `.camindo.key`.
 
 The price: encrypted fields can only be searched by their exact value, not with wildcards,
 and cannot be sorted meaningfully. In the CSV export, they appear in plain text.
+
+You choose the type when creating the field or convert an existing text field later
+(see [Changing the type](#changing-the-type)).
 
 ## Meta fields
 

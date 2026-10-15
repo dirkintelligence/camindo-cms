@@ -278,6 +278,12 @@ answer is more detailed.
 - ***Show:*** ask the assistant to show you something – a record, a filtered list, an input
   form or another view you are allowed to open – and it opens it as a layer next to the
   chat. What it cannot do itself, it also opens and tells you step by step what to do.
+- ***What you have open:*** with every message the assistant learns which layers you have
+  open – for example the list of an area and a record above it – and for the top layer
+  also your search criteria. So you can simply write “Help me with this article” or
+  “Why don’t I find article X here?”. Labels and ids are passed on, no contents; search
+  values in encrypted fields appear only as `[encrypted]`. What you have typed in an open
+  input form but not saved yet is not visible to it.
 - ***Questions about operation:*** “How do I change one word efficiently in 100 records?” –
   the assistant looks it up in the manuals and, on request, opens the matching page for you.
 - ***Open input forms:*** the assistant does not change a record you currently have open in
@@ -286,7 +292,9 @@ answer is more detailed.
   “New chat”.
 - ***Previous chats:*** you find earlier chats with the symbol
   ![view_headline](../_/view_headline.svg) “Previous chats” and on the start page of the module
-  in the tab “Previous chats”. There you can also continue an earlier chat or delete it.
+  in the tab “Previous chats”. Clicking a row continues the chat in the side panel; you delete it
+  via the context menu (right mouse button). Depending on the settings, a deleted chat stays
+  readable for superusers for a few days.
 - ***Close the side panel:*** the X symbol at the far right closes the side panel.
 
 Below the input field you see the model and the ***tokens*** used so far in the chat,
