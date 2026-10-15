@@ -1562,19 +1562,20 @@ trait VirtualFieldsTrait {
         $sql = 'INSERT INTO `data_fil`'
             . ' (`language_id`, `file_language_id`, `record_id`, `fieldname_id`, `field_id`, `extension`, `mime_type`,'
             . ' `data`, `filename`, `size`, `width`, `height`, `token`, `version`)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) AS new_data'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
             . ' ON DUPLICATE KEY UPDATE'
             // PK: language_id, record_id, fieldname_id
             // field_id cannot change
-            . ' `file_language_id` = new_data.`file_language_id`,'
-            . ' `extension` = new_data.`extension`,'
-            . ' `mime_type` = new_data.`mime_type`,'
-            . ' `data` = new_data.`data`,'
-            . ' `filename` = new_data.`filename`,'
-            . ' `size` = new_data.`size`,'
-            . ' `width` = new_data.`width`,'
-            . ' `height` = new_data.`height`,'
-            . ' `token` = new_data.`token`,'
+            // VALUES(col) instead of the row alias (VALUES … AS new): MariaDB knows only this form
+            . ' `file_language_id` = VALUES(`file_language_id`),'
+            . ' `extension` = VALUES(`extension`),'
+            . ' `mime_type` = VALUES(`mime_type`),'
+            . ' `data` = VALUES(`data`),'
+            . ' `filename` = VALUES(`filename`),'
+            . ' `size` = VALUES(`size`),'
+            . ' `width` = VALUES(`width`),'
+            . ' `height` = VALUES(`height`),'
+            . ' `token` = VALUES(`token`),'
             . ' `version` = `data_fil`.`version` + 1';
 
         $rows = ($languageId === null)

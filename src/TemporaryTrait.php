@@ -313,6 +313,9 @@ trait TemporaryTrait
             $sql .= ", `instance_id` = ?";
             $sqlTypes .= 'i';
             $sqlValues[] = $this->areaInstanceId((int)$areaId);
+            // parent_ids is JSON NOT NULL without a default. MySQL fills a missing value with
+            // JSON null, MariaDB with '' - which violates its implicit CHECK (json_valid()).
+            $sql .= ", `parent_ids` = '[]'";
         }
         $this->db->query($sql, $sqlTypes, $sqlValues);
         $tmpId = $forceId > 0 ? $forceId : (int)$this->db->insert_id;
