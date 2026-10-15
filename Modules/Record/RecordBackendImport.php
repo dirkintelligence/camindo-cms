@@ -461,6 +461,7 @@ class RecordBackendImport extends RecordBackend {
         }
         return $this->backend->template('select_sm', [
             '{name}' => htmlspecialchars($name),
+            '{label}' => $this->_selectLabel($name, 'record.label_import_mode'),
             '{options}' => $this->backend->options($options, $selected),
         ]);
     }
@@ -469,8 +470,20 @@ class RecordBackendImport extends RecordBackend {
     {
         return $this->backend->template('select_sm', [
             '{name}' => htmlspecialchars($name),
+            '{label}' => $this->_selectLabel($name, 'record.label_import_criterion'),
             '{options}' => $this->backend->options($options ?: ['' => ''], $selected),
         ]);
+    }
+
+    /**
+     * Name of a mode/criterion selection in the table for screen readers (WCAG 4.1.2):
+     * column (structure, records, templates) and what is selected.
+     */
+    private function _selectLabel(string $name, string $snippet): string
+    {
+        $column = preg_match('/\[(structure|records|templates)(?:_by)?\]$/', $name, $m)
+            ? $this->cms->snippet('record.label_import_' . $m[1]) . ' – ' : '';
+        return $this->backend->escape($column . $this->cms->snippet($snippet));
     }
 
     /**

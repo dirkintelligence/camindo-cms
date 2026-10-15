@@ -646,6 +646,8 @@ class AdminBackend {
      *                    an internal message (SchedulerRunner)
      *     message_digest summary of the internal messages by email
      *                    (0 off, 1 daily - Messaging\MessageDigest)
+     *     animation      slide animation of the record list of a lookup field
+     *                    (1 on, 0 off - cConfig.animation)
      *
      * Besides '' (display), 'save' and 'errors' there is 'update': adding and
      * removing a widget send the form back to itself without
@@ -887,6 +889,17 @@ class AdminBackend {
                 ],
             ]);
         }
+
+        // Animation when a lookup field opens its record list
+        $this->backend->formField($this->admin, [
+            'name' => 'settings.animation',
+            'value' => (int)($settings['animation'] ?? 1),
+            'id' => $id,
+            'options' => [
+                1 => $this->cms->snippet('admin.option_animation_1'),
+                0 => $this->cms->snippet('admin.option_animation_0'),
+            ],
+        ]);
 
         // Start page widgets
         $this->backend->formStatic($this->admin, 'settings.widgets', $this->_settingsWidgets($settings));

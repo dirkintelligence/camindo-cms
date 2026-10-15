@@ -974,7 +974,8 @@
          * Initializes Bootstrap tooltips lazily via event delegation.
          */
         _bindTooltips() {
-            $('body').on('mouseenter', '[data-bs-toggle="tooltip"]', (e) => {
+            // focusin: also for keyboard users (tabindex="0" on the trigger, WCAG 1.4.13)
+            $('body').on('mouseenter focusin', '[data-bs-toggle="tooltip"]', (e) => {
                 const target = e.currentTarget;
                 let instance = bootstrap.Tooltip.getInstance(target);
                 if (!instance) {
@@ -1124,18 +1125,34 @@
 
                 // Content fresh from the server on every opening (Start/menu.php): info,
                 // manuals and the modules the group is currently allowed to use
+                // aria-expanded on the button; after loading the focus moves to the
+                // first entry (keyboard users land in the menu, Escape: backend-a11y.js)
                 $button.on('click', function(e) {
                     e.stopPropagation();
-                    if (!$menu.is(':visible')) {
-                        $menu.cLoadContent({ url: 'Start/menu.php', spinner: false });
+                    const opening = !$menu.is(':visible');
+                    if (opening) {
+                        $menu.cLoadContent({
+                            url: 'Start/menu.php',
+                            spinner: false,
+                            callback: () => { $menu.find('a, button').first().trigger('focus'); }
+                        });
                     }
+                    $button.attr('aria-expanded', opening ? 'true' : 'false');
                     $menu.fadeToggle(200);
                 });
                 $(document).on('click', function(e) {
                     if (!$button.is(e.target) && $button.has(e.target).length === 0) {
                         if ($menu.is(':visible')) {
                             $menu.fadeOut(200);
+                            $button.attr('aria-expanded', 'false');
                         }
+                    }
+                });
+                // Focus leaves the menu (Tab past the last entry): close it
+                $menu.on('focusout', function(e) {
+                    if (e.relatedTarget && !$menu[0].contains(e.relatedTarget) && !$button.is(e.relatedTarget)) {
+                        $menu.fadeOut(200);
+                        $button.attr('aria-expanded', 'false');
                     }
                 });
             });
@@ -1148,12 +1165,13 @@
                 $button.on('click', function(e) {
                     e.stopPropagation();
                     if (!this.bgprocVisible) {
-                        $menu.html('wait...').cLoadContent({
+                        $menu.html(window.cConfig.label_loading || '…').cLoadContent({
                             url: 'Start/bgproc_list.php?details=1',
                             spinner: false
                         });
                     }
                     $menu.toggle();
+                    $button.attr('aria-expanded', $menu.is(':visible') ? 'true' : 'false');
                 });
                 $(document).on('click', function(e) {
                     if (
@@ -1161,6 +1179,7 @@
                         && $(e.target).closest('.c9-abort-bgproc').length === 0
                      ) {
                         $menu.hide();
+                        $button.attr('aria-expanded', 'false');
                     }
                 });
             });

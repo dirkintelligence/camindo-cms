@@ -67,6 +67,9 @@
                 const left = (document.documentElement.dir === 'rtl')
                     ? Math.max(0, e.pageX - $menu.outerWidth()) : e.pageX;
                 $menu.offset({ left: left, top: e.pageY }).hide().fadeIn(100);
+
+                // Keyboard: menu roles, focus on the first entry, Escape back to the row
+                if (cApp.a11y) cApp.a11y.menuOpened($menu, this);
             });
         },
 

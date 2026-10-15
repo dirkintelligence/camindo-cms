@@ -429,7 +429,18 @@ class GroupBackend {
                 if ($teaser === '') continue;
                 $isTemplate = ($info['type'] === 'template');
                 if ($edit) {
+                    // Name of each checkbox for screen readers: area, group, right (WCAG 1.3.1, 4.1.2)
+                    $areaText = trim(strip_tags($teaser));
+                    $rightLabel = fn(string $key) => $areaText . ': ' . match ($key) {
+                        'group_write'  => $this->cms->snippet('admin.access_own_group') . ' – ' . $this->cms->snippet('admin.access_write'),
+                        'group_delete' => $this->cms->snippet('admin.access_own_group') . ' – ' . $this->cms->snippet('admin.access_delete'),
+                        'other_write'  => $this->cms->snippet('admin.access_other_group') . ' – ' . $this->cms->snippet('admin.access_write'),
+                        'other_delete' => $this->cms->snippet('admin.access_other_group') . ' – ' . $this->cms->snippet('admin.access_delete'),
+                        'set_owner'    => $this->cms->snippet('admin.access_extended'),
+                        default        => $this->cms->snippet('admin.access_read'),
+                    };
                     $cell = fn(string $key) => $this->backend->template('admin.group_area_checkbox', [
+                        '{label}' => $this->backend->escape(html_entity_decode($rightLabel($key), ENT_QUOTES)),
                         '{name}' => "data[areas][{$areaId}][{$key}]",
                         '{class}' => ' c9-access-dep',
                         '{checked}' => ($flags !== null && !empty($flags[$key])) ? ' checked' : '',
@@ -437,6 +448,7 @@ class GroupBackend {
                         '{onchange}' => '',
                     ]);
                     $read = $this->backend->template('admin.group_area_checkbox', [
+                        '{label}' => $this->backend->escape(html_entity_decode($rightLabel('read'), ENT_QUOTES)),
                         '{name}' => "data[areas][{$areaId}][read]",
                         '{class}' => '',
                         '{checked}' => ($flags !== null) ? ' checked' : '',

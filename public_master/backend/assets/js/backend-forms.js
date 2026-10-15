@@ -167,7 +167,8 @@
                     return;
                 }
 
-                $form.closest('.c9-layer, .modal-dialog').cLoadContent({
+                const $target = $form.closest('.c9-layer, .modal-dialog');
+                $target.cLoadContent({
                     url:      action,
                     params:   cData,
                     method:   method,
@@ -175,6 +176,8 @@
                         $form.attr('data-changed', 'false');
 
                         $('article').scrollTop(0);
+                        // Focus: the first invalid field, otherwise the layer (WCAG 3.3.1, 2.4.3)
+                        if (cApp.a11y) cApp.a11y.afterSubmit($target);
                         // (Formerly the code of an onsubmit attribute ran here a second
                         // time via new Function - unused, and the script policy forbids
                         // eval. An onsubmit now runs like any handler on submit,

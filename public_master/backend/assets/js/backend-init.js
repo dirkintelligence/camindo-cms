@@ -5,6 +5,7 @@
  * Starts all cApp modules in the correct order.
  */
 $(document).ready(() => {
+    cApp.a11y.init    && cApp.a11y.init();       // Accessibility: keyboard, skip links, focus
     cApp.system.init  && cApp.system.init();     // Base infrastructure
     cApp.forms.init   && cApp.forms.init();      // Form tracking
     cApp.ui.init      && cApp.ui.init();         // UI events

@@ -26,6 +26,7 @@
 namespace Camindo\Core\Modules\Record;
 
 use Camindo\Core\Backend;
+use Camindo\Core\Cms;
 use Camindo\Core\Database;
 use Camindo\Core\Page;
 
@@ -34,6 +35,7 @@ class RecordPresenter
     public function __construct(
         private Database $db,
         private Backend $backend,
+        private Cms $cms,
     )
     {
     }
@@ -74,16 +76,19 @@ class RecordPresenter
      */
     public function listValue(string $name, array $row, array $schemaVirtual): string
     {
+        // The icons are hidden from screen readers - their meaning as text (WCAG 1.1.1)
+        $unreviewed = fn() => $this->backend->template('user.icon_unreviewed')
+            . '<span class="visually-hidden">' . $this->cms->snippet('user.status_unreviewed') . '</span>';
         if ($name === 'status_id') {
             $value = $this->backend->teaser('status', (int)($row['status_id'] ?? 0), icon:true, label:false);
             if (!empty($row['needs_review'])) {
-                $value .= $this->backend->template('user.icon_unreviewed');
+                $value .= $unreviewed();
             }
             return $value;
         }
         if ($name === 'needs_review') {
             return !empty($row['needs_review'])
-                ? $this->backend->template('user.icon_unreviewed')
+                ? $unreviewed()
                 : $this->backend->emptyPlaceholder;
         }
         if ($name === 'template_id') {

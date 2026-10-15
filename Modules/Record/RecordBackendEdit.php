@@ -752,6 +752,7 @@ class RecordBackendEdit extends RecordBackend {
         if (in_array($name, $this->cms->getErrorFields(), true)) {
             $blockClass = ' c9-invalid';
             $errorMsg = $this->backend->template('form_error', [
+                '{id}' => 'c9-error-' . $fieldId,
                 '{text}' => $this->cms->errors[$name]['text'] ?? ''
             ]);
         }

@@ -12,7 +12,8 @@ und stellt die Funktionen vor, die man leicht übersieht.
 2. [Anmelden und Abmelden](./02-anmeldung.md) – Anmeldung, Anmelde-Code,
    Sprache, Datumsformat, Zeitzone
 3. [Die Arbeitsoberfläche](./03-arbeitsoberflaeche.md) – Startseite, Ebenen,
-   Hintergrundprozesse, Nachrichten, KI-Assistent, persönliche Einstellungen, Widgets
+   Bedienung mit der Tastatur, Hintergrundprozesse, Nachrichten, KI-Assistent,
+   persönliche Einstellungen, Widgets
 4. [Inhalte finden](./04-inhalte-finden.md) – Bereichsbaum, Datensatzliste,
    Suchmaske, Suchoperatoren, bereichsübergreifende Suche
 5. [Datensätze bearbeiten](./05-datensaetze-bearbeiten.md) – Anlegen, Bearbeiten,

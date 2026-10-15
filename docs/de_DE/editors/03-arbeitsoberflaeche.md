@@ -118,6 +118,38 @@ In allen Listen des Backends gilt:
   weitere Funktionen – in der Datensatzliste etwa „Export“, „Import“ und
   „Stapelverarbeitung“.
 
+## Bedienung mit der Tastatur
+
+Das Backend lässt sich vollständig ohne Maus bedienen und mit einem Screenreader
+nutzen. Mit der ***Tabulatortaste*** springen Sie von Element zu Element, mit
+Umschalt+Tab zurück; das gerade gewählte Element ist umrandet.
+
+- ***Zum Inhalt springen:*** Beim ersten Druck auf die Tabulatortaste erscheint oben
+  links „Zum Inhalt springen“ und – beim zweiten – „Zur Pfadnavigation springen“.
+  Mit der Eingabetaste überspringen Sie die Kopfleiste mit Hauptmenü und Symbolen.
+- ***Hauptmenü:*** Die Schaltfläche ![menu](../_/menu.svg) öffnet es, der erste
+  Eintrag ist sofort gewählt. Die Esc-Taste schließt es wieder; das gilt auch für die
+  Liste der Hintergrundprozesse.
+- ***Listen:*** Jede Zeile lässt sich mit der Tabulatortaste ansteuern. Die
+  Eingabetaste öffnet die Detailansicht, Umschalt+F10 oder die Kontextmenütaste
+  öffnet das Kontextmenü. Darin wählen Sie mit den Pfeiltasten, die Eingabetaste
+  führt die Aktion aus, Esc schließt das Menü.
+- ***Spaltenüberschriften*** sortieren auch mit der Eingabetaste.
+- ***Ebenen:*** Öffnen Sie eine neue Ebene, steht die Auswahl auf ihrer Überschrift.
+  Schließen Sie sie, kehrt die Auswahl dorthin zurück, von wo aus Sie die Ebene
+  geöffnet haben – etwa zur Zeile der Liste.
+- ***Formulare:*** Meldet das Speichern einen Fehler, steht die Auswahl auf dem
+  ersten fehlerhaften Feld; die Fehlermeldung gehört zum Feld und wird von
+  Screenreadern mit vorgelesen.
+- ***Hinweise*** zu einem Feld (das Fragezeichen neben der Beschriftung) erscheinen
+  auch, wenn Sie sie mit der Tabulatortaste ansteuern; Esc blendet sie aus.
+
+Kurze Meldungen wie „Gespeichert“ bleiben einige Sekunden stehen, Fehlermeldungen
+länger. Solange der Mauszeiger oder die Auswahl auf einer Meldung steht, bleibt sie
+sichtbar. Hat Ihr Betriebssystem „Bewegung reduzieren“ eingeschaltet, verzichtet das
+Backend auf Animationen; die Einblend-Animation der Lookup-Felder schalten Sie außerdem
+in den [persönlichen Einstellungen](#persönliche-einstellungen) unter ***„Animation“*** aus.
+
 ## Hintergrundprozesse
 
 Funktionen mit langer Laufzeit – Stapelverarbeitung, Import, Export, das Löschen
@@ -187,6 +219,7 @@ Das Zahnrad ![settings](../_/settings.svg) öffnet Ihre persönlichen Einstellun
 | Zeitzone | Zeitzone, in der Sie Zeitpunkte sehen und eingeben |
 | Bevorzugte Sprachversion | Bei mehrsprachigen Inhalten öffnet die Eingabemaske zuerst diese Sprache (siehe [Kapitel 6](./06-mehrsprachigkeit.md)) |
 | Frontend-Editing | Bearbeiten-Verweise direkt auf der Website einblenden (siehe [Kapitel 9](./09-frontend-editing.md)) |
+| Animation | „ein“ (Vorgabe): Öffnet ein Lookup-Feld die Liste des verknüpften Bereichs, gleitet sie von der Seite herein. „aus“: Die Liste erscheint sofort |
 | Widgets der Startseite | siehe unten |
 | Bericht abonnieren | Berichte, die der Administrator für Ihre Benutzergruppe freigegeben hat – nach jedem Lauf kommt das Ergebnis als Nachricht in Ihren Posteingang. Der Punkt erscheint nur, wenn es solche Berichte gibt |
 | Nachrichten per E-Mail zusammenfassen | „täglich“: eine E-Mail mit den ungelesenen Nachrichten je Absender und den neuen mit Betreff, nur wenn neue eingegangen sind (siehe [Nachrichten per E-Mail zusammenfassen](#nachrichten-per-e-mail-zusammenfassen)) |

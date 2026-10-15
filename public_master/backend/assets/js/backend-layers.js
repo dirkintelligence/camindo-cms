@@ -164,6 +164,8 @@
             const $lastLayer = $('.c9-layer:last');
             if ($lastLayer.length) {
                 $lastLayer.attr('data-scroll', $('article').scrollTop());
+                // Closing returns the focus to the element that opened the layer
+                if (!skipHashUpdate && cApp.a11y) cApp.a11y.rememberFocus($lastLayer);
             }
 
             path = path.replace(/^\/+/, '');
@@ -192,6 +194,8 @@
                         $('article .c9-layer').css('display','none').last().css('display', 'block');
                     }
                     this._naviRebuild();
+                    // Opened from the user interface: focus on the new layer (WCAG 2.4.3)
+                    if (!skipHashUpdate && cApp.a11y) cApp.a11y.focusLayer($newLayer);
                 }
             });
         },
@@ -207,6 +211,7 @@
             const $lastLayer = $('.c9-layer:last');
             if ($lastLayer.length) {
                 $lastLayer.attr('data-scroll', $('article').scrollTop());
+                if (cApp.a11y) cApp.a11y.rememberFocus($lastLayer);
             }
             path = path.replace(/^\/+/, '');
             const $newLayer = $(`<div class="c9-layer" style="display:none" data-url="${path}" data-intent="1"></div>`);
@@ -229,6 +234,7 @@
                     $('article').scrollTop(0);
                     $('article .c9-layer').css('display','none').last().css('display', 'block');
                     this._naviRebuild();
+                    if (cApp.a11y) cApp.a11y.focusLayer($newLayer);
                 }
             });
         },
@@ -304,6 +310,8 @@
 
             const $last = $('article .c9-layer:last');
             $last.attr('data-url', path).attr('data-intent', '1');
+            // the focused element (folder, page link, column header) gets the focus back
+            const focusKey = cApp.a11y ? cApp.a11y.focusKey($last) : null;
 
             const paths = hashToPaths(location.hash);
             paths.pop();
@@ -315,6 +323,7 @@
                 if (scrollTop) {
                     $('article').scrollTop(0);
                 }
+                if (cApp.a11y) cApp.a11y.refocus($last, focusKey);
             }
             
             $last.cLoadContent({
@@ -354,6 +363,7 @@
                 callback: () => {
                     cApp.layers._naviRebuild();
                     $('article').scrollTop(0);
+                    cApp.layers._refocus();
                 }
             });
         },
@@ -383,6 +393,7 @@
                 method:   'POST',
                 callback: () => {
                     cApp.layers._naviRebuild();
+                    cApp.layers._refocus();
                 }
             });
         },
@@ -739,6 +750,8 @@
          * @returns {boolean}
          */
         _slideOk() {
+            // switched off in the personal settings (cConfig.animation)
+            if (window.cConfig && window.cConfig.animation === false) return false;
             return typeof Element.prototype.animate === 'function'
                 && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         },
@@ -815,11 +828,24 @@
 
         // --- Internal helper functions ---
 
+        /**
+         * The content of the topmost layer was replaced (replace(), POST): its focused
+         * element no longer exists - focus on the layer instead of the page start.
+         */
+        _refocus() {
+            const active = document.activeElement;
+            if (cApp.a11y && (!active || active === document.body || !document.contains(active))) {
+                cApp.a11y.focusLayer();
+            }
+        },
+
         _showLast() {
             const $last = $('article .c9-layer:last');
             $last.css('display', 'block');
             const scrollY = parseInt($last.attr('data-scroll') || 0, 10);
             $('article').scrollTop(scrollY);
+            // Focus back to the element that opened the closed layer (cApp.a11y.rememberFocus())
+            if (cApp.a11y && !$last.attr('data-stale')) cApp.a11y.restoreFocus($last);
             // outdated (invalidate()): reload, keep the scroll position
             if ($last.attr('data-stale')) {
                 const callback = $last.data('stale-callback');
@@ -829,6 +855,7 @@
                     callback: () => {
                         this._naviRebuild();
                         $('article').scrollTop(scrollY);
+                        if (cApp.a11y) cApp.a11y.restoreFocus($last);
                         if (typeof callback === 'function') callback();
                     }
                 });
@@ -841,24 +868,28 @@
         _naviRebuild() {
             const paths = hashToPaths(location.hash);
 
+            // Links with href (keyboard, screen reader); the click handler below prevents
+            // the default action. The current level carries aria-current, the separators
+            // are decoration.
             const attr =  ' aria-label="' + window.cConfig.label_home + '"';
             const icon = window.cConfig.icon_home;
             if (!paths.length) {
-                $('#c9-navi > nav').html('<span class="c9-navitem-text"' + attr + '>' + icon + '</span>');
+                $('#c9-navi > nav').html('<span class="c9-navitem-text" role="img" aria-current="page"' + attr + '>' + icon + '</span>');
+                this._updateTitle();
                 return;
             }
 
-            let html = '<a role="button" tabindex="0" class="c9-navitem-link"' + attr + '>' + icon + '</a>'
-                     + '<span class="c9-navitem-separator"></span>';
+            let html = '<a href="#" class="c9-navitem-link"' + attr + '>' + icon + '</a>'
+                     + '<span class="c9-navitem-separator" aria-hidden="true"></span>';
 
             paths.forEach((p, i) => {
                 const separator = window.cConfig.path_separator;
                 const name = pathWithoutParameters(p).split('/').pop();
                 if (i < paths.length - 1) {
-                    html += `<a role="button" tabindex="0" class="c9-navitem-link">${name}</a>`
-                          + ' <span class="c9-navitem-separator">' + separator + '</span>';
+                    html += `<a href="#" class="c9-navitem-link">${name}</a>`
+                          + ' <span class="c9-navitem-separator" aria-hidden="true">' + separator + '</span>';
                 } else {
-                    html += `<span class="c9-navitem-text">${name}</span>`;
+                    html += `<span class="c9-navitem-text" aria-current="page">${name}</span>`;
                 }
             });
 
@@ -881,6 +912,19 @@
                 }
                 pathIndex++;
             });
+            this._updateTitle();
+        },
+
+        /**
+         * Page title = current level of the breadcrumb (WCAG 2.4.2) - the browser tab,
+         * the history and screen readers name the open mask.
+         */
+        _updateTitle() {
+            const base = 'camindo CMS';
+            // the home level has only the icon (its ligature text is no title)
+            const current = hashToPaths(location.hash).length
+                ? $('#c9-navi .c9-navitem-text:last').text().trim() : '';
+            document.title = current ? current + ' – ' + base : (window.cConfig.label_home || 'Home') + ' – ' + base;
         }
     };
 

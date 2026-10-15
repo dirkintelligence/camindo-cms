@@ -100,6 +100,9 @@ window.cApp = window.cApp || {};
             tooltip.dispose();
         });
 
+        // Screen readers: the region is being updated (removed in complete)
+        if (!settings.background) $this.attr('aria-busy', 'true');
+
         // Abort a running request for this element if it has not finished yet
         const existingXhr = $this.data('xhr');
         if (existingXhr && existingXhr.readyState !== 4) {
@@ -191,6 +194,7 @@ window.cApp = window.cApp || {};
                 // Clean up after completion, if it is still this request
                 if ($this.data('xhr') === xhr) {
                     $this.removeData('xhr');
+                    $this.removeAttr('aria-busy');
                 }
             }
         });

@@ -51,6 +51,8 @@
  *     reports        Subscribed reports of the scheduler (scheduler_ids)
  *     message_digest Summary of the internal messages by email: 0 off,
  *                    1 daily (scheduler task messagedigest, MessageDigest)
+ *     animation      Slide animation of the record list opened from a lookup field:
+ *                    1 on (default), 0 off (cConfig.animation, backend-layers.js _slideOk())
  * Maintained via AdminBackend::settings() (top right in the backend, or as a tab in the
  * detail view - there a superuser sets them for other admins) and via the login form
  * (backend language, locale, time zone). The values are kept in the session details and
@@ -333,6 +335,16 @@ class Admin extends Dataset {
                 'min'   => 0,
                 'max'   => 1,
                 'default' => '0',
+            ],
+            // Slide animation when a lookup field opens its record list (backend-layers.js)
+            'settings.animation' => [
+                'type'  => 'integer',
+                'display_type' => 'radio',
+                'label' => '#admin.field_admin_settings_animation',
+                'tooltip' => '#admin.tooltip_settings_animation',
+                'min'   => 0,
+                'max'   => 1,
+                'default' => '1',
             ],
             'deleted' => [
                 'type'  => 'bit',

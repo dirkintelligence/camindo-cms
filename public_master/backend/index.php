@@ -100,30 +100,38 @@
             }
         })();
     </script>
+    <!-- Skip links (WCAG 2.4.1): first focusable elements of the page, visible on focus;
+         backend-a11y.js moves the focus (a #hash would change the layer routing) -->
+    <div class="c9-skip-links">
+        <a href="#c9-content" class="visually-hidden-focusable c9-skip-link" data-c9-skip="#c9-content"><?php echo $cms->snippet('skip_to_content'); ?></a>
+        <a href="#c9-navi" class="visually-hidden-focusable c9-skip-link" data-c9-skip="#c9-navi"><?php echo $cms->snippet('skip_to_breadcrumb'); ?></a>
+    </div>
     <div class="resize-overlay"></div>
     <header class="d-flex align-items-center justify-content-between p-0">
     <div class="d-flex align-items-center">
-        <button id="c9-hamburger" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('speak_open_menu'); ?>">
-            <span class="icon">menu</span>
+        <button type="button" id="c9-hamburger" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('speak_open_menu'); ?>"
+            aria-haspopup="true" aria-expanded="false" aria-controls="c9-menu-container">
+            <span class="icon" aria-hidden="true">menu</span><span class="visually-hidden"><?php echo $cms->snippet('speak_open_menu'); ?></span>
         </button>
-        <button id="c9-logo" class="btn c9-head-btn" <?php echo $backend->on('click', 'cApp.layers.home();'); ?>>
+        <button type="button" id="c9-logo" class="btn c9-head-btn" title="<?php echo $cms->snippet('label_home'); ?>" <?php echo $backend->on('click', 'cApp.layers.home();'); ?>>
             camindo<small>CMS</small>
         </button>
     </div>
     <div class="d-flex align-items-center">
-        <button id="c9-bgproc-btn" class="btn c9-head-btn p-0 position-relative" title="Background Processes">
-            <span class="icon" aria-hidden="false">hourglass</span>
+        <button type="button" id="c9-bgproc-btn" class="btn c9-head-btn p-0 position-relative" title="<?php echo $cms->snippet('bgproc_headline'); ?>"
+            aria-haspopup="true" aria-expanded="false" aria-controls="c9-bgproc-container">
+            <span class="icon" aria-hidden="true">hourglass</span><span class="visually-hidden"><?php echo $cms->snippet('bgproc_headline'); ?></span>
             <span class="c9-badge" style="display:none"><small>0</small></span>
         </button>
-        <button id="c9-mail-btn" class="btn c9-head-btn p-0 position-relative" title="<?php echo $cms->snippet('messaging.speak_open_messages'); ?>">
-            <span class="icon">mail</span>
+        <button type="button" id="c9-mail-btn" class="btn c9-head-btn p-0 position-relative" title="<?php echo $cms->snippet('messaging.speak_open_messages'); ?>">
+            <span class="icon" aria-hidden="true">mail</span><span class="visually-hidden"><?php echo $cms->snippet('messaging.speak_open_messages'); ?></span>
             <span class="c9-badge"<?php if ($unreadCount < 1) echo ' style="display:none"'; ?>><small><?php echo $unreadCount; ?></small></span>
         </button>
-        <button id="c9-settings-btn" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('button_settings'); ?>">
-            <span class="icon">settings</span>
+        <button type="button" id="c9-settings-btn" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('button_settings'); ?>">
+            <span class="icon" aria-hidden="true">settings</span><span class="visually-hidden"><?php echo $cms->snippet('button_settings'); ?></span>
         </button>
-        <button id="c9-logout-btn" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('button_logout'); ?>">
-            <span class="icon icon-dir">logout</span>
+        <button type="button" id="c9-logout-btn" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('label_logout'); ?>">
+            <span class="icon icon-dir" aria-hidden="true">logout</span><span class="visually-hidden"><?php echo $cms->snippet('label_logout'); ?></span>
         </button>
     </div>
     </header>
@@ -135,7 +143,8 @@
             <?php echo htmlspecialchars($state->blockMessage($blockReason)); ?>
         </div>
         <?php endif; ?>
-        <article>
+        <!-- Target of the skip link: the layers (backend-layers.js); tabindex -1 so that it can take the focus -->
+        <article id="c9-content" tabindex="-1">
         <!--  JavaScript enabled? -->
 
 		<noscript>
@@ -146,36 +155,36 @@
 			</div><!-- container -->
 		</noscript>
         </article>
-        <div id="c9-navi"><nav class="container"></nav></div>
-        <aside>
+        <div id="c9-navi" tabindex="-1"><nav class="container" aria-label="<?php echo $cms->snippet('label_breadcrumb'); ?>"></nav></div>
+        <aside aria-label="<?php echo $cms->snippet('label_sidebar'); ?>">
             <div class="resize-handle">
                 <span class="icon" aria-hidden="true">drag_indicator</span>
             </div>
             <div id="aside-content"></div>
-            <button class="btn aside-close-btn" <?php echo $backend->on('click', 'cApp.aside.close();'); ?>><span class="icon" aria-hidden="true">close</span><span class="visually-hidden"><?php echo $cms->snippet('button_close_sidebar'); ?></span></button>
+            <button type="button" class="btn aside-close-btn" <?php echo $backend->on('click', 'cApp.aside.close();'); ?>><span class="icon" aria-hidden="true">close</span><span class="visually-hidden"><?php echo $cms->snippet('button_close_sidebar'); ?></span></button>
         </aside>
     </main>
 
     <!-- main menu: Inhalt lädt cApp.ui._initMainMenu() beim Öffnen aus Start/menu.php
          (Info, Handbücher, Module der Gruppe); dies ist nur der Stand vor der Anmeldung -->
-    <div id="c9-menu-container" class="shadow-lg bg-white p-3">
+    <nav id="c9-menu-container" class="shadow-lg bg-white p-3" aria-label="<?php echo $cms->snippet('speak_open_menu'); ?>">
     <ul class="list-unstyled mb-0">
         <li><a class="dropdown-item" href="#"<?php echo $backend->on('js', "cApp.aside.close('');"); ?>><?php echo $cms->snippet('label_close_sidebar'); ?></a></li>
         <li><a class="dropdown-item" href="#"<?php echo $backend->on('js', "cApp.layers.addOnce('Admin/settings.php');"); ?>><?php echo $cms->snippet('button_settings'); ?></a></li>
         <li><a class="dropdown-item" href="#"<?php echo $backend->on('js', 'cApp.layers.logout();'); ?>><?php echo $cms->snippet('label_logout'); ?></a></li>
     </ul>
-    </div>
+    </nav>
 
     <!-- bgproc details -->
-    <div id="c9-bgproc-container" class="shadow-lg bg-white">
-        wait...
+    <div id="c9-bgproc-container" class="shadow-lg bg-white" role="region" aria-label="<?php echo $cms->snippet('bgproc_headline'); ?>">
+        <?php echo $cms->snippet('label_loading'); ?>
     </div>
 
     <!-- Zielcontainer für das Abzeichen der internen Nachrichten (cApp.mail.refreshBadge) -->
     <div id="c9-mail-container" class="d-none"></div>
 
     <!-- modal -->
-    <div id="login-modal" class="modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div id="login-modal" class="modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="login-modal-title" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" id="login-dialog">
         </div>
     </div>
@@ -196,6 +205,12 @@
             message_edited:'<?php echo $cms->snippet('message_edited'); ?>',
             label_home: '<?php echo $cms->snippet('label_home'); ?>',
             icon_home: '<?php echo $backend->template('icon_home'); ?>',
+            // Accessibility (backend-a11y.js, backend-system.js): texts for screen readers
+            label_loading: <?php echo json_encode($cms->snippet('label_loading')); ?>,
+            // Personal setting "Animation" (admin.settings.animation, default on): the slide
+            // animation of the record list of a lookup field (backend-layers.js _slideOk())
+            animation: <?php echo json_encode((int)(((array)($session->get('details') ?? []))['settings']['animation'] ?? 1) !== 0); ?>,
+            button_close: <?php echo json_encode($cms->snippet('button_close')); ?>,
             path_separator: '<?php echo $cms->snippet('path_separator'); ?>',
             message_connection_error: '<?php echo $cms->snippet('message_connection_error'); ?>',
             bgproc_finished: '<?php echo $cms->snippet('bgproc_message_finished'); ?>',
@@ -219,6 +234,7 @@
     </script>
     <script src="assets/js/backend.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-handlers.js<?php echo $nocache; ?>"></script>
+    <script src="assets/js/backend-a11y.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-system.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-forms.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-ui.js<?php echo $nocache; ?>"></script>

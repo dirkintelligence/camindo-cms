@@ -4,9 +4,9 @@
             <span>{type}</span>
             <span>{date}</span>
         </div>
-        <div class="c9-bgproc-bar" data-bs-toggle="tooltip" data-bs-placement="top" title="{tooltip}" tabindex="0"><span class="bg-{class}" style="width:{progress}%">{progress}%</span></div>
+        <div class="c9-bgproc-bar" data-bs-toggle="tooltip" data-bs-placement="top" title="{tooltip}" tabindex="0"><span class="bg-{class}" style="width:{progress}%" role="progressbar" aria-valuenow="{progress}" aria-valuemin="0" aria-valuemax="100" aria-label="{type}">{progress}%</span></div>
     </div>
     <div>
-        <button class="btn btn-light c9-abort-bgproc" title="{#button_abort}"><span class="icon" aria-hidden="true">close<span></button>
+        <button class="btn btn-light c9-abort-bgproc" title="{#button_abort}"><span class="icon" aria-hidden="true">close</span></button>
     </div>
 </li>

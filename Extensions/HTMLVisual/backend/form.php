@@ -22,18 +22,22 @@ $toolbarOptions = [];
 foreach (['full', 'basic', 'custom'] as $value) {
     $toolbarOptions[$value] = $cms->snippet('ext.htmlvisual.option_toolbar_' . $value);
 }
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_toolbar'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_toolbar'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_toolbar', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{options}' => $backend->options($toolbarOptions, $toolbar),
     ]),
 ]);
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_toolbar_custom_list'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_toolbar_custom_list'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_toolbar_custom', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $backend->escape((string)($options['toolbar_custom'] ?? '')),
         '{note}' => $note('note_toolbar_custom'),
@@ -41,19 +45,23 @@ echo $backend->template('edit_form_block', [
 ]);
 
 // Height
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_min_height'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_min_height'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_min_height', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => (string)max(50, (int)($options['min_height'] ?? 200)),
     ]),
 ]);
 $maxHeight = (int)($options['max_height'] ?? 0);
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_max_height'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_max_height'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_max_height', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $maxHeight > 0 ? (string)$maxHeight : '',
         '{note}' => $note('note_max_height'),
@@ -69,10 +77,12 @@ $fileOptions = ['' => $cms->snippet('ext.htmlvisual.option_stylesheet_none')];
 foreach ($files as $file) {
     $fileOptions[$file] = $file;
 }
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_stylesheet'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_stylesheet'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_stylesheet', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{options}' => $backend->options($fileOptions, $stylesheet),
         '{note}' => $files
@@ -82,10 +92,12 @@ echo $backend->template('edit_form_block', [
 ]);
 
 // CSS class
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.htmlvisual.option_css_class'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_css_class'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.htmlvisual.field_css_class', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $backend->escape((string)($options['css_class'] ?? '')),
         '{note}' => $note('note_css_class'),

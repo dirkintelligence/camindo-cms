@@ -594,6 +594,20 @@ article.c9-layers-sliding {
     gap: 10px; /* Abstand zwischen mehreren Nachrichten */
     pointer-events: none;
 }
+/* Live regions of cApp.system.balloon(): stack like the container itself */
+#balloon-messages > div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+/* the live regions stay rendered while empty (otherwise screen readers miss them) -
+   the gap of the container would add space above an empty one */
+#balloon-messages:has(> div:empty) {
+    gap: 0;
+}
+#balloon-messages > div:not(:empty) + div:not(:empty) {
+    margin-top: 10px;
+}
 #balloon-messages .alert {
     pointer-events: auto;
     margin-bottom: 0;
@@ -1202,4 +1216,86 @@ body.c9-docs-print { height: auto; overflow: visible; --bs-body-bg: #fff; backgr
     .c9-docs :is(th, td, code, a) { overflow-wrap: anywhere; }
     .c9-docs pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
     .c9-docs a { color: inherit; text-decoration: none; }
+}
+
+/* ------------------------------------------------------------------
+   Accessibility (WCAG 2.1 AA / BITV 2.0, backend-a11y.js)
+   ------------------------------------------------------------------ */
+
+/* Skip links: invisible until they receive the keyboard focus */
+.c9-skip-links {
+    position: fixed;
+    top: 0;
+    inset-inline-start: 0;
+    z-index: 2000;
+}
+.c9-skip-link:focus,
+.c9-skip-link:focus-visible {
+    display: inline-block;
+    margin: 4px;
+    padding: .5rem 1rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-primary);
+    border: 2px solid var(--bs-primary);
+    border-radius: .25rem;
+    font-weight: 600;
+    text-decoration: underline;
+    box-shadow: 0 .25rem .75rem rgba(0,0,0,.3);
+}
+
+/* Visible keyboard focus (WCAG 2.4.7). In the header the text stays white in every
+   state (Bootstrap would color it for :focus/:active) - the frame marks the focus */
+.c9-head-btn {
+    --bs-btn-color: #fff;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-color: #fff;
+    --bs-btn-disabled-color: #fff;
+    --bs-btn-border-color: transparent;
+    --bs-btn-active-border-color: transparent;
+}
+.c9-head-btn:focus,
+.c9-head-btn:focus-visible,
+.c9-head-btn:active,
+.c9-head-btn.active,
+.c9-head-btn.show {
+    color: #fff;
+    border-color: transparent;
+}
+.c9-head-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -4px;
+    box-shadow: none;
+}
+.c9-ctx-row:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: -2px;
+}
+.c9-ctx-row:focus-visible > * {
+    --bs-table-bg-state: var(--c9-table-striped-bg);
+}
+a.c9-navitem-link:focus-visible,
+.btn-module:focus-visible,
+.nav-tabs .nav-link:focus-visible,
+.c9-ctx-menu .dropdown-item:focus-visible,
+#c9-menu-container .dropdown-item:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+}
+
+/* Focus targets that only receive the focus programmatically (skip link, new layer):
+   no frame, the screen reader announces them anyway */
+#c9-content:focus,
+#c9-navi:focus,
+.c9-layer [data-c9-focus-target]:focus {
+    outline: none;
+}
+
+/* Respect the system setting "reduce motion" (the loading indicator keeps turning) */
+@media (prefers-reduced-motion: reduce) {
+    *:not(.c9-spinning), *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

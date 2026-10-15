@@ -115,6 +115,36 @@ In all lists of the backend, the following applies:
 - The menu ![more_vert](../_/more_vert.svg) at the top right of a list contains further
   functions – in the record list, for example, “Export”, “Import” and “Batch processing”.
 
+## Keyboard operation
+
+The backend can be used entirely without a mouse and with a screen reader. The
+***Tab key*** moves from element to element, Shift+Tab moves back; the selected element
+has a frame.
+
+- ***Skip to content:*** The first press of the Tab key shows “Skip to content” at the top
+  left and – on the second press – “Skip to path navigation”. Press Enter to skip the
+  header bar with the main menu and the symbols.
+- ***Main menu:*** The button ![menu](../_/menu.svg) opens it with the first entry
+  selected. The Esc key closes it again; the same applies to the list of background
+  processes.
+- ***Lists:*** Every row can be reached with the Tab key. Enter opens the detail view,
+  Shift+F10 or the context menu key opens the context menu. In the menu you choose with
+  the arrow keys, Enter carries out the action and Esc closes the menu.
+- ***Column headings*** also sort with the Enter key.
+- ***Layers:*** When you open a new layer, the selection is on its heading. When you close
+  it, the selection returns to where you opened the layer – for example to the row of the
+  list.
+- ***Forms:*** If saving reports an error, the selection is on the first field with an
+  error; the error message belongs to the field and screen readers read it out with it.
+- ***Notes*** on a field (the question mark next to the label) also appear when you reach
+  them with the Tab key; Esc hides them.
+
+Short messages such as “Saved” remain visible for a few seconds, error messages longer.
+While the mouse pointer or the selection is on a message, it stays visible. If your
+operating system has “reduce motion” switched on, the backend does without animations; you
+can also switch off the slide animation of lookup fields in your
+[personal settings](#personal-settings) under ***“Animation”***.
+
 ## Background processes
 
 Functions with a long run time – batch processing, import, export, deleting many records,
@@ -183,6 +213,7 @@ The gear ![settings](../_/settings.svg) opens your personal settings.
 | Time zone | Time zone in which you see and enter points in time |
 | Preferred language version | For multilingual content, the input form opens this language first (see [chapter 6](./06-multilingual-content.md)) |
 | Frontend editing | Shows edit links directly on the website (see [chapter 9](./09-frontend-editing.md)) |
+| Animation | “on” (default): when a lookup field opens the list of the linked area, it slides in from the side. “off”: the list appears immediately |
 | Dashboard widgets | see below |
 | Subscribe to reports | Reports that your administrator has released for your user group – after every run, the result arrives as a message in your inbox. This entry only appears if such reports exist |
 | Summarize messages by email | “daily”: an email with the unread messages per sender and the new ones with their subject, only if new messages have arrived (see [Summarize messages by email](#summarize-messages-by-email)) |

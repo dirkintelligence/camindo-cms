@@ -17,10 +17,12 @@ use Camindo\Core\PasswordPolicy;
 $defaults = $GLOBALS['app']->get(PasswordPolicy::class)->rules();
 foreach (['min_length', 'min_special', 'min_upper', 'min_lower', 'min_digit'] as $rule) {
     $value = (string)($options[$rule] ?? '');
+    $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
     echo $backend->template('edit_form_block', [
-        '{label}' => $cms->snippet('ext.password.option_' . $rule),
+        '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.password.option_' . $rule), '{class}' => '']),
         '{class}' => '',
         '{field}' => $backend->template('ext.password.field_rule', [
+            '{id}' => $fieldId,
             '{name}' => $name,
             '{rule}' => $rule,
             '{value}' => $backend->escape($value),
@@ -35,10 +37,12 @@ $choices = [
     '1' => $cms->snippet('ext.password.option_yes'),
     '0' => $cms->snippet('ext.password.option_no'),
 ];
+$fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $cms->snippet('ext.password.option_upper_not_first'),
+    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.password.option_upper_not_first'), '{class}' => '']),
     '{class}' => '',
     '{field}' => $backend->template('ext.password.field_upper_not_first', [
+        '{id}' => $fieldId,
         '{name}' => $name,
         '{options}' => $backend->options($choices, $value),
     ]),
