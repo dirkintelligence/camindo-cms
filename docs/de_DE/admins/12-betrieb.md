@@ -337,6 +337,12 @@ htaccess renew
 ```
 ***.htaccess*** prüfen bzw. erneuern – wie die Schaltfläche „Erneuern“ unter „Werkzeuge“ → „Server“. Ohne Zusatz meldet der Befehl, ob die Datei zur Verzeichnisstruktur passt (Exit-Code 1, wenn nicht); `renew` schreibt den von camindo CMS verwalteten Abschnitt neu, Zeilen außerhalb bleiben erhalten. `upgrade` erneuert die Datei ohnehin
 
+```
+template commands --lang=de_DE
+template commands --all --out=VERZEICHNIS
+```
+die ***CMS-Befehle*** (Kern und aktive Module) mit ihren Parametern und Beschreibungen als JSON ausgeben – für die Editor-Unterstützung, etwa die Erweiterung für Visual Studio Code. Ohne `--all` in einer Sprache auf die Standardausgabe, mit `--all` je Backend-Sprache eine Datei `commands.{sprache}.json` im Verzeichnis
+
 
 ### Schlüssel wechseln
 

@@ -258,6 +258,12 @@ htaccess renew
 ```
 Check or renew the ***.htaccess*** – like the “Renew” button under “Tools” → “Server”. Without an argument the command reports whether the file matches the directory structure (exit code 1 if not); `renew` rewrites the section managed by camindo CMS, lines outside it are kept. `upgrade` renews the file anyway
 
+```
+template commands --lang=en_US
+template commands --all --out=DIRECTORY
+```
+Output the ***CMS commands*** (core and active modules) with their parameters and descriptions as JSON – for editor support such as the extension for Visual Studio Code. Without `--all` in one language to standard output, with `--all` one file `commands.{language}.json` per backend language in the directory
+
 
 ### Changing the key
 

@@ -50,6 +50,17 @@ php Core/cron/camindo.php upgrade --no-backup
 php Core/cron/camindo.php status | grep -q "everything up to date"
 echo "::endgroup::"
 
+echo "::group::Befehlsdefinitionen (template commands)"
+# every backend language, every snippet of commands.php resolved (no "#template.cmd_…" left)
+out=$(mktemp -d)
+php Core/cron/camindo.php template commands --all --out="$out"
+php -r '$n = 0; foreach (glob($argv[1] . "/commands.*.json") as $f) { $j = json_decode(file_get_contents($f), true);
+    if (!isset($j["commands"]["select"]["params"]["filter"])) { fwrite(STDERR, "$f: invalid\n"); exit(1); }
+    if (str_contains(file_get_contents($f), "\"#template.cmd")) { fwrite(STDERR, "$f: unresolved snippet\n"); exit(1); }
+    $n++; } echo "$n files ok\n"; exit($n >= 2 ? 0 : 1);' "$out"
+rm -rf "$out"
+echo "::endgroup::"
+
 echo "::group::Testinstanz anlegen"
 php "$CORE_DIR/.github/ci/create-instance.php"
 echo "::endgroup::"
