@@ -253,7 +253,8 @@ class Backend {
      * Core/Modules/{Name} or Modules/{Name}. A module missing there (not
      * installed, inactive, update pending) is not reachable in the backend.
      *
-     * @param string $file  _path from the Apache RewriteRule
+     * @param string $path  _path from the Apache RewriteRule
+     * @param string $kind  'modules', 'extensions'
      * @return string       absolute path to the backend script to include
      */
     public function backendPath(string $path, string $kind = 'modules'):string

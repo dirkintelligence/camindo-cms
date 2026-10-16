@@ -207,6 +207,7 @@ class InstallCommand extends Command {
         if (in_array('tasks', $steps, true)) {
             $this->out('tasks');
             $installer->createDefaultTasks();
+            $installer->createDefaultConverter();
         }
         if (in_array('finish', $steps, true)) {
             $this->out('finish');

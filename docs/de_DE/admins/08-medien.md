@@ -29,7 +29,10 @@ nachinstallieren. Ob ImageMagick und ffmpeg gefunden werden, zeigt das Modul
 
 ## Konverter einrichten
 
-Konverter legen Sie im Modul „Medienkonverter“ an:
+Konverter legen Sie im Modul „Medienkonverter“ an. Die Installation richtet bereits den
+Konverter ***„Interne Bildvorschau (GD)“*** ein: Er wandelt alle Bildformate, die die
+GD Bibliothek liest, in JPEG-Bilder von höchstens 200 px Breite und 300 px Höhe um.
+
 
 | Einstellung | Bedeutung |
 |---|---|

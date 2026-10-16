@@ -26,6 +26,7 @@
  *    10  refreshComponents()   ComponentManager::refresh() - discover, not install
  *    11  buildRuntime()        Snippet-/HTML-Cache, InstanceCache, .htaccess, Versionsstempel
  *    12  createDefaultTasks()  default tasks of the scheduler (Scheduler::DEFAULT_TASKS)
+ *                              createDefaultConverter() - media converter "internal preview (GD)"
  *    13  finish()              var/install.lock
  *
  * From step 7 the installer needs a container whose config knows the just
@@ -669,6 +670,39 @@ class Installer {
             throw new \RuntimeException('scheduler tasks could not be created: ' . $errors);
         }
         $this->log($created ? 'scheduler tasks created: ' . implode(', ', array_keys($created)) : 'scheduler tasks exist');
+    }
+
+    /**
+     * Create the default media converter "internal preview (GD)": every image format
+     * GD reads becomes a .jpg of at most 200 x 300 px, otherwise the processor defaults.
+     * GD is a required extension, so the converter works on every installation.
+     * Repeatable: only when there is no converter yet (with --fixtures there are some).
+     */
+    public function createDefaultConverter(): void
+    {
+        // fresh container: Cms reads the processor list (var/config/components/processors.php)
+        // in its constructor - the one booted before refreshComponents() knows none
+        $this->app = null;
+        $app = $this->boot();
+        $db = $app->get(Database::class);
+        $db->query('SELECT COUNT(*) FROM `converter`');
+        if ((int)($db->fetchNum()[0] ?? 0) > 0) {
+            $this->log('converters exist');
+            return;
+        }
+        $converter = $app->get(\Camindo\Core\Modules\Converter\Converter::class);
+        $data = $converter->init(['processor' => 'ImageGd']);
+        $data['processor'] = 'ImageGd';
+        $data['label'] = '#converter.image_preview_gd';
+        $data['extension'] = 'jpg';
+        $data['media_types_incl'] = implode("\n", ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/avif']);
+        $data['details']['width'] = 200;
+        $data['details']['height'] = 300;
+        $id = $converter->save([], $data);
+        if ($id === null) {
+            throw new \RuntimeException('converter could not be created: ' . $app->get(Cms::class)->errorMsg(' | '));
+        }
+        $this->log("converter 'internal preview (GD)' created (id $id)");
     }
 
     // ==== 9-12 Register, components, runtime, finish ====

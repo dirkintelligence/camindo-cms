@@ -7,7 +7,7 @@ if (version_compare(PHP_VERSION, '8.3.0', '<')) {
 
 // SemVer, identical to the Git tag of the release (developer docs, chapter 09 (Installation and update)).
 // If the version stamp in var/config/core.php differs from it, `upgrade` is pending.
-define('CAMINDO_VERSION', '9.0.5');
+define('CAMINDO_VERSION', '9.0.6');
 
 // Composer Autoloader
 require_once dirname(__DIR__) . '/vendor/autoload.php';
