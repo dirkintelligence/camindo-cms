@@ -26,9 +26,7 @@ Logik, die mit den Ausgabebefehlen allein nicht zu schreiben ist:
 
 ```cms
 (CMS:SAVEDATA article)
-<?php
-$article = $GLOBALS['article'];
-if ($article['price'] > 100 && $article['stock'] > 0) { ?>
+<?php if ($article['price'] > 100 && $article['stock'] > 0) { ?>
   <span class="badge">Premium</span>
 <?php } ?>
 ```
@@ -38,7 +36,7 @@ zu rechnen:
 
 ```cms
 (CMS:SAVEDATA parent id="{$cms['parent_id']}")
-<?php if ($GLOBALS['parent']['price'] > $cms['price']) { ?> … <?php } ?>
+<?php if ($parent['price'] > $cms['price']) { ?> … <?php } ?>
 ```
 
 Geht es nur um die ***Ausgabe*** von Feldern eines anderen Datensatzes, brauchen Sie
@@ -60,13 +58,19 @@ Gibt es den Datensatz nicht, ist das Array leer.
 
 ### `phpvar`
 
-Name der Variable in `$GLOBALS`; darf ohne Schlüssel stehen. Nur Buchstaben, Ziffern und `_`:
+Name der Variable; darf ohne Schlüssel stehen. Nur Buchstaben, Ziffern und `_`.
+Das Array steht danach direkt als `$article` im Template – auch in mit
+`CMS:INCLUDE` eingebundenen Templates – und zusätzlich in `$GLOBALS['article']`,
+etwa für eigene PHP-Funktionen:
 
 ```cms
 (CMS:SAVEDATA phpvar=article)
 (CMS:SAVEDATA article)
-<?php echo $GLOBALS['article']['record_id']; ?>
+<?php echo $article['record_id']; ?>
 ```
+
+Namen, die mit `_` beginnen, sowie `this` und `GLOBALS` sind nur über
+`$GLOBALS[…]` erreichbar.
 
 ### `id`
 

@@ -290,6 +290,36 @@ class Template extends Dataset {
     }
 
     /**
+     * All command definitions (core and active modules, loadCommands()), sorted
+     * alphabetically by name - for the command picker of the input mask
+     * (TemplateBackend::command()).
+     *
+     * @return array  name (lowercase, without "CMS:") => definition from commands.php
+     */
+    public function commandDefinitions(): array
+    {
+        $commands = $this->loadCommands();
+        ksort($commands);
+        return $commands;
+    }
+
+    /**
+     * Text of a command definition (note, description, value, default) for display:
+     * '#prefix.key' is a snippet (Cms::textOrSnippet() rule), anything else - also a value
+     * hint like '#rrggbb' of a module command - stays as it is. Plain text, not escaped.
+     *
+     * @param string $lang  language of the snippet (default: that of the call)
+     */
+    public function commandText(mixed $value, string $lang = ''): string
+    {
+        $value = (string)$value;
+        if (preg_match('/^#([A-Za-z0-9_.]+\.[A-Za-z0-9_]+)$/', $value, $m)) {
+            return $this->cms->snippet($m[1], [], $lang);
+        }
+        return $value;
+    }
+
+    /**
      * Rewrite all compiled files (Tools > Developer).
      *
      * Recompiles each template from its source file (var/templates, never from

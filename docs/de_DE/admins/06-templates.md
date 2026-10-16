@@ -26,7 +26,21 @@ Templates.
 Die Detailansicht zeigt den Code farbig hervorgehoben. ***Fehler*** im Code – ein
 unbekannter Befehl, ein falscher Parameter, eine fehlende Klammer – verhindern das
 Speichern nicht, sondern werden mit Zeilennummer über dem Code angezeigt. Verweise auf
-andere Templates sind anklickbar.
+andere Templates sind anklickbar. Existiert das verwiesene Template noch nicht, bietet
+camindo CMS an, es gleich anzulegen; ein ***Listentemplate*** (Parameter `resulttemplate`
+von `CMS:SELECT` und `CMS:SELECT_LANGVERSION`) erhält dabei schon die Schleife
+`(CMS:RESULT_START)` … `(CMS:RESULT_END)` als Code.
+
+***CMS-Befehl einfügen:*** Rechts über dem Code-Feld der Eingabemaske steht eine Auswahl
+aller CMS-Befehle (alphabetisch, samt den Befehlen der Zusatzmodule). Wählen Sie einen aus,
+öffnet sich eine Maske mit allen Parametern des Befehls: je Parameter ein Eingabefeld für den
+Wert, davor bei Bedarf Felder für die ***Schlüssel*** (`filter[preis]`) und – bei `filter` –
+eine Auswahl des ***Vergleichsoperators*** (`=`, `==`, `!=`, `<`, `>=` …). Parameter mit
+Schlüsseln dürfen mehrfach vorkommen; mit dem kleinen „+“ darunter fügen Sie eine weitere
+Zeile hinzu. Das Fragezeichen neben dem Parameternamen zeigt seine Beschreibung,
+Pflichtparameter sind mit * markiert. „Einfügen“ setzt den Befehl an der Cursorposition in
+den Code ein – Parameter ohne Wert bleiben weg, ab drei Parametern steht jeder in einer
+eigenen Zeile. Gespeichert wird erst mit dem Template.
 
 Ein Template lässt sich in einen anderen Template-Bereich **verschieben**; seine
 Zuweisungen bleiben erhalten.
