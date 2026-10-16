@@ -478,6 +478,8 @@ class Page {
         // Script policy of the instance (switchable, SecurityHeaders::sendFrontendCsp())
         // - before any output; CMS:CSP in the template can still change it afterwards
         $this->container->get(SecurityHeaders::class)->sendFrontendCsp((array)$this->instance);
+        // Frontend editing shows editor controls - never from a cache
+        if ($this->cms->fedActive()) SecurityHeaders::sendNoStore();
 
         // Which language? Likewise before the first content query - select() joins
         // the data_* rows and the content cache of the language.

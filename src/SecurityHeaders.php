@@ -37,6 +37,16 @@
  * CMS:CSP changes a page's policy (more sources, other mode) and sends it
  * again as long as nothing has been output yet.
  *
+ * CACHING (developer docs, chapter 14 (Security: web))
+ * --------------------
+ * Frontend pages are dynamic: by default 'Cache-Control: private, no-cache' - no shared
+ * cache (proxy, CDN) stores them, the browser asks the server again before every display
+ * (back/forward cache stays usable). As soon as a page belongs to one visitor - a frontend
+ * session (UserSession, also an anonymous basket) or frontend editing - sendNoStore()
+ * switches to 'private, no-store'. A template can replace the default with
+ * (CMS:HEADER "Cache-Control: …"); the switch to no-store of a personal page wins
+ * when it comes later. Media delivery (MediaDelivery) sets its own value.
+ *
  * HSTS only on request (security.hsts_max_age > 0) and only over HTTPS: the browser
  * remembers the rule up to max-age, so an installation without consistent HTTPS
  * would lock itself out. Over http:// the browser ignores the header anyway.
@@ -53,6 +63,12 @@ class SecurityHeaders
 
     /** Endpoint for violation reports of the frontend (public/csp_report.php) */
     public const FRONTEND_REPORT_PATH = '/csp_report.php';
+
+    /** Cache-Control of a frontend page (see class comment) */
+    public const FRONTEND_CACHE = 'private, no-cache';
+
+    /** Cache-Control of a page that belongs to one visitor */
+    public const PERSONAL_CACHE = 'private, no-store';
 
     private ?string $nonce = null;
 
@@ -157,7 +173,19 @@ class SecurityHeaders
             // Templates that deliver CSS/JS/JSON set their Content-Type via CMS:HEADER
             'X-Content-Type-Options'  => 'nosniff',
             'Referrer-Policy'         => 'strict-origin-when-cross-origin',
+            // Content changes regularly - see class comment (CACHING)
+            'Cache-Control'           => self::FRONTEND_CACHE,
         ];
+    }
+
+    /**
+     * The page belongs to one visitor (frontend session, frontend editing): no cache
+     * may store it. Nothing on the command line or after the first output.
+     */
+    public static function sendNoStore(): void
+    {
+        if (PHP_SAPI === 'cli' || headers_sent()) return;
+        header('Cache-Control: ' . self::PERSONAL_CACHE);
     }
 
     // ====================

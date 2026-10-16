@@ -84,6 +84,7 @@ X-Frame-Options: SAMEORIGIN
 Content-Security-Policy: frame-ancestors 'self'
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
+Cache-Control: private, no-cache
 ```
 
 Die Seite lässt sich damit nur innerhalb der eigenen Website in einen Rahmen legen
@@ -106,6 +107,28 @@ Eine eigene Content-Security-Policy ersetzt die Voreinstellung – nehmen Sie
 ```cms
 (CMS:HEADER "Content-Security-Policy: frame-ancestors 'self'; script-src 'self' https://cdn.example")
 ```
+
+### Zwischenspeichern (Cache)
+
+Seiten werden bei jedem Aufruf neu erzeugt. Mit der Voreinstellung
+***`Cache-Control: private, no-cache`*** speichert kein Proxy und kein CDN die Seite, und
+der Browser fragt vor jeder Anzeige erneut beim Server an – geänderte Inhalte erscheinen
+sofort. Die Zurück-Schaltfläche des Browsers bleibt trotzdem schnell.
+
+Gehört eine Seite einem einzelnen Besucher – es läuft eine Sitzung eines Frontend-Users
+(auch ein Warenkorb ohne Anmeldung, siehe [CMS:USER_BASKET](user-basket.md)) oder das
+Frontend-Editing ist eingeschaltet –, sendet camindo stattdessen
+***`Cache-Control: private, no-store`***: Die Seite wird nirgends gespeichert.
+
+Eine Seite, die sich selten ändert, darf länger zwischengespeichert werden:
+
+```cms
+(CMS:HEADER "Cache-Control: public, max-age=3600")
+```
+
+Setzen Sie den Header an den Template-Anfang. Läuft danach noch ein `CMS:USER_*`-Befehl mit
+einer Sitzung, gilt wieder `private, no-store` – persönliche Seiten landen so in keinem
+Zwischenspeicher.
 
 ---
 
