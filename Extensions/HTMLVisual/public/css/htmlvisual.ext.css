@@ -90,6 +90,7 @@
     color: var(--bs-secondary-color, #6c757d);
     pointer-events: none;
 }
+.c9-htv-content img { max-width: 100%; height: auto; }
 .c9-htv-content > :first-child { margin-top: 0; }
 .c9-htv-content > :last-child { margin-bottom: 0; }
 .c9-htv-content p,

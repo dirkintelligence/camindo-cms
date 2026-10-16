@@ -14,17 +14,19 @@ The same as Markdown (visual): bold, italic, underline, inline code,
 paragraph format (paragraph, heading 1–6), bulleted and numbered lists with
 sub-items, quote, code block, link, horizontal line, line break, special characters,
 align left, center, right, ***text direction*** for selected sections, and
-tables with a header row. It does not support images.
+tables with a header row. Images, classes and styles can be specified in the source
+(see below).
 
 When ***pasting***, the editor only takes over what it can display: formatted text
 from Word, Google Docs or web pages is trimmed to the supported formats, pasted
 plain text that looks like Markdown is converted. Images, colors, fonts,
 classes and strikethrough are dropped; the text remains.
 
-The same applies to HTML that is written or changed in the source (**<>**): when
-switching back to the formatted view and when saving, only what the editor can
-represent is kept. Existing HTML in the field (for example from TinyMCE) remains
-unchanged until the text is changed in the editor – then it is trimmed in the same way.
+The ***source*** (**<>**) allows more: HTML written or changed there additionally
+keeps ***own attributes*** and ***images*** (see “Classes, styles and images” below).
+Everything else is trimmed in the same way when switching back to the formatted view
+and when saving. Existing HTML in the field (for example from TinyMCE) remains
+unchanged until the text is changed in the editor – then the same rules apply.
 
 How editors work with it is described in the [Manual for editors](../../editors/05-editing-records.md#text)
 (Editing records → Input fields → Text).
@@ -44,8 +46,8 @@ pasting work regardless of which buttons you select.
 
 ## HTML in the field
 
-The editor writes only these elements – without classes and without styles other than
-alignment:
+The editor writes only these elements – classes, styles and images only if they were
+specified in the source:
 
 | HTML | Meaning |
 |---|---|
@@ -60,6 +62,33 @@ alignment:
 | `<table>` with `<thead>`/`<tbody>`, `<th>`, `<td>` | table, first row is the header row |
 | `style="text-align: left\|center\|right;"` | alignment of paragraph, heading, list, quote, table; on cells as column alignment |
 | `<bdi dir="rtl">` / `<bdi dir="ltr">` | section right to left or left to right |
+| `<span>`, `<img>` | only from the source, see below |
+
+### Classes, styles and images
+
+When specified in the source, these are kept:
+
+| What | Where |
+|---|---|
+| `class`, `style`, `id`, `title` | on `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` and on `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` become `<strong>`, `<em>`, `<u>`) |
+| `<img>` with `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` | in the text, also in links and table cells; `src` only `http(s):`, relative addresses and `data:image/…` |
+
+```html
+<p class="lead">Introduction with <span class="marker">highlight</span>.</p>
+<p><a class="button" href="/contact">Contact</a></p>
+<p><img src="/media/1/12/picture.jpg" alt="Showroom" width="600" loading="lazy"></p>
+```
+
+In the formatted view, classes and styles take effect immediately (together with the
+field's stylesheet); images appear in place and can be deleted or moved like a
+character. Attributes can only be changed in the source. Alignment via the buttons
+adds `text-align` to `style`; a `text-align` in the source becomes the alignment of
+the block.
+
+Not kept: attributes on list items and table cells, `<div>` (becomes a paragraph,
+classes are dropped), other attributes (`data-…`, events such as `onclick`) and other
+elements. ***Pasted HTML*** from the clipboard still loses classes, styles and images –
+copying within the editor, on the other hand, keeps them.
 
 Invisible special characters are stored as entities in the HTML: `&nbsp;`, `&#8239;` (narrow
 non-breaking space), `&ensp;`, `&thinsp;`, `&shy;`, `&#8209;` (non-breaking

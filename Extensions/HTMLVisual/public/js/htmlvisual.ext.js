@@ -22,7 +22,8 @@
  * The internal Markdown is only the exchange format between DOM and block list (as in
  * MarkdownVisual) - it is never saved. Pasted HTML runs through the same
  * block list - what it does not map (images, strikethrough, colors, fonts,
- * classes, attributes …) is dropped, the text remains.
+ * classes, attributes …) is dropped, the text remains. Only the HTML of the field
+ * (and of the source view) keeps own attributes and images, see below.
  *
  * HTML IN THE FIELD
  * --------------------
@@ -31,6 +32,9 @@
  *     <strong> <em> <u> <code> <a href> <br> <bdi dir="rtl|ltr">
  *     style="text-align: left|center|right" on paragraph, heading, list, quote,
  *     table and cell (column alignment)
+ *     from the field / source view only: id, class, style, title on p, h1-h6, ul/ol,
+ *     blockquote, pre, hr, table and on span, strong, em, u, code, a; <img> with
+ *     src, alt, title, width, height, loading, srcset, sizes, id, class, style
  * Invisible special characters are entities in the HTML (&nbsp; &shy; &#8239; …); in the
  * editor they are marked, non-editable span.htv-ch. An &nbsp; set by the browser itself
  * (space at the end of a line), on the other hand, becomes a normal space.
@@ -115,6 +119,87 @@
         const scheme = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
         if (scheme && !/^(https?|mailto|tel|ftp)$/i.test(scheme[1])) return '';
         return url;
+    }
+
+    // Image sources: http(s), relative addresses and data:image/… - otherwise ''
+    function safeSrc(url) {
+        url = String(url || '').trim();
+        if (/[\u0000-\u001F\u007F]/.test(url)) return '';
+        if (/^data:image\/(png|gif|jpe?g|webp|avif|bmp)[;,]/i.test(url)) return url;
+        const scheme = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+        return scheme && !/^https?$/i.test(scheme[1]) ? '' : url;
+    }
+
+    // ---- Own attributes (only from the HTML of the field, i.e. the source view) ----
+    //
+    // id, class, style and title on blocks and inline elements, <img> with its
+    // attributes. Pasted HTML loses them. In the editor the element carries them
+    // as real attributes (preview with the stylesheet; id only in the JSON) and as
+    // JSON in data-htv-a - only the JSON counts when reading, the browser changes
+    // style attributes itself. Inline they travel through the internal Markdown as
+    // EL_OPEN id EL_MID … EL_CLOSE and EL_IMG id EL_MID (entries in elRegistry).
+
+    const OWN_ATTRS = ['id', 'class', 'style', 'title'];
+    const IMG_ATTRS = ['src', 'alt', 'title', 'width', 'height', 'loading', 'srcset', 'sizes', 'id', 'class', 'style'];
+    // Inline elements that keep own attributes (b/i/ins as strong/em/u)
+    const ATTR_INLINE = { SPAN: 'span', STRONG: 'strong', B: 'strong', EM: 'em', I: 'em', U: 'u', INS: 'u', CODE: 'code', A: 'a' };
+    const EL_OPEN = '';
+    const EL_MID = '';
+    const EL_CLOSE = '';
+    const EL_IMG = '';
+    const EL_RE = /[-]/g;
+    const elRegistry = [];
+    const elIds = new Map();
+
+    function elRef(entry) {
+        const key = JSON.stringify(entry);
+        let id = elIds.get(key);
+        if (id === undefined) {
+            id = String(elRegistry.length);
+            elRegistry.push(entry);
+            elIds.set(key, id);
+        }
+        return id;
+    }
+
+    function cleanAttrs(src, names, block) {
+        const out = {};
+        names.forEach((k) => {
+            let v = src[k];
+            if (typeof v !== 'string') return;
+            v = v.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim();
+            if (k === 'class') v = v.split(/\s+/).filter((c) => c && !/^(c9-)?htv-/.test(c)).join(' ');
+            // the alignment of a block is its own setting (data-align)
+            else if (k === 'style' && block) v = v.replace(/(^|;)\s*text-align\s*:[^;]*/gi, '$1').replace(/;(\s*;)+/g, ';').replace(/^\s*;\s*/, '').trim();
+            else if (k === 'src') v = safeSrc(v);
+            else if (k === 'srcset' && v.split(',').some((c) => c.trim() !== '' && !safeSrc(c.trim().split(/\s+/)[0]))) v = '';
+            if (v !== '' || (k === 'alt' && names === IMG_ATTRS)) out[k] = v;
+        });
+        return out;
+    }
+
+    // Own attributes of el or null; block: element of a block (text-align is dropped)
+    function ownAttrs(el, names, block) {
+        let src;
+        const data = el.getAttribute('data-htv-a');
+        if (data !== null) {
+            try { src = JSON.parse(data); } catch (e) { src = null; }
+            if (!src || typeof src !== 'object') src = {};
+        }
+        else if (ownHtml) {
+            src = {};
+            names.forEach((k) => { if (el.hasAttribute(k)) src[k] = el.getAttribute(k); });
+        }
+        else return null;
+        const out = cleanAttrs(src, names, block);
+        return Object.keys(out).length ? out : null;
+    }
+
+    // Attributes for the editor HTML
+    function attrsHtml(attrs) {
+        if (!attrs) return '';
+        return Object.keys(attrs).filter((k) => k !== 'id').map((k) => ' ' + k + '="' + esc(attrs[k]) + '"').join('')
+            + ' data-htv-a="' + esc(JSON.stringify(attrs)) + '"';
     }
 
     function isWS(c) {
@@ -528,11 +613,23 @@
                 i++;
                 continue;
             }
-            if (c === RLI || c === LRI || c === PDI) {
+            if (c === RLI || c === LRI || c === PDI || c === EL_CLOSE) {
                 push({ type: 'iso', ch: c });
                 i++;
                 continue;
             }
+            if (c === EL_OPEN || c === EL_IMG) {
+                const e = src.indexOf(EL_MID, i + 1);
+                const id = e > i ? src.slice(i + 1, e) : '';
+                if (/^\d+$/.test(id) && elRegistry[+id]) {
+                    push(c === EL_IMG ? { type: 'img', id: +id } : { type: 'iso', ch: c, id: +id });
+                    i = e + 1;
+                    continue;
+                }
+                i++;
+                continue;
+            }
+            if (c === EL_MID) { i++; continue; }
             if (c === '&') {
                 const m = src.slice(i, i + 40).match(ENTITY_RE);
                 if (m) {
@@ -589,22 +686,26 @@
         return nodes;
     }
 
-    // Pair isolates: RLI/LRI … PDI -> bdi[dir], with their own emphasis inside (it
-    // does not reach across the boundary); whatever has no counterpart remains text
+    // Pair isolates: RLI/LRI … PDI -> bdi[dir], EL_OPEN … EL_CLOSE -> element with own
+    // attributes, each with their own emphasis inside (it does not reach across the
+    // boundary); an isolate without counterpart remains text, an element marker is dropped
     function pairIsolates(nodes) {
         const open = [];
+        const asText = (n) => ({ type: 'text', v: n.ch === EL_OPEN || n.ch === EL_CLOSE ? '' : n.ch });
         for (let k = 0; k < nodes.length; k++) {
             const n = nodes[k];
             if (n.type !== 'iso') continue;
-            if (n.ch !== PDI) { open.push(k); continue; }
-            if (!open.length) { nodes[k] = { type: 'text', v: n.ch }; continue; }
+            if (n.ch !== PDI && n.ch !== EL_CLOSE) { open.push(k); continue; }
+            if (!open.length || (nodes[open[open.length - 1]].ch === EL_OPEN) !== (n.ch === EL_CLOSE)) { nodes[k] = asText(n); continue; }
             const o = open.pop();
             const children = nodes.slice(o + 1, k);
             processEmphasis(children);
-            nodes.splice(o, k - o + 1, { type: 'elem', tag: 'bdi', dir: nodes[o].ch === RLI ? 'rtl' : 'ltr', children: children });
+            nodes.splice(o, k - o + 1, nodes[o].ch === EL_OPEN
+                ? { type: 'elem', el: nodes[o].id, children: children }
+                : { type: 'elem', tag: 'bdi', dir: nodes[o].ch === RLI ? 'rtl' : 'ltr', children: children });
             k = o;
         }
-        open.forEach((k) => { nodes[k] = { type: 'text', v: nodes[k].ch }; });
+        open.forEach((k) => { nodes[k] = asText(nodes[k]); });
     }
 
     // Pair emphasis (simplified CommonMark algorithm)
@@ -656,7 +757,19 @@
                         ? renderInlineNodes(n.children, inLink)
                         : '<a href="' + esc(n.href) + '">' + renderInlineNodes(n.children, true) + '</a>';
                     break;
+                case 'img': {
+                    const e = elRegistry[n.id];
+                    if (e && e.tag === 'img') out += '<img' + attrsHtml(e.attrs) + '>';
+                    break;
+                }
                 case 'elem':
+                    if (n.el !== undefined) {
+                        const e = elRegistry[n.el];
+                        const tag = e.tag === 'a' && (inLink || !e.href) ? 'span' : e.tag;
+                        out += '<' + tag + (tag === 'a' ? ' href="' + esc(e.href) + '"' : '') + attrsHtml(e.attrs) + '>'
+                            + renderInlineNodes(n.children, inLink || tag === 'a') + '</' + tag + '>';
+                        break;
+                    }
                     out += n.tag
                         ? '<' + n.tag + (n.dir ? ' dir="' + n.dir + '"' : '') + '>' + renderInlineNodes(n.children, inLink) + '</' + n.tag + '>'
                         : renderInlineNodes(n.children, inLink);
@@ -686,16 +799,16 @@
     }
 
     function renderBlock(b) {
-        const al = alignAttr(b.align);
+        const al = alignAttr(b.align) + attrsHtml(b.attrs);
         switch (b.t) {
             case 'p':
                 return '<p' + al + '>' + (parseInline(b.inl) || '<br>') + '</p>';
             case 'h':
                 return '<h' + b.level + al + '>' + (parseInline(b.inl) || '<br>') + '</h' + b.level + '>';
             case 'hr':
-                return '<hr>';
+                return '<hr' + attrsHtml(b.attrs) + '>';
             case 'code':
-                return '<pre' + (b.lang ? ' data-lang="' + esc(b.lang) + '"' : '') + '>' + esc(b.text)
+                return '<pre' + (b.lang ? ' data-lang="' + esc(b.lang) + '"' : '') + attrsHtml(b.attrs) + '>' + esc(b.text)
                     + (b.text === '' || b.text.endsWith('\n') ? '<br>' : '') + '</pre>';
             case 'quote':
                 return '<blockquote' + al + '>' + (renderBlocks(b.children) || '<p><br></p>') + '</blockquote>';
@@ -809,7 +922,8 @@
             if (n.nodeType === 3) { inline.push(n); return; }
             if (n.nodeType !== 1) return;
             const tag = tagOf(n);
-            if (SKIP_TAGS.test(tag)) return;
+            // <img> is inline content - collectRuns() decides whether it stays
+            if (SKIP_TAGS.test(tag) && tag !== 'IMG') return;
             if (!BLOCK_TAGS.test(tag)) {
                 // Inline element with blocks inside (Google Docs: <b id="docs-internal-guid…">)
                 if (hasBlockDescendant(n)) { flush(); out.push(...domToBlocks(n, alignOf(n) || align)); }
@@ -818,30 +932,36 @@
             }
             flush();
             const a = alignOf(n) || align || '';
+            const own = (b) => {
+                const at = ownAttrs(n, OWN_ATTRS, true);
+                if (at) b.attrs = at;
+                return b;
+            };
             const h = tag.match(/^H([1-6])$/);
             if (h) {
                 const inl = inlineMd(Array.from(n.childNodes), { heading: true });
-                if (inl !== '') out.push({ t: 'h', level: +h[1], inl: inl, align: a });
+                if (inl !== '') out.push(own({ t: 'h', level: +h[1], inl: inl, align: a }));
             }
-            else if (tag === 'UL' || tag === 'OL') out.push(listFromDom(n, a));
+            else if (tag === 'UL' || tag === 'OL') out.push(own(listFromDom(n, a)));
             else if (tag === 'LI') out.push({ t: 'list', ordered: false, start: 1, items: [{ children: domToBlocks(n, '') }], align: a });
             else if (tag === 'BLOCKQUOTE') {
                 const children = domToBlocks(n, '');
-                if (children.length) out.push({ t: 'quote', children: children, align: a });
+                if (children.length) out.push(own({ t: 'quote', children: children, align: a }));
             }
             else if (tag === 'PRE') {
                 const text = preText(n).replace(/\n+$/, '');
-                if (text.trim() !== '') out.push({ t: 'code', lang: codeLang(n), text: text });
+                if (text.trim() !== '') out.push(own({ t: 'code', lang: codeLang(n), text: text }));
             }
-            else if (tag === 'HR') out.push({ t: 'hr' });
+            else if (tag === 'HR') out.push(own({ t: 'hr' }));
             else if (tag === 'TABLE') {
                 const t = tableFromDom(n, a);
-                if (t) out.push(t);
+                if (t) out.push(own(t));
             }
             else if (hasBlockDescendant(n) || /^(THEAD|TBODY|TFOOT|TR|TD|TH|DL|FIELDSET|DETAILS)$/.test(tag)) out.push(...domToBlocks(n, a));
             else {
                 const inl = inlineMd(Array.from(n.childNodes), {});
-                if (inl !== '') out.push({ t: 'p', inl: inl, align: a });
+                const b = { t: 'p', inl: inl, align: a };
+                if (inl !== '') out.push(tag === 'P' ? own(b) : b);
             }
         });
         flush();
@@ -860,7 +980,7 @@
                 if (items.length) items[items.length - 1].children.push(sub);
                 else items.push({ children: [sub] });
             }
-            else if (n.nodeType === 3 || (n.nodeType === 1 && !SKIP_TAGS.test(tag))) {
+            else if (n.nodeType === 3 || (n.nodeType === 1 && (!SKIP_TAGS.test(tag) || tag === 'IMG'))) {
                 const inl = inlineMd([n], {});
                 if (inl !== '') items.push({ children: [{ t: 'p', inl: inl }] });
             }
@@ -912,12 +1032,17 @@
     function collectRuns(nodes, marks, runs) {
         nodes.forEach((n) => {
             if (n.nodeType === 3) {
-                const s = n.data.replace(ZW_RE, '').replace(/ /g, ' ').replace(/[ \t\r\n\f]+/g, ' ');
+                const s = n.data.replace(ZW_RE, '').replace(EL_RE, '').replace(/ /g, ' ').replace(/[ \t\r\n\f]+/g, ' ');
                 if (s) runs.push({ text: s, marks: marks });
                 return;
             }
             if (n.nodeType !== 1) return;
             const tag = tagOf(n);
+            if (tag === 'IMG') {
+                const attrs = ownAttrs(n, IMG_ATTRS, false);
+                if (attrs && attrs.src) runs.push({ img: elRef({ tag: 'img', attrs: attrs }), marks: marks });
+                return;
+            }
             if (SKIP_TAGS.test(tag)) return;
             if (tag === 'BR') { runs.push({ br: true }); return; }
             if (n.classList && n.classList.contains('htv-ch')) {
@@ -932,6 +1057,19 @@
                 return;
             }
             const m = Object.assign({}, marks);
+            const attrs = ATTR_INLINE[tag] ? ownAttrs(n, OWN_ATTRS, false) : null;
+            if (attrs) {
+                // Element with own attributes: tag and attributes stay as they are
+                const entry = { tag: ATTR_INLINE[tag], attrs: attrs };
+                if (tag === 'A') {
+                    const href = m.inLink ? '' : safeUrl(n.getAttribute('href') || '');
+                    if (href) { entry.href = href; m.inLink = true; }
+                    else entry.tag = 'span';
+                }
+                m.els = (m.els || []).concat(elRef(entry));
+                collectRuns(Array.from(n.childNodes), m, runs);
+                return;
+            }
             if (tag === 'STRONG' || tag === 'B') m.strong = true;
             else if (tag === 'EM' || tag === 'I') m.em = true;
             else if (tag === 'U' || tag === 'INS') m.u = true;
@@ -942,7 +1080,7 @@
             }
             else if (tag === 'A') {
                 const href = safeUrl(n.getAttribute('href') || '');
-                if (href && !m.href) { m.href = href; m.inLink = true; }
+                if (href && !m.inLink) { m.href = href; m.inLink = true; m.els = (m.els || []).concat('h'); }
             }
             const st = n.style;
             if (st) {
@@ -978,6 +1116,7 @@
         let space = false;
         out.forEach((r) => {
             if (r.br) { lineStart = true; space = false; return; }
+            if (r.img) { lineStart = false; space = false; return; }
             if (!r.keep && (lineStart || space)) r.text = r.text.replace(/^ +/, '');
             if (r.text !== '') { lineStart = false; space = !r.keep && / $/.test(r.text); }
         });
@@ -985,43 +1124,56 @@
         for (let k = out.length - 1, end = true; k >= 0; k--) {
             const r = out[k];
             if (r.br) { end = true; continue; }
+            if (r.img) { end = false; continue; }
             if (end && !r.keep) {
                 r.text = r.text.replace(/ +$/, '');
                 if (r.text === '') continue;
             }
             end = false;
         }
-        const res = out.filter((r) => r.br || r.text !== '');
+        const res = out.filter((r) => r.br || r.img || r.text !== '');
         // Line breaks at the beginning and end (placeholders) are dropped
         while (res.length && res[0].br) res.shift();
         while (res.length && res[res.length - 1].br) res.pop();
         return res;
     }
 
-    // The writing direction encloses everything else
-    const MARK_ORDER = ['dir', 'href', 'strong', 'em', 'u'];
+    // The writing direction encloses everything else, then elements with own
+    // attributes and the link in their order (marks.els, 'h' = the link), then the formats
+    const MARK_ORDER = ['strong', 'em', 'u'];
     const MARK_TEXT = { strong: '**', em: '*', u: '++' };
-    const markOpen = (mk) => mk.key === 'href' ? '[' : (mk.key === 'dir' ? (mk.value === 'rtl' ? RLI : LRI) : MARK_TEXT[mk.key]);
+    const markOpen = (mk) => mk.key === 'href' ? '[' : (mk.key === 'dir' ? (mk.value === 'rtl' ? RLI : LRI)
+        : (mk.key === 'el' ? EL_OPEN + mk.value + EL_MID : MARK_TEXT[mk.key]));
+
+    function wantedMarks(m) {
+        const want = m.dir ? [{ key: 'dir', value: m.dir }] : [];
+        (m.els || []).forEach((x) => {
+            if (x !== 'h') want.push({ key: 'el', value: x });
+            else if (m.href) want.push({ key: 'href', value: m.href });
+        });
+        return want.concat(MARK_ORDER.filter((k) => m[k]).map((k) => ({ key: k, value: m[k] })));
+    }
 
     function sameMarks(a, b) {
         return !!a.strong === !!b.strong && !!a.em === !!b.em && !!a.u === !!b.u && !!a.code === !!b.code && (a.href || '') === (b.href || '')
-            && (a.dir || '') === (b.dir || '');
+            && (a.dir || '') === (b.dir || '') && (a.els || []).join() === (b.els || []).join();
     }
 
     function emitRuns(runs, ctx) {
         const merged = [];
         runs.forEach((r) => {
             const prev = merged[merged.length - 1];
-            if (!r.br && prev && !prev.br && sameMarks(prev.marks, r.marks)) prev.text += r.text;
+            if (!r.br && !r.img && prev && !prev.br && !prev.img && sameMarks(prev.marks, r.marks)) prev.text += r.text;
             else merged.push(Object.assign({}, r));
         });
         merged.forEach((r, k) => {
-            if (r.br) return;
+            if (r.br || r.img) return;
             // Formats on pure whitespace are dropped
             if (r.text.trim() === '' && !r.marks.code) r.marks = {};
             // Link whose text is the address: write it as an address
             const m = r.marks;
-            if (m.href && m.href === r.text && /^https?:\/\//i.test(m.href) && !m.strong && !m.em && !m.u && !m.code && !m.dir) {
+            if (m.href && m.href === r.text && /^https?:\/\//i.test(m.href) && !m.strong && !m.em && !m.u && !m.code && !m.dir
+                && (m.els || []).length === 1) {
                 const prev = merged[k - 1];
                 const next = merged[k + 1];
                 if (!(prev && !prev.br && prev.marks.href === m.href) && !(next && !next.br && next.marks.href === m.href)) {
@@ -1037,7 +1189,8 @@
                 const top = stack.pop();
                 const sp = out.match(/ +$/);
                 if (sp) out = out.slice(0, -sp[0].length);
-                out += top.key === 'href' ? '](' + linkDest(top.value) + ')' : (top.key === 'dir' ? PDI : MARK_TEXT[top.key]);
+                out += top.key === 'href' ? '](' + linkDest(top.value) + ')'
+                    : (top.key === 'dir' ? PDI : (top.key === 'el' ? EL_CLOSE : MARK_TEXT[top.key]));
                 if (sp) out += sp[0];
             }
         };
@@ -1048,11 +1201,11 @@
                 out += ctx.table ? '<br>' : (ctx.heading ? ' ' : '  \n');
                 return;
             }
-            const want = MARK_ORDER.filter((k) => r.marks[k]).map((k) => ({ key: k, value: r.marks[k] }));
+            const want = wantedMarks(r.marks);
             let keep = 0;
             while (keep < stack.length && keep < want.length && stack[keep].key === want[keep].key && stack[keep].value === want[keep].value) keep++;
             closeTo(keep);
-            let text = r.text;
+            let text = r.img ? '' : r.text;
             if (keep < want.length) {
                 const lead = text.match(/^ +/);
                 if (lead) { out += lead[0]; text = text.slice(lead[0].length); }
@@ -1061,7 +1214,8 @@
                     stack.push(want[k]);
                 }
             }
-            if (r.url === 'raw') out += text;
+            if (r.img) out += EL_IMG + r.img + EL_MID;
+            else if (r.url === 'raw') out += text;
             else if (r.url === 'angle') out += '<' + text + '>';
             else if (r.marks.code) out += codeSpan(text, ctx);
             else out += escapeInline(text, ctx);
@@ -1123,7 +1277,8 @@
             if (b.t === 'quote') b = Object.assign({}, b, { children: mergeAdjacentLists(b.children) });
             if (b.t === 'list') b = Object.assign({}, b, { items: b.items.map((it) => ({ children: mergeAdjacentLists(it.children) })) });
             const prev = out[out.length - 1];
-            if (b.t === 'list' && prev && prev.t === 'list' && prev.ordered === b.ordered && (prev.align || '') === (b.align || '')) {
+            if (b.t === 'list' && prev && prev.t === 'list' && prev.ordered === b.ordered && (prev.align || '') === (b.align || '')
+                && JSON.stringify(prev.attrs || null) === JSON.stringify(b.attrs || null)) {
                 prev.items = prev.items.concat(b.items);
                 return;
             }
@@ -1147,8 +1302,15 @@
         const box = document.createElement('div');
         box.innerHTML = renderBlocks(blocks);
         box.querySelectorAll('.htv-ch').forEach((n) => n.replaceWith(document.createTextNode(n.textContent)));
+        box.querySelectorAll('[data-htv-a]').forEach((n) => {
+            const at = JSON.parse(n.getAttribute('data-htv-a'));
+            if (at.id) n.setAttribute('id', at.id);
+            n.removeAttribute('data-htv-a');
+        });
         box.querySelectorAll('[data-align]').forEach((n) => {
-            n.style.textAlign = n.getAttribute('data-align');
+            const own = n.getAttribute('style');
+            if (own) n.setAttribute('style', own.replace(/[\s;]*$/, '; ') + 'text-align: ' + n.getAttribute('data-align') + ';');
+            else n.style.textAlign = n.getAttribute('data-align');
             n.removeAttribute('data-align');
         });
         box.querySelectorAll('pre').forEach((pre) => {
@@ -1372,7 +1534,7 @@
     function hasText(n) {
         if (n.nodeType === 3) return n.data.replace(ZW_RE, '') !== '';
         if (n.nodeType !== 1) return false;
-        if (n.classList.contains('htv-ch') || n.nodeName === 'HR') return true;
+        if (n.classList.contains('htv-ch') || n.nodeName === 'HR' || n.nodeName === 'IMG' || n.querySelector('img')) return true;
         return n.textContent.replace(ZW_RE, '') !== '';
     }
 
@@ -1400,7 +1562,7 @@
 
     function renameEl(el, tag) {
         const n = document.createElement(tag);
-        if (el.getAttribute('data-align')) n.setAttribute('data-align', el.getAttribute('data-align'));
+        ['data-align', 'data-htv-a', 'class', 'style', 'title'].forEach((k) => { if (el.hasAttribute(k)) n.setAttribute(k, el.getAttribute(k)); });
         while (el.firstChild) n.appendChild(el.firstChild);
         el.replaceWith(n);
         return n;
@@ -1415,7 +1577,7 @@
     // Remove empty inline leftovers after splitting (<strong></strong>)
     function cleanupEmptyInline(el) {
         Array.from(el.querySelectorAll('strong,b,em,i,u,code,a,span:not(.htv-ch)')).reverse().forEach((n) => {
-            if (!n.textContent.replace(ZW_RE, '') && !n.querySelector('br,.htv-ch')) n.remove();
+            if (!n.textContent.replace(ZW_RE, '') && !n.querySelector('br,.htv-ch,img')) n.remove();
         });
     }
 
@@ -1846,7 +2008,7 @@
             // Only touch the selection if something changes - setting it again discards
             // the browser's typing mode (bold toggle without selected text)
             const stray = Array.from(root.childNodes).some((n) => n.nodeType === 3 || (n.nodeType === 1 && !BLOCK_TAGS.test(n.nodeName)));
-            const styled = root.querySelector('span[style]:not(.htv-ch), font, [style]:not(.htv-ch)');
+            const styled = root.querySelector('font, [style]:not(.htv-ch):not([data-htv-a])');
             if (!stray && !styled) return;
             const s = saveSel(root);
             let p = null;
@@ -1857,8 +2019,9 @@
                 if (!p) { p = document.createElement('p'); root.insertBefore(p, n); }
                 p.appendChild(n);
             });
-            root.querySelectorAll('span[style], font').forEach((n) => { if (!n.classList.contains('htv-ch')) unwrapEl(n); });
-            root.querySelectorAll('[style]').forEach((n) => { if (!n.classList.contains('htv-ch')) n.removeAttribute('style'); });
+            // elements with own attributes (data-htv-a) keep their style
+            root.querySelectorAll('span[style]:not([data-htv-a]), font').forEach((n) => { if (!n.classList.contains('htv-ch')) unwrapEl(n); });
+            root.querySelectorAll('[style]:not([data-htv-a])').forEach((n) => { if (!n.classList.contains('htv-ch')) n.removeAttribute('style'); });
             restoreSel(root, s);
         }
 
