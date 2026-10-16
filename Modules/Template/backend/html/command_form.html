@@ -1,0 +1,8 @@
+<p class="c9-grey-50">{note}</p>
+<div class="c9-cmd-form mt-3" data-cmd="{name}" onkeydown="cApp.templateCommands.keydown(this, event)">
+{rows}
+<div class="d-flex gap-2 mt-4">
+  <button type="button" class="btn btn-primary" onclick="cApp.templateCommands.insert(this)">{#template.command_insert}</button>
+  <button type="button" class="btn btn-outline-secondary" onclick="cApp.layers.close()">{#button_cancel}</button>
+</div>
+</div>

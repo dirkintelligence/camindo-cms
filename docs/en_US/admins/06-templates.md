@@ -24,7 +24,21 @@ In the module “Templates”, you open a template area and edit its templates t
 
 The detail view shows the code with color highlighting. ***Errors*** in the code – an unknown
 command, a wrong parameter, a missing bracket – do not prevent saving, but are displayed with
-the line number above the code. References to other templates are clickable.
+the line number above the code. References to other templates are clickable. If the referenced template does not exist yet,
+camindo CMS offers to create it right away; a ***list template*** (parameter `resulttemplate` of
+`CMS:SELECT` and `CMS:SELECT_LANGVERSION`) is created with the loop
+`(CMS:RESULT_START)` … `(CMS:RESULT_END)` as its code.
+
+***Insert CMS command:*** To the right above the code field of the input mask is a selection of
+all CMS commands (alphabetical, including the commands of add-on modules). When you choose one,
+a mask with all parameters of the command opens: one input field per parameter for the value,
+in front of it fields for the ***keys*** where needed (`filter[price]`) and – for `filter` – a
+selection of the ***comparison operator*** (`=`, `==`, `!=`, `<`, `>=` …). Parameters with keys
+may occur several times; the small “+” below them adds another row. The question mark next to
+the parameter name shows its description; mandatory parameters are marked with *. “Insert”
+places the command at the cursor position in the code – parameters without a value are left
+out, from three parameters on each stands on its own line. It is only stored when you save the
+template.
 
 A template can be ***moved*** to another template area; its assignments are retained.
 

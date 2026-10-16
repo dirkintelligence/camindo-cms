@@ -18,6 +18,11 @@ return [
     'label'  => '#template.widget_label',
     'icon'   => 'data_object',
 ],
+// on every backend page: command picker of the input mask (public/template.js,
+// TemplateBackend::command())
+'assets' => [
+    'js' => ['template.js'],
+],
 // Scripts that other modules may call as lookup without module access (Access::script())
 'shared' => ['template_list.php', 'template_search.php'],
 // Additional module rights:

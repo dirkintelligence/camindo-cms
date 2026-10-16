@@ -5942,16 +5942,20 @@ class Cms {
     //
     // Stores a complete record under $GLOBALS[{phpvar}], so that the surrounding
     // PHP can work with it. Without 'id' this is simply the current record.
-    public function cmsSaveData($p): void
+    // Returns the variable name: the php_suffix savedata_local binds it as a
+    // local variable as well - the template runs inside a closure, a plain
+    // $GLOBALS entry would not be visible there as ${phpvar}.
+    public function cmsSaveData($p): string
     {
         $name = $this->_name((string)($p['phpvar'] ?? ''));
         if ($name === '') {
             $this->error('CMS:SAVEDATA: parameter "phpvar" required.');
-            return;
+            return '';
         }
 
         // 'id' - record_id or slug; without specification the running record (_record())
         $GLOBALS[$name] = $this->_record($p);
+        return $name;
     }
 
     // CMS:SELECT - returns template file (see templateFile())

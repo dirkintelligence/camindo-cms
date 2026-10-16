@@ -104,6 +104,9 @@ class TemplateBackend {
 
     /** Maximum number of templates in the widget */
     private const WIDGET_MAX = 20;
+    // Comparison operators of the command picker for parameters with 'operator'
+    // (TemplateParserTrait::readOperator())
+    private const COMMAND_OPERATORS = ['=', '==', '!=', '!!', '<', '>', '<=', '>=', '<<', '>>'];
 
     private const REFRESH_SCRIPT = "cApp.system.addSpinner();"
         . "$.ajax({type:'POST',url:cConfig.backend_path + 'Modules/Template/template_sync.php',"
@@ -642,7 +645,9 @@ class TemplateBackend {
      * ambiguous, there is an error message. If nothing is found under the name,
      * an error is not simply shown, but the query whether the template
      * should now be created: the normal case is a reference from another
-     * template to a not yet existing one.
+     * template to a not yet existing one. kind=list (link from a parameter
+     * marked 'list' in commands.php, e.g. resulttemplate) is passed on, so that
+     * _editCreate() prefills the code with the result loop.
      *
      * `styled_code` is shown, not `code` - the coloring was created during
      * saving (see class comment). Before it stand the saved
@@ -705,7 +710,8 @@ class TemplateBackend {
                 $name = end($refParts);
                 echo $this->backend->template('template.message_with_create_link', [
                     '{area_id}' => $this->areaId,
-                    '{name}' => $name
+                    '{name}' => $name,
+                    '{kind}' => ($_REQUEST['kind'] ?? '') === 'list' ? 'list' : ''
                 ]);
                 echo $this->backend->template('container_footer');
                 return;
@@ -1277,6 +1283,10 @@ class TemplateBackend {
         // see html snippet "template.message_with_create_link"
         $this->data['name'] = $this->id;
         $this->id = 0;
+        // List template (kind=list, see info()): prefill the result loop
+        if (($_REQUEST['kind'] ?? '') === 'list') {
+            $this->data['code'] = "(CMS:RESULT_START)\n\n(CMS:RESULT_END)\n";
+        }
     }
 
     /**
@@ -1396,6 +1406,118 @@ class TemplateBackend {
     }
 
     /**
+     * Selection list of all CMS commands (core and modules, alphabetical) for the
+     * input mask. Choosing one opens command() as a new layer; the cursor position
+     * in the code field is remembered by cApp.templateCommands (public/template.js).
+     */
+    private function _commandPicker(): string
+    {
+        $options = [];
+        foreach (array_keys($this->template->commandDefinitions()) as $name) {
+            $options[$name] = 'CMS:' . strtoupper($name);
+        }
+        return $this->backend->template('template.command_picker', [
+            '{options}' => $this->backend->options($options),
+        ]);
+    }
+
+    /**
+     * Layer of the command picker: all parameters of one command (?cmd=select).
+     *
+     * One row per parameter: name (tooltip: description from commands.php),
+     * one input per sub-key level ('subparam'), the comparison operator (a
+     * selection only for parameters with 'operator', otherwise a fixed '='), the value.
+     * Parameters with sub-keys may appear several times (filter[a]=… filter[b]=…) -
+     * "+" below them adds another row. "Insert" assembles the command in the
+     * browser and inserts it at the cursor position of the code field
+     * (cApp.templateCommands.insert()); nothing is sent to the server.
+     */
+    public function command(): void
+    {
+        $name = strtolower(preg_replace('/[^a-z0-9_]/i', '', (string)($_REQUEST['cmd'] ?? '')));
+        $commands = $this->template->commandDefinitions();
+        $upper = 'CMS:' . strtoupper($name);
+
+        $this->backend->setNaviLabel($upper);
+        echo $this->backend->template('container_header');
+
+        if (!isset($commands[$name])) {
+            echo $this->backend->template('alert_danger', [
+                '{text}' => $this->backend->escape(str_replace('{name}', $upper, $this->cms->snippet('template.command_unknown')))
+            ]);
+            echo $this->backend->template('container_footer');
+            return;
+        }
+        $def = $commands[$name];
+
+        echo $this->backend->headline("{$this->iconTemplate} " . $upper);
+
+        // Texts from commands.php: '#prefix.key' = snippet, otherwise literal - escaped on output
+        $text = fn($value) => $this->template->commandText($value);
+
+        $rows = '';
+        $n = 0;
+        foreach ((array)($def['params'] ?? []) as $param => $pdef) {
+            $n++;
+            $uid = 'c9-cmd-' . $n;
+            $depth = max(0, (int)($pdef['subparam'] ?? 0));
+
+            // Tooltip (HTML): description and default
+            $tooltip = [];
+            if (($description = $text($pdef['description'] ?? '')) !== '') {
+                $tooltip[] = htmlspecialchars($description);
+            }
+            if (($default = $text($pdef['default'] ?? '')) !== '') {
+                $tooltip[] = htmlspecialchars(str_replace('{default}', $default, $this->cms->snippet('template.command_default')));
+            }
+
+            $subs = '';
+            for ($i = 1; $i <= $depth; $i++) {
+                $subs .= $this->backend->template('template.command_param_sub', [
+                    '{param}' => $this->backend->escape($param),
+                    '{level}' => $i,
+                ]);
+            }
+
+            if (!empty($pdef['operator'])) {
+                $operator = $this->backend->template('template.command_param_operator', [
+                    '{options}' => $this->backend->options(array_combine(self::COMMAND_OPERATORS, self::COMMAND_OPERATORS), '='),
+                ]);
+            }
+            else {
+                $operator = $this->backend->template('template.command_param_equals');
+            }
+
+            $rows .= $this->backend->template('template.command_param_row', [
+                '{id}' => $uid,
+                '{param}' => $this->backend->escape($param),
+                '{mandatory}' => !empty($pdef['mandatory']) ? $this->backend->template('mandatory_field_indicator') : '',
+                '{tooltip}' => $tooltip ? $this->backend->template('template.command_param_tooltip', [
+                    // escaped once more: the attribute value is read as HTML (data-bs-html)
+                    '{tooltip}' => $this->backend->escape(implode('<br>', $tooltip)),
+                ]) : '',
+                '{subs}' => $subs,
+                '{operator}' => $operator,
+                '{placeholder}' => $this->backend->escape($text($pdef['value'] ?? '')),
+                '{add}' => $depth > 0 ? $this->backend->template('template.command_param_add', [
+                    '{param}' => $this->backend->escape($param),
+                ]) : '',
+            ]);
+        }
+        if ($rows === '') {
+            $rows = $this->backend->template('template.command_no_params');
+        }
+
+        echo $this->backend->template('template.command_form', [
+            '{name}' => $this->backend->escape($name),
+            '{note}' => $this->backend->escape($text($def['note'] ?? '')),
+            '{rows}' => $rows,
+        ]);
+
+        echo $this->backend->template('container_footer');
+    }
+
+    /**
      * Output error messages from Cms::errors as a red box.
      */
     private function _editErrors(): void
@@ -1457,7 +1579,9 @@ class TemplateBackend {
             'value' => $this->data['code'] ?? '',
             'id' => $this->id,
             'template' => 'template.edit_form_code_growing',
-            'fullWidth' => true
+            'fullWidth' => true,
+            // right-aligned on the height of the label: command picker (command())
+            'labelPrefix' => $this->_commandPicker()
         ]);
         
         // JavaScript statement for growing textarea, after Ajax load

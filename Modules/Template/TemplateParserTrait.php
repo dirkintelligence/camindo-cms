@@ -1193,7 +1193,8 @@ trait TemplateParserTrait
      * - with key (template=header, resulttemplate="liste") as well as
      * the keyless 'do' parameter ((CMS:INCLUDE header), (CMS:SELECT liste …)).
      * The value may be an id, name or "area.name"; it is resolved only on
-     * click in TemplateBackend::info(). Values with a PHP part remain unlinked;
+     * click in TemplateBackend::info(); parameters marked 'list' add kind=list
+     * (a missing template is then created as a list template). Values with a PHP part remain unlinked;
      * $links = false (styleCode()) verlinkt gar nichts.
      */
     private function styleCommandInner(string $code, array $cmd, bool $links = true): string
@@ -1242,6 +1243,7 @@ trait TemplateParserTrait
                 's'    => $token['start'],
                 'e'    => $token['start'] + strlen($token['text']),
                 'id'   => $id,
+                'list' => !empty($paramDefs[$pname]['list']),
             ];
         }
 
@@ -1262,7 +1264,7 @@ trait TemplateParserTrait
                 // id is sanitized above to [0-9a-zA-Z_.]: id or "[area.]name" -
                 // not (int), otherwise a name would become 0 (= start page of the module)
                 $out .= '<a href="#"' . $this->container->get(\Camindo\Core\Backend::class)->on('js', "cApp.layers.replace('Template/template_info.php?id="
-                    . $r['id'] . '&area_id=' . (int)$this->parseAreaId . "')") . '>' . $chunk . '</a>';
+                    . $r['id'] . '&area_id=' . (int)$this->parseAreaId . ($r['list'] ? '&kind=list' : '') . "')") . '>' . $chunk . '</a>';
             }
             $pos = $r['e'];
         }

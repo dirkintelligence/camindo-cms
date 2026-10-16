@@ -26,9 +26,7 @@ logic that cannot be written with the output commands alone:
 
 ```cms
 (CMS:SAVEDATA article)
-<?php
-$article = $GLOBALS['article'];
-if ($article['price'] > 100 && $article['stock'] > 0) { ?>
+<?php if ($article['price'] > 100 && $article['stock'] > 0) { ?>
   <span class="badge">Premium</span>
 <?php } ?>
 ```
@@ -38,7 +36,7 @@ with its values:
 
 ```cms
 (CMS:SAVEDATA parent id="{$cms['parent_id']}")
-<?php if ($GLOBALS['parent']['price'] > $cms['price']) { ?> … <?php } ?>
+<?php if ($parent['price'] > $cms['price']) { ?> … <?php } ?>
 ```
 
 If you only need to ***output*** fields of another record, you do not need
@@ -60,13 +58,19 @@ If the record does not exist, the array is empty.
 
 ### `phpvar`
 
-Name of the variable in `$GLOBALS`; may be given without a key. Only letters, digits and `_`:
+Name of the variable; may be given without a key. Only letters, digits and `_`.
+The array is then available directly as `$article` in the template – also in templates
+included with `CMS:INCLUDE` – and additionally in `$GLOBALS['article']`, for example
+for your own PHP functions:
 
 ```cms
 (CMS:SAVEDATA phpvar=article)
 (CMS:SAVEDATA article)
-<?php echo $GLOBALS['article']['record_id']; ?>
+<?php echo $article['record_id']; ?>
 ```
+
+Names starting with `_`, as well as `this` and `GLOBALS`, are only accessible via
+`$GLOBALS[…]`.
 
 ### `id`
 
