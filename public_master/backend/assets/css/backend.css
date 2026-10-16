@@ -1299,3 +1299,23 @@ a.c9-navitem-link:focus-visible,
         scroll-behavior: auto !important;
     }
 }
+
+/* Dark mode (personal setting admin.settings.dark_mode, data-bs-theme="dark" on <html>):
+   counterparts of the fixed colors above; the rest (tokens --c9-*, Bootstrap's "light"
+   utilities) comes with the Bootstrap build (custom.scss) */
+[data-bs-theme="dark"] .btn.btn-module { color: var(--bs-primary-text-emphasis); }
+[data-bs-theme="dark"] .c9-navitem-text,
+[data-bs-theme="dark"] .resize-handle .icon { color: var(--c9-grey-90); }
+[data-bs-theme="dark"] .resize-handle:hover { background: rgba(255,255,255,0.1); }
+[data-bs-theme="dark"] .custom-pagination .page-link:hover,
+[data-bs-theme="dark"] .custom-pagination .page-number .page-link:hover { background: var(--c9-grey-30); }
+[data-bs-theme="dark"] .custom-pagination .page-number .page-link { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] #login-modal.show { background-color: #1a1d20; }
+[data-bs-theme="dark"] .c9-indicator { background: #11111188; }
+[data-bs-theme="dark"] .c9-styled-code a { color: #8fb3e8; }
+[data-bs-theme="dark"] .c9-command { color: #e08ae0; }
+[data-bs-theme="dark"] .c9-php { color: #ffaa55; }
+[data-bs-theme="dark"] .c9-ph-img span { color: #d9b38c; }
+[data-bs-theme="dark"] .c9-docs { --bs-code-color: #e08ae0; }
+[data-bs-theme="dark"] .c9-docs h3 code,
+[data-bs-theme="dark"] .c9-docs td code { --bs-code-color: var(--bs-body-color); }

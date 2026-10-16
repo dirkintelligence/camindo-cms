@@ -648,6 +648,7 @@ class AdminBackend {
      *                    (0 off, 1 daily - Messaging\MessageDigest)
      *     animation      slide animation of the record list of a lookup field
      *                    (1 on, 0 off - cConfig.animation)
+     *     dark_mode      color scheme of the backend (0 light, 1 dark)
      *
      * Besides '' (display), 'save' and 'errors' there is 'update': adding and
      * removing a widget send the form back to itself without
@@ -684,6 +685,8 @@ class AdminBackend {
                 if (!$isOwn) unset($input['fed']);
                 // Add or remove a widget (see _settingsWidgets())
                 $input[Widgets::SETTINGS_KEY] = $this->_settingsWidgetsFromRequest($input);
+                // Switch: an unchecked checkbox does not arrive at all
+                $input['dark_mode'] = empty($input['dark_mode']) ? 0 : 1;
                 // Reports: only those the admin's group may subscribe to - without
                 // a tick the key does not arrive at all, so then there is none
                 $input['reports'] = array_values(array_intersect(
@@ -889,6 +892,13 @@ class AdminBackend {
                 ],
             ]);
         }
+
+        // Color scheme: dark mode on/off
+        $this->backend->formField($this->admin, [
+            'name' => 'settings.dark_mode',
+            'value' => (int)($settings['dark_mode'] ?? 0),
+            'id' => $id,
+        ]);
 
         // Animation when a lookup field opens its record list
         $this->backend->formField($this->admin, [
