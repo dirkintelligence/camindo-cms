@@ -190,6 +190,8 @@ class UserSession {
             );
             $row['record_id'] = (int)($row['record_id'] ?? 0);
             $this->data = $row;
+            // A page with a session belongs to this visitor
+            SecurityHeaders::sendNoStore();
             return true;
         }
         finally {
@@ -411,6 +413,8 @@ class UserSession {
             'samesite' => (string)($this->config->get('user.cookie_samesite') ?: 'Lax'),
         ];
         setcookie($name, $delete ? '' : $value, $options);
+        // Session cookie set or deleted: this response must not end up in any cache
+        if ($name !== self::CSRF_COOKIE) SecurityHeaders::sendNoStore();
         if ($delete) unset($_COOKIE[$name]);
         else $_COOKIE[$name] = $value;
     }

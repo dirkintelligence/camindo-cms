@@ -84,6 +84,7 @@ X-Frame-Options: SAMEORIGIN
 Content-Security-Policy: frame-ancestors 'self'
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
+Cache-Control: private, no-cache
 ```
 
 This means the page may only be placed in a frame within the website itself
@@ -106,6 +107,27 @@ A custom Content-Security-Policy replaces the default – then include
 ```cms
 (CMS:HEADER "Content-Security-Policy: frame-ancestors 'self'; script-src 'self' https://cdn.example")
 ```
+
+### Caching
+
+Pages are generated anew on every request. With the default
+***`Cache-Control: private, no-cache`***, no proxy and no CDN stores the page, and the
+browser asks the server again before every display – changed content appears
+immediately. The browser's back button stays fast all the same.
+
+If a page belongs to a single visitor – a session of a frontend user is running (also a
+basket without sign-in, see [CMS:USER_BASKET](user-basket.md)) or frontend editing is
+switched on – camindo sends ***`Cache-Control: private, no-store`*** instead: the page
+is not stored anywhere.
+
+A page that rarely changes may be cached longer:
+
+```cms
+(CMS:HEADER "Cache-Control: public, max-age=3600")
+```
+
+Put the header at the top of the template. If a `CMS:USER_*` command with a session runs
+afterwards, `private, no-store` applies again – so personal pages never end up in a cache.
 
 ---
 
