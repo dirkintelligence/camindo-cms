@@ -896,7 +896,6 @@ class StartBackend {
                 $rows = '';
                 foreach ($result['outdated'] as $package) {
                     $kind = $this->cms->snippet($package['direct'] ? 'start.label_update_direct' : 'start.label_update_dependency');
-                    if ($package['status'] === 'update-possible') $kind .= ' · ' . $this->cms->snippet('start.label_update_major');
                     $rows .= '<tr><td>' . htmlspecialchars((string)$package['name']) . '</td><td>'
                         . htmlspecialchars((string)$package['version']) . '</td><td>'
                         . htmlspecialchars((string)$package['latest']) . '</td><td>'

@@ -101,9 +101,17 @@ Composer exchanges the files of the core and add-on components; `upgrade` backs 
 
 ### Update check
 
-Every night, the scheduler task “Check for updates” checks with Composer whether there are newer versions of camindo CMS and the installed packages (`composer outdated`, direct packages and their dependencies) and whether ***security vulnerabilities*** are known for installed packages (`composer audit`). The result is shown in the main menu under ***“Info”*** – only for superusers, with a table of the packages and the button ***“Check now”***. An operating notice appears on the start page as soon as there is something to do.
+Every night, the scheduler task “Check for updates” checks with Composer whether there are newer versions of camindo CMS and the installed packages (`composer outdated`, direct packages and their dependencies) and whether ***security vulnerabilities*** are known for installed packages (`composer audit`). The result is shown in the main menu under ***“Info”*** – only for superusers, with a table of the packages and the button ***“Check now”***.
 
-The check requires network access to Packagist or the package sources and the program `composer` on the server (`paths.composer`, empty = check off). JavaScript libraries that camindo CMS brings along as files (jQuery, Bootstrap, editors) come with the update of camindo CMS.
+Only versions that `composer update` actually installs within the version constraints are reported. A new ***major version*** of a package does not appear – it requires a change to `composer.json`. An operating notice appears on the start page only for a new version of camindo CMS and for known security vulnerabilities; newer versions of other packages are listed under “Info” only.
+
+The check requires network access to Packagist or the package sources and the program `composer` on the server (`paths.composer`, empty = check off). The web server and the cron job start Composer without a shell – an alias from `.bashrc` does not apply there. Enter the absolute path or the whole command line instead, for example for a `composer.phar` with its own PHP version:
+
+```php
+'composer' => '/usr/bin/php8.4 -d memory_limit=-1 /home/www/bin/composer/composer.phar',
+```
+
+Put words containing spaces in double quotes. JavaScript libraries that camindo CMS brings along as files (jQuery, Bootstrap, editors) come with the update of camindo CMS.
 
 ## The command line
 
@@ -553,7 +561,7 @@ Superusers see a block ***“Operational notices”*** beneath the module tiles 
 | Key in CAMINDO_KEY outdated | The environment variable `CAMINDO_KEY` does not contain the current key – usually after a [key change](#changing-the-key). `.camindo.key` is used; enter its content into the variable |
 | security.txt missing | There is no reporting channel for security vulnerabilities (see [chapter 14](./14-security-and-compliance.md#reporting-security-vulnerabilities)) |
 | Audit log damaged | The daily check has found a broken checksum chain in `var/audit/`, missing entries or entries of the database that do not match the files; details with `php Core/cron/camindo.php audit verify` |
-| Security vulnerabilities / new version / updates | Result of the daily [update check](#update-check): known vulnerabilities in installed packages (alarm), a new version of camindo CMS (warning) or newer packages (note); “Open” leads to “Info” |
+| Security vulnerabilities / new version / updates | Result of the daily [update check](#update-check): known vulnerabilities in installed packages (alarm), a new version of camindo CMS (warning); “Open” leads to “Info” |
 
 A click on “Open” leads, where possible, directly to the place where the notice can be remedied.
 

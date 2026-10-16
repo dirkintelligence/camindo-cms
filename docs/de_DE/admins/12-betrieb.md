@@ -170,11 +170,25 @@ Jede Nacht prüft die Zeitplaner-Aufgabe „Nach Updates suchen“ mit Composer,
 und der installierten Pakete gibt (`composer outdated`, direkte Pakete und ihre
 Abhängigkeiten) und ob für installierte Pakete ***Sicherheitslücken*** bekannt sind
 (`composer audit`). Das Ergebnis zeigt das Hauptmenü unter ***„Info“*** – nur für
-Superuser, mit Tabelle der Pakete und der Schaltfläche ***„Jetzt prüfen“***. Auf der Startseite
-erscheint ein Betriebshinweis, sobald es etwas zu tun gibt.
+Superuser, mit Tabelle der Pakete und der Schaltfläche ***„Jetzt prüfen“***.
+
+Gemeldet werden nur Versionen, die `composer update` innerhalb der Versionsgrenzen auch
+installiert. Eine neue ***Hauptversion*** eines Pakets erscheint nicht – sie erfordert eine
+Änderung der `composer.json`. Auf der Startseite erscheint ein Betriebshinweis nur bei einer
+neuen Version von camindo CMS und bei bekannten Sicherheitslücken; neuere Versionen anderer
+Pakete stehen nur unter „Info“.
 
 Die Prüfung braucht Netzzugang zu Packagist bzw. zu den Paketquellen und das Programm
-`composer` auf dem Server (`paths.composer`, leer = Prüfung aus). JavaScript-Bibliotheken,
+`composer` auf dem Server (`paths.composer`, leer = Prüfung aus). Webserver und Cronjob starten
+Composer ohne Shell – ein Alias aus der `.bashrc` gilt dort nicht. Tragen Sie deshalb den
+absoluten Pfad oder die ganze Befehlszeile ein, zum Beispiel für ein `composer.phar` mit
+eigener PHP-Version:
+
+```php
+'composer' => '/usr/bin/php8.4 -d memory_limit=-1 /home/www/bin/composer/composer.phar',
+```
+
+Wörter mit Leerzeichen setzen Sie in doppelte Anführungszeichen. JavaScript-Bibliotheken,
 die camindo CMS als Dateien mitbringt (jQuery, Bootstrap, Editoren), kommen mit dem
 Update von camindo CMS.
 
@@ -776,7 +790,7 @@ erscheint er nicht.
 | Schlüssel in CAMINDO_KEY veraltet | Die Umgebungsvariable `CAMINDO_KEY` enthält nicht den aktuellen Schlüssel – meist nach einem [Schlüsselwechsel](#schlüssel-wechseln). Verwendet wird `.camindo.key`; tragen Sie deren Inhalt in die Variable ein |
 | security.txt fehlt | Es gibt keinen Meldeweg für Sicherheitslücken (siehe [Kapitel 14](./14-sicherheit-und-compliance.md#sicherheitslücken-melden)) |
 | Audit-Log beschädigt | Die tägliche Prüfung hat in `var/audit/` eine gebrochene Prüfsummenkette, fehlende Einträge oder Einträge der Datenbank, die nicht zu den Dateien passen, gefunden; Details mit `php Core/cron/camindo.php audit verify` |
-| Sicherheitslücken / neue Version / Updates | Ergebnis der täglichen [Update-Prüfung](#update-prüfung): bekannte Lücken in installierten Paketen (Alarm), eine neue Version von camindo CMS (Warnung) oder neuere Pakete (Hinweis); „Öffnen“ führt zu „Info“ |
+| Sicherheitslücken / neue Version / Updates | Ergebnis der täglichen [Update-Prüfung](#update-prüfung): bekannte Lücken in installierten Paketen (Alarm), eine neue Version von camindo CMS (Warnung); „Öffnen“ führt zu „Info“ |
 
 Ein Klick auf „Öffnen“ führt, wo möglich, direkt an die Stelle, an der sich der Hinweis
 beheben lässt.

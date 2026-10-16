@@ -6,9 +6,13 @@
  * The basis is Composer, which manages the installation anyway
  * (developer docs, chapter 09 (Installation and update)):
  *
- *     composer outdated --format=json   newer versions of all installed packages
+ *     composer outdated --minor-only    newer versions of the installed packages
  *                                       (camindo/cms, add-on modules, libraries;
- *                                       direct and dependent)
+ *                                       direct and dependent) - only SemVer-compatible
+ *                                       ones, i.e. what `composer update` installs
+ *                                       within the usual ^ constraints; a new major
+ *                                       version would be a change of composer.json
+ *                                       and is not reported
  *     composer audit --format=json      known security vulnerabilities (advisory database
  *                                       of Packagist/GitHub) and abandoned packages
  *
@@ -16,15 +20,16 @@
  * a task of the scheduler (type updatecheck, default daily at night) and
  * on demand in the info page (StartBackend::info()); the stored result
  * (var/cache/update-check.json) is displayed. The start page warns
- * superusers via SystemHealth (check 'updates').
+ * superusers via SystemHealth (check 'updates') - only about camindo/cms and
+ * security vulnerabilities; other packages are listed on the info page only.
  *
  * Not covered: JavaScript libraries that are files in the core (jQuery,
  * Bootstrap, qrcode-generator, vanillajs-datepicker) - they come with the
  * update of camindo/cms.
  *
  * Composer gets its own COMPOSER_HOME under var/tmp: the web server user
- * usually has no writable home directory. paths.composer = '' switches the
- * check off.
+ * usually has no writable home directory. paths.composer may be a whole command
+ * line (PHP binary, options, composer.phar - command()); '' switches the check off.
  */
 namespace Camindo\Core;
 
@@ -54,7 +59,7 @@ class UpdateCheck {
      * Stored result of the last check, null = never checked.
      *
      * @return array|null  checked_at (UTC), core (installed, latest|null),
-     *                     outdated (list: name, version, latest, direct, status),
+     *                     outdated (list: name, version, latest, direct),
      *                     advisories (list: package, title, cve, link, severity,
      *                     affected), abandoned (list: package, replacement), error
      */
@@ -85,7 +90,7 @@ class UpdateCheck {
         }
 
         // composer outdated: exit code 0, JSON on stdout
-        $outdated = $this->composer(['outdated', '--format=json'], $error);
+        $outdated = $this->composer(['outdated', '--minor-only', '--format=json'], $error);
         if ($outdated === null) {
             $result['error'] = $error;
         }
@@ -93,13 +98,13 @@ class UpdateCheck {
             $name = (string)($package['name'] ?? '');
             $latest = (string)($package['latest'] ?? '');
             if ($name === '' || $latest === '' || $latest === (string)($package['version'] ?? '')) continue;
+            // Only a major version left (e.g. 0.x -> 0.y): composer update would not install it
+            if (($package['latest-status'] ?? '') === 'update-possible') continue;
             $entry = [
                 'name' => $name,
                 'version' => (string)($package['version'] ?? ''),
                 'latest' => $latest,
                 'direct' => !empty($package['direct-dependency']),
-                // semver-safe-update | update-possible (new major version)
-                'status' => (string)($package['latest-status'] ?? ''),
             ];
             if ($name === 'camindo/cms') $result['core']['latest'] = $latest;
             $result['outdated'][] = $entry;
@@ -151,7 +156,7 @@ class UpdateCheck {
         putenv('COMPOSER_NO_INTERACTION=1');
 
         $command = array_merge(
-            [(string)$this->config->get('paths.composer')],
+            self::command((string)$this->config->get('paths.composer')),
             $args,
             ['--no-interaction', '--no-ansi', '--working-dir=' . $root]
         );
@@ -160,6 +165,19 @@ class UpdateCheck {
         if (is_array($json) && ($exit === 0 || $acceptExitCodes)) return $json;
         $error = 'composer ' . $args[0] . ': exit ' . $exit . ' ' . mb_substr(trim((string)$stderr ?: (string)$stdout), 0, 300);
         return null;
+    }
+
+    /**
+     * paths.composer as argument list: words separated by whitespace, a word
+     * containing spaces in double quotes.
+     *
+     *     '/usr/bin/php8.4 -d memory_limit=-1 /home/www/composer.phar'
+     *     -> ['/usr/bin/php8.4', '-d', 'memory_limit=-1', '/home/www/composer.phar']
+     */
+    public static function command(string $setting): array
+    {
+        preg_match_all('/"([^"]*)"|(\S+)/', trim($setting), $matches, PREG_SET_ORDER);
+        return array_map(fn(array $m) => ($m[2] ?? '') !== '' ? $m[2] : $m[1], $matches);
     }
 
     private function cacheFile(): string
