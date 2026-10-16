@@ -58,6 +58,13 @@
     $bootstrapCss = ($dir === 'rtl' && is_file(__DIR__ . '/assets/bootstrap/bootstrap.rtl.min.css'))
         ? 'bootstrap.rtl.min.css' : 'bootstrap.min.css';
 
+    // Color scheme (personal setting admin.settings.dark_mode): data-bs-theme on <html>
+    // switches Bootstrap and the --c9-* tokens (custom.scss). Without a session null - then
+    // the login page takes the scheme last used in this browser (localStorage c9.theme).
+    $theme = $session->get('admin_id')
+        ? (empty(((array)($session->get('details') ?? []))['settings']['dark_mode']) ? 'light' : 'dark')
+        : null;
+
     // Assets of the active modules (settings.php 'assets', published to mod/{name}/):
     // Stylesheets in the head, scripts before backend-init.js. They come on every page,
     // also without module permission - the server checks the permissions.
@@ -71,8 +78,19 @@
     }
 ?>
 <!doctype html>
-<html lang="<?php echo htmlspecialchars(str_replace('_', '-', $cms->getLang())); ?>" dir="<?php echo $dir; ?>">
+<html lang="<?php echo htmlspecialchars(str_replace('_', '-', $cms->getLang())); ?>" dir="<?php echo $dir; ?>" data-bs-theme="<?php echo $theme ?? 'light'; ?>">
     <head>
+        <script<?php echo $nonceAttr; ?>>
+            // Color scheme: remember it for the login page, there apply it before the first paint
+            (function () {
+                var theme = <?php echo json_encode($theme); ?>;
+                try {
+                    if (theme) localStorage.setItem('c9.theme', theme);
+                    else theme = localStorage.getItem('c9.theme');
+                } catch (e) { /* storage blocked: light */ }
+                if (theme === 'dark') document.documentElement.setAttribute('data-bs-theme', 'dark');
+            })();
+        </script>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>camindo CMS 9</title>
@@ -83,7 +101,7 @@
         <link href="<?php echo htmlspecialchars($assetPath); ?>" rel="stylesheet">
 <?php endforeach; ?>
     </head>
-    <body data-bs-theme="light">
+    <body>
     <!-- old browsers -->
     <noscript>
         <div class="container"><div class="alert alert-danger">###no_script</div></div>

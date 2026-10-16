@@ -53,6 +53,8 @@
  *                    1 daily (scheduler task messagedigest, MessageDigest)
  *     animation      Slide animation of the record list opened from a lookup field:
  *                    1 on (default), 0 off (cConfig.animation, backend-layers.js _slideOk())
+ *     dark_mode      Color scheme of the backend: 0 light (default), 1 dark
+ *                    (data-bs-theme on <html>, backend/index.php)
  * Maintained via AdminBackend::settings() (top right in the backend, or as a tab in the
  * detail view - there a superuser sets them for other admins) and via the login form
  * (backend language, locale, time zone). The values are kept in the session details and
@@ -345,6 +347,14 @@ class Admin extends Dataset {
                 'min'   => 0,
                 'max'   => 1,
                 'default' => '1',
+            ],
+            // Color scheme of the backend: 0 light, 1 dark (backend/index.php)
+            'settings.dark_mode' => [
+                'type'  => 'bit',
+                'display_type' => 'switch',
+                'label' => '#admin.field_admin_settings_dark_mode',
+                'tooltip' => '#admin.tooltip_settings_dark_mode',
+                'default' => '0',
             ],
             'deleted' => [
                 'type'  => 'bit',

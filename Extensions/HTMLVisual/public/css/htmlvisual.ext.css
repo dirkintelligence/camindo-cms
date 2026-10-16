@@ -84,6 +84,8 @@
     overflow-wrap: anywhere;
     background:#fff;
 }
+/* Dark mode: editing area like the input fields */
+[data-bs-theme="dark"] .c9-htv-content { background: var(--c9-brick-bg); }
 .c9-htv-content.is-empty::before {
     content: attr(data-placeholder);
     position: absolute;
