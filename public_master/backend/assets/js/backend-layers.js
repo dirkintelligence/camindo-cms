@@ -842,6 +842,9 @@
         _showLast() {
             const $last = $('article .c9-layer:last');
             $last.css('display', 'block');
+            // Growing textareas were skipped while hidden - measure them again
+            // before restoring the scroll position
+            if (cApp.ui) cApp.ui._initTextareaGrow($last);
             const scrollY = parseInt($last.attr('data-scroll') || 0, 10);
             $('article').scrollTop(scrollY);
             // Focus back to the element that opened the closed layer (cApp.a11y.rememberFocus())

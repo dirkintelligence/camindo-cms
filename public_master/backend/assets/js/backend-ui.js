@@ -1056,6 +1056,9 @@
          * @param {HTMLElement} el
          */
         _resizeTextarea(el) {
+            // Not rendered (hidden layer, collapsed tab): scrollHeight is 0 there and
+            // would shrink the field - ajaxComplete reaches every textarea on the page
+            if (!el.getClientRects().length) return;
             if (!el._c9MinHeight) {
                 el._c9MinHeight = el.offsetHeight;
             }
@@ -1073,6 +1076,8 @@
          * @param {HTMLElement} el
          */
         _resizeCodeTextarea(el) {
+            // Not rendered: see _resizeTextarea()
+            if (!el.getClientRects().length) return;
             if (!el._c9MinHeight) {
                 el._c9MinHeight = el.offsetHeight;
             }
