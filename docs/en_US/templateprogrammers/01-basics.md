@@ -574,6 +574,24 @@ code editor and manage it with Git. camindo CMS applies changes every minute (or
 in the file system, a rename counts as deleting and creating anew, and the assignments are lost.
 Error messages appear in the widget “Template messages”.
 
+### Editor support
+
+For ***Visual Studio Code*** there is the extension “camindo CMS Templates”
+([github.com/dirkintelligence/camindo-vscode](https://github.com/dirkintelligence/camindo-vscode),
+also in the Visual Studio Marketplace and on Open VSX). In `*.cms.php` files it colors the
+CMS commands purple and the PHP expressions inside them orange – like the view in the
+backend –, completes the command names after `(CMS:` and then the parameters of the command,
+and shows their description on hover, in the same language as the backend.
+
+The extension knows the commands of the core and the standard modules. If your modules bring
+their own commands, write the command list of your project with
+
+```
+php Core/cron/camindo.php template commands --all --out=var/vscode
+```
+
+and enter the directory in the VS Code setting `camindo.commandsFile`.
+
 ## Scheduled templates
 
 A template with the ***usage “Scheduled (scheduler)”*** (tab “Access” of the template) does

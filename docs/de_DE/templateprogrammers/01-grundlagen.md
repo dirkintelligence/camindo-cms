@@ -594,6 +594,24 @@ dort mit einem Code-Editor bearbeiten und mit Git verwalten. camindo CMS überni
 Dateisystem gilt Umbenennen als Löschen und Neuanlegen, und die Zuweisungen gehen
 verloren. Fehlermeldungen erscheinen im Widget „Template-Meldungen“.
 
+### Editor-Unterstützung
+
+Für ***Visual Studio Code*** gibt es die Erweiterung „camindo CMS Templates“
+([github.com/dirkintelligence/camindo-vscode](https://github.com/dirkintelligence/camindo-vscode),
+auch im Visual Studio Marketplace und bei Open VSX). Sie färbt in `*.cms.php`-Dateien die
+CMS-Befehle lila und die PHP-Ausdrücke darin orange – wie die Ansicht im Backend –, ergänzt
+nach `(CMS:` die Befehlsnamen und danach die Parameter des Befehls und zeigt beim Überfahren
+deren Beschreibung, in derselben Sprache wie das Backend.
+
+Die Erweiterung kennt die Befehle des Kerns und der Standardmodule. Bringen Ihre Module eigene
+Befehle mit, schreiben Sie die Befehlsliste Ihres Projekts mit
+
+```
+php Core/cron/camindo.php template commands --all --out=var/vscode
+```
+
+und tragen das Verzeichnis in der VS-Code-Einstellung `camindo.commandsFile` ein.
+
 ## Zeitgesteuerte Templates
 
 Ein Template mit der ***Verwendung „Zeitgesteuert“*** (Reiter „Zugriff“ des Templates)

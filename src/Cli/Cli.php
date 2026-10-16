@@ -38,6 +38,7 @@ class Cli {
         'fulltext'    => FulltextCommand::class,
         'scheduler'   => SchedulerCommand::class,
         'htaccess'    => HtaccessCommand::class,
+        'template'    => TemplateCommand::class,
     ];
 
     private bool $quiet = false;
@@ -133,6 +134,8 @@ class Cli {
                                                          tasks, run one now (e.g. "run trash")
           htaccess      [status] | renew                 managed block of public/.htaccess - like Tools > Server
                                                          (status: exit code 1 if outdated)
+          template      commands [--lang=LANG | --all --out=DIR]
+                                                         CMS command definitions as JSON (editor support)
 
           --quiet   no output except errors
         TXT);
