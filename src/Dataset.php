@@ -579,7 +579,10 @@ abstract class Dataset {
                     if (in_array($cacheName, $submittedFields, true)) {
                         // Request takes precedence - for multilingual fields per language
                         if ($isMulti) {
-                            $submitted = is_array($data[$cacheName] ?? null) ? $data[$cacheName] : [];
+                            // a single value (mask of a single-language instance: data[field]
+                            // without language id) is the value of the primary language
+                            $submitted = $data[$cacheName] ?? [];
+                            if (!is_array($submitted)) $submitted = [(int)$langCtx['primary_id'] => $submitted];
                             $submittedLangs = array_map('intval', array_keys($submitted));
                             $data[$cacheName] = $submitted + (array)$entry[1];
                             $staged[$cacheName] = array_values(array_diff(

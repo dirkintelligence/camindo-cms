@@ -464,6 +464,7 @@ class TemplateBackend {
         $schema = $this->template->getSchema();
         $thName = $this->backend->tableHeadColumn($schema['name'], $f, 'name');
         $thLabel = $this->backend->tableHeadColumn($schema['label'], $f, 'label');
+        $thChangedAt = $this->backend->tableHeadColumn($schema['changed_at'], $f, 'changed_at');
 
         // Create Head columns
         if (!empty($this->srcField)) {
@@ -478,6 +479,7 @@ class TemplateBackend {
             '{checkbox_column}' => $checkboxHeadColumn,
             '{label_name}' => $thName,
             '{label_label}' => $thLabel,
+            '{label_changed_at}' => $thChangedAt,
         ]);
 
         // Collect table rows
@@ -518,6 +520,7 @@ class TemplateBackend {
                 '{checkbox_column}' => $checkboxColumn,
                 '{data_name}' => $row['name'],
                 '{data_label}' => $row['label'],
+                '{data_changed_at}' => htmlspecialchars($this->cms->_formatDate($this->cms->utcToUserTZ((string)$row['changed_at']))),
             ]) ."\n";
 
             $tableRows .= $tableRow;

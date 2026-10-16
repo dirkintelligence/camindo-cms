@@ -251,9 +251,9 @@ class FieldEditBackend extends FieldBackend {
      *
      * $targetId is a random key with which the blocks that depend on display_type
      * (option note, custom_order) can be addressed in the DOM; the JavaScript
-     * shows and hides them when the selection changes. Therefore the
-     * display_type selection is triggered once at the end via trigger('change') - so that the
-     * initial state is correct without rebuilding it here on the server.
+     * shows and hides them when the selection changes. The initial state comes from
+     * the server ({display_type_class}): the handler is a native listener
+     * (backend-handlers.js), which a jQuery trigger('change') does not reach.
      */
     private function _editForm(): void
     {
@@ -429,6 +429,8 @@ class FieldEditBackend extends FieldBackend {
         // --------------------
         // Id for dependent elements (onchange)
         $targetId = $this->crypt->randomKey(16);
+        // display types for which these blocks are shown (cApp.ui.displayType())
+        $dependentDisplayTypes = [];
 
         if ($type === 'file') {
             // no display type selection
@@ -461,12 +463,17 @@ class FieldEditBackend extends FieldBackend {
             // cApp.forms.updateElement({element}, {action})
             $this->backend->formReplace('{element}', $targetId);
             if (in_array($type, $this->cms->relationTypes, true)) {
-                $this->backend->formReplace('{elopt}', "lookup");
+                $dependentDisplayTypes = ['lookup'];
             }
             elseif ($type !== 'file' && !$isMeta) {
-                $this->backend->formReplace('{elopt}', "select,multiselect,checkbox,radio");
+                $dependentDisplayTypes = ['select', 'multiselect', 'checkbox', 'radio'];
             }
+            $this->backend->formReplace('{elopt}', implode(',', $dependentDisplayTypes));
         }
+        // initial state of the dependent blocks - the JavaScript only takes over
+        // when the selection changes
+        $this->backend->formReplace('{display_type_class}',
+            in_array((string)$displayType, $dependentDisplayTypes, true) ? '' : 'd-none');
 
         // Extension (developer docs, chapter 08 (Components and extensions))
         // --------------------
@@ -858,8 +865,6 @@ class FieldEditBackend extends FieldBackend {
         // - instruction for growing textarea, after Ajax load
         $script = "cApp.ui._initTextareaGrow(\$('.c9-layer:last'));";
 
-        // - display_type-Liste triggern
-        $script .= "\$('.c9-layer:last select[name=\"data[display_type]\"]').trigger('change');";
         // - show profile areas only if user_auth is set
         if ($type === 'file' && in_array($displayType, ['upload', 'thumbnail'], true)) {
             $script .= "(function(){"

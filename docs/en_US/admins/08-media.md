@@ -27,7 +27,10 @@ Whether ImageMagick and ffmpeg are found is shown by the module “Tools” on t
 
 ## Setting up converters
 
-You create converters in the module “Media converters”:
+You create converters in the module “Media converters”. The installation already sets up
+the converter ***“Internal Image Preview (GD)”***: it converts every image format the
+GD library reads into JPEG images of at most 200 px width and 300 px height.
+
 
 | Setting | Meaning |
 |---|---|
