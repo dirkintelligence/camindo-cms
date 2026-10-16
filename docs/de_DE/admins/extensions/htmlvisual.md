@@ -14,17 +14,19 @@ Dasselbe wie Markdown (visuell): Fett, kursiv, unterstrichen, Code im Text,
 Absatzformat (Absatz, Überschrift 1–6), Aufzählung und nummerierte Liste mit
 Unterpunkten, Zitat, Codeblock, Link, horizontale Linie, Zeilenumbruch, Sonderzeichen,
 Ausrichtung links, zentriert, rechts, ***Schreibrichtung*** für markierte Abschnitte und
-Tabellen mit Kopfzeile. Bilder unterstützt er nicht.
+Tabellen mit Kopfzeile. Bilder, Klassen und Stile lassen sich im Quelltext angeben
+(siehe unten).
 
 Beim ***Einfügen*** übernimmt der Editor nur, was er darstellen kann: Formatierter Text
 aus Word, Google Docs oder Webseiten wird auf die unterstützten Formate gestutzt,
 eingefügter Klartext, der wie Markdown aussieht, übersetzt. Bilder, Farben, Schriften,
 Klassen und Durchstreichen entfallen, der Text bleibt.
 
-Dasselbe gilt für HTML, das im Quelltext (**<>**) geschrieben oder geändert wird: Beim
-Zurückschalten in die formatierte Ansicht und beim Speichern bleibt nur, was der Editor
-abbildet. Vorhandenes HTML im Feld (etwa aus TinyMCE) bleibt unverändert, bis der Text
-im Editor geändert wird – dann wird es ebenso gestutzt.
+Im ***Quelltext*** (**<>**) geht mehr: Dort geschriebenes oder geändertes HTML behält
+zusätzlich ***eigene Attribute*** und ***Bilder*** (siehe „Klassen, Stile und Bilder“
+unten). Alles andere wird beim Zurückschalten in die formatierte Ansicht und beim
+Speichern ebenso gestutzt. Vorhandenes HTML im Feld (etwa aus TinyMCE) bleibt
+unverändert, bis der Text im Editor geändert wird – dann gelten dieselben Regeln.
 
 Wie Redakteure damit arbeiten, beschreibt das [Handbuch für Anwender](../../editors/05-datensaetze-bearbeiten.md#text)
 (Datensätze bearbeiten → Eingabefelder → Text).
@@ -44,8 +46,8 @@ Einfügen wirken unabhängig davon, welche Schaltflächen Sie auswählen.
 
 ## HTML im Feld
 
-Der Editor schreibt nur diese Elemente – ohne Klassen und ohne Stile außer der
-Ausrichtung:
+Der Editor schreibt nur diese Elemente – Klassen, Stile und Bilder nur, wenn sie im
+Quelltext angegeben wurden:
 
 | HTML | Bedeutung |
 |---|---|
@@ -60,6 +62,34 @@ Ausrichtung:
 | `<table>` mit `<thead>`/`<tbody>`, `<th>`, `<td>` | Tabelle, erste Zeile Kopfzeile |
 | `style="text-align: left\|center\|right;"` | Ausrichtung an Absatz, Überschrift, Liste, Zitat, Tabelle; an Zellen als Spaltenausrichtung |
 | `<bdi dir="rtl">` / `<bdi dir="ltr">` | Abschnitt rechts nach links bzw. links nach rechts |
+| `<span>`, `<img>` | nur aus dem Quelltext, siehe unten |
+
+### Klassen, Stile und Bilder
+
+Im Quelltext angegeben, bleiben erhalten:
+
+| Was | Wo |
+|---|---|
+| `class`, `style`, `id`, `title` | an `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` und an `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` werden zu `<strong>`, `<em>`, `<u>`) |
+| `<img>` mit `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` | im Text, auch in Links und Tabellenzellen; `src` nur `http(s):`, relative Adressen und `data:image/…` |
+
+```html
+<p class="lead">Einleitung mit <span class="marker">Hervorhebung</span>.</p>
+<p><a class="button" href="/kontakt">Kontakt</a></p>
+<p><img src="/media/1/12/bild.jpg" alt="Showroom" width="600" loading="lazy"></p>
+```
+
+In der formatierten Ansicht wirken Klassen und Stile sofort (zusammen mit dem
+Stylesheet des Feldes); Bilder erscheinen an ihrer Stelle und lassen sich wie ein
+Zeichen löschen oder verschieben. Ändern lassen sich Attribute nur im Quelltext.
+Eine Ausrichtung über die Schaltflächen ergänzt `style` um `text-align`; ein
+`text-align` im Quelltext wird zur Ausrichtung des Blocks.
+
+Nicht erhalten bleiben: Attribute an Listenpunkten und Tabellenzellen, `<div>` (wird
+zum Absatz, Klassen entfallen), andere Attribute (`data-…`, Ereignisse wie `onclick`)
+und andere Elemente. ***Eingefügtes HTML*** aus der Zwischenablage verliert Klassen,
+Stile und Bilder weiterhin – kopieren Sie dagegen innerhalb des Editors, bleiben sie
+erhalten.
 
 Unsichtbare Sonderzeichen stehen als Entities im HTML: `&nbsp;`, `&#8239;` (schmales
 geschütztes Leerzeichen), `&ensp;`, `&thinsp;`, `&shy;`, `&#8209;` (geschützter
