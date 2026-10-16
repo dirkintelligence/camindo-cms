@@ -37,7 +37,7 @@
  *                   with the database, scheduler task auditverify): findings = danger
  *     updates       result of the daily update check (UpdateCheck): known
  *                   security vulnerabilities (danger), new version of camindo/cms
- *                   (warning), other packages with updates (info); link to the info page
+ *                   (warning); other packages only on the info page (link)
  *
  * Each check yields at most one message. A check that itself fails
  * (database gone) fails silently - the start page must not hang on it.
@@ -320,11 +320,10 @@ class SystemHealth {
             $packages = array_unique(array_column($result['advisories'], 'package'));
             return $this->warning('danger', 'health_updates_advisories', ['packages' => implode(', ', $packages)], $action);
         }
+        // Other packages only on the info page - libraries publish new versions
+        // almost daily, the start page would never be quiet
         if (!empty($result['core']['latest'])) {
             return $this->warning('warning', 'health_updates_core', ['version' => $result['core']['latest']], $action);
-        }
-        if (!empty($result['outdated'])) {
-            return $this->warning('info', 'health_updates_packages', ['count' => count($result['outdated'])], $action);
         }
         return null;
     }

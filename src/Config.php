@@ -686,6 +686,11 @@ class Config {
                 /*
                     Composer executable (absolute path) - update check
                     (Camindo\Core\UpdateCheck: composer outdated / composer audit).
+                    May be a whole command line, e.g. a composer.phar with its own PHP:
+                    '/usr/bin/php8.4 -d memory_limit=-1 /home/www/bin/composer.phar'
+                    (words separated by spaces, a word with spaces in "…").
+                    A shell alias from .bashrc does not apply - the web server and the
+                    cron job start Composer without a shell.
                     '' = no check
                 */
                 'composer' => 'composer',
