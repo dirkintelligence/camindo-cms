@@ -760,6 +760,10 @@ class RecordApi
      * @param array  $data          edit: field => value (as record.update; no passwords, no unique fields)
      * @param array  $relations     edit: as record.update
      * @param array  $files         edit: as record.update
+     * @param int    $parentId      edit: new parent record (tree; 0 = top level, -1 = unchanged) -
+     *                              the records are appended at the end, in their current order
+     * @param int    $previousId    edit: predecessor (position; 0 = at the start, -1 = unchanged) -
+     *                              the records follow it in their current order (RecordBatch, TREE FIELDS)
      * @param int    $targetAreaId  move: target area
      * @param array  $mapping       move: source field => target field ('' = discard)
      * @param bool   $autoMap       move: map fields not named to matching target fields of the same name
@@ -769,8 +773,8 @@ class RecordApi
      */
     #[ApiMethod('record.batch', '#record.api_batch', write: true, level: ApiMethod::LEVEL_MASS)]
     public function batch(int $areaId, string $mode, array $ids = [], array $filter = [], array $filterop = [], array $filtermode = [],
-        bool $all = false, array $data = [], array $relations = [], array $files = [], int $targetAreaId = 0, array $mapping = [],
-        bool $autoMap = true, bool $simulate = false, string $background = 'auto'): array
+        bool $all = false, array $data = [], array $relations = [], array $files = [], int $parentId = -1, int $previousId = -1,
+        int $targetAreaId = 0, array $mapping = [], bool $autoMap = true, bool $simulate = false, string $background = 'auto'): array
     {
         $this->context->require();
         $batch = $this->container->get(RecordBatch::class);
@@ -791,7 +795,7 @@ class RecordApi
 
         $job = ['mode' => $mode, 'area_id' => $areaId, 'simulate' => $simulate];
         if ($mode === 'edit') {
-            $input = $this->writeInput($areaId, (int)$areaData['instance_id'], $data, [], $relations, $files, -1, -1, 0);
+            $input = $this->writeInput($areaId, (int)$areaData['instance_id'], $data, [], $relations, $files, $parentId, $previousId, 0);
             $allowed = $batch->batchFields($this->record->virtualSchema($areaId, false));
             $fields = array_values(array_unique(array_merge($input['fields'], array_keys($input['relations']), array_keys($input['files']))));
             foreach ($fields as $name) {

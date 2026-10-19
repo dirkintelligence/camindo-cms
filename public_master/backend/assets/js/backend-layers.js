@@ -262,7 +262,7 @@
             if (slide) {
                 $last.removeClass('c9-layer').addClass('c9-layer-ghost')
                     .attr({ 'inert': '', 'aria-hidden': 'true' })
-                    .css({ position: 'absolute', top: 0, left: 0, right: 0 });
+                    .css({ position: 'absolute', top: this._padTop() + 'px', left: 0, right: 0 });
             } else {
                 $last.remove();
             }
@@ -801,7 +801,9 @@
             }).first();
             if (!$prev.length || !this._slideOk()) return false;
             const $article = $('article');
-            $new.css({ display: 'block', position: 'absolute', top: $article.scrollTop() + 'px', left: 0, right: 0 });
+            // below the space of the head that scrolls along at low window heights (_padTop())
+            const top = Math.max($article.scrollTop(), this._padTop());
+            $new.css({ display: 'block', position: 'absolute', top: top + 'px', left: 0, right: 0 });
             this._slide([$prev[0], $new[0]], [[0, -100], [100, 0]], () => {
                 $new.css({ position: '', top: '', left: '', right: '' });
                 $('article .c9-layer').css('display', 'none').last().css('display', 'block');
@@ -819,7 +821,7 @@
         _slideOut($ghost, scrollFrom) {
             const $cur = $('article .c9-layer:last');
             // Offset the ghost so that it stays visible at the same place
-            $ghost.css('top', ($('article').scrollTop() - scrollFrom) + 'px');
+            $ghost.css('top', (this._padTop() + $('article').scrollTop() - scrollFrom) + 'px');
             this._slide([$cur[0], $ghost[0]], [[-100, 0], [0, 100]], () => {
                 $ghost.remove();
             });
@@ -827,6 +829,15 @@
 
 
         // --- Internal helper functions ---
+
+        /**
+         * Top padding of <article>: 0, at window heights below 500px the space for the head
+         * and breadcrumb that scroll along (backend.css) - absolutely positioned layers
+         * start below it.
+         */
+        _padTop() {
+            return parseFloat($('article').css('padding-top')) || 0;
+        },
 
         /**
          * The content of the topmost layer was replaced (replace(), POST): its focused

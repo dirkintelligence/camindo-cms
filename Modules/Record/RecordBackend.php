@@ -306,8 +306,16 @@ abstract class RecordBackend {
                 $this->areaId = (int)$srcFieldData['rel_area_id'];
             }
             elseif (in_array($type, $this->cms->multiAreaTypes, true)) {
-                // target areas (pointer, link)
-                $this->areaIds = $this->record->getRelAreaIds($this->srcField);
+                // target areas (pointer, link) - deleted ones (trash) or missing ones are skipped
+                $relAreaIds = $this->record->getRelAreaIds($this->srcField);
+                $this->areaIds = array_values(array_filter($relAreaIds,
+                    fn($areaId) => $this->backend->areaData((int)$areaId) !== null));
+                if (!empty($relAreaIds) && empty($this->areaIds)) {
+                    // otherwise the lookup would list all areas
+                    $this->cms->error($this->cms->snippet('area.error_rel_area_not_found'));
+                    $this->function = 'errors';
+                    return;
+                }
                 // exactly one?
                 if (count($this->areaIds) === 1) $this->areaId = (int)$this->areaIds[0];
             }
@@ -336,7 +344,9 @@ abstract class RecordBackend {
             // one area -> load data
             // Backend::areaData() supplies additional info on the default field and sort field
             if (!$this->areaData = $this->backend->areaData($this->areaId)) {
-                // (error messages in $this->cms->errors)
+                // deleted (trash) or missing - e.g. the target area of a relation field
+                $this->cms->error($this->cms->snippet(!empty($this->srcField)
+                    ? 'area.error_rel_area_not_found' : 'area.error_area_not_found'));
                 $this->function = 'errors';
                 return;
             }

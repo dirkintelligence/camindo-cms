@@ -197,6 +197,21 @@ header {
     border-bottom: 1px solid var(--camindo-primary-border-emph);
     box-shadow: 0 3px 3px #00000044;
     z-index: 4;
+    overflow: hidden;
+}
+/* Narrow windows: the buttons on the right always stay flush right and cover the logo */
+.c9-head-start {
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+.c9-head-start > * {
+    flex-shrink: 0;
+}
+.c9-head-end {
+    position: absolute;
+    inset-inline-end: 0;
+    top: 0;
+    background: var(--bs-primary);
 }
 
 main {
@@ -226,6 +241,7 @@ aside {
     z-index: 3;
     display: none;
 }
+
 
 .icon-checkbox {
     font-size:130%;
@@ -295,6 +311,11 @@ aside {
     justify-content: center;
     border-radius:0;
 }
+/* Optical centering: the glyphs sit low in their line box, the bottom border takes 1px */
+.c9-head-btn > .icon {
+    position: relative;
+    top: -1px;
+}
 .c9-head-btn:hover {
     color:white;
     background: #8997b5;
@@ -363,9 +384,10 @@ aside {
     position: fixed;
     z-index: 1050;
     inset-inline-start:0;
-    top:40px;
+    top: calc(40px - var(--c9-head-shift, 0px));
     width: 100%;
     max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
     overflow-y: auto;
 }
 /* Hauptmenü (Start/menu.php): Trennlinien ohne .dropdown-menu-Kontext */
@@ -383,13 +405,14 @@ aside {
 /* --- bgproc-container --- */
 #c9-bgproc-container {
     display: none;
-    position: absolute;
+    position: fixed; /* like the main menu: always directly below the head, also on mobile */
     inset-inline-end: 0;
-    top: 40px;
+    top: calc(40px - var(--c9-head-shift, 0px));
     z-index: 1051;
     width: 100%;
     max-width: 786px;
     max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
     overflow-y: auto;
 }
 
@@ -1319,3 +1342,27 @@ a.c9-navitem-link:focus-visible,
 [data-bs-theme="dark"] .c9-docs { --bs-code-color: #e08ae0; }
 [data-bs-theme="dark"] .c9-docs h3 code,
 [data-bs-theme="dark"] .c9-docs td code { --bs-code-color: var(--bs-body-color); }
+
+/* Window height below 500px (landscape on phones): head and breadcrumb are not fixed,
+   they scroll away with the content. <article> remains the scroll container; its top
+   padding holds their space, cApp.ui._initLowHeader() sets --c9-scroll (scroll position)
+   and --c9-head-shift (scrolled-away part of the head, max. 40px). */
+@media (max-height: 499.98px) {
+    header,
+    #c9-navi {
+        transform: translateY(calc(-1 * var(--c9-scroll, 0px)));
+    }
+    main {
+        top: 0;
+    }
+    article {
+        top: 0;
+        padding-top: 80px;
+    }
+    #c9-navi {
+        top: 50px;
+    }
+    aside {
+        top: calc(40px - var(--c9-head-shift, 0px));
+    }
+}

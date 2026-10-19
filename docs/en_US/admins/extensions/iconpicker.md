@@ -18,7 +18,8 @@ picker:
   page through the categories.
 - The ***search field*** searches all icons by name and ***tags*** (English, from the
   search index of Google Fonts, e.g. `book`, `calendar`, `person`). If you enter several
-  terms, all of them must match.
+  terms, all of them must match. The Enter key takes the search term into the field: an
+  exact icon name, otherwise the only hit, otherwise the text itself (spaces become `_`).
 - A click on an icon writes its name into the field and closes the window.
   ![block](../../_/block.svg) “No icon” empties the field.
 - ![close](../../_/close.svg), the Esc key or a click outside close the window without

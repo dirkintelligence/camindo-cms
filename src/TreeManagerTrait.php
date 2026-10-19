@@ -399,6 +399,12 @@ trait TreeManagerTrait
         // Validation of the given records (must lie in the same area)
         $this->validateNodeExists($parentId,   'parent_id',   $areaId);
         $this->validateNodeExists($previousId, 'previous_id', $areaId);
+        // The new parent must not be the record itself or lie in its subtree -
+        // the branch would detach from the tree (cycle)
+        if ($parentId > 0 && $this->isInSubtree($parentId, $id, $areaId)) {
+            $this->createFieldError('error_parent_in_subtree', 'parent_id', '#record.field_parent_id');
+            throw new \Exception('#' . $this->cms->errorMsgLast());
+        }
         // Close the gap at the old place
         $this->shiftPositionsUp($oldParentId, $oldPosition, $id, $oldAreaId);
         // Also bring the new level to 1..n (its own row does not count there,
@@ -423,6 +429,65 @@ trait TreeManagerTrait
         // lft, rgt, depth – rebuildTree() takes care of these after the UPDATE in save()
         $data['position'] = $newPosition;
         return true;
+    }
+
+    /**
+     * Is $nodeId the record $rootId itself or one of its descendants? Via the
+     * nested set (lft/rgt of the area) - basis of the cycle check in
+     * updateInTree() and of the batch processing (RecordBatch).
+     *
+     * @param int $nodeId  record to check (e.g. the new parent record)
+     * @param int $rootId  root of the subtree
+     * @param int $areaId  content area
+     */
+    public function isInSubtree(int $nodeId, int $rootId, int $areaId = 0): bool
+    {
+        if ($nodeId < 1 || $rootId < 1) return false;
+        if ($nodeId === $rootId) return true;
+        $bindTypes = 'ii';
+        $values    = [$rootId, $nodeId];
+        $sql = "SELECT 1 FROM `{$this->tableName}` `r` JOIN `{$this->tableName}` `n`"
+             . " ON `n`.`lft` > `r`.`lft` AND `n`.`lft` < `r`.`rgt`"
+             . ($this->hasAreaId ? " AND `n`.`area_id` = `r`.`area_id`" : '')
+             . " WHERE `r`.`{$this->tableName}_id` = ? AND `n`.`{$this->tableName}_id` = ?";
+        if ($this->hasAreaId && $areaId > 0) {
+            $sql .= " AND `r`.`area_id` = ?";
+            $bindTypes .= 'i';
+            $values[]   = $areaId;
+        }
+        $this->db->pushResult();
+        $this->db->query($sql, $bindTypes, $values);
+        $found = $this->db->num_rows > 0;
+        $this->db->popResult();
+        return $found;
+    }
+
+    /**
+     * The last child (highest position) under $parentId - the predecessor for
+     * "append at the end". Records marked as deleted are skipped as in
+     * getPreviousId(), working copies do not count.
+     *
+     * @param int $parentId   id of the parent record or 0 (root level)
+     * @param int $areaId     content area
+     * @param int $excludeId  record that is not counted (the one being moved)
+     * @return int            record id or 0 (no children)
+     */
+    public function lastChildId(int $parentId, int $areaId = 0, int $excludeId = 0): int
+    {
+        $bindTypes = '';
+        $values    = [];
+        $sql = "SELECT `{$this->tableName}_id` FROM `{$this->tableName}`"
+             . " WHERE " . $this->parentCondition($parentId, $areaId, $bindTypes, $values)
+             . " AND `{$this->tableName}_id` != ?";
+        $bindTypes .= 'i';
+        $values[]   = $excludeId;
+        $sql .= $this->treeFilter(true);
+        $sql .= " ORDER BY `position` DESC LIMIT 1";
+        $this->db->pushResult();
+        $this->db->query($sql, $bindTypes, $values);
+        $id = $this->db->num_rows > 0 ? (int)$this->db->fetchNum()[0] : 0;
+        $this->db->popResult();
+        return $id;
     }
 
     /**

@@ -165,6 +165,13 @@
                 this.query = this.search.value.trim().toLowerCase();
                 this.render();
             });
+            // Return takes over the search text instead of submitting the form
+            this.search.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' || e.isComposing) return;
+                e.preventDefault();
+                e.stopPropagation();
+                this.takeSearch();
+            });
             const closeBtn = el('button', 'btn btn-sm btn-light c9-iconpicker-close');
             closeBtn.type = 'button';
             closeBtn.title = texts.speak_close;
@@ -257,6 +264,16 @@
             if (!icons.length) frag.appendChild(el('div', 'c9-iconpicker-empty-note text-muted', texts.label_no_results));
             this.grid.replaceChildren(frag);
             this.grid.scrollTop = 0;
+        }
+
+        // Search text as icon name: an exact name, else the only hit, else the text itself
+        takeSearch() {
+            const text = this.search.value.trim();
+            if (text === '') return;
+            const name = text.replace(/\s+/g, '_');
+            if (this.data.icons.some((i) => i.name === name)) { this.select(name); return; }
+            const hits = this.matches();
+            this.select(hits.length === 1 ? hits[0].name : name);
         }
 
         select(name) {

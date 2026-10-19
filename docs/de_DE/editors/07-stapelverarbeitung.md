@@ -39,9 +39,22 @@ camindo CMS es automatisch an.
   bisherigen des Feldes.
 - ***Dateien:*** Eine hier hochgeladene Datei wird in jeden Datensatz übernommen. Ist
   ein Upload-Feld angehakt, aber leer, wird die Datei in jedem Datensatz entfernt.
+- ***Eltern-Datensatz:*** Die Datensätze werden unter den gewählten Datensatz gehängt –
+  als dessen letzte untergeordnete Datensätze, in ihrer bisherigen Reihenfolge.
+- ***Position:*** Wählen Sie den vorangehenden Datensatz. Die Datensätze werden in ihrer
+  bisherigen Reihenfolge hinter ihn gestellt; „(an den Anfang)“ stellt sie an den Anfang.
+  Die Auswahl zeigt die Datensätze unter dem gewählten Eltern-Datensatz – in Bereichen
+  mit Baumstruktur landen die Datensätze also auch unter diesem Eltern-Datensatz. Ist der
+  vorangehende Datensatz selbst im Umfang, bleibt er an seinem Platz.
+
+Mit ***bisherige Reihenfolge*** ist die Reihenfolge in der Baumstruktur bzw. die manuelle
+Sortierung gemeint, nicht die Sortierung der Liste. Untergeordnete Datensätze, die selbst
+nicht im Umfang sind, wandern mit ihrem Eltern-Datensatz mit. Ein Datensatz lässt sich nicht
+unter sich selbst oder einen seiner untergeordneten Datensätze hängen – er erscheint dann im
+Ergebnis als fehlgeschlagen.
 
 Nicht angeboten werden Felder, deren Wert eindeutig sein muss (derselbe Wert in vielen
-Datensätzen wäre nie eindeutig) und Felder, deren Wert automatisch berechnet wird: Volltextfelder, Thumbnails, die Position im Baum. Auch 1:1-Verknüpfungsfelder („eingebettete Inhalte“) werden hier nicht angeboten.
+Datensätzen wäre nie eindeutig) und Felder, deren Wert automatisch berechnet wird: Volltextfelder und Thumbnails. Auch 1:1-Verknüpfungsfelder („eingebettete Inhalte“) werden hier nicht angeboten.
 
 ### Verschieben
 

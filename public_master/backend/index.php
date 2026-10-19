@@ -126,7 +126,7 @@
     </div>
     <div class="resize-overlay"></div>
     <header class="d-flex align-items-center justify-content-between p-0">
-    <div class="d-flex align-items-center">
+    <div class="d-flex align-items-center c9-head-start">
         <button type="button" id="c9-hamburger" class="btn c9-head-btn p-0" title="<?php echo $cms->snippet('speak_open_menu'); ?>"
             aria-haspopup="true" aria-expanded="false" aria-controls="c9-menu-container">
             <span class="icon" aria-hidden="true">menu</span><span class="visually-hidden"><?php echo $cms->snippet('speak_open_menu'); ?></span>
@@ -135,7 +135,7 @@
             camindo<small>CMS</small>
         </button>
     </div>
-    <div class="d-flex align-items-center">
+    <div class="d-flex align-items-center c9-head-end">
         <button type="button" id="c9-bgproc-btn" class="btn c9-head-btn p-0 position-relative" title="<?php echo $cms->snippet('bgproc_headline'); ?>"
             aria-haspopup="true" aria-expanded="false" aria-controls="c9-bgproc-container">
             <span class="icon" aria-hidden="true">hourglass</span><span class="visually-hidden"><?php echo $cms->snippet('bgproc_headline'); ?></span>

@@ -18,7 +18,9 @@ Auswahlfenster:
   blättern durch die Kategorien.
 - Das ***Suchfeld*** durchsucht alle Icons nach Name und ***Schlagwörtern*** (englisch,
   aus dem Suchindex von Google Fonts, z. B. `book`, `calendar`, `person`). Mehrere
-  Begriffe müssen alle vorkommen.
+  Begriffe müssen alle vorkommen. Die Eingabetaste übernimmt den Suchbegriff ins Feld:
+  einen exakten Icon-Namen, sonst den einzigen Treffer, sonst den Text selbst
+  (Leerzeichen werden zu `_`).
 - Ein Klick auf ein Icon schreibt seinen Namen ins Feld und schließt das Fenster.
   ![block](../../_/block.svg) „Kein Icon“ leert das Feld.
 - ![close](../../_/close.svg), die Esc-Taste oder ein Klick außerhalb schließen das

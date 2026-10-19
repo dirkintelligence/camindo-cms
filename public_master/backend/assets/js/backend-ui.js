@@ -20,6 +20,7 @@
             this._initSettingsButton();
             this._initLogoutButton();
             this._initBgprocContainer();
+            this._initLowHeader();
             this._bindColumnCheckboxes();
             this._bindBgprocRemove();
         },
@@ -1161,6 +1162,27 @@
                     }
                 });
             });
+        },
+
+        // Window height below 500px (landscape on phones): the head scrolls away with the
+        // content as if it were static. The scroll container stays <article> (layers,
+        // scroll positions), so the CSS (backend.css, max-height: 499.98px) shifts the head
+        // and breadcrumb by --c9-scroll; --c9-head-shift is the part of the head height
+        // already scrolled away (for the popups below it).
+        _initLowHeader() {
+            const media = window.matchMedia('(max-height: 499.98px)');
+            const root = document.documentElement;
+            const article = document.querySelector('article');
+            if (!article) return;
+            // scroll events come at most once per frame - no requestAnimationFrame needed
+            const update = () => {
+                const y = media.matches ? article.scrollTop : 0;
+                root.style.setProperty('--c9-scroll', y + 'px');
+                root.style.setProperty('--c9-head-shift', Math.min(y, 40) + 'px');
+            };
+            article.addEventListener('scroll', update, { passive: true });
+            media.addEventListener('change', update);
+            update();
         },
 
         _initBgprocContainer() {
