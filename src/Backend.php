@@ -1230,6 +1230,9 @@ class Backend {
      *                          as in formField() - the placeholder
      *                          {data_settings_widgets}
      * @param string $html      HTML
+     *
+     * A 'tooltip' in the schema appears - as with formField() - on the
+     * question mark after the label.
      */
     public function formStatic(Dataset $dataset, string $name, string $html, $append = false): void
     {
@@ -1240,8 +1243,10 @@ class Backend {
         if ($append && strpos($this->form, $placeholder) === false) {
             $this->form .= "\n" . $placeholder;
         }
-        $formBlock = $this->template('edit_form_static', [
+        $tooltip = (string)($schema[$name]['tooltip'] ?? '');
+        $formBlock = $this->template($tooltip === '' ? 'edit_form_static' : 'edit_form_static_tt', [
             '{label}' => $this->cms->textOrSnippet($label),
+            '{tooltip}' => htmlspecialchars($this->cms->textOrSnippet($tooltip), ENT_QUOTES),
             '{html}' => $html
         ]);
         $this->form = str_replace($placeholder, $formBlock, $this->form);
@@ -2471,9 +2476,10 @@ class Backend {
             }
         }
 
-        // Extension (developer docs, chapter 08 (Components and extensions)): only in the input mask, only if it is active -
+        // Extension (developer docs, chapter 08 (Components and extensions)): only in the input mask (also in
+        // the embedded masks of a 'link' field, embed[{record_id}]), only if it is active -
         // one class and two data attributes, cApp.extensions does the rest
-        if ($varName === 'data') {
+        if ($varName === 'data' || str_starts_with($varName, 'embed[')) {
             $ext = $this->fieldExtension($colDef);
             if ($ext !== null) {
                 $class[] = 'c9-ext';

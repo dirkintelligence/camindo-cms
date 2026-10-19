@@ -1615,7 +1615,9 @@
         build() {
             const el = this.el;
             const o = this.options;
-            const field = (String(el.name || '').match(/\[([^\]]+)\]/) || [null, el.name || 'field'])[1].replace(/[^A-Za-z0-9_-]/g, '_');
+            // field name from data[name][lang] resp. embed[record_id][name][lang] (numbers = ids)
+            const parts = Array.from(String(el.name || '').matchAll(/\[([^\]]+)\]/g), (m) => m[1]).filter((p) => !/^\d+$/.test(p));
+            const field = (parts[0] || el.name || 'field').replace(/[^A-Za-z0-9_-]/g, '_');
             const cssClass = String(o.css_class || '').trim() || 'c9-markdownvisual-' + field;
             this.minHeight = Math.max(50, parseInt(o.min_height || '200', 10) || 200);
             this.maxHeight = parseInt(o.max_height || '0', 10) || 0;

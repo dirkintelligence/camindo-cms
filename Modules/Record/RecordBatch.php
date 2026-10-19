@@ -17,7 +17,8 @@
  *     fields          edit: names of the checked fields
  *     data            edit: raw input of the mask (data[...] as in a normal
  *                     save, multilingual per language) - only the checked fields;
- *                     passwords as hash (see prehashed)
+ *                     passwords as hash (see prehashed); tree fields as
+ *                     data['parent_id'] and data['previous_id'] (see TREE FIELDS)
  *     stored          edit: fields whose values in data are in database format
  *                     (API, ApiValues::input())
  *     prehashed       edit: password fields whose value in data is the hash
@@ -57,6 +58,24 @@
  *     move    rights, lock -> MoveTrait::moveToArea() - children, mapping,
  *             check in the target area
  *     delete  rights, lock -> Record::delete() (soft delete incl. hooks)
+ *
+ * TREE FIELDS (edit)
+ * --------------------
+ * parent_id and position move the records - one after the other, in their current
+ * order (tree order lft, otherwise position; _treeOrder()):
+ *
+ *     parent_id only    each record is appended at the end of the children of the new
+ *                       parent record (predecessor: lastChildId()) - so they stand
+ *                       there last, in their previous order
+ *     position          the first record goes behind the chosen predecessor
+ *                       (data['previous_id'], 0 = at the start), each further one
+ *                       behind the record moved before it. The level is the parent
+ *                       record from data['parent_id'] - without parent_id among the
+ *                       fields that of the predecessor (0: root level). The
+ *                       predecessor itself stays where it is, if it is in the scope
+ *
+ * A new parent record that is one of the records itself or lies in its subtree is
+ * refused per record (TreeManagerTrait::isInSubtree()).
  *
  * "Lock" here also means: the triggering admin still has the record open
  * in an input mask - the check-out would discard that working copy
@@ -110,8 +129,12 @@ class RecordBatch {
     /** Type identifier of the background process (table `bgproc`) */
     public const TYPE = 'batch';
 
-    /** Fields that cannot be changed in batch (see batchFields()) */
-    private const NOT_EDITABLE = ['parent_id', 'position', 'previous_id'];
+    /** Tree fields - moved one after the other (see TREE FIELDS) */
+    public const TREE_FIELDS = ['parent_id', 'position'];
+
+    /** Tree fields of the running job (_treePlan()) and the last moved record */
+    private ?array $tree = null;
+    private int $treePrevious = 0;
 
     public function __construct(
         private Config $config,
@@ -237,7 +260,7 @@ class RecordBatch {
      *                               record, it is not a batch)
      *     thumbnails                are calculated from the upload field
      *     full text                 is generated
-     *     parent_id / position      tree fields (NOT_EDITABLE)
+     *     position as lookup        the predecessor is chosen from a list
      *     link                      firmly linked contents each belong to one
      *                               record - the same content in many would belong to
      *                               none (LinkTrait)
@@ -255,7 +278,7 @@ class RecordBatch {
             if ($type === 'fulltext') continue;
             if ($type === 'file' && $displayType !== 'upload') continue;
             if (in_array($type, $this->cms->dependentTypes, true)) continue;
-            if (in_array($name, self::NOT_EDITABLE, true)) continue;
+            if ($name === 'position' && $displayType === 'lookup') continue;
             $flags = (array)($colDef['flags'] ?? []);
             if (in_array('unique', $flags, true) || in_array('unique_in_area', $flags, true)) continue;
             $fields[$name] = $colDef;
@@ -390,6 +413,16 @@ class RecordBatch {
                 continue;
             }
 
+            // tree fields: parent record resp. predecessor (TREE FIELDS)
+            if ($name === 'parent_id') {
+                $job['data']['parent_id'] = max(0, (int)($data['parent_id'] ?? 0));
+                continue;
+            }
+            if ($name === 'position') {
+                $job['data']['previous_id'] = max(0, (int)($data['previous_id'] ?? 0));
+                continue;
+            }
+
             // password: the hash from the template (securePasswords()) instead of the input
             if ($type === 'password' || $displayType === 'password') {
                 $hash = (string)($tmpData[$name][1] ?? '');
@@ -472,6 +505,13 @@ class RecordBatch {
             return $result;
         }
 
+        // tree fields: in the current order, one after the other (TREE FIELDS)
+        $this->tree = ($mode === 'edit') ? $this->_treePlan($job) : null;
+        if ($this->tree !== null) {
+            $ids = $this->_treeOrder($ids);
+            $this->treePrevious = (int)($this->tree['previous_id'] ?? 0);
+        }
+
         $step = 0;
         foreach ($ids as $id) {
             $this->cms->errorsReset();
@@ -496,8 +536,56 @@ class RecordBatch {
             if ($progress !== null) $progress($step, $result['total']);
         }
         $this->cms->errorsReset();
+        $this->tree = null;
         if ($mode === 'edit') $this->cleanupJob($job);
         return $result;
+    }
+
+    /**
+     * The tree fields of an 'edit' job: target level and predecessor (TREE FIELDS).
+     *
+     * @return array|null  ['tree' => bool (area with tree), 'parent_id' => int,
+     *                     'previous_id' => int|null (null: append at the end)];
+     *                     null: no tree field checked
+     */
+    private function _treePlan(array $job): ?array
+    {
+        $fields = (array)($job['fields'] ?? []);
+        $hasParent = in_array('parent_id', $fields, true);
+        $hasPosition = in_array('position', $fields, true);
+        if (!$hasParent && !$hasPosition) return null;
+        $areaId = (int)($job['area_id'] ?? 0);
+        $isTree = $this->record->isTreeArea($areaId);
+        $previousId = $hasPosition ? max(0, (int)($job['data']['previous_id'] ?? 0)) : null;
+        if (!$isTree) $parentId = 0;
+        elseif ($hasParent) $parentId = max(0, (int)($job['data']['parent_id'] ?? 0));
+        elseif ($previousId > 0) {
+            // only position: the level of the predecessor
+            $this->db->pushResult();
+            $this->db->query("SELECT `parent_id` FROM `record` WHERE `record_id` = ? AND `area_id` = ?", 'ii', [$previousId, $areaId]);
+            $parentId = (int)($this->db->fetchNum()[0] ?? 0);
+            $this->db->popResult();
+        }
+        else $parentId = 0;
+        return ['tree' => $isTree, 'parent_id' => $parentId, 'previous_id' => $previousId];
+    }
+
+    /**
+     * Ids in their current order: tree order (lft), otherwise position.
+     *
+     * @param int[] $ids
+     * @return int[]
+     */
+    private function _treeOrder(array $ids): array
+    {
+        if (count($ids) < 2) return $ids;
+        $this->db->pushResult();
+        $this->db->query("SELECT `record_id` FROM `record` WHERE `record_id` IN (" . implode(',', array_map('intval', $ids)) . ")"
+            . " ORDER BY `lft` ASC, `position` ASC, `record_id` ASC");
+        $ordered = array_map('intval', $this->db->fetchAll());
+        $this->db->popResult();
+        // ids no longer found (deleted in the meantime) at the end - they fail individually
+        return array_values(array_unique(array_merge($ordered, $ids)));
     }
 
     /**
@@ -547,7 +635,32 @@ class RecordBatch {
         $data = [];
         $relations = [];
         $files = [];
+        $moved = false;
+        if ($this->tree !== null) {
+            $fields = array_values(array_diff($fields, self::TREE_FIELDS));
+            $previousId = $this->tree['previous_id'];
+            // the chosen predecessor itself stays where it is
+            if ($previousId === null || $id !== $previousId) {
+                $parentId = (int)$this->tree['parent_id'];
+                if ($this->tree['tree'] && $parentId > 0 && $this->record->isInSubtree($parentId, $id, $areaId)) {
+                    $this->cms->error($this->cms->snippet('error_parent_in_subtree'), 'parent_id', $this->cms->textOrSnippet('#record.field_parent_id'));
+                    return false;
+                }
+                $data['previous_id'] = ($previousId === null)
+                    ? $this->record->lastChildId($parentId, $areaId, $id)
+                    : $this->treePrevious;
+                if ($this->tree['tree'] && isset($allowed['parent_id'])) {
+                    $fields[] = 'parent_id';
+                    $data['parent_id'] = $parentId;
+                }
+                if (isset($allowed['position'])) $fields[] = 'position';
+                $moved = true;
+            }
+            // nothing else to change (the predecessor itself)
+            if (empty($fields)) return true;
+        }
         foreach ($fields as $name) {
+            if (in_array($name, self::TREE_FIELDS, true)) continue;
             $colDef = $allowed[$name];
             $type = (string)($colDef['type'] ?? 'text');
             // links: lookup fields from the template (ids), via the API also
@@ -564,13 +677,18 @@ class RecordBatch {
             }
         }
 
-        return (bool)$this->service->updateOne($id, array_keys($data), $data, $relations, $files, [
+        $dataFields = array_values(array_diff(array_keys($data), ['previous_id']));
+        if ($moved && in_array('position', $fields, true)) $dataFields[] = 'position';
+        $ok = (bool)$this->service->updateOne($id, $dataFields, $data, $relations, $files, [
             'area_id'   => $areaId,
             'simulate'  => !empty($job['simulate']),
             'prehashed' => (array)($job['prehashed'] ?? []),
             'stored'    => array_values(array_intersect((array)($job['stored'] ?? []), array_keys($data))),
             'history'   => false,
         ]);
+        // the next record goes behind this one
+        if ($ok && $moved) $this->treePrevious = $id;
+        return $ok;
     }
 
     /**

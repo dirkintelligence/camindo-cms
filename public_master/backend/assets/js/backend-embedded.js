@@ -176,6 +176,7 @@
                 }
                 cApp.ui._initTextareaGrow($newCell);
                 if (cApp.smartrows && cApp.smartrows.refreshAll) cApp.smartrows.refreshAll($newCell);
+                if (cApp.extensions && cApp.extensions.refreshAll) cApp.extensions.refreshAll($newCell);
                 this._flash($newCell);
                 this._markChanged($block);
                 $newCell.find('input, select, textarea').filter(':visible:not(:disabled)').first().trigger('focus');
@@ -223,6 +224,7 @@
                     return;
                 }
                 $block.find('.c9-embed-error').remove();
+                if (cApp.extensions && cApp.extensions.destroyAll) cApp.extensions.destroyAll($cell);
                 $cell.remove();
                 this._markChanged($block);
             });

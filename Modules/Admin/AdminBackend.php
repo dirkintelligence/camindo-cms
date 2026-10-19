@@ -995,10 +995,11 @@ class AdminBackend {
         }
         $html = $this->backend->template('admin.fed_sites', [
             '{buttons}' => implode('', $buttons),
-            '{note}' => $this->backend->escape($this->cms->snippet($mode > 0 ? 'admin.note_fed_sites' : 'admin.note_fed_sites_off')),
         ]);
-        return $this->backend->template('edit_form_static', [
+        // The explanation is the tooltip on the label, as with the fields above
+        return $this->backend->template('edit_form_static_tt', [
             '{label}' => $this->cms->snippet('admin.label_fed_sites'),
+            '{tooltip}' => htmlspecialchars($this->cms->snippet($mode > 0 ? 'admin.note_fed_sites' : 'admin.note_fed_sites_off'), ENT_QUOTES),
             '{html}' => $html,
         ]);
     }
@@ -1151,12 +1152,6 @@ class AdminBackend {
         $widgets = $this->widgets->normalize((array)($settings[Widgets::SETTINGS_KEY] ?? []), requireExists: false);
         $positions = $this->widgets->positionOptions();
 
-        // The explanation is a note in the block, not a tooltip on the label:
-        // formStatic() renders no tooltip, and for a hover the text is too long
-        $note = $this->backend->template('remark_block', [
-            '{text}' => $this->cms->snippet('admin.note_widgets'),
-        ]);
-
         // Attached widgets
         $rows = '';
         foreach ($widgets as $i => $item) {
@@ -1169,7 +1164,7 @@ class AdminBackend {
             $this->backend->formHidden("data[settings][widgets][$i][module]", $item['module']);
             $this->backend->formHidden("data[settings][widgets][$i][position]", $item['position']);
         }
-        $list = $note . ($rows === ''
+        $list = ($rows === ''
             ? $this->backend->template('admin.settings_widgets_none')
             : $this->backend->template('admin.settings_widget_table', ['{table_rows}' => $rows]));
 

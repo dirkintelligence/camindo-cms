@@ -627,7 +627,7 @@ class RecordService
      * Apply the changes to a working copy and fill $saveData:
      * links (applyRelations()), files (deletion marker or source for
      * secureUploads()), the other values from $data; 'position' takes
-     * $data['previous_id'].
+     * $data['previous_id'] (so does 'parent_id' without 'position').
      *
      * @return bool  false on errors (Cms::errors)
      */
@@ -676,6 +676,11 @@ class RecordService
             if ($name === 'position') {
                 $saveData['previous_id'] = (int)($data['previous_id'] ?? 0);
                 continue;
+            }
+            // parent record with a predecessor, but without the field `position` (batch
+            // processing: append at the end of the new siblings)
+            if ($name === 'parent_id' && array_key_exists('previous_id', $data) && !in_array('position', $fields, true)) {
+                $saveData['previous_id'] = (int)$data['previous_id'];
             }
             $saveData[$name] = $data[$name] ?? '';
         }

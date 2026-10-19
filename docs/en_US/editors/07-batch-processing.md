@@ -36,10 +36,21 @@ As soon as you enter something in a field, camindo CMS ticks it automatically.
   every record.
 - ***Files:*** a file uploaded here is applied to every record. If an upload field is ticked but
   empty, the file is removed from every record.
+- ***Parent record:*** the records are placed under the selected record – as its last child
+  records, in their current order.
+- ***Position:*** select the preceding record. The records are placed after it in their current
+  order; “(at the start)” places them at the beginning. The list shows the records under the
+  selected parent record – in areas with a tree structure the records therefore also end up under
+  this parent record. If the preceding record itself is part of the scope, it stays where it is.
+
+***Current order*** means the order in the tree structure or the manual sorting, not the sorting
+of the list. Child records that are not part of the scope themselves move along with their parent
+record. A record cannot be placed under itself or one of its child records – it then appears as
+failed in the result.
 
 Fields whose value must be unique are not offered – the same value in many records could never be
-unique – nor are fields whose value is calculated automatically: full-text fields, thumbnails and the
-position in the tree. Also 1:1 relation fields (“embedded content”) are not offered here.
+unique – nor are fields whose value is calculated automatically: full-text fields and thumbnails.
+Also 1:1 relation fields (“embedded content”) are not offered here.
 
 ### Move
 

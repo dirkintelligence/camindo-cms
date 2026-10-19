@@ -1383,7 +1383,7 @@ class RecordBackendEdit extends RecordBackend {
      * @param string $displayType       display_type of the field
      * @param bool   $hasPreviousField  is there a predecessor list to reload?
      */
-    private function _editParentParams(array $fieldParams, string $displayType, bool $hasPreviousField): array
+    protected function _editParentParams(array $fieldParams, string $displayType, bool $hasPreviousField): array
     {
         if ($displayType === 'lookup') {
             $fieldParams['template'] = 'record.parent_lookup_field';
@@ -1413,7 +1413,7 @@ class RecordBackendEdit extends RecordBackend {
      * @param int   $parentId     parent record to which the list refers
      * @param array $options      selection list from _previousOptions()
      */
-    private function _editPreviousParams(array $fieldParams, int $parentId, array $options): array
+    protected function _editPreviousParams(array $fieldParams, int $parentId, array $options): array
     {
         $fieldParams['name'] = 'previous_id';
         $fieldParams['value'] = $this->_previousValue($parentId, $options);
@@ -1563,7 +1563,7 @@ class RecordBackendEdit extends RecordBackend {
      *
      * @param int $parentId  parent record or 0
      */
-    private function _parentLookupPreviewCreate(int $parentId): string
+    protected function _parentLookupPreviewCreate(int $parentId): string
     {
         if ($parentId < 1) return '';
 

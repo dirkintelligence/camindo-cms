@@ -700,6 +700,10 @@ class FieldEditBackend extends FieldBackend {
             // Typ 'reltable' (Inhalt liegt in `rel_field_area`) - formField() behandelt
             // it like 'json'; the type conversion is therefore no longer necessary.
             $colDef = $this->field->getSchema()['rel_area_ids'];
+            // link: only dependent areas can be selected (_relAreaOptions())
+            if (in_array($type, $this->cms->dependentTypes, true)) {
+                $colDef['tooltip'] = '#area.tooltip_field_rel_area_ids_link';
+            }
             $this->backend->formField($this->field, [
                 'name' => 'rel_area_ids',
                 'value' => (array)($this->data['rel_area_ids'] ?? []),

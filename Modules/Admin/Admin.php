@@ -320,6 +320,7 @@ class Admin extends Dataset {
             'settings.widgets' => [
                 'type'  => 'json',
                 'label' => '#admin.field_admin_settings_widgets',
+                'tooltip' => '#admin.note_widgets',
             ],
             // subscribed reports of the scheduler (scheduler_ids)
             'settings.reports' => [

@@ -26,8 +26,11 @@
  *     select    the mask for the function:
  *                 edit    the input mask of the area with a checkbox in front of each
  *                         field - only checked fields are changed (in ALL
- *                         records). Without tree fields and fields with the unique flag
- *                         (RecordBatch::batchFields()). Links with
+ *                         records). Without fields with the unique flag
+ *                         (RecordBatch::batchFields()). parent_id and position
+ *                         as in the input mask (parent record, predecessor list) -
+ *                         the records are moved one after the other
+ *                         (RecordBatch, TREE FIELDS). Links with
  *                         search windows and upload fields depend on a TEMPLATE -
  *                         a working copy without original (Record::tmpInit()), which
  *                         carries the hidden field batch_tmp_id through the steps and
@@ -275,6 +278,12 @@ class RecordBackendBatch extends RecordBackendEdit {
         $this->id = $templateId;
         $templateData = ($templateId > 0) ? $this->record->loadTmpData($templateId) : [];
 
+        // tree fields as in the input mask: parent record (selection or search window)
+        // and predecessor list of its children (RecordBatch, TREE FIELDS)
+        $this->data['origin_id'] = 0;
+        $parentId = isset($fields['parent_id']) ? (int)($this->data['parent_id'] ?? 0) : 0;
+        $hasPreviousField = isset($fields['position']);
+
         $languages = $this->instanceCache->languages((int)($this->areaData['instance_id'] ?? 0));
         $languageIds = array_map('intval', array_keys($languages));
         $isMultilingual = count($languageIds) > 1;
@@ -302,6 +311,11 @@ class RecordBackendBatch extends RecordBackendEdit {
             }
             elseif ($name === 'template_id') $options = $this->_templateOptions();
             elseif ($name === 'status_id')   $options = $this->_statusOptions(settableOnly: true);
+            elseif ($name === 'parent_id' && $displayType !== 'lookup') $options = $this->_parentOptions();
+            elseif ($name === 'position')    $options = $this->_previousOptions($parentId);
+            if (in_array($name, RecordBatch::TREE_FIELDS, true)) {
+                $colDef['note'] = '#record.note_batch_' . $name;
+            }
 
             // no required: only checked fields count
             $colDef['flags'] = array_values(array_diff((array)($colDef['flags'] ?? []), ['not_empty']));
@@ -323,6 +337,17 @@ class RecordBackendBatch extends RecordBackendEdit {
                 'options' => $options,
                 'labelPrefix' => $checkbox(null),
             ];
+            if ($name === 'parent_id') {
+                $fieldParams = $this->_editParentParams($fieldParams, $displayType, $hasPreviousField);
+            }
+            elseif ($name === 'position') {
+                $fieldParams = $this->_editPreviousParams($fieldParams, $parentId, $options);
+                // default: at the end of the siblings (as when creating)
+                $selectable = $options;
+                unset($selectable['disabled']);
+                $fieldParams['value'] = array_key_exists('previous_id', $this->data)
+                    ? (int)$this->data['previous_id'] : (int)array_key_last($selectable);
+            }
 
             if ($isMultilingual && $this->cms->isMultilingualField($colDef)) {
                 $values = (array)($this->data[$name] ?? []);
@@ -345,7 +370,16 @@ class RecordBackendBatch extends RecordBackendEdit {
             }
             $this->backend->formField($this->record, $fieldParams);
 
-            if ($isLookup) {
+            if ($name === 'parent_id' && $displayType === 'lookup') {
+                // search window for the parent record (as RecordBackendEdit::_editFormFields())
+                $urlSuffix = "&src_id={$templateId}&src_field={$fieldId}";
+                $this->backend->formReplace('{src_id}', $templateId);
+                $this->backend->formReplace('{src_field}', $fieldId);
+                $this->backend->formReplace('{search_url}', "Record/record_list.php?" . $urlSuffix);
+                $this->backend->formReplace('{update_url}', "Record/ajax_parent_lookup.php?" . $urlSuffix);
+                $this->backend->formReplace('{preview}', $this->_parentLookupPreviewCreate($parentId));
+            }
+            elseif ($isLookup) {
                 $this->_editLookupReplacements($fieldId, (int)($colDef['max'] ?? 0));
             }
             elseif ($type === 'file') {
@@ -547,6 +581,11 @@ class RecordBackendBatch extends RecordBackendEdit {
             }
             elseif (empty($fields)) {
                 $this->cms->error($this->cms->snippet('record.error_batch_no_fields'));
+            }
+            // position: the predecessor list belongs to the parent record of the mask -
+            // its level applies, even if parent_id is not checked
+            if (in_array('position', $fields, true) && isset($allowed['parent_id']) && !in_array('parent_id', $fields, true)) {
+                $fields[] = 'parent_id';
             }
             if (!empty($this->cms->errors)) {
                 $this->errors();
