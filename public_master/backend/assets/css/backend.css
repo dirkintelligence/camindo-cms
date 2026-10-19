@@ -357,7 +357,7 @@ aside {
     width: auto;
     font-size: 1.4rem;
     padding: 0 10px;
-    line-height: 40px; /* = Buttonhöhe: Text sitzt vertikal mittig, <small> auf derselben Baseline */
+    line-height: 32px; /* < Buttonhöhe (40px): Text sitzt optisch mittig (4px höher), <small> auf derselben Baseline */
     display: inline-block; /* kein Flex: align-items:baseline packt die Zeile sonst an den oberen Rand */
     white-space: nowrap;
     direction: ltr; /* Markenname: "camindo" + <small>CMS</small> bei dir="rtl" nicht tauschen */
