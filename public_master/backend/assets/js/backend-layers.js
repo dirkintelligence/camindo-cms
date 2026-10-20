@@ -542,6 +542,10 @@
          * the layers below - only for masks below which there is certainly no
          * input mask (e.g. editing an area via the info page and list).
          *
+         * The start page (base layer '') is always marked as well: it holds no input
+         * mask, and its widgets (trash, log files …) may show what just changed -
+         * the home icon of the breadcrumb only shows it again (_showLast()).
+         *
          * @param {function} [callback]  execute after the referer has been reloaded
          *                               (e.g. fill a lookup field of the mask below)
          * @param {number}   [levels=1]  Number of layers below the topmost one
@@ -550,6 +554,10 @@
             const $layers = $('article .c9-layer');
             for (let i = 2; i <= levels + 1 && i <= $layers.length; i++) {
                 $layers.eq(-i).attr('data-stale', '1');
+            }
+            const $base = $layers.first();
+            if ($layers.length >= 2 && $base.attr('data-url') === '') {
+                $base.attr('data-stale', '1');
             }
             if ($layers.length >= 2 && typeof callback === 'function') {
                 $layers.eq(-2).data('stale-callback', callback);
