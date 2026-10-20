@@ -814,6 +814,14 @@ class TemplateBackend {
         $styledCode = str_replace("  ","\u{00A0} ", $styledCode);
         // Linebreak
         $styledCode = $this->cms->_nl2br($styledCode);
+        // Template links: handler with the nonce of this page (TemplateParserTrait::styleCommandInner()).
+        // The raw <a … "> can only come from the parser, the template code itself is escaped.
+        $styledCode = preg_replace_callback(
+            '~<a href="#" data-c9-template-link="([0-9a-zA-Z_.]+),(\d+)(,list)?">~',
+            fn($m) => '<a href="#"' . $this->backend->on('js', "cApp.layers.replace('Template/template_info.php?id="
+                . $m[1] . '&area_id=' . (int)$m[2] . (!empty($m[3]) ? '&kind=list' : '') . "')") . '>',
+            $styledCode
+        );
 
         $lineCount = count(preg_split('/\R/', $styledCode));
         $lineNumbers = implode("<br>\n", range(1, $lineCount));
