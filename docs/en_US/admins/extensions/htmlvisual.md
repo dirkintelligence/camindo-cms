@@ -25,7 +25,7 @@ classes and strikethrough are dropped; the text remains.
 The ***source*** (**<>**) allows more: HTML written or changed there additionally
 keeps ***own attributes*** and ***images*** (see “Classes, styles and images” below).
 Everything else is trimmed in the same way when switching back to the formatted view
-and when saving. Existing HTML in the field (for example from TinyMCE) remains
+and when saving. Existing HTML in the field remains
 unchanged until the text is changed in the editor – then the same rules apply.
 
 How editors work with it is described in the [Manual for editors](../../editors/05-editing-records.md#text)

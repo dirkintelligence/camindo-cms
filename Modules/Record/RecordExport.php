@@ -880,7 +880,7 @@ class RecordExport {
         if ($withFields && in_array((string)$areaRow['type'], ['record', 'profile', 'ugc'], true)) {
             $xml->startElement('fields');
             $this->db->pushResult();
-            $this->db->query("SELECT * FROM `field` WHERE `area_id` = ? ORDER BY `position` ASC", 'i', [$areaId]);
+            $this->db->query("SELECT * FROM `field` WHERE `area_id` = ? AND `deleted` = 0 ORDER BY `position` ASC", 'i', [$areaId]);
             $fields = $this->db->fetchAll();
             $this->db->popResult();
             foreach ($fields as $field) {

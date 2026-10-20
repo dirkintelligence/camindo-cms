@@ -27,14 +27,10 @@ composer require camindo/extension-{name}
 php Core/cron/camindo.php component install {Name} --activate
 ```
 
-| Extension | Package | Field types / display | What it does |
-|---|---|---|---|
-| TinyMCE | `camindo/extension-tinymce` | Short/long text / multiline | WYSIWYG editor, writes HTML |
-
 Each additional component brings its own manual. After installation, you find it in the overview of the manuals under “Manuals of add-on components”.
 
 ## Custom stylesheets for editors
 
 Editor extensions offer a ***stylesheet*** in their settings, with which you can match the display in the editor to the website. You store the files yourself under `var/extensions/{name}/` (name in lowercase letters, so `var/extensions/markdownvisual/` or `var/extensions/htmlvisual/`) – all `.css` files there appear in the selection.
 
-So that one stylesheet can design several fields differently, each editor carries a CSS class that you can set for each field (default: `c9-{name}-{fieldname}`, for example `c9-tinymce-teaser`). Examples are given in the description of the respective extension.
+So that one stylesheet can design several fields differently, each editor carries a CSS class that you can set for each field (default: `c9-{name}-{fieldname}`, for example `c9-htmlvisual-teaser`). Examples are given in the description of the respective extension.

@@ -159,7 +159,7 @@ class ToolsBackend {
         if ((string)($_REQUEST['function'] ?? '') === 'run') {
             $result = $this->toolDatabase->purgeTrash($days);
             $report = $this->_purgeAlert(
-                $this->cms->snippet('tools.trash_summary', ['records' => $result['record'], 'areas' => $result['area']]),
+                $this->cms->snippet('tools.trash_summary', ['records' => $result['record'], 'fields' => $result['field'], 'areas' => $result['area']]),
                 $result['errors']
             );
         }

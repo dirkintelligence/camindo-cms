@@ -46,12 +46,13 @@ Missing maintenance tasks – for example after an accidental deletion – are c
 
 ## Trash
 
-Deleted records and areas are first only marked as deleted; their files move to `var/deleted/`. Whether a record ends up in the trash at all is determined by the [deletion policy](./15-privacy.md#deleting-according-to-deletion-policy) of its area. Permanent deletion takes place after the ***retention period*** (`admin.trash_retention_days`, default 7 days) through the scheduler task “Empty trash” (every night) – or immediately via “Tools” → “Database” → “Empty trash”. Deleted users are always retained.
+Deleted records, input fields and areas are first only marked as deleted; the files of deleted records move to `var/deleted/`, those of a deleted input field stay locked in place. Whether a record ends up in the trash at all is determined by the [deletion policy](./15-privacy.md#deleting-according-to-deletion-policy) of its area. Permanent deletion takes place after the ***retention period*** (`admin.trash_retention_days`, default 7 days) through the scheduler task “Empty trash” (every night) – or immediately via “Tools” → “Database” → “Empty trash”. Deleted users are always retained.
 
 Within the period, restoring takes place – including sub-records, hard-linked content and files:
 
 - ***Records*** every user restores from their own [trash](./10-modules.md#trash) themselves.
-- ***Areas*** are restored by a superuser from the trash. Their sub-areas and all records that were deleted together with them come back with the area.
+- ***Areas*** are restored by a superuser from the trash. Their sub-areas and all records and input fields that were deleted together with them come back with the area.
+- ***Input fields*** are restored by a superuser from the trash – with their contents (see [deleting an input field](./05-input-fields.md#deleting-an-input-field)).
 
 It also works on the command line, without the backend:
 

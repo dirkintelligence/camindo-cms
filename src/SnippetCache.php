@@ -36,7 +36,7 @@
  * ADDITIONAL LANGUAGES: var/translation/translated/*.ini
  * --------------------
  * One file per language for any number of components; the language is in the name:
- * {code}.ini or {code}_{anything}.ini (sv_SE.ini, sv_SE_core.ini, sv_SE_ext_tinymce.ini).
+ * {code}.ini or {code}_{anything}.ini (sv_SE.ini, sv_SE_core.ini, sv_SE_ext_password.ini).
  * Every language for which a file exists here becomes a backend language (languages.php).
  *
  *     [frontend]                          like lang/         (backend AND frontend)

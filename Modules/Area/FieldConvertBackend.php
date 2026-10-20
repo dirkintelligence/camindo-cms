@@ -33,7 +33,7 @@ class FieldConvertBackend extends FieldBackend {
         echo $this->backend->template('container_header');
 
         // Daten laden
-        if (!$this->data = $this->field->load($this->id)) {
+        if (!$this->data = $this->field->loadLive($this->id)) {
             echo $this->backend->template('alert_danger', [
                 '{text}' => $this->cms->errorMsg()
             ]);

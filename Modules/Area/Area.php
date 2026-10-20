@@ -537,7 +537,7 @@ class Area extends Dataset {
             if ($fieldId > 0 && $type === 'profile' && $areaId > 0) {
                 $placeholders = implode(',', array_fill(0, count($types), '?'));
                 $this->db->query(
-                    "SELECT 1 FROM `field` WHERE `field_id` = ? AND `area_id` = ? AND `type` IN ($placeholders)",
+                    "SELECT 1 FROM `field` WHERE `field_id` = ? AND `area_id` = ? AND `deleted` = 0 AND `type` IN ($placeholders)",
                     'ii' . str_repeat('s', count($types)),
                     array_merge([$fieldId, $areaId], $types)
                 );
@@ -992,6 +992,22 @@ class Area extends Dataset {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
+        // Input fields: those of the area and the relation fields of other areas that
+        // point to it (otherwise they would remain visible and lead nowhere) - with the
+        // same timestamp, each through Field::hookOnSoftDelete() (counter fields,
+        // caches). Their data_* rows stay for the restore.
+        $field = $this->field;
+        $field->setMarkTimestamp($this->getMarkTimestamp());
+        $fieldIds = array_unique(array_merge(
+            $field->cascadeIds('area_id', $areaId, 'delete'),
+            $field->cascadeIds('rel_area_id', $areaId, 'delete')
+        ));
+        foreach ($fieldIds as $fieldId) {
+            if (!$field->softDelete($fieldId)) {
+                throw new \Exception('#' . $this->cms->errorMsgLast());
+            }
+        }
+
         // Deletion policy of the area, trigger "area was deleted" (module Privacy) -
         // runs with the scheduler task; a restoration discards the jobs
         if ($recordIds) {
@@ -1092,6 +1108,21 @@ class Area extends Dataset {
         $ids = $record->cascadeIds('area_id', $areaId, 'restore', $this->getRestoreTimestamp());
         foreach ($ids as $recordId) {
             if (!$record->restoreOne($recordId)) {
+                throw new \Exception('#' . $this->cms->errorMsgLast());
+            }
+        }
+
+        // Input fields of the same deletion (see hookOnSoftDelete()) - fields that
+        // were deleted on their own before stay in the trash
+        $field = $this->field;
+        $field->setMarkTimestamp($this->getMarkTimestamp());
+        $field->setRestoreTimestamp($this->getRestoreTimestamp());
+        $fieldIds = array_unique(array_merge(
+            $field->cascadeIds('area_id', $areaId, 'restore', $this->getRestoreTimestamp()),
+            $field->cascadeIds('rel_area_id', $areaId, 'restore', $this->getRestoreTimestamp())
+        ));
+        foreach ($fieldIds as $fieldId) {
+            if (!$field->restoreOne($fieldId)) {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
@@ -1249,7 +1280,7 @@ class Area extends Dataset {
      * @param int $areaId  : id of the area
      */
     public function fieldsNumber(int $areaId): int {
-        $sql = "SELECT COUNT(*) FROM `field` WHERE `area_id`= ?";
+        $sql = "SELECT COUNT(*) FROM `field` WHERE `area_id`= ? AND `deleted` = 0";
         $this->db->query($sql, 'i', [$areaId]);
         return (int)$this->db->fetchNum()[0];
     }

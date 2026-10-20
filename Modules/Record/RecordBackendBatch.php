@@ -314,7 +314,7 @@ class RecordBackendBatch extends RecordBackendEdit {
             elseif ($name === 'parent_id' && $displayType !== 'lookup') $options = $this->_parentOptions();
             elseif ($name === 'position')    $options = $this->_previousOptions($parentId);
             if (in_array($name, RecordBatch::TREE_FIELDS, true)) {
-                $colDef['note'] = '#record.note_batch_' . $name;
+                $colDef['tooltip'] = '#record.note_batch_' . $name;
             }
 
             // no required: only checked fields count

@@ -2250,7 +2250,7 @@ class AreaBackend {
         $placeholders = implode(',', array_fill(0, count($types), '?'));
         $this->db->query(
             "SELECT `field_id`, `name`, `label` FROM `field`"
-            . " WHERE `area_id` = ? AND `type` IN ($placeholders) ORDER BY `position` ASC",
+            . " WHERE `area_id` = ? AND `deleted` = 0 AND `type` IN ($placeholders) ORDER BY `position` ASC",
             'i' . str_repeat('s', count($types)),
             array_merge([$this->id], $types)
         );

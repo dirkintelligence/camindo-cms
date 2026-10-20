@@ -284,7 +284,7 @@ class MediaAccess {
         $count = 0;
         $this->db->pushResult();
         $this->db->query(
-            "SELECT `f`.`field_id`, `f`.`details`, `a`.`instance_id` FROM `field` `f`"
+            "SELECT `f`.`field_id`, `f`.`details`, `f`.`deleted`, `a`.`instance_id` FROM `field` `f`"
             . " INNER JOIN `area` `a` ON `a`.`area_id` = `f`.`area_id`"
             . " WHERE `f`.`type` = 'file'"
         );
@@ -292,7 +292,8 @@ class MediaAccess {
         $this->db->popResult();
         foreach ($rows as $row) {
             $details = json_decode((string)($row['details'] ?? ''), true) ?: [];
-            $protected = !empty($details['user_auth']);
+            // fields in the trash stay locked until restored (Field::hookOnSoftDelete())
+            $protected = !empty($details['user_auth']) || !empty($row['deleted']);
             $this->protectField((int)$row['field_id'], $protected, (int)$row['instance_id']);
             if ($protected) $count++;
         }

@@ -180,8 +180,13 @@ gerückt werden.
 
 Gelöschte Bereiche kommen wie Datensätze in den Papierkorb und werden erst nach der
 Aufbewahrungsfrist endgültig entfernt (siehe [Kapitel 12](./12-betrieb.md#papierkorb)).
-Bis dahin kann ein Superuser sie wiederherstellen – mit allen Unterbereichen und
-Datensätzen, die mit ihnen gelöscht wurden.
+Bis dahin kann ein Superuser sie wiederherstellen – mit allen Unterbereichen,
+Datensätzen und Eingabefeldern, die mit ihnen gelöscht wurden.
+
+Mit einem Bereich gehen auch die ***Verknüpfungsfelder anderer Bereiche*** in den
+Papierkorb, die auf ihn verweisen – sie würden sonst ins Leere zeigen. Beim
+Wiederherstellen des Bereichs kommen sie mit zurück (siehe
+[Eingabefeld löschen](./05-eingabefelder.md#eingabefeld-löschen)).
 
 Die Datensätze eines gelöschten Bereichs gehen mit ihm in den
 [Papierkorb](./10-module.md#papierkorb) und werden nach einigen Tagen endgültig

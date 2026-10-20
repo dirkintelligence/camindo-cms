@@ -1188,7 +1188,7 @@ class RecordImport {
                             $existingFields = [];
                             if ($update) {
                                 $this->db->pushResult();
-                                $this->db->query("SELECT `name`, `type` FROM `field` WHERE `area_id` = ?", 'i', [$existingId]);
+                                $this->db->query("SELECT `name`, `type` FROM `field` WHERE `area_id` = ? AND `deleted` = 0", 'i', [$existingId]);
                                 foreach ($this->db->fetchAll() as $row) $existingFields[(string)$row['name']] = (string)$row['type'];
                                 $this->db->popResult();
                             }
@@ -2924,7 +2924,7 @@ class RecordImport {
     private function _fieldInArea(int $fieldId, int $areaId): bool
     {
         $this->db->pushResult();
-        $this->db->query("SELECT 1 FROM `field` WHERE `field_id` = ? AND `area_id` = ?", 'ii', [$fieldId, $areaId]);
+        $this->db->query("SELECT 1 FROM `field` WHERE `field_id` = ? AND `area_id` = ? AND `deleted` = 0", 'ii', [$fieldId, $areaId]);
         $found = $this->db->num_rows > 0;
         $this->db->popResult();
         return $found;
@@ -3030,7 +3030,7 @@ class RecordImport {
             $areaId = (int)$this->map['area'][$fileAreaId];
             $names = array_map(fn($f) => (string)$f['name'], (array)$areas[$fileAreaId]['fields']);
             $this->db->pushResult();
-            $this->db->query("SELECT `field_id`, `name`, `label` FROM `field` WHERE `area_id` = ?", 'i', [$areaId]);
+            $this->db->query("SELECT `field_id`, `name`, `label` FROM `field` WHERE `area_id` = ? AND `deleted` = 0", 'i', [$areaId]);
             $rows = $this->db->fetchAll();
             $this->db->popResult();
             foreach ($rows as $row) {
@@ -3047,7 +3047,7 @@ class RecordImport {
     private function _fieldByName(int $areaId, string $name): ?array
     {
         $this->db->pushResult();
-        $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `name` = ?", 'is', [$areaId, $name]);
+        $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `name` = ? AND `deleted` = 0", 'is', [$areaId, $name]);
         $fieldId = (int)($this->db->fetchNum()[0] ?? 0);
         $this->db->popResult();
         return $fieldId > 0 ? $this->field->load($fieldId) : null;

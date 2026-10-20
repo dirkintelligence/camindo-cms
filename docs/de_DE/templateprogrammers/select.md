@@ -37,6 +37,7 @@ Durchsucht die Datenbank anhand der angegebenen (Filter-)Kriterien und liefert d
 | `debug` | `true / false` | `false` |  | true: Der erzeugte Datenbank-Query wird für Support-Analysen ausgegeben. |
 | `sql` | – | – |  | Raw SQL-Zusatz in der WHERE-Klausel (Achtung: nur für den Support!). |
 | `state` | `Status-Id oder any` | `0` |  | Ohne Angabe nur freigegebene Datensätze (status_id 0). Eine Status-Id > 0 findet nur Datensätze mit diesem Status, "any" Datensätze jeden Status. |
+| `request` | `Kommaliste` | – |  | Übernimmt Filter- und Sortierwerte aus der URL – Kommaliste oder Array der erlaubten Schlüssel: filter[feld], filter_op[feld], filter_mode[feld], skip, limit, sort, order (z. B. "filter[titel],sort,order,skip"). filter nur mit Feldname. Im Befehl gesetzte Werte haben immer Vorrang; für ein im Befehl gefiltertes Feld fügt die URL nichts hinzu. |
 | `set` | `Array-Index von $set` | – |  | Die gesamte Ausgabe (samt eingebundenem Template) wird nicht ausgegeben, sondern in der Variable $set gespeichert. |
 
 ¹ kann ohne Schlüssel als erster Wert angegeben werden.  
@@ -86,6 +87,7 @@ Zeitraum:                         (CMS:SELECT liste filter[area]=artikel filter[
 Verknüpfte Datensätze:            (CMS:SELECT topic_badge relation=topics)
 Kinder im Baum:                   (CMS:SELECT nav filter[parent_id]="{$cms['record_id']}" filter[depth]=1 sort=position order=asc)
 Blätterbare Liste:                (CMS:SELECT liste filter[area]=artikel limit=20 skip="{$_REQUEST['skip']}" count=true)
+Suchformular mit Sortierung:      (CMS:SELECT liste filter[area]=artikel limit=20 count=true request="filter[title],sort,order,skip")
 ```
 
 Mehrere Werte für dasselbe Feld werden mit OR verknüpft (`filter_mode[feld]=AND`
@@ -417,6 +419,45 @@ Datensätze mit genau diesem Status, `any` hebt den Statusfilter auf:
 (CMS:SELECT liste filter[area]=artikel state=2)
 (CMS:SELECT liste filter[area]=artikel state=any)
 ```
+
+### `request`
+
+Übernimmt Filter, Sortierung und Blättern aus der ***URL*** (GET oder POST) – für
+Suchformulare und sortierbare Listen, ohne jeden Wert einzeln in den Befehl zu
+schreiben. Angegeben wird, was übernommen werden darf, als Kommaliste oder Array:
+
+```
+request="sort,order,skip"                                  nur Sortierung und Blättern
+request="filter[title],filter[price],filter_op[price]"     Suche in Titel und Preis
+request[]=sort request[]="filter[title]"                   dasselbe als Array
+```
+
+Erlaubt sind `skip`, `limit`, `sort`, `order` sowie `filter`, `filter_op` und
+`filter_mode` ***nur mit Feldname*** (`filter[title]`). Ein `filter` ohne Feldname und
+`all` werden ignoriert und als Fehler gemeldet – sonst dürfte ein Besucher nach jedem
+Feld der gefundenen Datensätze suchen, auch nach Feldern, die die Seite gar nicht
+anzeigt, etwa einer internen Notiz.
+
+In der URL heißen die Schlüssel wie im Befehl, nur `filterop` und `filtermode` ohne
+Unterstrich: `?filter[title]=Hen*&sort=title&order=desc&skip=20`.
+
+```cms
+(CMS:SELECT liste filter[area]=artikel limit=20 count=true request="filter[title],sort,order,skip")
+```
+
+Die URL kann die Abfrage nur ***einschränken***, nie erweitern:
+
+* Werte im Befehl haben Vorrang. Für ein Feld, das der Befehl filtert, übernimmt
+  `request` weder Werte noch `filter_op`/`filter_mode` – `?filter[area]=intern` oder
+  `?filterop[area]=!=` ändern an `filter[area]=artikel` nichts. Felder eines verknüpften
+  Datensatzes zählen zum Verweisfeld (`autor.name` gehört zu `autor`), `area` und
+  `area_id` gelten als dasselbe Feld.
+* `skip`, `limit`, `sort` und `order` aus dem Befehl ersetzen den Wert der URL
+  vollständig. `limit` aus der URL gilt nur als positive Zahl – „unbegrenzt“ lässt sich
+  nicht anfordern.
+* ***Verschlüsselte Felder*** finden nur den exakten Wert; Platzhalter (`*`) und
+  Größer/Kleiner liefern keine Treffer.
+* ***Passwortfelder*** lassen sich grundsätzlich weder filtern noch sortieren.
 
 ---
 

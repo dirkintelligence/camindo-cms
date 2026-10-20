@@ -93,6 +93,24 @@
  * (FulltextState) - it is rebuilt via "Update now" or the
  * scheduler. Only the conversion to 'encrypted' rebuilds immediately.
  *
+ * TRASH
+ * --------------------
+ * Deleting a field (Dataset::delete()) only marks it: `deleted` = 1, changed_at =
+ * time of the operation. Its `data_*` rows and relation table entries stay, but
+ * every query on `field` reads only live fields (`deleted` = 0) - masks, lists,
+ * virtualSchema(), record_cache (cleared for the area, rebuilt without the field),
+ * and Cms::filter()/sort exclude its data_* rows (Cms::liveFieldSql()). After
+ * admin.trash_retention_days the scheduler task trash deletes it finally
+ * (ToolDatabase::purgeTrash() -> hookOnDelete()/hookOnDeleted() as before).
+ * What goes along (same timestamp, back with restore()): the counter field of a
+ * relation and the thumbnail fields of an upload field; with an area all its
+ * fields and the relation fields of other areas pointing to it
+ * (Area::hookOnSoftDelete()). The name stays registered in `fieldname` and taken
+ * in the area (hookOnSave()) - a restore cannot meet a type or name conflict.
+ * Exception to "only live fields": a `parent_id` field in the trash keeps the
+ * tree of its area (TreeManagerTrait::isTreeArea()) - only the final deletion
+ * flattens it.
+ *
  * TYPE AND MULTILINGUALISM CHANGE ONLY VIA convert()
  * --------------------
  * The type is fixed since creation, and the flag `multilingual` can no longer be
@@ -116,6 +134,7 @@ use Camindo\Core\Dataset;
 use Camindo\Core\FulltextState;
 use Camindo\Core\InstanceCache;
 use Camindo\Core\MediaAccess;
+use Camindo\Core\RecordCache;
 use Camindo\Core\Modules\Record\Record;
 
 class Field extends Dataset {
@@ -146,6 +165,13 @@ class Field extends Dataset {
     // Areas whose full text had a just-deleted field as source
     // (hookOnDelete() -> hookOnDeleted())
     private array $fulltextOfDeleted = [];
+
+    // field_id => true while its soft deletion/restore cascades into the counter
+    // field - which points back (hookOnSoftDelete(), hookOnRestore())
+    private array $trashCascade = [];
+
+    // InstanceCache::rebuild() is due after the next commit (queueCacheRebuild())
+    private bool $cacheRebuildPending = false;
 
     // Types that can be converted into each other (convert()): within and
     // between the two groups. Including relation <-> relation1 and pointer <-> pointer1
@@ -491,6 +517,20 @@ class Field extends Dataset {
                 'label' => '#area.field_field_profile_area_ids',
                 'tooltip' => '#area.tooltip_field_profile_area_ids',
             ],
+            // Trash: Dataset::delete() only marks the field (see class comment
+            // "TRASH"); changed_at/changed_by name the deletion operation
+            'changed_at' => [
+                'type'  => 'timestampl',
+                'label' => '#area.field_area_changed_at',
+            ],
+            'changed_by' => [
+                'type'  => 'id',
+                'label' => '#area.field_area_changed_by',
+                'table' => 'admin'
+            ],
+            'deleted' => [
+                'type' => 'bit'
+            ],
         ];
 
         // Reserved prefix at the start of a field name, depending on the type
@@ -740,7 +780,7 @@ class Field extends Dataset {
     {
         $this->db->pushResult();
         $this->db->query(
-            "SELECT f.`field_id` FROM `rel_field_converter` r JOIN `field` f ON f.`field_id` = r.`field_id`
+            "SELECT f.`field_id` FROM `rel_field_converter` r JOIN `field` f ON f.`field_id` = r.`field_id` AND f.`deleted` = 0
              WHERE r.`converter_id` = ? ORDER BY f.`area_id` ASC, f.`position` ASC",
             'i', [$converterId]
         );
@@ -835,6 +875,17 @@ class Field extends Dataset {
                 // Yes, name reserved for another field type -> error message
                 $wrongType = $this->db->fetchNum()[0];
                 $this->createFieldError('area.error_field_name_wrong_type', 'name', $schema['name']['label'] ?? '', $wrongType);
+                throw new \Exception('#' . $this->cms->errorMsgLast());
+            }
+            // A field in the trash keeps its name in the area: its data_* rows
+            // carry (record_id, fieldname_id) - a new field of the same name would
+            // collide with them, and the restore would have two fields of one name
+            $this->db->query(
+                "SELECT 1 FROM `field` WHERE `area_id` = ? AND `name` = ? AND `deleted` = 1 AND `field_id` != ? LIMIT 1",
+                'isi', [$areaId ?: (int)($previousData['area_id'] ?? 0), $name, $fieldId]
+            );
+            if ($this->db->num_rows > 0) {
+                $this->createFieldError('area.error_field_name_in_trash', 'name', $schema['name']['label'] ?? '', $name);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
             // Check reserved prefixes
@@ -1545,6 +1596,262 @@ class Field extends Dataset {
         // markieren statt sofort neu aufzubauen (FulltextState)
         $this->fulltextState()->markStale($this->fulltextOfDeleted);
         $this->fulltextOfDeleted = [];
+
+        // a field from the trash: the file cache lists it (InstanceCache::deletedFieldIds())
+        if (!empty($data['deleted'])) $this->queueCacheRebuild();
+    }
+
+    // Trash (soft delete) - see class comment "TRASH"
+    // ====================
+
+    /**
+     * load() for the backend masks: a field in the trash counts as not found
+     * (message area.error_field_in_trash) - it is only restored via the trash.
+     */
+    public function loadLive(int $fieldId): ?array
+    {
+        $data = $this->load($fieldId);
+        if ($data && !empty($data['deleted'])) {
+            $this->cms->error($this->cms->snippet('area.error_field_in_trash'));
+            return null;
+        }
+        return $data;
+    }
+
+    /**
+     * Before the soft deletion.
+     *
+     * The `data_*` rows and the entries in the relation tables stay - only the
+     * definition disappears from all lists, masks and queries (`deleted` = 1).
+     * Done here:
+     *
+     *     cascade      counter field of a relation (rel_field_id) and thumbnail
+     *                  fields (parent_field_id) with the same timestamp - they would
+     *                  disappear with the field on the final deletion anyway (FK)
+     *     area refs    default/sort/login field of the area are cleared and noted
+     *                  in details.trash_area_refs - hookOnRestore() sets them back
+     *     media        the media directory is locked (MediaAccess), the files stay
+     *     caches       record_cache of the area (rebuilt on the next access),
+     *                  full text of the areas using the field marked as stale
+     */
+    protected function hookOnSoftDelete(array $data): void
+    {
+        $fieldId = (int)$data['field_id'];
+        $areaId  = (int)$data['area_id'];
+
+        // Counter field and thumbnail fields: same operation (timestamp).
+        // The counter field points back - $trashCascade stops the recursion.
+        $this->trashCascade[$fieldId] = true;
+        try {
+            foreach ($this->trashDependentIds($fieldId, (int)($data['rel_field_id'] ?? 0), 'delete') as $id) {
+                if (!isset($this->trashCascade[$id])) $this->softDeleteOne($id);
+            }
+        }
+        finally {
+            unset($this->trashCascade[$fieldId]);
+        }
+
+        // Area references (fk_area_* would only clear them on the final deletion)
+        $refs = [];
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `default_field_id`, `sort_field_id`, `login_name_field_id`, `login_password_field_id`"
+                . " FROM `area` WHERE `area_id` = ?", 'i', [$areaId]
+            );
+            foreach ((array)$this->db->fetch() as $column => $value) {
+                if ((int)$value === $fieldId) $refs[] = $column;
+            }
+            foreach ($refs as $column) {
+                $this->db->query("UPDATE `area` SET `$column` = NULL WHERE `area_id` = ?", 'i', [$areaId]);
+            }
+            $this->writeTrashDetails($fieldId, $refs);
+        }
+        finally {
+            $this->db->popResult();
+        }
+
+        $this->trashSideEffects($data);
+    }
+
+    /**
+     * Before restoring.
+     *
+     * Counterpart to hookOnSoftDelete(): counter and thumbnail fields of the same
+     * operation, area references (only where still empty), media lock according to
+     * details.user_auth, caches. The name must still be free in the area - creating
+     * a field with the name of a field in the trash is refused (hookOnSave()), a
+     * restore checks it once more.
+     */
+    protected function hookOnRestore(array $data): void
+    {
+        $fieldId = (int)$data['field_id'];
+        $areaId  = (int)$data['area_id'];
+
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT 1 FROM `field` WHERE `area_id` = ? AND `name` = ? AND `deleted` = 0 AND `field_id` != ? LIMIT 1",
+                'isi', [$areaId, (string)$data['name'], $fieldId]
+            );
+            $taken = $this->db->num_rows > 0;
+            $this->db->query("SELECT `details` FROM `field` WHERE `field_id` = ?", 'i', [$fieldId]);
+            $details = json_decode((string)($this->db->fetchNum()[0] ?? ''), true);
+        }
+        finally {
+            $this->db->popResult();
+        }
+        if ($taken) {
+            $this->cms->error($this->cms->snippet('area.error_field_restore_name_taken', ['name' => (string)$data['name']]));
+            throw new \Exception('#' . $this->cms->errorMsgLast());
+        }
+
+        // Counter field and thumbnail fields of the same deletion
+        $this->trashCascade[$fieldId] = true;
+        try {
+            foreach ($this->trashDependentIds($fieldId, (int)($data['rel_field_id'] ?? 0), 'restore') as $id) {
+                if (!isset($this->trashCascade[$id])) $this->restoreOneCore($id);
+            }
+        }
+        finally {
+            unset($this->trashCascade[$fieldId]);
+        }
+
+        // Area references back - only where nobody has set another field since
+        $details = is_array($details) ? $details : [];
+        $refs = array_intersect(
+            (array)($details['trash_area_refs'] ?? []),
+            ['default_field_id', 'sort_field_id', 'login_name_field_id', 'login_password_field_id']
+        );
+        $this->db->pushResult();
+        try {
+            foreach ($refs as $column) {
+                $this->db->query("UPDATE `area` SET `$column` = ? WHERE `area_id` = ? AND `$column` IS NULL", 'ii', [$fieldId, $areaId]);
+            }
+            $this->writeTrashDetails($fieldId, null);
+        }
+        finally {
+            $this->db->popResult();
+        }
+
+        $this->trashSideEffects($data, $details);
+    }
+
+    /**
+     * Fields that go into the trash resp. come back with a field: its counter
+     * field and its thumbnail fields - only those of the same operation on restore
+     * (timestamp, as Area::hookOnRestore() does with the records).
+     *
+     * @param string $mode  'delete' | 'restore'
+     * @return int[]
+     */
+    private function trashDependentIds(int $fieldId, int $relFieldId, string $mode): array
+    {
+        $deleted = ($mode === 'delete') ? 0 : 1;
+        $sql = "SELECT `field_id` FROM `field` WHERE `deleted` = ? AND (`parent_field_id` = ?"
+             . ($relFieldId > 0 ? " OR `field_id` = ?" : '') . ")";
+        $types = 'ii' . ($relFieldId > 0 ? 'i' : '');
+        $values = [$deleted, $fieldId];
+        if ($relFieldId > 0) $values[] = $relFieldId;
+        if ($mode === 'restore') {
+            $sql .= " AND `changed_at` = ?";
+            $types .= 's';
+            $values[] = $this->getRestoreTimestamp();
+        }
+        $this->db->pushResult();
+        $this->db->query($sql, $types, $values);
+        $ids = array_map('intval', $this->db->fetchAll());
+        $this->db->popResult();
+        return $ids;
+    }
+
+    /**
+     * Note the cleared area references in details.trash_area_refs (null: remove).
+     * Directly in the column - the row is not saved via save() in the trash.
+     */
+    private function writeTrashDetails(int $fieldId, ?array $refs): void
+    {
+        $this->db->query("SELECT `details` FROM `field` WHERE `field_id` = ?", 'i', [$fieldId]);
+        $details = json_decode((string)($this->db->fetchNum()[0] ?? ''), true);
+        $details = is_array($details) ? $details : [];
+        if ($refs) {
+            $details['trash_area_refs'] = array_values($refs);
+        }
+        elseif (array_key_exists('trash_area_refs', $details)) {
+            unset($details['trash_area_refs']);
+        }
+        else {
+            return;
+        }
+        $this->db->query(
+            "UPDATE `field` SET `details` = ? WHERE `field_id` = ?",
+            'si', [json_encode($details ?: new \stdClass(), JSON_UNESCAPED_UNICODE), $fieldId]
+        );
+    }
+
+    /**
+     * What soft deletion and restore have in common: media lock, content cache of
+     * the area, full text, field caches of the request.
+     *
+     * @param ?array $details  on restore: details of the field (user_auth decides
+     *                         about the media lock); null = soft deletion (lock)
+     */
+    private function trashSideEffects(array $data, ?array $details = null): void
+    {
+        $fieldId = (int)$data['field_id'];
+        $areaId  = (int)$data['area_id'];
+        $type    = (string)($data['type'] ?? '');
+
+        // Media files stay in place, but are no longer directly retrievable
+        // (public/file.php refuses fields in the trash as well)
+        // (after the commit: a rollback must not leave the directory locked)
+        if ($type === 'file') {
+            $protect = $details === null || !empty($details['user_auth']);
+            $mediaAccess = $this->container->get(MediaAccess::class);
+            $this->db->afterCommit(fn() => $mediaAccess->protectField($fieldId, $protect));
+        }
+
+        // record_cache: rebuilt without (resp. with) the field on the next access;
+        // working copies keep their working state (RecordCache::clear())
+        $this->db->pushResult();
+        try {
+            $this->container->get(RecordCache::class)->clear(0, [$areaId]);
+        }
+        finally {
+            $this->db->popResult();
+        }
+
+        // Full text: sources of other full-text fields, link/relation targets of the
+        // standard full text
+        $areas = [];
+        if (in_array($type, self::FULLTEXT_SOURCE_TYPES, true) && (string)($data['display_type'] ?? '') !== 'thumbnail') {
+            $areas = $this->fulltextState()->areasUsingField($fieldId);
+        }
+        elseif (in_array($type, ['link', 'relation', 'relation1', 'fulltext'], true)) {
+            $areas = [$areaId];
+        }
+        $this->fulltextState()->markStale($areas);
+
+        $this->cms->clearFieldCaches();
+        $this->queueCacheRebuild();
+    }
+
+    /**
+     * Rewrite the file cache after the commit: it lists the fields in the trash
+     * (InstanceCache::deletedFieldIds(), read by Cms::select()). Once per
+     * transaction, however many fields an operation takes along.
+     */
+    private function queueCacheRebuild(): void
+    {
+        // Each call queues, the first callback after the commit rebuilds - a rollback
+        // discards the callbacks, but leaves the flag: the next commit rebuilds then
+        $this->cacheRebuildPending = true;
+        $this->db->afterCommit(function () {
+            if (!$this->cacheRebuildPending) return;
+            $this->cacheRebuildPending = false;
+            $this->container->get(InstanceCache::class)->rebuild();
+            $this->cms->clearFieldCaches();
+        });
     }
 
     // Target areas of the reference fields
@@ -1710,7 +2017,8 @@ class Field extends Dataset {
     public function fulltextSourceOptions(int $areaId): array
     {
         $options = [];
-        $sourceSql = "`t`.`type` IN ('text', 'chars', 'json', 'file') AND NOT (`t`.`type` = 'file' AND `t`.`display_type` = 'thumbnail')";
+        $sourceSql = "`t`.`type` IN ('text', 'chars', 'json', 'file') AND NOT (`t`.`type` = 'file' AND `t`.`display_type` = 'thumbnail')"
+                   . " AND `t`.`deleted` = 0";
         $label = fn(array $row) => '<strong>' . htmlspecialchars((string)$row['name']) . '</strong> '
             . htmlspecialchars($this->cms->textOrSnippet((string)$row['label']));
         $this->db->pushResult();
@@ -1732,9 +2040,9 @@ class Field extends Dataset {
                 . " `a`.`label` AS `area_label`, `t`.`field_id`, `t`.`name`, `t`.`label`"
                 . " FROM `field` `l`"
                 . " LEFT JOIN `rel_field_area` `ra` ON `ra`.`field_id` = `l`.`field_id` AND `l`.`type` = 'link'"
-                . " INNER JOIN `area` `a` ON `a`.`area_id` = IF(`l`.`type` = 'link', `ra`.`area_id`, `l`.`rel_area_id`)"
+                . " INNER JOIN `area` `a` ON `a`.`area_id` = IF(`l`.`type` = 'link', `ra`.`area_id`, `l`.`rel_area_id`) AND `a`.`deleted` = 0"
                 . " INNER JOIN `field` `t` ON `t`.`area_id` = `a`.`area_id`"
-                . " WHERE `l`.`area_id` = ? AND `l`.`type` IN ('link', 'relation', 'relation1') AND {$sourceSql}"
+                . " WHERE `l`.`area_id` = ? AND `l`.`deleted` = 0 AND `l`.`type` IN ('link', 'relation', 'relation1') AND {$sourceSql}"
                 . " ORDER BY `l`.`position`, `l`.`field_id`, `a`.`area_id`, `t`.`position`",
                 'i', [$areaId]
             );

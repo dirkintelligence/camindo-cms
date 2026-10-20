@@ -621,7 +621,7 @@ class SchedulerRunner {
             $auditLog->setContext($context);
             $this->bgproc->unlock();
         }
-        $message = sprintf('%d records, %d areas deleted', $result['record'], $result['area']);
+        $message = sprintf('%d records, %d fields, %d areas deleted', $result['record'], $result['field'], $result['area']);
         if ($result['errors']) {
             foreach ($result['errors'] as $error) $this->system->log('trash', $error);
             throw new \Exception($message . ', ' . count($result['errors']) . ' errors: '

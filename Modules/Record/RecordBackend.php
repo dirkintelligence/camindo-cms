@@ -591,15 +591,17 @@ abstract class RecordBackend {
      * sets selectable for it.
      *
      * The first option is empty and means "use the default of the area".
+     * A template without label is listed with its file name.
      */
     protected function _templateOptions(): array
     {
         // first option: "default"
         $options = ['' => $this->cms->snippet('record.default_template_label')];
-        $sql = "SELECT `template`.`template_id`, `template`.`label` FROM `rel_area_template` `r`"
+        $sql = "SELECT `template`.`template_id`, COALESCE(NULLIF(`template`.`label`, ''), `template`.`name`) AS `title`"
+        ." FROM `rel_area_template` `r`"
         ." INNER JOIN `template` ON `r`.`template_id` = `template`.`template_id`"
         ." WHERE `r`.`area_id` = ? AND `r`.`selectable` = 1"
-        ." ORDER BY `template`.`label` ASC";
+        ." ORDER BY `title` ASC";
         $this->db->query($sql, 'i', [$this->areaId]);
         $assigendOptions = $this->db->fetchPairs();
         // do not list the default template again

@@ -60,7 +60,7 @@ Backend snippets are also available ***in the frontend***: the core uses them, f
 
 #### Installing additional languages
 
-Further backend languages come as ***translation packages*** in the form of `.ini` files. The language is at the beginning of the file name: `sv_SE.ini`, `sv_SE_core.ini`, `sv_SE_ext_tinymce.ini`. These are stored in `var/translation/translated/`. A package takes effect after the snippet cache has been rebuilt (module “Tools”, tab “Developer”, or on the command line with `php Core/cron/camindo.php refresh snippets`).
+Further backend languages come as ***translation packages*** in the form of `.ini` files. The language is at the beginning of the file name: `sv_SE.ini`, `sv_SE_core.ini`, `sv_SE_ext_password.ini`. These are stored in `var/translation/translated/`. A package takes effect after the snippet cache has been rebuilt (module “Tools”, tab “Developer”, or on the command line with `php Core/cron/camindo.php refresh snippets`).
 
 #### Developing your own language pack
 
@@ -118,7 +118,7 @@ The ***scheduler*** runs tasks on a time schedule. It requires the cron job `cro
 | ***Clean up logs*** | deletes log files under `var/log/` that are older than the set period (default 90 days). Security logs (`security`, `csp`) have their own, usually longer period (default 365 days). In addition, failed sign-in attempts with name and IP address are deleted from the database (default after 30 days). Recommended: every night. The [audit log](#audit-log) has its own periods |
 | ***Clean up frontend cache*** | deletes expired files of the output cache under `var/cache/include/`, which templates create with `CMS:INCLUDE … caching=…`, and files for deleted or since changed templates. Files with unlimited period remain until their template is changed. No settings. Recommended: hourly, for example at minute `15`, all others `*` |
 | ***Rebuild full text*** | rebuilds the [full text](./05-input-fields.md#rebuilding-the-full-text) of the selected areas (without a selection: all areas) from the source fields – after a change to the source fields of a full-text field. The records themselves remain unchanged, the audit log receives no entries. If the maximum execution time is not sufficient, the run is aborted and counts as failed; then increase it |
-| ***Empty trash*** | permanently deletes records and content areas that have been in the trash for longer than `admin.trash_retention_days` (default 7 days). No settings |
+| ***Empty trash*** | permanently deletes records, input fields and content areas that have been in the trash for longer than `admin.trash_retention_days` (default 7 days). No settings |
 | ***Delete temporary files*** | cleans up `var/tmp/` (`admin.tmp_retention_hours`) and deletes expired export files (`admin.export_retention_hours`). No settings. Recommended: hourly |
 | ***Apply deletion policies*** | carries out the due jobs of the [deletion policies](./15-privacy.md#deleting-according-to-deletion-policy). No settings |
 | ***Apply retention periods*** | shortens IP addresses, deletes expired entries of the audit log, old internal messages and registrations that were never confirmed – according to the periods of the configuration; plus the periods of installed add-on modules, such as deleted chats of the AI assistant. No settings |
@@ -142,7 +142,7 @@ The module “Tools” has five tabs; each has its own additional right.
 | Tab | Tools |
 |---|---|
 | “Server” | versions of camindo CMS, operating system, web server, database and PHP; check and renewal of the `.htaccess` file; “Clear record cache” – for all websites, one website or one area; MySQL configuration; availability of ImageMagick and ffmpeg; PHP info |
-| “Database” | “Empty trash” – permanent deletion of records and areas that have been in the trash for more than *n* days (0 = everything); “Discard working copies” – remove leftover working copies older than *n* hours and release the originals again |
+| “Database” | “Empty trash” – permanent deletion of records, input fields and areas that have been in the trash for more than *n* days (0 = everything); “Discard working copies” – remove leftover working copies older than *n* hours and release the originals again |
 | “Data” | “Regenerate thumbnails” for all records of an area (see [chapter 8](./08-media.md#regenerating-thumbnails)); “Normalize tree” – checks and repairs the order in areas with a tree structure, for example if it has become mixed up through direct database changes; the existing order is retained |
 | “Trash of a user” | immediately delete permanently the profile and contributions of a website user that are in the trash – for example at the user’s request (see [chapter 15](./15-privacy.md#emptying-a-website-users-trash-immediately)) |
 | “Developer” | renew caches (snippets, backend templates, instances); translate template files again and compare them with `var/templates` (including the parser messages – on the command line `php Core/cron/camindo.php cache templates`, automatically at `upgrade`); renew the access rules of the media directory; show session data |
@@ -239,12 +239,12 @@ The ***files*** of a component are always fetched and removed by Composer on the
 
 Every user has the module “Trash”, regardless of their user group; it appears as a button on the start page and as a widget that shows the number of entries. How editors work with it is described in the [manual for editors](../editors/05-editing-records.md#trash).
 
-Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; hard-linked content and the records of a deleted area do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash.
+Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; hard-linked content, the records and input fields of a deleted area, the counter field of a relation and the file versions of an upload field do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash.
 
 | Who | Sees |
 |---|---|
 | every user | “Records deleted by me” – from areas to which they have access, and not from deleted areas |
-| superusers | additionally “Deleted areas” (with instance, scope and who deleted them) and, via ![group](../_/group.svg) “All users”, the deleted records of all users |
+| superusers | additionally “Deleted areas” (with instance, scope and who deleted them), “Deleted input fields” (with area, and the counter field and file versions deleted along) and, via ![group](../_/group.svg) “All users”, the deleted records of all users |
 
 Restoring requires the right to delete in the area (see [area rights](./07-users-and-rights.md#5-area-rights)); if it is missing, the entry shows “no permission”. How long entries stay in the trash is determined by the [retention period](./12-operation.md#trash). Large operations (more records than `admin.mass_delete_threshold`) run as a background process, as with deletion.
 

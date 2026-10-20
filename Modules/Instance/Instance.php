@@ -661,7 +661,7 @@ class Instance extends Dataset {
             'areas'     => "SELECT COUNT(*) FROM `area` WHERE `instance_id` = ?",
             'fields'    => "SELECT COUNT(*) FROM `field` `f`"
                          . " INNER JOIN `area` `a` ON `a`.`area_id` = `f`.`area_id`"
-                         . " WHERE `a`.`instance_id` = ?",
+                         . " WHERE `a`.`instance_id` = ? AND `f`.`deleted` = 0",
             'records'   => "SELECT COUNT(*) FROM `record` WHERE `instance_id` = ? AND `tmp` = 0",
             'templates' => "SELECT COUNT(*) FROM `template` `t`"
                          . " INNER JOIN `area` `a` ON `a`.`area_id` = `t`.`area_id`"

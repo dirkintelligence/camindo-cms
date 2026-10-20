@@ -5,9 +5,9 @@
  * Entry points (scripts in backend/):
  *
  *     index.php   -> list()      own deleted records; superusers additionally
- *                                deleted areas and, on request (?all=1), the
- *                                records of all administrators
- *                 -> restore()   function=restore, table=record|area, id - POST only
+ *                                deleted areas and input fields and, on request
+ *                                (?all=1), the records of all administrators
+ *                 -> restore()   function=restore, table=record|area|field, id - POST only
  *
  * Also the start page widget widget() (settings.php 'widget'): the number of
  * entries and a button to the list.
@@ -94,6 +94,12 @@ class TrashBackend {
                 '{text}' => htmlspecialchars($this->cms->snippet('trash.headline_areas')),
             ]);
             echo $this->_areaTable($this->trash->areas(Trash::MAX_ENTRIES + 1), $all);
+
+            // Input fields
+            echo $this->backend->template('headline4_mt', [
+                '{text}' => htmlspecialchars($this->cms->snippet('trash.headline_fields')),
+            ]);
+            echo $this->_fieldTable($this->trash->fields(Trash::MAX_ENTRIES + 1), $all);
         }
 
         echo $this->backend->template('container_footer');
@@ -105,7 +111,7 @@ class TrashBackend {
     public function widget(): string
     {
         $counts = $this->trash->counts();
-        $total = $counts['records'] + $counts['areas'];
+        $total = $counts['records'] + $counts['areas'] + $counts['fields'];
         if ($total === 0) {
             return $this->backend->template('alert_success', [
                 '{text}' => htmlspecialchars($this->cms->snippet('trash.widget_empty')),
@@ -115,6 +121,9 @@ class TrashBackend {
         $text = $this->cms->snippet('trash.widget_records', ['count' => $counts['records']]);
         if ($counts['areas'] > 0) {
             $text .= ' ' . $this->cms->snippet('trash.widget_areas', ['count' => $counts['areas']]);
+        }
+        if ($counts['fields'] > 0) {
+            $text .= ' ' . $this->cms->snippet('trash.widget_fields', ['count' => $counts['fields']]);
         }
         return $this->backend->template('trash.widget', [
             '{number}' => (string)$total,
@@ -137,9 +146,11 @@ class TrashBackend {
         $result = $this->trash->restore($table, $id);
         switch ($result) {
             case 'restored':
-                $this->backend->balloon('success', $this->cms->snippet(
-                    $table === 'area' ? 'trash.message_area_restored' : 'trash.message_record_restored'
-                ));
+                $this->backend->balloon('success', $this->cms->snippet(match ($table) {
+                    'area'  => 'trash.message_area_restored',
+                    'field' => 'trash.message_field_restored',
+                    default => 'trash.message_record_restored',
+                }));
                 break;
             case 'background':
                 $this->backend->balloon('info', $this->cms->snippet('message_background_started'));
@@ -247,6 +258,50 @@ class TrashBackend {
                 htmlspecialchars($this->_adminName((int)$row['changed_by'])),
                 htmlspecialchars($this->cms->_formatDate($this->trash->expiresAt((string)$row['changed_at']))),
                 $this->_restoreForm('area', (int)$row['area_id'], $all, 'trash.confirm_restore_area'),
+            ]);
+        }
+        return $this->_table($columns, $tableRows, $more);
+    }
+
+    /**
+     * Table of the deleted input fields (superusers only).
+     */
+    private function _fieldTable(array $rows, bool $all): string
+    {
+        if (!$rows) {
+            return $this->backend->template('alert_success', [
+                '{text}' => htmlspecialchars($this->cms->snippet('trash.note_no_fields')),
+            ]);
+        }
+        $more = count($rows) > Trash::MAX_ENTRIES;
+        $rows = array_slice($rows, 0, Trash::MAX_ENTRIES);
+
+        $columns = ['column_deleted_at', 'column_field', 'column_area', 'column_contents', 'column_deleted_by', 'column_expires', ''];
+
+        $tableRows = '';
+        foreach ($rows as $row) {
+            $areaData = $this->backend->areaData((int)$row['area_id']) ?? [];
+            $contents = [];
+            if ((string)$row['counter_field'] !== '') {
+                $contents[] = $this->cms->snippet('trash.note_counter_field', ['name' => (string)$row['counter_field']]);
+            }
+            if ((int)$row['thumbnails'] > 0) {
+                $contents[] = $this->cms->snippet('trash.note_thumbnails', ['count' => (int)$row['thumbnails']]);
+            }
+            $label = htmlspecialchars($this->cms->textOrSnippet((string)$row['label']))
+                . ' ' . $this->backend->template('small-nowrap', [
+                    '{text}' => htmlspecialchars((string)$row['name'] . ' · ' . (string)$row['type']),
+                ]);
+
+            $tableRows .= $this->_row([
+                $this->_date((string)$row['changed_at']),
+                $label,
+                $this->backend->template('icon', ['{name}' => htmlspecialchars((string)($areaData['icon'] ?? ''))])
+                    . ' ' . htmlspecialchars($this->cms->textOrSnippet((string)($areaData['label'] ?? ''))),
+                htmlspecialchars(implode(', ', $contents)),
+                htmlspecialchars($this->_adminName((int)$row['changed_by'])),
+                htmlspecialchars($this->cms->_formatDate($this->trash->expiresAt((string)$row['changed_at']))),
+                $this->_restoreForm('field', (int)$row['field_id'], $all, 'trash.confirm_restore_field'),
             ]);
         }
         return $this->_table($columns, $tableRows, $more);

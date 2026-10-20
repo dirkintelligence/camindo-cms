@@ -3060,7 +3060,7 @@ class Backend {
 
         $sql = "SELECT `field`.`name`, `a`.`sort_order` FROM `area` `a`"
         ." LEFT JOIN `field`"
-        ." ON `a`.`sort_field_id`=`field`.`field_id`"
+        ." ON `a`.`sort_field_id`=`field`.`field_id` AND `field`.`deleted`=0"
         ." WHERE `a`.`area_id`=? AND `a`.`deleted`=0";
         $this->db->query($sql, 'i', [$areaId]);
 
@@ -3140,7 +3140,7 @@ class Backend {
         }
 
         $this->db->pushResult();
-        $sql = "SELECT * FROM `field` WHERE `default_field`=1 AND `area_id`=?";
+        $sql = "SELECT * FROM `field` WHERE `default_field`=1 AND `area_id`=? AND `deleted`=0";
         $this->db->query($sql, 'i', [$areaId]);
 
         if ($this->db->num_rows < 1) {
@@ -3213,8 +3213,8 @@ class Backend {
             . "     COALESCE(`f1`.`type`, 'text') AS `default_field_type`,"
             . "     COALESCE(`f2`.`name`, 'changed_at') AS `sort_field_name`"
             . " FROM `area` `a`"
-            . "     LEFT JOIN `field` `f1` ON `a`.`default_field_id` = `f1`.`field_id`"
-            . "     LEFT JOIN `field` `f2` ON `a`.`sort_field_id` = `f2`.`field_id`"
+            . "     LEFT JOIN `field` `f1` ON `a`.`default_field_id` = `f1`.`field_id` AND `f1`.`deleted` = 0"
+            . "     LEFT JOIN `field` `f2` ON `a`.`sort_field_id` = `f2`.`field_id` AND `f2`.`deleted` = 0"
             . " WHERE `a`.`area_id` = ? AND `a`.`deleted` = 0";
         $this->db->query($sql, 'i', [$areaId]);
         if ($data = $this->db->fetch()) {
