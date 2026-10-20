@@ -1262,9 +1262,12 @@ trait TemplateParserTrait
                 $out .= '<span class="c9-php">' . $chunk . '</span>';
             } else {
                 // id is sanitized above to [0-9a-zA-Z_.]: id or "[area.]name" -
-                // not (int), otherwise a name would become 0 (= start page of the module)
-                $out .= '<a href="#"' . $this->container->get(\Camindo\Core\Backend::class)->on('js', "cApp.layers.replace('Template/template_info.php?id="
-                    . $r['id'] . '&area_id=' . (int)$this->parseAreaId . ($r['list'] ? '&kind=list' : '') . "')") . '>' . $chunk . '</a>';
+                // not (int), otherwise a name would become 0 (= start page of the module).
+                // Stored without a handler: the nonce of Backend::on() belongs to one page
+                // load, styled_code lives in the database - TemplateBackend::info() turns
+                // the marker into the handler of the current page.
+                $out .= '<a href="#" data-c9-template-link="' . $r['id'] . ',' . (int)$this->parseAreaId
+                    . ($r['list'] ? ',list' : '') . '">' . $chunk . '</a>';
             }
             $pos = $r['e'];
         }
