@@ -1716,6 +1716,13 @@ return [
                 'default' => '0',
                 'value' => '#template.cmdval_status_or_any',
                 'description' => '#template.cmd_select__state'
+            ],
+            'request' => [
+                'mandatory' => false,
+                'subparam' => 0,
+                'default' => '',
+                'value' => '#template.cmdval_select_request',
+                'description' => '#template.cmd_select__request'
             ]
         ],
         'include' => []

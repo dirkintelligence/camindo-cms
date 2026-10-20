@@ -325,8 +325,8 @@ in the process:
 
 If a conversion can lose content (a text that is not a number; when switching to “n:1”, all
 relations except the first; when switching to single-language, all translations), the mask
-warns beforehand. If the field name is also used in other areas, the field must be renamed
-first – the type is bound to the name.
+warns beforehand. If the field name is also used in other areas – also by a field in the
+trash –, the field must be renamed first; the type is bound to the name.
 
 When converting to ***“Encrypted text”***, the field is removed from all full-text fields and
 the standard full text; camindo CMS rebuilds these for all records of the area (also for
@@ -341,6 +341,33 @@ remains. However, the open input mask still knows the old field type: unsaved in
 then no longer be saveable (for example after the change to single-language); in that case,
 the only option is to cancel the editing and reopen the record. Therefore, ask the editors to
 save or cancel beforehand.
+
+## Deleting an input field
+
+“Delete” in the detail view moves the field to the ***trash***. Its contents are kept until
+the permanent deletion, but the field itself disappears everywhere at once: from the input
+and search mask, from the record list, from export and output. Templates no longer find
+anything via the field and no longer sort by it – as if the area did not have the field.
+
+The following go to the trash together with the field:
+
+- for a bidirectional relation, the ***counter field*** in the target area,
+- for an upload field, its ***file versions*** (thumbnails).
+
+If the field is set in the area as “Main field”, “Default sort order” or for the login
+(name, password), this setting is cleared; restoring sets it back, unless another field has
+been entered in the meantime. The files of an upload field stay in place but can no longer
+be retrieved directly. Full texts that had the field as a source are marked as
+[outdated](#rebuilding-the-full-text).
+
+As long as the field is in the trash, its ***name is taken in the area***: a new field with
+the same name can only be created once the old one has been deleted permanently or restored.
+A field `parent_id` keeps the tree structure of the area until the permanent deletion.
+
+Superusers restore deleted fields in the [trash](./10-modules.md#trash) – with contents,
+counter field and file versions. After the [retention period](./12-operation.md#trash), the
+scheduler task “Empty trash” deletes the field and its contents permanently. If a whole area
+is deleted, its input fields go to the trash with it (see [chapter 4](./04-structure.md)).
 
 ## Naming rules
 

@@ -146,7 +146,7 @@ class MediaDelivery {
 
             // 3. Field
             $this->db->query(
-                "SELECT `field_id`, `name`, `type`, `multilingual`, `details` FROM `field` WHERE `field_id` = ? AND `area_id` = ?",
+                "SELECT `field_id`, `name`, `type`, `multilingual`, `details` FROM `field` WHERE `field_id` = ? AND `area_id` = ? AND `deleted` = 0",
                 'ii',
                 [$fieldId, $areaId]
             );

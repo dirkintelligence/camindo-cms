@@ -333,7 +333,8 @@ camindo CMS wandelt dabei alle vorhandenen Inhalte um:
 Kann eine Umwandlung Inhalte verlieren (ein Text, der keine Zahl ist; beim Wechsel
 auf „n:1“ alle Verknüpfungen außer der ersten; beim Wechsel auf einsprachig alle
 Übersetzungen), warnt die Maske vorher. Wird der Feldname auch in anderen Bereichen
-verwendet, muss das Feld vorher umbenannt werden – der Typ ist an den Namen gebunden.
+verwendet – auch von einem Feld im Papierkorb –, muss das Feld vorher umbenannt werden;
+der Typ ist an den Namen gebunden.
 
 Bei der Umwandlung in ***„Verschlüsselter Text“*** fällt das Feld aus allen
 Volltextfeldern und dem Standard-Volltext; camindo CMS baut diese für alle Datensätze
@@ -351,6 +352,36 @@ Ungespeicherte Eingaben darin lassen sich danach unter Umständen nicht mehr spe
 (etwa nach dem Wechsel auf einsprachig); dann hilft nur, die Bearbeitung abzubrechen
 und den Datensatz neu zu öffnen. Bitten Sie die Bearbeiter deshalb am besten, vorher
 zu speichern oder abzubrechen.
+
+## Eingabefeld löschen
+
+„Löschen“ in der Detailansicht legt das Feld in den ***Papierkorb***. Seine Inhalte
+bleiben bis zum endgültigen Löschen erhalten, das Feld selbst verschwindet aber sofort
+überall: aus Eingabe- und Suchmaske, aus der Datensatzliste, aus Export und Ausgabe.
+Templates finden über das Feld nichts mehr und sortieren nicht mehr danach – als hätte
+der Bereich das Feld nicht.
+
+Mit dem Feld gehen in den Papierkorb:
+
+- bei einer bidirektionalen Verknüpfung das ***Gegenfeld*** im Zielbereich,
+- bei einem Upload-Feld seine ***Dateiversionen*** (Thumbnails).
+
+Ist das Feld im Bereich als „Haupt-Feld“, „Standard-Sortierung“ oder für die Anmeldung
+(Name, Passwort) eingetragen, wird diese Einstellung geleert; beim Wiederherstellen kommt sie zurück, sofern inzwischen kein
+anderes Feld eingetragen wurde. Die Dateien eines Upload-Feldes bleiben liegen, sind
+aber nicht mehr direkt abrufbar. Volltexte, die das Feld als Quelle hatten, werden als
+[veraltet](#volltext-neu-aufbauen) markiert.
+
+Solange das Feld im Papierkorb liegt, ist sein ***Name im Bereich belegt***: Ein neues
+Feld mit demselben Namen lässt sich erst anlegen, wenn das alte endgültig gelöscht oder
+wiederhergestellt ist. Ein Feld `parent_id` behält die Baumstruktur des Bereichs bis
+zum endgültigen Löschen.
+
+Superuser stellen gelöschte Felder im [Papierkorb](./10-module.md#papierkorb) wieder
+her – samt Inhalten, Gegenfeld und Dateiversionen. Nach der
+[Aufbewahrungsfrist](./12-betrieb.md#papierkorb) löscht die Zeitplaner-Aufgabe
+„Papierkorb leeren“ Feld und Inhalte endgültig. Wird ein ganzer Bereich gelöscht, gehen
+seine Eingabefelder mit ihm in den Papierkorb (siehe [Kapitel 4](./04-struktur.md)).
 
 ## Namensregeln
 

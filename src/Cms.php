@@ -187,6 +187,7 @@ class Cms {
     private array $recordRefCache = [];  // (CMS:...) id=... -> record, see _record()
     private array $slugCache = [];       // "{record_id}:{language_id}" -> slug, see languageSlug()
     private array $virtualSchemaCache = [];
+    private ?array $deletedFieldIds = null; // fieldname_id => field_ids in the trash, see deletedFieldIds()
     private ?array $backendLanguages = null; // see backendLanguages()
 
     // SELECT and FILTER
@@ -232,6 +233,9 @@ class Cms {
     // Field types that have no own table column and therefore cannot be filtered
     // nor sorted (see select() / filter()).
     public array $noColumnTypes = ['reltable'];
+    // Field types that are never filtered nor sorted: a prefix search or the
+    // order of the rows would reveal the stored password hash character by character
+    public array $unsearchableTypes = ['password'];
 
     // string values
     public array $textTypes =     ['text', 'chars', 'encrypted', 'password'];
@@ -1809,34 +1813,13 @@ class Cms {
         }
         $useVirtual = $this->hasVirtualFields;
 
-        // $_REQUEST: evaluate only known keys,
-        // 'sql' cannot be added via request
-        $requestKeys = (string)($param['request'] ?? '');
-        if ($requestKeys === 'all') {
-            $keys = $this->selectParams;
-        }
-        else {
-            $keys = explode(',', $requestKeys);
-        }
-        // Collect the final parameters in $p
-        $p = [];
-        foreach ($keys as $key) {
-            $mainKey = '';
-            if (preg_match('/^([a-z]+)(?:\[([a-z]+)\])?(\[\])?$/', trim($key), $matches)) {
-                $mainKey = $matches[1] ?? '';
-            }
-            if (!in_array($mainKey, $this->selectParams)) {
-                // ignore
-                continue;
-            }
-            if (!isset($_REQUEST[$mainKey])) {
-                continue;
-            }
-            $p[$mainKey] = $_REQUEST[$mainKey];
-        }
-        // Values from $param override the _REQUEST values
-        // (src_id/relation/sql come exclusively from $param)
-        $p = array_replace_recursive($p, $param);
+        // $_REQUEST: only the keys named in 'request' (see requestParams()),
+        // 'sql', 'src_id', 'relation' ... cannot be added via request.
+        // Values from $param override the request values.
+        $p = array_replace_recursive(
+            $this->requestParams((string)($param['request'] ?? ''), $param, $useVirtual),
+            $param
+        );
         // Type safeguard against manipulated request parameters.
         // filter/filterop/filtermode must be arrays (e.g. ?filter=xyz would
         // otherwise later lead to foreach/string offset errors), skip/limit
@@ -2053,7 +2036,8 @@ class Cms {
                                 'sql'    => "LEFT JOIN `data_rel` AS `$alias`"
                                           . " ON `$alias`.`dest_id` = `$tableName`.`{$tableName}_id`"
                                           . " AND `$alias`.`src_id` = ?"
-                                          . " AND `$alias`.`fieldname_id` = ?",
+                                          . " AND `$alias`.`fieldname_id` = ?"
+                                          . $this->liveFieldSql($alias, (int)$relField['fieldname_id']),
                                 'types'  => 'ii',
                                 'values' => [$srcId, $relField['fieldname_id']],
                                 'phase'  => 'sort',
@@ -2116,7 +2100,8 @@ class Cms {
                     }
                     // 'reltable' is in the schema but has no column
                     // (content lies in its own relation table)
-                    if (in_array($schema[$fieldClean]['type'] ?? '', $this->noColumnTypes, true)) {
+                    if (in_array($schema[$fieldClean]['type'] ?? '', $this->noColumnTypes, true)
+                        || in_array($schema[$fieldClean]['type'] ?? '', $this->unsearchableTypes, true)) {
                         $this->error($this->snippet('error_sort_field_invalid'), $fieldClean);
                         continue;
                     }
@@ -2187,6 +2172,10 @@ class Cms {
                         }
                         elseif ($subF !== '') {
                             // Subfield notation only makes sense for relation/file
+                            $this->error($this->snippet('error_sort_field_invalid'), $fieldClean);
+                            continue;
+                        }
+                        elseif (in_array($vf['type'], $this->unsearchableTypes, true)) {
                             $this->error($this->snippet('error_sort_field_invalid'), $fieldClean);
                             continue;
                         }
@@ -2438,6 +2427,86 @@ class Cms {
     }
 
     /**
+     * Parameters of select() taken from $_REQUEST ('request' parameter).
+     *
+     *     all                   filter, filterop, filtermode, skip, limit, sort, order
+     *     filter,sort,skip      whole parameters (comma list)
+     *     filter[title]         only this key (likewise filterop[title], filtermode[title])
+     *     filter_op, filter_mode  spelling of CMS:SELECT, the URL keys stay filterop/filtermode
+     *
+     * The request may only NARROW what the caller fixes in $param:
+     *   - skip/limit/sort/order set by the caller replace the request value completely
+     *   - for a field the caller filters on, the request brings neither values nor
+     *     filterop/filtermode - otherwise filter[area_id]=5 could be widened by a
+     *     second value (OR) or inverted by filterop[area_id]=!=. The main field
+     *     counts ('author.name' belongs to 'author'), 'area' and 'area_id' are the same.
+     *   - password fields are never searchable (see $unsearchableTypes), encrypted
+     *     ones only by exact value (buildEncryptedCondition())
+     *   - limit only as positive number (no "unlimited" from the URL)
+     *
+     * @param string $requestKeys  value of the 'request' parameter
+     * @param array  $param        parameters of the caller
+     * @param bool   $useVirtual   table 'record' (virtual fields)
+     * @return array               request values, unchecked types (see select())
+     */
+    private function requestParams(string $requestKeys, array $param, bool $useVirtual): array
+    {
+        $requestKeys = trim($requestKeys);
+        if ($requestKeys === '' || $requestKeys === 'false') return [];
+
+        // [mainKey => true (whole) | [subKey => true, ...]]
+        $allowed = [];
+        $keys = ($requestKeys === 'all') ? $this->selectParams : explode(',', $requestKeys);
+        foreach ($keys as $key) {
+            if (!preg_match('/^([a-z_]+)(?:\[([a-z0-9_.]+)\])?$/', trim($key), $m)) continue;
+            // spelling of the template command (filter_op) = that of the URL (filterop)
+            $mainKey = str_replace('_', '', $m[1]);
+            $subKey  = $m[2] ?? '';
+            if (!in_array($mainKey, $this->selectParams, true)) continue;
+            if ($subKey === '') {
+                $allowed[$mainKey] = true;
+            }
+            elseif (($allowed[$mainKey] ?? null) !== true) {
+                $allowed[$mainKey][$subKey] = true;
+            }
+        }
+
+        // main fields the caller filters on
+        $mainOf = function (string $key) use ($useVirtual): string {
+            if ($useVirtual && ($dot = strpos($key, '.')) !== false) $key = substr($key, 0, $dot);
+            return ($key === 'area') ? 'area_id' : $key;
+        };
+        $fixed = [];
+        foreach ((array)($param['filter'] ?? []) as $key => $v) $fixed[$mainOf((string)$key)] = true;
+
+        $p = [];
+        foreach ($allowed as $mainKey => $subKeys) {
+            if (!isset($_REQUEST[$mainKey])) continue;
+            $value = $_REQUEST[$mainKey];
+
+            if (!in_array($mainKey, ['filter', 'filterop', 'filtermode'], true)) {
+                // skip, limit, sort, order: the caller's value wins completely
+                if (isset($param[$mainKey]) || $subKeys !== true) continue;
+                if ($mainKey === 'limit' && (!is_scalar($value) || (int)$value < 1)) continue;
+                $p[$mainKey] = $value;
+                continue;
+            }
+            // filter/filterop/filtermode: per field; a non-array goes to select()'s check
+            if (!is_array($value)) {
+                if ($subKeys === true) $p[$mainKey] = $value;
+                continue;
+            }
+            foreach ($value as $key => $v) {
+                $key = (string)$key;
+                if ($subKeys !== true && !isset($subKeys[$key])) continue;
+                if (isset($fixed[$mainOf($key)])) continue;
+                $p[$mainKey][$key] = $v;
+            }
+        }
+        return $p;
+    }
+
+    /**
      * Translate pseudo filter field 'area' into 'area_id' (select()).
      *
      * filter[area] takes area names and/or ids, comma-separated or as array,
@@ -2618,7 +2687,8 @@ class Cms {
                 $placeholders = implode(',', array_fill(0, count($ids), '?'));
                 $whereParts[] = "EXISTS (SELECT 1 FROM `data_rel` `_rany`"
                               . " WHERE `_rany`.`src_id` = `$tableName`.`{$tableName}_id`"
-                              . " AND `_rany`.`dest_id` IN ($placeholders))";
+                              . " AND `_rany`.`dest_id` IN ($placeholders)"
+                              . $this->liveFieldSql('_rany', null) . ")";
                 $bindTypes .= str_repeat('i', count($ids));
                 array_push($values, ...$ids);
                 $filterTextParts[] = $this->snippet('filter_refers_to') . ' #' . implode(', #', $ids);
@@ -2860,6 +2930,13 @@ class Cms {
                 $fieldCond = $isAny ? '' : (count($fieldnameIds) === 1
                     ? " AND `_src`.`fieldname_id` = ?"
                     : " AND `_src`.`fieldname_id` IN (" . implode(',', array_fill(0, count($fieldnameIds), '?')) . ")");
+                // links of fields in the trash do not count
+                if ($isAny) {
+                    $fieldCond .= $this->liveFieldSql('_src', null);
+                }
+                else {
+                    foreach ($fieldnameIds as $fieldnameId) $fieldCond .= $this->liveFieldSql('_src', $fieldnameId);
+                }
                 if ($srcId > 0) {
                     $nextCond = '';
                     if ($nextOf > 0 && count($fieldnameIds) === 1) {
@@ -3037,6 +3114,7 @@ class Cms {
                 'sql'    => "$joinType `$dataTable` AS `$alias`"
                           . " ON `$alias`.`record_id` = `$tableName`.`{$tableName}_id`"
                           . " AND `$alias`.`fieldname_id` = ?"
+                          . $this->liveFieldSql($alias, (int)$vf['fieldname_id'])
                           . " AND `$alias`.`language_id` = " . $this->languageExpr($tableName),
                 'types'  => 'i',
                 'values' => [$vf['fieldname_id']],
@@ -3192,6 +3270,12 @@ class Cms {
         string $strOr,
         string $strNot
     ): array {
+        // Password hashes: no condition, but also no hit - an ignored filter
+        // would otherwise find ALL records
+        if (in_array($type, $this->unsearchableTypes, true)) {
+            $this->error(strtr($this->snippet('error_field_not_searchable'), ['{name}' => $fieldLabel]), $fieldLabel);
+            return ['0 = 1', '', [], ''];
+        }
         $conds = [];
         $types = '';
         $vals  = [];
@@ -3418,7 +3502,8 @@ class Cms {
     {
         $exists = "EXISTS (SELECT 1 FROM `data_rel` `_re`"
                 . " INNER JOIN `record` `_rd` ON `_rd`.`record_id` = `_re`.`dest_id` AND `_rd`.`tmp` = 0 AND `_rd`.`deleted` = 0"
-                . " WHERE `_re`.`fieldname_id` = ? AND `_re`.`src_id` = `$tableName`.`{$tableName}_id`)";
+                . " WHERE `_re`.`fieldname_id` = ? AND `_re`.`src_id` = `$tableName`.`{$tableName}_id`"
+                . $this->liveFieldSql('_re', $fid) . ")";
         return [
             $negate ? $exists : "NOT $exists",
             'i',
@@ -3458,7 +3543,8 @@ class Cms {
         string $strNot
     ): ?array {
         $predicates = [];
-        $relWhere   = "r.`fieldname_id` = ? AND r.`src_id` = `$tableName`.`{$tableName}_id`";
+        $relWhere   = "r.`fieldname_id` = ? AND r.`src_id` = `$tableName`.`{$tableName}_id`"
+                    . $this->liveFieldSql('r', $fid);
 
         foreach ($entries as $e) {
             $sub = $e['sub'];
@@ -3566,6 +3652,7 @@ class Cms {
                     . " AND EXISTS (SELECT 1 FROM `$dataTable`"
                         . " WHERE `record_id` = r.`dest_id`"
                         . " AND `fieldname_id` = ?"
+                        . $this->liveFieldSql('', (int)$subField['fieldname_id'])
                         . " AND " . $group[0] . "))",
                 'ii' . $group[1],
                 array_merge([$fid, $subField['fieldname_id']], $group[2]),
@@ -3685,6 +3772,7 @@ class Cms {
                 $outer[] = ($negate ? '' : 'NOT ') . "EXISTS (SELECT 1 FROM `data_fil`"
                     . " WHERE `record_id` = `$tableName`.`{$tableName}_id`"
                     . " AND `fieldname_id` = ?"
+                    . $this->liveFieldSql('', $fid)
                     . " AND `language_id` = " . $this->languageExpr($tableName)
                     . " AND `filename` != '')";
                 $outerTexts[] = trim("$fieldLabel.$sub " . ($negate ? $strNot : '=') . ' ' . self::EMPTY_FILTER);
@@ -3727,6 +3815,7 @@ class Cms {
             $parts[]  = "EXISTS (SELECT 1 FROM `data_fil`"
                       . " WHERE `record_id` = `$tableName`.`{$tableName}_id`"
                       . " AND `fieldname_id` = ?"
+                      . $this->liveFieldSql('', $fid)
                       . " AND `language_id` = " . $this->languageExpr($tableName)
                       . " AND $innerSql)";
             $partTypes = 'i' . $types;
@@ -4264,6 +4353,43 @@ class Cms {
     {
         $this->fieldnameCache = [];
         $this->virtualSchemaCache = [];
+        $this->deletedFieldIds = null;
+    }
+
+    /**
+     * Ids of the soft-deleted input fields (`field`.`deleted` = 1, trash),
+     * grouped by fieldname_id - from the file cache (InstanceCache::deletedFieldIds()),
+     * no query. Normally the trash holds no field and the result is empty.
+     *
+     * The data_* rows of such a field stay until the final deletion (restore),
+     * but must neither be found nor sort: they share the fieldname_id with the
+     * live fields of the same name in other areas.
+     *
+     * @return array<int, int[]>  fieldname_id => field_ids
+     */
+    public function deletedFieldIds(): array
+    {
+        return $this->deletedFieldIds ??= $this->instanceCache->deletedFieldIds();
+    }
+
+    /**
+     * SQL condition that hides the data_* rows of soft-deleted fields, for a data
+     * alias with a fixed fieldname_id - '' if no field of this name is in the
+     * trash (the normal case: the query stays unchanged).
+     *
+     * @param string   $alias         alias of the data_* table ('' = unqualified)
+     * @param int|null $fieldnameId   fieldname_id of the condition; null = all fields
+     *                                (relation=any)
+     * @return string                 ' AND `alias`.`field_id` NOT IN (…)' or ''
+     */
+    private function liveFieldSql(string $alias, ?int $fieldnameId): string
+    {
+        $map = $this->deletedFieldIds();
+        if (!$map) return '';
+        $ids = ($fieldnameId === null) ? array_merge(...array_values($map)) : ($map[$fieldnameId] ?? []);
+        if (!$ids) return '';
+        $col = ($alias === '' ? '' : "`$alias`.") . '`field_id`';
+        return " AND $col NOT IN (" . implode(',', array_map('intval', $ids)) . ")";
     }
 
     /**
@@ -4544,6 +4670,7 @@ class Cms {
             'sql'    => "LEFT JOIN `data_rel` AS `$relAlias`"
                       . " ON `$relAlias`.`src_id` = `$tableName`.`{$tableName}_id`"
                       . " AND `$relAlias`.`fieldname_id` = ?"
+                      . $this->liveFieldSql($relAlias, $relFid)
                       // omit edges to working copies: check-out also creates the
                       // incoming edges to the copy - the field would then have two
                       // rows, the JOIN would yield duplicates
@@ -4664,6 +4791,12 @@ class Cms {
                 $this->error($this->snippet($errInvalid), $fullName);
                 return null;
             }
+            // password hashes are not sortable (the filter yields no hit
+            // via buildScalarGroup())
+            if ($phase === 'sort' && in_array($subField['type'], $this->unsearchableTypes, true)) {
+                $this->error($this->snippet($errInvalid), $fullName);
+                return null;
+            }
         }
         // base JOIN on data_rel (only once per relation field)
         $relAlias = $this->registerRelationBaseJoin($tableName, $relFid, $ctx, $phase);
@@ -4687,6 +4820,7 @@ class Cms {
                 'sql'    => "LEFT JOIN `$dataTable` AS `$dAlias`"
                           . " ON `$dAlias`.`record_id` = `$relAlias`.`dest_id`"
                           . " AND `$dAlias`.`fieldname_id` = ?"
+                          . $this->liveFieldSql($dAlias, $subFid)
                           . " AND `$dAlias`.`language_id` = " . $this->languageExpr($recAlias),
                 'types'  => 'i',
                 'values' => [$subFid],
@@ -4771,6 +4905,7 @@ class Cms {
                 'sql'    => "LEFT JOIN `data_fil` AS `$alias`"
                           . " ON `$alias`.`record_id` = `$tableName`.`{$tableName}_id`"
                           . " AND `$alias`.`fieldname_id` = ?"
+                          . $this->liveFieldSql($alias, $fid)
                           . " AND `$alias`.`language_id` = " . $this->languageExpr($tableName),
                 'types'  => 'i',
                 'values' => [$fid],
@@ -4792,7 +4927,7 @@ class Cms {
     {
         if (empty($this->virtualSchemaCache[$areaId])) {
             $this->db->pushResult();
-            $this->db->query("SELECT `field_id`, `name`, `type`, `multilingual` FROM `field` WHERE `area_id`=?", 'i', [$areaId]);
+            $this->db->query("SELECT `field_id`, `name`, `type`, `multilingual` FROM `field` WHERE `area_id`=? AND `deleted`=0", 'i', [$areaId]);
             $this->virtualSchemaCache[$areaId] = $this->db->fetchAll();
             $this->db->popResult();
         }
@@ -5077,7 +5212,8 @@ class Cms {
             }
             elseif ($type === 'timestampl') {
                 // date is in UTC time -> convert it to the PHP time zone
-                $data[$name] = $this->utcToUserTZ($data[$name]);
+                // (NULL stays NULL, e.g. `field`.`changed_at` of a field never saved)
+                if ($data[$name] !== null) $data[$name] = $this->utcToUserTZ($data[$name]);
             }
             elseif ($type === 'json') {
                 $data[$name] = json_decode((string)$data[$name], true) ?? [];
@@ -5911,6 +6047,7 @@ class Cms {
                  . " LEFT JOIN `data_dft` `d` ON `d`.`record_id` = `r`.`dest_id`"
                  . " AND `d`.`language_id` = " . $this->languageExpr('t')
                  . " WHERE `r`.`src_id` = ? AND `r`.`fieldname_id` = ?"
+                 . $this->liveFieldSql('r', (int)$relField['fieldname_id'])
                  . " ORDER BY `r`.`position` ASC LIMIT " . $limit;
             $this->db->query($sql, 'ii', [$srcId, $relField['fieldname_id']]);
             foreach ($this->db->fetchColumn() as $value) {
@@ -5958,6 +6095,45 @@ class Cms {
         return $name;
     }
 
+    /**
+     * 'request' of CMS:SELECT - stricter than select() for the backend lists:
+     * no 'all', and filter / filter_op / filter_mode only with a field name
+     * (filter[title]); a whole 'filter' would let visitors search every field of the
+     * found records, also those the page does not show. skip, limit, sort, order
+     * as a whole. Comma list or array (request[]=sort request[]=filter[title]);
+     * anything else is registered as error and ignored.
+     *
+     * @param mixed $request  value of the template parameter
+     * @return string         comma list for select()
+     */
+    private function templateRequestKeys(mixed $request): string
+    {
+        $items = [];
+        foreach ((array)$request as $part) {
+            if (!is_scalar($part)) continue;
+            array_push($items, ...explode(',', (string)$part));
+        }
+        $keys = [];
+        foreach ($items as $item) {
+            $item = trim($item);
+            if ($item === '') continue;
+            $ok = preg_match('/^([a-z_]+)(?:\[([a-z0-9_.]+)\])?$/', $item, $m) === 1;
+            if ($ok) {
+                $main = str_replace('_', '', $m[1]);
+                $sub  = $m[2] ?? '';
+                $ok = in_array($main, ['filter', 'filterop', 'filtermode'], true)
+                    ? $sub !== ''
+                    : (in_array($main, ['skip', 'limit', 'sort', 'order'], true) && $sub === '');
+            }
+            if (!$ok) {
+                $this->error($this->snippet('error_param_invalid'), 'request: ' . $item);
+                continue;
+            }
+            $keys[] = $item;
+        }
+        return implode(',', $keys);
+    }
+
     // CMS:SELECT - returns template file (see templateFile())
     //
     // A template sees only PUBLISHED records (publishedSql()): re-
@@ -5981,6 +6157,9 @@ class Cms {
         foreach (['filter_op' => 'filterop', 'filter_mode' => 'filtermode', 'hits' => 'result'] as $from => $to) {
             if (isset($p[$from]) && !isset($p[$to])) $p[$to] = $p[$from];
         }
+
+        // 'request' of a template: only named keys, see templateRequestKeys()
+        if (isset($p['request'])) $p['request'] = $this->templateRequestKeys($p['request']);
 
         // 'relation' without 'src_id': the references of the running record
         // (default per commands.php). Without a source the relation filter in
@@ -6532,6 +6711,7 @@ class Cms {
         $sql = 'SELECT DISTINCT `record`.`record_id` FROM `' . $this->virtualDataTable($vf['type']) . '` `d`'
              . ' INNER JOIN `record` ON `record`.`record_id` = `d`.`record_id` AND `record`.`tmp` = 0 AND `record`.`deleted` = 0'
              . ' WHERE ' . $languageSql . ' AND `d`.`fieldname_id` = ? AND `d`.`data` = ?'
+             . $this->liveFieldSql('d', (int)$vf['fieldname_id'])
              . ' AND `record`.`instance_id` IN (' . implode(',', array_map('intval', array_keys($languages))) . ')';
         if (!empty($inAreas)) {
             $sql .= ' AND `record`.`area_id` IN (' . implode(',', array_map('intval', $inAreas)) . ')';

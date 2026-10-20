@@ -82,8 +82,9 @@ unter dem Benutzer `scheduler`, den die Installation anlegt. Näheres in
 
 ## Papierkorb
 
-Gelöschte Datensätze und Bereiche werden zunächst nur als gelöscht markiert; ihre
-Dateien wandern nach `var/deleted/`. Ob ein Datensatz überhaupt in den Papierkorb
+Gelöschte Datensätze, Eingabefelder und Bereiche werden zunächst nur als gelöscht
+markiert; die Dateien gelöschter Datensätze wandern nach `var/deleted/`, die eines
+gelöschten Eingabefeldes bleiben gesperrt an ihrem Platz. Ob ein Datensatz überhaupt in den Papierkorb
 kommt, bestimmt die [Lösch-Policy](./15-datenschutz.md#löschen-nach-lösch-policy)
 seines Bereichs. Endgültig gelöscht wird nach der
 ***Aufbewahrungsfrist*** (`admin.trash_retention_days`, Vorgabe 7 Tage) durch die
@@ -96,7 +97,10 @@ verbundenen Inhalten und Dateien:
 - ***Datensätze*** holt jeder Benutzer selbst aus seinem
   [Papierkorb](./10-module.md#papierkorb) zurück.
 - ***Bereiche*** stellt ein Superuser im Papierkorb wieder her. Mit dem Bereich kommen
-  seine Unterbereiche und alle Datensätze zurück, die mit ihm gelöscht wurden.
+  seine Unterbereiche und alle Datensätze und Eingabefelder zurück, die mit ihm
+  gelöscht wurden.
+- ***Eingabefelder*** stellt ein Superuser im Papierkorb wieder her – samt Inhalten
+  (siehe [Eingabefeld löschen](./05-eingabefelder.md#eingabefeld-löschen)).
 
 Ohne Backend geht es auch auf der Kommandozeile:
 

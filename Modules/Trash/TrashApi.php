@@ -36,13 +36,13 @@ class TrashApi
     /**
      * Deleted records, most recently deleted first: label, area, who and
      * when deleted, deleted descendants, when the trash permanently deletes them.
-     * Superusers additionally get the deleted areas.
+     * Superusers additionally get the deleted areas and input fields.
      *
      * @param bool   $all     deletions of all administrators (superusers only; otherwise only their own)
      * @param string $search  partial word in the label of the record ('' = all)
      * @param int    $areaId  only from this area (0 = all)
      * @param int    $limit   maximum number (1-200)
-     * @return array  records (record_id, label, area, deleted_at, deleted_by, children, expires_at), areas (superusers only), more
+     * @return array  records (record_id, label, area, deleted_at, deleted_by, children, expires_at), areas, fields (superusers only), more
      */
     #[ApiMethod('trash.list', '#trash.api_list')]
     public function list(bool $all = false, string $search = '', int $areaId = 0, int $limit = 50): array
@@ -87,6 +87,27 @@ class TrashApi
                     'subareas'   => (int)$row['subareas'],
                     'records'    => (int)$row['records'],
                     'expires_at' => $this->expiresAt((string)$row['changed_at']),
+                ];
+            }
+        }
+        if ($superuser) {
+            $result['fields'] = [];
+            foreach ($this->trash->fields($limit) as $row) {
+                if ($areaId > 0 && (int)$row['area_id'] !== $areaId) continue;
+                $label = $this->context->plain($this->cms->textOrSnippet((string)$row['label']));
+                if ($needle !== '' && !str_contains(mb_strtolower($label . ' ' . $row['name']), $needle)) continue;
+                $areaData = $this->backend->areaData((int)$row['area_id']) ?? [];
+                $result['fields'][] = [
+                    'field_id'      => (int)$row['field_id'],
+                    'label'         => $label,
+                    'name'          => (string)$row['name'],
+                    'type'          => (string)$row['type'],
+                    'area'          => ['area_id' => (int)$row['area_id'], 'label' => $this->context->plain($this->cms->textOrSnippet((string)($areaData['label'] ?? '')))],
+                    'deleted_at'    => $this->context->isoTime((string)$row['changed_at']),
+                    'deleted_by'    => $this->teaser('admin', (int)$row['changed_by']),
+                    'counter_field' => (string)$row['counter_field'],
+                    'thumbnails'    => (int)$row['thumbnails'],
+                    'expires_at'    => $this->expiresAt((string)$row['changed_at']),
                 ];
             }
         }

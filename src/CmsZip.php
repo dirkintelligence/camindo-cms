@@ -203,7 +203,7 @@ class CmsZip
         $key = $areaId . ':' . $name;
         if (!array_key_exists($key, $memo)) {
             $this->db->pushResult();
-            $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `name` = ? AND `type` = 'file'", 'is', [$areaId, $name]);
+            $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `name` = ? AND `type` = 'file' AND `deleted` = 0", 'is', [$areaId, $name]);
             $memo[$key] = (int)($this->db->fetchNum()[0] ?? 0);
             $this->db->popResult();
         }

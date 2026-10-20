@@ -172,8 +172,12 @@ whether the contained areas are deleted as well or moved up one level.
 
 Deleted areas go to the trash like records and are only permanently removed after the
 retention period (see [chapter 12](./12-operation.md#trash)).
-Until then, a superuser can restore them – with all subareas and records that were deleted
-together with them.
+Until then, a superuser can restore them – with all subareas, records and input fields that
+were deleted together with them.
+
+The ***relation fields of other areas*** that point to an area go to the trash with it –
+otherwise they would point nowhere. Restoring the area brings them back as well (see
+[deleting an input field](./05-input-fields.md#deleting-an-input-field)).
 
 The records of a deleted area go with it into the [trash](./10-modules.md#trash) and are
 permanently deleted after a few days. The deletion policy of the area takes effect here

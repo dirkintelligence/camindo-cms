@@ -61,7 +61,7 @@ class ToolThumbnails {
             "SELECT `a`.`area_id`, `a`.`label`, `a`.`name`, `a`.`instance_id` FROM `area` `a`"
             . " WHERE `a`.`type` IN ('record','profile','ugc') AND `a`.`deleted` = 0"
             . " AND EXISTS (SELECT 1 FROM `field` `f` WHERE `f`.`area_id` = `a`.`area_id`"
-            . "   AND `f`.`type` = 'file' AND `f`.`display_type` = 'thumbnail')"
+            . "   AND `f`.`type` = 'file' AND `f`.`display_type` = 'thumbnail' AND `f`.`deleted` = 0)"
             . " ORDER BY `a`.`lft` ASC"
         );
         $multi = $this->instanceCache->hasMultipleInstances();

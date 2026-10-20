@@ -157,7 +157,9 @@ trait VirtualFieldsTrait {
         // load virtual fields, sorted in the correct order
         $schema = [];
         $this->db->pushResult();
-        $sql = "SELECT * FROM `field` WHERE `area_id`=? ORDER BY `position` ASC";
+        // only live fields - fields in the trash keep their data_* rows, but take
+        // part in nothing (Field, class comment "TRASH")
+        $sql = "SELECT * FROM `field` WHERE `area_id`=? AND `deleted`=0 ORDER BY `position` ASC";
         $this->db->query($sql, 'i', [$areaId]);
         if ($this->db->num_rows > 0) {
             while ($row = $this->db->fetch()) {
@@ -1154,7 +1156,7 @@ trait VirtualFieldsTrait {
         $in = $affectedTextFieldIds ? implode(',', $affectedTextFieldIds) : '0';
         $this->db->query(
             "SELECT DISTINCT `r`.`fulltext_field_id` FROM `rel_fulltext_text` `r`"
-            . " INNER JOIN `field` `f` ON `f`.`field_id` = `r`.`fulltext_field_id`"
+            . " INNER JOIN `field` `f` ON `f`.`field_id` = `r`.`fulltext_field_id` AND `f`.`deleted` = 0"
             . " WHERE `f`.`area_id` = ? AND (`r`.`rel_field_id` IS NOT NULL OR `r`.`text_field_id` IN ({$in}))",
             'i', [$areaId]
         );
@@ -1166,7 +1168,7 @@ trait VirtualFieldsTrait {
         // 2. owner via a link field
         $this->db->query(
             "SELECT `d`.`src_id`, `d`.`field_id`, `o`.`area_id` FROM `data_rel` `d`"
-            . " INNER JOIN `field` `l` ON `l`.`field_id` = `d`.`field_id` AND `l`.`type` = 'link'"
+            . " INNER JOIN `field` `l` ON `l`.`field_id` = `d`.`field_id` AND `l`.`type` = 'link' AND `l`.`deleted` = 0"
             . " INNER JOIN `record` `o` ON `o`.`record_id` = `d`.`src_id` AND `o`.`tmp` = 0"
             . " WHERE `d`.`dest_id` = ?",
             'i', [$recordId]
@@ -1225,7 +1227,7 @@ trait VirtualFieldsTrait {
         try {
             $this->db->query(
                 "SELECT `field_id` AS `text_field_id`, 0 AS `rel_field_id` FROM `field`"
-                . " WHERE `area_id` = ? AND `type` IN ('text', 'chars', 'json', 'file')"
+                . " WHERE `area_id` = ? AND `deleted` = 0 AND `type` IN ('text', 'chars', 'json', 'file')"
                 . " AND NOT (`type` = 'file' AND `display_type` = 'thumbnail')"
                 . " ORDER BY `position`, `field_id`",
                 'i', [$areaId]
@@ -1235,8 +1237,8 @@ trait VirtualFieldsTrait {
             $this->db->query(
                 "SELECT `t`.`field_id` AS `text_field_id`, `l`.`field_id` AS `rel_field_id` FROM `field` `l`"
                 . " INNER JOIN `rel_field_area` `ra` ON `ra`.`field_id` = `l`.`field_id`"
-                . " INNER JOIN `field` `t` ON `t`.`area_id` = `ra`.`area_id`"
-                . " WHERE `l`.`area_id` = ? AND `l`.`type` = 'link'"
+                . " INNER JOIN `field` `t` ON `t`.`area_id` = `ra`.`area_id` AND `t`.`deleted` = 0"
+                . " WHERE `l`.`area_id` = ? AND `l`.`type` = 'link' AND `l`.`deleted` = 0"
                 . " AND `t`.`type` IN ('text', 'chars', 'json', 'file')"
                 . " AND NOT (`t`.`type` = 'file' AND `t`.`display_type` = 'thumbnail')"
                 . " ORDER BY `l`.`position`, `t`.`position`, `t`.`field_id`",
@@ -3189,7 +3191,14 @@ trait VirtualFieldsTrait {
     public function refreshFulltext(int $fulltextFieldId, ?int $recordId = null): void
     {
         // ids of the source fields (and possibly relation fields via which text field and full text are connected)
-        $this->db->query("SELECT `rel_field_id`, `text_field_id` FROM `rel_fulltext_text` WHERE `fulltext_field_id`=?", 'i', [$fulltextFieldId]);
+        // (sources in the trash do not count)
+        $this->db->query(
+            "SELECT `r`.`rel_field_id`, `r`.`text_field_id` FROM `rel_fulltext_text` `r`"
+            . " INNER JOIN `field` `t` ON `t`.`field_id` = `r`.`text_field_id` AND `t`.`deleted` = 0"
+            . " LEFT JOIN `field` `l` ON `l`.`field_id` = `r`.`rel_field_id`"
+            . " WHERE `r`.`fulltext_field_id` = ? AND (`r`.`rel_field_id` IS NULL OR `l`.`deleted` = 0)",
+            'i', [$fulltextFieldId]
+        );
         $sources = $this->db->fetchAll();
         if (empty($sources)) {
             // no source fields

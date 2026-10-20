@@ -34,10 +34,6 @@ composer require camindo/extension-{name}
 php Core/cron/camindo.php component install {Name} --activate
 ```
 
-| Extension | Paket | Feldtypen / Darstellung | Was sie tut |
-|---|---|---|---|
-| TinyMCE | `camindo/extension-tinymce` | Kurzer/Langer Text / mehrzeilig | WYSIWYG-Editor, schreibt HTML |
-
 Jede Zusatzkomponente bringt ihr eigenes Handbuch mit. Nach der Installation finden Sie
 es in der Übersicht der Handbücher unter „Handbücher der Zusatzkomponenten“.
 
@@ -51,5 +47,5 @@ selbst unter `var/extensions/{name}/` ab (Name kleingeschrieben, also
 
 Damit ein Stylesheet mehrere Felder unterschiedlich gestalten kann, trägt jeder
 Editor eine CSS-Klasse, die Sie je Feld festlegen können (Vorgabe:
-`c9-{name}-{feldname}`, z. B. `c9-tinymce-teaser`). Beispiele stehen in der
+`c9-{name}-{feldname}`, z. B. `c9-htmlvisual-teaser`). Beispiele stehen in der
 Beschreibung der jeweiligen Extension.

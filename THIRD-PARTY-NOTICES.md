@@ -38,12 +38,11 @@ These components are not part of the core. They are installed only on request
 
 | Component | License | Uses | License of the used library |
 |---|---|---|---|
-| `camindo/extension-tinymce` (`Extensions/TinyMce/`) | GPL-2.0-or-later | [TinyMCE](https://www.tiny.cloud/) 8, Ephox Corporation DBA Tiny Technologies, Inc. | GPL-2.0-or-later or commercial (`vendor/tinymce/tinymce/license.md`) |
 | `camindo/module-pdf` (`Modules/Pdf/`) | LGPL-3.0-or-later | [tc-lib-pdf](https://github.com/tecnickcom/tc-lib-pdf) and its `tc-lib-*` dependencies, Nicola Asuni / Tecnick.com LTD | LGPL-3.0-or-later |
 | `camindo/module-pdf`: standard font metrics (`Modules/Pdf/fonts/core/`) | see `fonts/core/LICENSE` | derived from the Adobe Core 14 AFM files, Adobe Systems Incorporated | Adobe AFM license |
 | `camindo/module-ai` (`Modules/Ai/`) | AGPL-3.0-or-later | [anthropic-ai/sdk](https://github.com/anthropics/anthropic-sdk-php), Anthropic, PBC; [Guzzle](https://github.com/guzzle/guzzle) with its PSR and Symfony helper packages | MIT |
 
 ## Trademarks
 
-Bootstrap, jQuery, TinyMCE, Material Symbols, Source and all other product names are
+Bootstrap, jQuery, Material Symbols, Source and all other product names are
 trademarks of their respective owners. Their mention only identifies the component.

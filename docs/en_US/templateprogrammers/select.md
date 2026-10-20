@@ -37,6 +37,7 @@ Searches the database using the given (filter) criteria and returns the records 
 | `debug` | `true / false` | `false` |  | true: The generated database query is output for support analysis. |
 | `sql` | – | – |  | Raw SQL addition in the WHERE clause (caution: for support only!). |
 | `state` | `status ID or any` | `0` |  | Without a value only released records (status_id 0). A status ID > 0 finds only records with this status; "any" finds records of every status. |
+| `request` | `comma list` | – |  | Takes filter and sort values from the URL – comma list or array of the permitted keys: filter[field], filter_op[field], filter_mode[field], skip, limit, sort, order (e.g. "filter[title],sort,order,skip"). filter only with a field name. Values set in the command always take precedence; for a field filtered in the command, the URL adds nothing. |
 | `set` | `array index of $set` | – |  | The entire output (including the included template) is not output, but stored in the variable $set. |
 
 ¹ can be given without a key as the first value.  
@@ -85,6 +86,7 @@ Time period:                   (CMS:SELECT list filter[area]=articles filter[onl
 Linked records:                (CMS:SELECT topic_badge relation=topics)
 Children in the tree:          (CMS:SELECT nav filter[parent_id]="{$cms['record_id']}" filter[depth]=1 sort=position order=asc)
 Pageable list:                 (CMS:SELECT list filter[area]=articles limit=20 skip="{$_REQUEST['skip']}" count=true)
+Search form with sorting:      (CMS:SELECT list filter[area]=articles limit=20 count=true request="filter[title],sort,order,skip")
 ```
 
 Several values for the same field are combined with OR (`filter_mode[field]=AND` switches
@@ -406,6 +408,44 @@ this status; `any` removes the status filter:
 (CMS:SELECT list filter[area]=articles state=2)
 (CMS:SELECT list filter[area]=articles state=any)
 ```
+
+### `request`
+
+Takes filters, sorting and paging from the ***URL*** (GET or POST) – for search forms and
+sortable lists, without writing every value into the command. You state what may be taken
+over, as a comma list or an array:
+
+```
+request="sort,order,skip"                                  only sorting and paging
+request="filter[title],filter[price],filter_op[price]"     search in title and price
+request[]=sort request[]="filter[title]"                   the same as an array
+```
+
+Permitted are `skip`, `limit`, `sort`, `order` as well as `filter`, `filter_op` and
+`filter_mode` ***only with a field name*** (`filter[title]`). A `filter` without a field
+name and `all` are ignored and reported as errors – otherwise a visitor could search by any
+field of the records found, including fields the page does not even show, such as an
+internal note.
+
+In the URL the keys are named as in the command, only `filterop` and `filtermode` without
+the underscore: `?filter[title]=Hen*&sort=title&order=desc&skip=20`.
+
+```cms
+(CMS:SELECT list filter[area]=articles limit=20 count=true request="filter[title],sort,order,skip")
+```
+
+The URL can only ***narrow*** the query, never widen it:
+
+* Values in the command take precedence. For a field the command filters on, `request`
+  takes over neither values nor `filter_op`/`filter_mode` – `?filter[area]=internal` or
+  `?filterop[area]=!=` change nothing about `filter[area]=articles`. Fields of a linked
+  record count as the reference field (`author.name` belongs to `author`); `area` and
+  `area_id` count as the same field.
+* `skip`, `limit`, `sort` and `order` from the command replace the URL value completely.
+  `limit` from the URL only counts as a positive number – “unlimited” cannot be requested.
+* ***Encrypted fields*** only find the exact value; wildcards (`*`) and greater/less yield
+  no hits.
+* ***Password fields*** can never be filtered or sorted.
 
 ---
 

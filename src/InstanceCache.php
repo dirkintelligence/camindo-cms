@@ -20,6 +20,7 @@
  *                          (area_id => name/type/instance_id, see below), the
  *                          ids of the user groups, code and collation per language
  *                          (languageCode(), collation(), see Camindo\Core\Collation)
+ *                          and the input fields in the trash (deletedFieldIds())
  *     instance-{id}.php    all data of ONE instance: the columns of the table
  *                          `instance`, the languages in the order primary language
  *                          first (with code/label/endonym from `language`), the
@@ -293,6 +294,19 @@ class InstanceCache {
     public function collation(int $languageId): string
     {
         return (string)($this->all()['collations'][$languageId] ?? '');
+    }
+
+    /**
+     * Input fields in the trash (`field`.`deleted` = 1), grouped by name: their data_*
+     * rows stay until the final deletion, but Cms::select() must neither find nor
+     * sort them. Rewritten by Field on soft deletion, restore and final deletion -
+     * normally empty, and then select() needs no condition at all.
+     *
+     * @return array<int, int[]>  fieldname_id => field_ids
+     */
+    public function deletedFieldIds(): array
+    {
+        return (array)($this->all()['deleted_fields'] ?? []);
     }
 
     /**
@@ -770,13 +784,13 @@ class InstanceCache {
 
     /**
      * Are all files present that must exist according to the collective file?
-     * (A collective file without 'group_ids', 'collations' or 'language_codes' stems
-     * from an earlier version and counts as incomplete.)
+     * (A collective file without 'group_ids', 'collations', 'language_codes' or
+     * 'deleted_fields' stems from an earlier version and counts as incomplete.)
      */
     private function isComplete(): bool
     {
         $all = $this->includeFile($this->cacheDir() . '/' . self::FILE_ALL);
-        if ($all === null || !isset($all['group_ids'], $all['collations'], $all['language_codes'])) return false;
+        if ($all === null || !isset($all['group_ids'], $all['collations'], $all['language_codes'], $all['deleted_fields'])) return false;
         foreach ((array)($all['instance_ids'] ?? []) as $instanceId) {
             if (!is_file($this->instanceFile((int)$instanceId))) return false;
         }
@@ -991,6 +1005,17 @@ class InstanceCache {
 
         $groups = $this->buildGroups($groupRows, array_keys($instances), $primaryLanguages, $allAreas, array_keys($languages), $statusIds);
 
+        // Input fields in the trash: fieldname_id => field_ids (Cms::liveFieldSql())
+        $deletedFields = [];
+        $this->db->query(
+            "SELECT `n`.`fieldname_id`, `f`.`field_id` FROM `field` `f`"
+            . " INNER JOIN `fieldname` `n` ON `n`.`name` = `f`.`name`"
+            . " WHERE `f`.`deleted` = 1 ORDER BY `f`.`field_id`"
+        );
+        while ($row = $this->db->fetchNum()) {
+            $deletedFields[(int)$row[0]][] = (int)$row[1];
+        }
+
         $all = [
             'default_id'         => \Camindo\Core\Modules\Instance\Instance::DEFAULT_ID,
             'instance_ids'       => array_keys($instances),
@@ -1001,6 +1026,7 @@ class InstanceCache {
             'language_codes'     => array_map(fn(array $language) => $language['code'], $languages),
             'areas'              => $allAreas,
             'group_ids'          => array_keys($groups),
+            'deleted_fields'     => $deletedFields,
         ];
 
         $dir = $this->cacheDir();

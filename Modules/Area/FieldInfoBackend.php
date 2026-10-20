@@ -23,7 +23,7 @@ class FieldInfoBackend extends FieldBackend {
         echo $this->backend->template('container_header');
 
         // Daten laden
-        if (!$data = $this->field->load($id)) {
+        if (!$data = $this->field->loadLive($id)) {
             echo $this->backend->template('alert_danger', [
                 '{text}' => $this->cms->errorMsg()
             ]);

@@ -784,7 +784,7 @@ class ComponentManager {
      * points into the project's vendor/ (third-party libraries from the composer.json of the
      * extension). Copy instead of symlink - vendor/ stays outside the docroot.
      * 'dirs' names whole directories that are copied recursively under their name
-     * (libraries that load their parts relative to the script - TinyMCE:
+     * (libraries that load their parts relative to the script, e.g.
      * skins/, themes/, plugins/ …); they are not in the manifest.
      *
      * @return int  copied files

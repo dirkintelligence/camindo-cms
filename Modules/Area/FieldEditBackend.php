@@ -143,7 +143,7 @@ class FieldEditBackend extends FieldBackend {
      */
     private function _editLoad(): void
     {
-        if ($this->data = $this->field->load($this->id)) {
+        if ($this->data = $this->field->loadLive($this->id)) {
             $this->areaId = (int)$this->data['area_id'];
 
             // write all 3 visibility options into one pseudo field
@@ -276,7 +276,7 @@ class FieldEditBackend extends FieldBackend {
         if ($displayType == 'thumbnail') {
             $sourceOptions = [];
             $sql = "SELECT `field_id`,`label` FROM `field`"
-                ." WHERE `type`='file' AND `area_id`=? AND `field_id` != ?"
+                ." WHERE `type`='file' AND `area_id`=? AND `field_id` != ? AND `deleted`=0"
                 ." ORDER BY `position` ASC";
             $this->db->query($sql, 'ii', [$this->areaId, $this->id]);
             if ($this->db->num_rows > 0) {
@@ -404,7 +404,7 @@ class FieldEditBackend extends FieldBackend {
         $options = [0 => $this->cms->snippet('position_at_start')];
         $ownPosition = (int)($this->data['position'] ?? 0);
         $selected = 0;
-        $sql = "SELECT * FROM `field` WHERE `area_id` =? AND `field_id` !=? ORDER BY `position` ASC";
+        $sql = "SELECT * FROM `field` WHERE `area_id` =? AND `field_id` !=? AND `deleted`=0 ORDER BY `position` ASC";
         $this->db->query($sql, 'ii', [$this->areaId, $this->id]);
         
         while ($row = $this->db->fetch()) {

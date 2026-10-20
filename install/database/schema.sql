@@ -1,4 +1,4 @@
--- camindo 9.0.1 - Struktur. Generiert von `camindo.php schema export`.
+-- camindo 9.1.0 - Struktur. Generiert von `camindo.php schema export`.
 
 /*M!999999\- enable the sandbox mode */ 
 
@@ -679,6 +679,9 @@ CREATE TABLE `field` (
   `default_field` bit(1) NOT NULL DEFAULT b'0',
   `meta` bit(1) NOT NULL DEFAULT b'0',
   `multilingual` bit(1) NOT NULL DEFAULT b'0',
+  `changed_at` datetime(3) DEFAULT NULL,
+  `changed_by` bigint unsigned DEFAULT NULL,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
   PRIMARY KEY (`field_id`),
   KEY `idx_area_id` (`area_id`),
   KEY `idx_name` (`name`),
@@ -686,6 +689,7 @@ CREATE TABLE `field` (
   KEY `idx_ref_field_id` (`rel_field_id`),
   KEY `fk_field_rel_area` (`rel_area_id`),
   KEY `fk_field_parent_field` (`parent_field_id`),
+  KEY `idx_deleted` (`deleted`),
   CONSTRAINT `fk_field_area` FOREIGN KEY (`area_id`) REFERENCES `area` (`area_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_field_parent_field` FOREIGN KEY (`parent_field_id`) REFERENCES `field` (`field_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_field_rel_area` FOREIGN KEY (`rel_area_id`) REFERENCES `area` (`area_id`) ON DELETE CASCADE,
@@ -890,7 +894,7 @@ DROP TABLE IF EXISTS `record`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `record` (
   `record_id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `area_id` bigint unsigned NOT NULL DEFAULT '0',
+  `area_id` bigint unsigned NOT NULL,
   `instance_id` int unsigned NOT NULL DEFAULT '1',
   `position` bigint NOT NULL DEFAULT '1',
   `depth` tinyint unsigned NOT NULL DEFAULT '0',
@@ -924,6 +928,7 @@ CREATE TABLE `record` (
   KEY `fk_record_instance_id` (`instance_id`),
   KEY `fk_record_user_id` (`user_id`),
   KEY `fk_record_owner_id` (`owner_id`),
+  CONSTRAINT `fk_record_area_id` FOREIGN KEY (`area_id`) REFERENCES `area` (`area_id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_record_changed_by` FOREIGN KEY (`changed_by`) REFERENCES `admin` (`admin_id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_record_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin` (`admin_id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_record_instance_id` FOREIGN KEY (`instance_id`) REFERENCES `instance` (`instance_id`) ON DELETE CASCADE ON UPDATE RESTRICT,

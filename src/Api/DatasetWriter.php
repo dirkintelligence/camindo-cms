@@ -74,7 +74,8 @@ class DatasetWriter
     {
         $this->cms->errorsReset();
         $data = $id > 0 ? $dataset->load($id) : null;
-        if (!$data) {
+        // rows in the trash (`deleted` = 1) count as not found
+        if (!$data || !empty($data['deleted'])) {
             $this->cms->errorsReset();
             throw new ApiException(ApiException::NOT_FOUND, $this->cms->snippet('error_record_not_found'));
         }

@@ -451,7 +451,7 @@ class Docs {
         return $targets;
     }
 
-    /** Identifier of a page for IDs: "admins/extensions/tinymce.md" -> "admins-extensions-tinymce" */
+    /** Identifier of a page for IDs: "admins/extensions/password.md" -> "admins-extensions-password" */
     public static function pageKey(string $page): string
     {
         return trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(preg_replace('/\.md$/i', '', $page) ?? '')) ?? '', '-');

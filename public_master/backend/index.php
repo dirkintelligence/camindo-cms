@@ -156,7 +156,7 @@
 
     <main>
         <?php if ($blockReason !== null): ?>
-        <div class="alert alert-warning rounded-0 mb-0 py-2 small" role="alert">
+        <div class="alert alert-warning rounded-0 mb-0 py-2 small c9-block-alert" role="alert" title="<?php echo htmlspecialchars($state->blockMessage($blockReason)); ?>">
             <span class="icon" aria-hidden="true">warning</span>
             <?php echo htmlspecialchars($state->blockMessage($blockReason)); ?>
         </div>

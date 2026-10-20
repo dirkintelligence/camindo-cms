@@ -25,7 +25,7 @@ Klassen und Durchstreichen entfallen, der Text bleibt.
 Im ***Quelltext*** (**<>**) geht mehr: Dort geschriebenes oder geändertes HTML behält
 zusätzlich ***eigene Attribute*** und ***Bilder*** (siehe „Klassen, Stile und Bilder“
 unten). Alles andere wird beim Zurückschalten in die formatierte Ansicht und beim
-Speichern ebenso gestutzt. Vorhandenes HTML im Feld (etwa aus TinyMCE) bleibt
+Speichern ebenso gestutzt. Vorhandenes HTML im Feld bleibt
 unverändert, bis der Text im Editor geändert wird – dann gelten dieselben Regeln.
 
 Wie Redakteure damit arbeiten, beschreibt das [Handbuch für Anwender](../../editors/05-datensaetze-bearbeiten.md#text)

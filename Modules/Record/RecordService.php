@@ -288,7 +288,7 @@ class RecordService
             try {
                 $this->db->query("SELECT UTC_TIMESTAMP()");
                 $startedAt = (string)$this->db->fetchNum()[0];
-                $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `type` = 'fulltext'", 'i', [$areaId]);
+                $this->db->query("SELECT `field_id` FROM `field` WHERE `area_id` = ? AND `type` = 'fulltext' AND `deleted` = 0", 'i', [$areaId]);
                 $fieldIds = array_map('intval', $this->db->fetchAll());
                 $this->db->query("SELECT `record_id` FROM `record` WHERE `area_id` = ? AND `tmp` = 0 ORDER BY `record_id`", 'i', [$areaId]);
                 $recordIds = array_map('intval', $this->db->fetchAll());

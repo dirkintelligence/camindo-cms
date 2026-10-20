@@ -101,7 +101,7 @@ Templates können Backend-Snippets mittels `$this->cms->snippet('custom.schlüss
 #### Zusatzsprachen nachinstallieren
 
 Weitere Backend-Sprachen kommen als ***Übersetzungspakete*** in Form von `.ini`-Dateien.
-Die Sprache steht am Anfang des Dateinamens: `sv_SE.ini`, `sv_SE_core.ini`, `sv_SE_ext_tinymce.ini`.
+Die Sprache steht am Anfang des Dateinamens: `sv_SE.ini`, `sv_SE_core.ini`, `sv_SE_ext_password.ini`.
 Abgelegt werden diese in `var/translation/translated/`.
 Wirksam wird ein Paket nach dem Neuaufbau des Snippet-Caches (Modul „Werkzeuge“, Reiter
 „Entwickler“, oder auf der Kommandozeile mit `php Core/cron/camindo.php refresh snippets`).
@@ -192,7 +192,7 @@ temporäre Dateien, Fristen, Logs, Prüfungen – legt die Installation an (sieh
 | ***Logs aufräumen*** | löscht Logdateien unter `var/log/`, die älter sind als die eingestellte Frist (Vorgabe 90 Tage). Sicherheitsprotokolle (`security`, `csp`) haben eine eigene, meist längere Frist (Vorgabe 365 Tage). Außerdem werden fehlgeschlagene Anmeldeversuche mit Name und IP-Adresse aus der Datenbank gelöscht (Vorgabe nach 30 Tagen). Empfohlen: täglich nachts. Das [Audit-Log](#audit-log) hat eigene Fristen |
 | ***Frontend-Cache aufräumen*** | löscht abgelaufene Dateien des Ausgabe-Caches unter `var/cache/include/`, den Templates mit `CMS:INCLUDE … caching=…` anlegen, dazu Dateien zu gelöschten oder seither geänderten Templates. Dateien mit unbegrenzter Frist bleiben, bis ihr Template geändert wird. Keine Einstellungen. Empfohlen: stündlich, etwa Minute `15`, alle anderen `*` |
 | ***Volltext neu aufbauen*** | baut den [Volltext](./05-eingabefelder.md#volltext-neu-aufbauen) der gewählten Bereiche (ohne Auswahl: aller Bereiche) aus den Quellfeldern neu auf – nach einer Änderung der Quellfelder eines Volltextfelds. Die Datensätze selbst bleiben unverändert, das Audit-Log erhält keine Einträge. Reicht die maximale Ausführungszeit nicht, bricht der Lauf ab und gilt als fehlgeschlagen; erhöhen Sie sie dann |
-| ***Papierkorb leeren*** | löscht Datensätze und Inhaltsbereiche endgültig, die länger als `admin.trash_retention_days` (Vorgabe 7 Tage) im Papierkorb liegen. Keine Einstellungen |
+| ***Papierkorb leeren*** | löscht Datensätze, Eingabefelder und Inhaltsbereiche endgültig, die länger als `admin.trash_retention_days` (Vorgabe 7 Tage) im Papierkorb liegen. Keine Einstellungen |
 | ***Temporäre Dateien löschen*** | räumt `var/tmp/` auf (`admin.tmp_retention_hours`) und löscht abgelaufene Exportdateien (`admin.export_retention_hours`). Keine Einstellungen. Empfohlen: stündlich |
 | ***Lösch-Policies anwenden*** | führt die fälligen Aufträge der [Lösch-Policies](./15-datenschutz.md#löschen-nach-lösch-policy) aus. Keine Einstellungen |
 | ***Aufbewahrungsfristen anwenden*** | kürzt IP-Adressen, löscht abgelaufene Einträge des Audit-Logs, alte interne Nachrichten und nie bestätigte Registrierungen – nach den Fristen der Konfiguration; dazu die Fristen installierter Zusatzmodule, etwa gelöschte Chats des KI-Assistenten. Keine Einstellungen |
@@ -236,7 +236,7 @@ Das Modul „Werkzeuge“ hat fünf Reiter; für jeden gibt es ein eigenes Zusat
 | Reiter | Werkzeuge |
 |---|---|
 | „Server“ | Versionen von camindo CMS, Betriebssystem, Webserver, Datenbank und PHP; Prüfung und Erneuerung der `.htaccess`-Datei; „Datensatz-Cache leeren“ – für alle Websites, eine Website oder einen Bereich; MySQL-Konfiguration; Verfügbarkeit von ImageMagick und ffmpeg; PHP-Info |
-| „Datenbank“ | „Papierkorb leeren“ – endgültiges Löschen von Datensätzen und Bereichen, die älter als *n* Tage im Papierkorb liegen (0 = alles); „Arbeitskopien verwerfen“ – liegen gebliebene Arbeitskopien älter als *n* Stunden entfernen und die Originale wieder freigeben |
+| „Datenbank“ | „Papierkorb leeren“ – endgültiges Löschen von Datensätzen, Eingabefeldern und Bereichen, die älter als *n* Tage im Papierkorb liegen (0 = alles); „Arbeitskopien verwerfen“ – liegen gebliebene Arbeitskopien älter als *n* Stunden entfernen und die Originale wieder freigeben |
 | „Daten“ | „Thumbnails neu erzeugen“ für alle Datensätze eines Bereichs (siehe [Kapitel 8](./08-medien.md#thumbnails-neu-erzeugen)); „Baum normalisieren“ – prüft und repariert die Reihenfolge in Bereichen mit Baumstruktur, falls sie etwa durch direkte Datenbankeingriffe durcheinandergeraten ist; die bestehende Reihenfolge bleibt erhalten |
 | „Papierkorb eines Users“ | Profil und Beiträge eines Website-Users, die im Papierkorb liegen, sofort endgültig löschen – etwa auf Verlangen des Users (siehe [Kapitel 15](./15-datenschutz.md#papierkorb-eines-website-users-sofort-leeren)) |
 | „Entwickler“ | Caches erneuern (Snippets, Backend-Vorlagen, Instanzen); Template-Dateien neu übersetzen und mit `var/templates` abgleichen (samt Parser-Meldungen – auf der Kommandozeile `php Core/cron/camindo.php cache templates`, bei `upgrade` automatisch); Zugriffsregeln des Medienverzeichnisses erneuern; Sitzungsdaten anzeigen |
@@ -403,7 +403,8 @@ zeigt. Wie Redakteure damit arbeiten, beschreibt das
 
 Jeder Eintrag steht für ***einen Löschvorgang***: Wird ein Datensatz mit seinen
 untergeordneten Datensätzen gelöscht, erscheint nur der oberste; fest verbundene
-Inhalte und die Datensätze eines gelöschten Bereichs erscheinen gar nicht einzeln.
+Inhalte, die Datensätze und Eingabefelder eines gelöschten Bereichs, das Gegenfeld einer
+Verknüpfung und die Dateiversionen eines Upload-Feldes erscheinen gar nicht einzeln.
 „Wiederherstellen“ holt immer alles zurück, was im selben Vorgang gelöscht wurde –
 erkannt am identischen Löschzeitpunkt. Was vorher schon in einem eigenen Vorgang
 gelöscht worden war, bleibt im Papierkorb.
@@ -411,7 +412,7 @@ gelöscht worden war, bleibt im Papierkorb.
 | Wer | sieht |
 |---|---|
 | jeder Benutzer | „Von mir gelöschte Datensätze“ – aus Bereichen, auf die er Zugriff hat, und nicht aus gelöschten Bereichen |
-| Superuser | zusätzlich „Gelöschte Bereiche“ (mit Instanz, Umfang und wer gelöscht hat) und über ![group](../_/group.svg) „Alle Benutzer“ die gelöschten Datensätze aller Benutzer |
+| Superuser | zusätzlich „Gelöschte Bereiche“ (mit Instanz, Umfang und wer gelöscht hat), „Gelöschte Eingabefelder“ (mit Bereich, Gegenfeld und Dateiversionen, die mitgelöscht wurden) und über ![group](../_/group.svg) „Alle Benutzer“ die gelöschten Datensätze aller Benutzer |
 
 Wiederherstellen setzt das Löschrecht im Bereich voraus (siehe
 [Bereichsrechte](./07-benutzer-und-rechte.md#5-bereichsrechte)); fehlt es, steht bei dem Eintrag

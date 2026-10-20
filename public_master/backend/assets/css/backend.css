@@ -230,6 +230,17 @@ article {
     padding-bottom: 20px;
 }
 
+/* Blocking notice (maintenance, upgrade due) at the top of <main>: one line of fixed
+   height, breadcrumb and content move down by it */
+.c9-block-alert {
+    height: 40px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+main:has(> .c9-block-alert) #c9-navi { top: 50px; }
+main:has(> .c9-block-alert) article { top: 80px; }
+
 aside {
     position: fixed;
     inset-inline-end: 0;
@@ -1365,4 +1376,10 @@ a.c9-navitem-link:focus-visible,
     aside {
         top: calc(40px - var(--c9-head-shift, 0px));
     }
+    .c9-block-alert {
+        margin-top: 40px;
+        transform: translateY(calc(-1 * var(--c9-scroll, 0px)));
+    }
+    main:has(> .c9-block-alert) #c9-navi { top: 90px; }
+    main:has(> .c9-block-alert) article { top: 0; padding-top: 120px; }
 }

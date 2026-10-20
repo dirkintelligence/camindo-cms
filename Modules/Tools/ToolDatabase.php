@@ -53,6 +53,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Dataset;
 use Camindo\Core\Modules\Record\Record;
 use Camindo\Core\Modules\Area\Area;
+use Camindo\Core\Modules\Area\Field;
 
 class ToolDatabase {
 
@@ -68,7 +69,8 @@ class ToolDatabase {
         protected System $system,
         protected Cms $cms,
         protected Record $record,
-        protected Area $area
+        protected Area $area,
+        protected Field $field
     )
     {
     }
@@ -79,7 +81,7 @@ class ToolDatabase {
      * @param int|null $days  minimum age of the marking in days; null: setting
      *                        admin.trash_retention_days; 0: everything that
      *                        is marked as deleted
-     * @return array          ['record' => int, 'area' => int, 'errors' => string[]]
+     * @return array          ['record' => int, 'field' => int, 'area' => int, 'errors' => string[]]
      *                        number of permanently deleted records per table
      */
     public function purgeTrash(?int $days = null): array
@@ -90,11 +92,15 @@ class ToolDatabase {
         // Cut-off date in UTC - changed_at is also stored in UTC
         $expirationDate = gmdate('Y-m-d H:i:s', time() - 86400 * $days);
 
-        $result = ['record' => 0, 'area' => 0, 'errors' => []];
+        $result = ['record' => 0, 'field' => 0, 'area' => 0, 'errors' => []];
 
-        // First the content, then its areas
+        // First the content, then the input fields, then the areas
         $result['record'] = $this->purgeTable($this->record, $expirationDate, $result['errors']);
+        $result['field']  = $this->purgeTable($this->field,  $expirationDate, $result['errors']);
         $result['area']   = $this->purgeTable($this->area,   $expirationDate, $result['errors']);
+        // Counter and thumbnail fields go with their field via foreign key -
+        // without their own hookOnDeleted(), their names would stay in `fieldname`
+        if ($result['field'] > 0) $this->field->cleanupFieldname();
 
         return $result;
     }
@@ -263,6 +269,9 @@ class ToolDatabase {
 
             foreach ($ids as $id) {
                 $id = (int)$id;
+                // Input fields: the counter field of a relation and the thumbnail
+                // fields disappear with their field (foreign key) - already gone
+                if ($tableName === 'field' && !$this->rowExists($tableName, $id)) continue;
                 // Each record individually - so that its hooks run
                 // (Record::hookOnDelete() removes the media files)
                 $this->cms->errorsReset();
@@ -281,5 +290,17 @@ class ToolDatabase {
         } while ($found === self::CHUNK_SIZE);
 
         return $deleted;
+    }
+
+    /**
+     * Does the row still exist? (purgeTable(), see there)
+     */
+    private function rowExists(string $tableName, int $id): bool
+    {
+        $this->db->pushResult();
+        $this->db->query("SELECT 1 FROM `{$tableName}` WHERE `{$tableName}_id` = ?", 'i', [$id]);
+        $exists = $this->db->num_rows > 0;
+        $this->db->popResult();
+        return $exists;
     }
 }
