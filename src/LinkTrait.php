@@ -122,9 +122,13 @@ trait LinkTrait
      * All virtual fields except links, full text and the tree/
      * sort fields; file fields including thumbnails.
      *
+     * $multilingualOnly (DOCX translation): only multilingual fields - filtered
+     * before the union, so a field of the same name that is monolingual in one
+     * target area does not hide the multilingual one of another.
+     *
      * @return array  name => field definition (that of the first target area with this name)
      */
-    public function linkTargetFields(array $colDef): array
+    public function linkTargetFields(array $colDef, bool $multilingualOnly = false): array
     {
         $fields = [];
         foreach ($this->linkTargetAreaIds($colDef) as $areaId) {
@@ -132,6 +136,7 @@ trait LinkTrait
                 $targetType = (string)($targetDef['type'] ?? '');
                 if ($targetType === 'fulltext' || in_array($targetType, $this->cms->relationTypes, true)) continue;
                 if (in_array($name, ['parent_id', 'position'], true)) continue;
+                if ($multilingualOnly && !$this->cms->isMultilingualField($targetDef)) continue;
                 $fields[$name] ??= $targetDef;
             }
         }

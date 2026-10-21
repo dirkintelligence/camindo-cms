@@ -1320,6 +1320,7 @@ a.c9-navitem-link:focus-visible,
    no frame, the screen reader announces them anyway */
 #c9-content:focus,
 #c9-navi:focus,
+.c9-layer[data-c9-focus-target]:focus,
 .c9-layer [data-c9-focus-target]:focus {
     outline: none;
 }

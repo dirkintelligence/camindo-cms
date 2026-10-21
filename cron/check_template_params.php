@@ -9,9 +9,11 @@
  *   - 'if' / 'replace': digit keys (if[1]="x") beside the short form
  *     (if="1?x", if[]="1?x") - PHP turns "1" into an int key (Cms::_pairs())
  *   - CMS:NUMBER 'decimals' and the empty check on the numeric value (0 / "0.00")
+ *   - parser note for filter[depth] without filter[parent_id]
  * Exit code 1 on deviations.
  */
 use Camindo\Core\Cms;
+use Camindo\Core\Modules\Template\Template;
 
 // Reachable only on the command line, not via the web server
 if (PHP_SAPI !== 'cli') {
@@ -84,5 +86,23 @@ foreach ($cases as [$label, $method, $p, $expected]) {
     if (!$ok) $failed++;
     printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : "erwartet '" . $expected . "', erhalten '" . $got . "'");
 }
-echo $failed ? "\n$failed Abweichung(en)\n" : "\nalle " . count($cases) . " Fälle ok\n";
+
+// Parser note: filter[depth] without filter[parent_id] (TemplateParserTrait::depthWithoutParentNote())
+// [description, source, note expected]
+$template = $app->get(Template::class);
+$parserCases = [
+    ['depth ohne parent_id',           '(CMS:SELECT nav filter[area_id]=1 filter[depth]=0)', true],
+    ['depth mit parent_id=null',       '(CMS:SELECT nav filter[parent_id]=null filter[depth]=1)', false],
+    ['depth, parent_id per request',   '(CMS:SELECT nav filter[depth]=1 request="filter[parent_id]")', false],
+    ['depth, dynamischer Schlüssel',   '(CMS:SELECT nav filter[depth]=1 filter[{$f}]=3)', false],
+    ['ohne depth',                     '(CMS:SELECT nav filter[area_id]=1)', false],
+];
+foreach ($parserCases as [$label, $source, $expected]) {
+    $notes = preg_grep('/filter\[depth\]/', $template->parse($source, 0)['errors']);
+    $ok = ((bool)$notes === $expected);
+    if (!$ok) $failed++;
+    printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : ($expected ? 'Hinweis fehlt' : 'unerwarteter Hinweis'));
+}
+$total = count($cases) + count($parserCases);
+echo $failed ? "\n$failed Abweichung(en)\n" : "\nalle $total Fälle ok\n";
 exit($failed ? 1 : 0);

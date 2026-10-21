@@ -130,6 +130,12 @@ Der DOCX-Export bereitet die Inhalte eines Bereichs für eine Übersetzung auf �
    Der Import überschreibt nur die Felder der Zielsprache; alle anderen Felder und
    Sprachen bleiben unverändert.
 
+***Eingebettete Inhalte*** werden mit dem Datensatz übersetzt: Ihre mehrsprachigen Felder
+stehen in der Feldauswahl als „Feld › Feld des Inhalts“ und in der Tabelle unter den
+Feldern des Datensatzes, je Inhalt durchnummeriert. Felder, die im Bereich der
+eingebetteten Inhalte nicht mehrsprachig sind, erscheinen nicht. Bettet ein Feld Inhalte
+aus mehreren Bereichen ein, entscheidet der Bereich des jeweiligen Inhalts.
+
 Für ostasiatische Zielsprachen kann der Import Satzzeichen und Leerzeichen in ihre
 ideografischen Formen umwandeln. Abschnitte in arabischer oder hebräischer Schrift
 innerhalb eines Textes lassen sich für die richtige Darstellung markieren

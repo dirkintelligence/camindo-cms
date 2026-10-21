@@ -408,8 +408,8 @@ class RecordExport {
             $fields[$name] = $colDef;
         }
         foreach ($links as $name => $colDef) {
-            foreach ($this->record->linkTargetFields($colDef) as $sub => $targetDef) {
-                if ((string)($targetDef['type'] ?? '') === 'file' || !$this->cms->isMultilingualField($targetDef)) continue;
+            foreach ($this->record->linkTargetFields($colDef, multilingualOnly: true) as $sub => $targetDef) {
+                if ((string)($targetDef['type'] ?? '') === 'file') continue;
                 $targetDef['link'] = $name;
                 $targetDef['sub'] = $sub;
                 $targetDef['label'] = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name))

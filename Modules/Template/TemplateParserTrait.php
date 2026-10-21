@@ -870,6 +870,8 @@ trait TemplateParserTrait
             }
         }
 
+        $this->depthWithoutParentNote($cmd, $errors);
+
         // oneof: at least one of these parameters must be given
         if (!empty($def['oneof'])) {
             $list  = array_map('trim', explode(',', (string)$def['oneof']));
@@ -884,6 +886,39 @@ trait TemplateParserTrait
                 $errors[] = 'Line ' . ($cmd['baseLine'] + 1) . ": Command '$upper' requires at "
                     . 'least one of these parameters: ' . implode(', ', $list) . '.';
             }
+        }
+    }
+
+    /**
+     * Note for filter[depth] without filter[parent_id]: depth is not the indentation of a
+     * record but the number of levels below parent_id (Cms::filter()) - on its own it has
+     * no effect. Only static keys count; a dynamic filter key or request= with
+     * filter[parent_id] can supply the parent at runtime, then there is no note.
+     * Cms::filter() checks the values at runtime anyway.
+     */
+    private function depthWithoutParentNote(array $cmd, array &$errors): void
+    {
+        if (empty($cmd['def']['params']['filter'])) return;
+        $depthLine = null;
+        foreach ($cmd['params'] as $p) {
+            $key = $p['staticKey'] ?? null;
+            if ($key === 'request') {
+                if ($p['value'] === null || !empty($p['value']['php'])
+                    || str_contains($p['value']['text'], 'parent_id')) return;
+                continue;
+            }
+            if ($key !== 'filter') continue;
+            $sub = $p['subs'][0] ?? null;
+            if ($sub === null || !empty($sub['empty'])) continue;
+            if (!empty($sub['php'])) return;   // dynamic field name
+            $name = $sub['quote'] !== null ? substr($sub['text'], 1, -1) : $sub['text'];
+            if ($name === 'parent_id') return;
+            if ($name === 'depth') $depthLine ??= $cmd['baseLine'] + $p['key']['line'] + 1;
+        }
+        if ($depthLine !== null) {
+            $errors[] = "Line $depthLine: Note: filter[depth] only works together with filter[parent_id]"
+                . " (number of levels below it, not the indentation) - without it the filter is ignored."
+                . " Top level: filter[parent_id]=null filter[depth]=1.";
         }
     }
 

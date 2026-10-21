@@ -2093,6 +2093,41 @@ trait VirtualFieldsTrait {
     }
 
     /**
+     * Carry the working state of the working copies of an area over to a renamed
+     * field (Field::hookOnSaved()): their `record_cache` rows are the working state and
+     * keyed by field name - under the old name the input would be lost on saving.
+     *
+     * @return int  number of working copies changed
+     */
+    public function renameInWorkingCopies(int $areaId, string $from, string $to): int
+    {
+        if ($from === '' || $to === '' || $from === $to) return 0;
+        $this->db->pushResult();
+        try {
+            $this->db->query("SELECT `record_id` FROM `record` WHERE `area_id` = ? AND `tmp` = 1", 'i', [$areaId]);
+            $count = 0;
+            foreach (array_map('intval', $this->db->fetchAll()) as $tmpId) {
+                $changed = false;
+                foreach ($this->_loadRecordCacheRows($tmpId) as $lang => $cache) {
+                    if (!array_key_exists($from, $cache)) continue;
+                    $cache[$to] = $cache[$from];
+                    unset($cache[$from]);
+                    $this->db->query(
+                        "REPLACE INTO `record_cache` (`record_id`, `language_id`, `cache`) VALUES (?, ?, ?)",
+                        'iis', [$tmpId, (int)$lang, (string)json_encode($cache, JSON_UNESCAPED_UNICODE)]
+                    );
+                    $changed = true;
+                }
+                if ($changed) $count++;
+            }
+            return $count;
+        }
+        finally {
+            $this->db->popResult();
+        }
+    }
+
+    /**
      * Carry over the working state of the working copies after switching a file field between
      * single- and multilingual (Field::migrateFileLanguage()) - directly in the
      * `record_cache` rows, independent of the schema:

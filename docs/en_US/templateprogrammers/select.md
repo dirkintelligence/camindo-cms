@@ -150,7 +150,15 @@ filter[relation_any]=42                  any link field points to 42
 filter[topics.title]="Iceland"           field of the linked record
 filter[tags]=a filter[tags]=b            two values, OR (see filter_mode)
 filter[parent_id]=17 filter[depth]=1     direct children of 17
+filter[parent_id]=null filter[depth]=1   top level (records without a parent record)
 ```
+
+`filter[depth]` is ***not a filter on a record’s indentation***; it states how many levels
+below `filter[parent_id]` are searched: `1` = direct children only, `2` = down to the
+grandchildren, omitted = all descendants. Without `filter[parent_id]` it has no effect (a note when saving the template, or with `debug=true`);
+`filter[depth]=0` returns no records. The value under “Indent levels” in the record info
+(`0` = top level), by contrast, is absolute – you find the top level with
+`filter[parent_id]=null filter[depth]=1`.
 
 Text fields are compared and sorted according to the ***rules of the language*** in which
 you search: upper and lower case and accents do not matter, `ß` equals `ss`; in German, in
@@ -370,7 +378,9 @@ Include pre-dated records (`online_at` not yet reached) – for example a previe
 
 ### `debug`
 
-Output the SQL and bind values of the query (for development only):
+Output the SQL and bind values of the query (for development only). Above them, ***dropped
+filters*** are listed with the reason – for example an unknown field name or `filter[depth]`
+without `filter[parent_id]`:
 
 ```cms
 (CMS:SELECT list filter[area]=articles debug=true)

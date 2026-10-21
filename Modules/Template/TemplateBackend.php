@@ -682,9 +682,6 @@ class TemplateBackend {
         // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
 
-        // Container header
-        echo $this->backend->template('container_header');
-
         // Load data
         if (!is_numeric($this->id)) {
             // Referenz "[bereich.]name" -> template_id
@@ -871,9 +868,6 @@ class TemplateBackend {
 
         // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_info');
-
-        // Container header
-        echo $this->backend->template('container_header');
 
         // Load data
         if (!$templateData = $this->template->load($this->id)) {

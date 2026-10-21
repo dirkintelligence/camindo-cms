@@ -1272,6 +1272,19 @@ class Field extends Dataset {
 
                 // Check whether the entry in `fieldname` can be deleted
                 $this->cleanupFieldname($previousName);
+
+                // record_cache is keyed by field name: discard the live rows of the
+                // area (rebuilt on the next access), rename the key in the working
+                // states of the working copies
+                $this->db->pushResult();
+                try {
+                    $this->container->get(RecordCache::class)->clear(0, [$areaId]);
+                    $this->recordDataset()->renameInWorkingCopies($areaId, $previousName, $name);
+                }
+                finally {
+                    $this->db->popResult();
+                }
+                $this->cms->clearFieldCaches();
             }
         }
 

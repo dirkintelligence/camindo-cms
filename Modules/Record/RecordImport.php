@@ -926,7 +926,7 @@ class RecordImport {
                 [$linkName, $sub] = explode('.', $name, 2);
                 $linkDef = $schema[$linkName] ?? null;
                 $colDef = ($linkDef !== null && in_array((string)($linkDef['type'] ?? ''), $this->cms->dependentTypes, true))
-                    ? ($this->record->linkTargetFields($linkDef)[$sub] ?? null) : null;
+                    ? ($this->record->linkTargetFields($linkDef, multilingualOnly: true)[$sub] ?? null) : null;
             }
             if ($colDef === null || !$this->cms->isMultilingualField($colDef)) {
                 $result['warnings'][] = str_replace('{field}', $name, $this->cms->snippet('record.warning_import_docx_field'));
@@ -4020,12 +4020,16 @@ class RecordImport {
             foreach ((array)($record['links'] ?? []) as $linkName => $dests) {
                 $colDef = $schema[$linkName] ?? null;
                 if ($colDef === null || !in_array((string)($colDef['type'] ?? ''), $this->cms->dependentTypes, true)) continue;
-                $targetFields = $this->record->linkTargetFields($colDef);
+                $targetAreaIds = $this->record->linkTargetAreaIds($colDef);
                 $entries = [];
                 foreach ($dests as $destId => $subs) {
                     $entry = ['id' => (int)$destId, 'area_id' => 0, 'values' => [], 'files' => [], 'stored' => [], 'prehashed' => []];
+                    // the fields of the content's own area decide (several target areas
+                    // may carry a field of the same name, monolingual in one of them)
+                    $destAreaId = $this->_recordAreaId((int)$destId);
+                    $destSchema = in_array($destAreaId, $targetAreaIds, true) ? $this->_schemaOf($destAreaId) : [];
                     foreach ($subs as $sub => $text) {
-                        $targetDef = $targetFields[$sub] ?? null;
+                        $targetDef = $destSchema[$sub] ?? null;
                         if ($targetDef === null || !$this->cms->isMultilingualField($targetDef)) continue;
                         $entry['values'][$sub] = [$languageId => $this->docxText($text, $options)];
                     }
@@ -4207,6 +4211,18 @@ class RecordImport {
     {
         if ($areaId < 1) return [];
         return $this->schemaMemo[$areaId] ??= $this->record->virtualSchema($areaId, false);
+    }
+
+    /**
+     * Area of a record (0 if unknown).
+     */
+    private function _recordAreaId(int $recordId): int
+    {
+        $this->db->pushResult();
+        $this->db->query("SELECT `area_id` FROM `record` WHERE `record_id` = ?", 'i', [$recordId]);
+        $row = $this->db->fetch();
+        $this->db->popResult();
+        return (int)($row['area_id'] ?? 0);
     }
 
     private function _areaOf(int $areaId): ?array
