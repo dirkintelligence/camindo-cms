@@ -39,7 +39,7 @@
         },
 
         /**
-         * Focus the visible layer: its first heading, otherwise the layer itself.
+         * Focus the visible layer: its first heading (h1-h3), otherwise the layer itself.
          * The element only receives tabindex="-1" (reachable by script, not in the tab order).
          * @param {jQuery} [$layer]  default: the visible topmost layer
          */
@@ -51,7 +51,8 @@
             }
             // cLoadContent() has already focused the first input field: keep it
             if ($layer[0].contains(document.activeElement)) return;
-            let $target = $layer.find('h1, h2').filter(':visible').first();
+            // h3: info pages start with headline3 (e.g. Template/template_info.php)
+            let $target = $layer.find('h1, h2, h3').filter(':visible').first();
             if (!$target.length) $target = $layer;
             if (!$target.is('[tabindex]')) $target.attr({ tabindex: '-1', 'data-c9-focus-target': '' });
             $target[0].focus({ preventScroll: true });

@@ -25,6 +25,25 @@
             this._bindBgprocRemove();
         },
 
+        /**
+         * Focus an element of freshly loaded content (Backend::script(), e.g. the login
+         * dialog). An element that is still hidden (modal fading in, slow connection)
+         * cannot take the focus - retried for about a second.
+         * @param {string} selector
+         */
+        focus(selector) {
+            let tries = 20;
+            const attempt = () => {
+                const el = document.querySelector(selector);
+                if (el && $(el).is(':visible')) {
+                    el.focus();
+                    if (document.activeElement === el) return;
+                }
+                if (--tries > 0) setTimeout(attempt, 50);
+            };
+            attempt();
+        },
+
         // --- Login form: backend language, locale and time zone ---
         //
         // The last choice is kept in localStorage (keys c9.backend_code,
@@ -1133,21 +1152,38 @@
                 // manuals and the modules the group is currently allowed to use
                 // aria-expanded on the button; after loading the focus moves to the
                 // first entry (keyboard users land in the menu, Escape: backend-a11y.js)
+                // The menu is shown only when its content has arrived - otherwise a slow
+                // connection would show the placeholder from index.php in the meantime
+                let pending = false;
                 $button.on('click', function(e) {
                     e.stopPropagation();
-                    const opening = !$menu.is(':visible');
-                    if (opening) {
-                        $menu.cLoadContent({
-                            url: 'Start/menu.php',
-                            spinner: false,
-                            callback: () => { $menu.find('a, button').first().trigger('focus'); }
-                        });
+                    if ($menu.is(':visible')) {
+                        $button.attr('aria-expanded', 'false');
+                        $menu.fadeOut(200);
+                        return;
                     }
-                    $button.attr('aria-expanded', opening ? 'true' : 'false');
-                    $menu.fadeToggle(200);
+                    if (pending) return;
+                    pending = true;
+                    $button.attr('aria-busy', 'true');
+                    $menu.cLoadContent({
+                        url: 'Start/menu.php',
+                        spinner: false,
+                        callback: () => {
+                            $button.removeAttr('aria-busy');
+                            if (!pending) return;   // closed by a click elsewhere meanwhile
+                            pending = false;
+                            $button.attr('aria-expanded', 'true');
+                            $menu.fadeIn(200);
+                            $menu.find('a, button').first().trigger('focus');
+                        }
+                    });
+                    // no callback on errors: release the button again
+                    const xhr = $menu.data('xhr');
+                    if (xhr) xhr.fail(() => { pending = false; $button.removeAttr('aria-busy'); });
                 });
                 $(document).on('click', function(e) {
                     if (!$button.is(e.target) && $button.has(e.target).length === 0) {
+                        pending = false;
                         if ($menu.is(':visible')) {
                             $menu.fadeOut(200);
                             $button.attr('aria-expanded', 'false');

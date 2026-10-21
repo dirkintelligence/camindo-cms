@@ -151,7 +151,16 @@ filter[relation_any]=42                  irgendein Verweisfeld zeigt auf 42
 filter[topics.title]="Island"            Feld des verknüpften Datensatzes
 filter[tags]=a filter[tags]=b            zwei Werte, OR (siehe filter_mode)
 filter[parent_id]=17 filter[depth]=1     direkte Kinder von 17
+filter[parent_id]=null filter[depth]=1   oberste Ebene (Datensätze ohne Elterndatensatz)
 ```
+
+`filter[depth]` ist ***kein Filter auf die Einrückung*** eines Datensatzes, sondern gibt
+an, wie viele Ebenen unterhalb von `filter[parent_id]` durchsucht werden: `1` = nur
+direkte Kinder, `2` = bis zu den Enkeln, ohne Angabe = alle Nachkommen. Ohne
+`filter[parent_id]` bleibt es wirkungslos (Hinweis beim Speichern des Templates bzw. mit `debug=true`); `filter[depth]=0` liefert keine Datensätze.
+Der Wert unter „Einzurückende Stellen“ in der Datensatzinfo (`0` = oberste Ebene) ist
+dagegen absolut – die oberste Ebene finden Sie mit `filter[parent_id]=null
+filter[depth]=1`.
 
 Textfelder werden nach den ***Regeln der Sprache*** verglichen und sortiert, in der
 gesucht wird: Groß-/Kleinschreibung und Akzente spielen keine Rolle, `ß` gleich `ss`,
@@ -379,7 +388,9 @@ Vorschau auf kommende Beiträge:
 
 ### `debug`
 
-SQL und Bind-Werte der Abfrage ausgeben (nur zur Entwicklung):
+SQL und Bind-Werte der Abfrage ausgeben (nur zur Entwicklung). Darüber stehen ***verworfene
+Filter*** mit Begründung – etwa ein unbekannter Feldname oder `filter[depth]` ohne
+`filter[parent_id]`:
 
 ```cms
 (CMS:SELECT liste filter[area]=artikel debug=true)

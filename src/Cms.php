@@ -1862,11 +1862,25 @@ class Cms {
         // Only generate the filter text if explicitly requested
         $wantFilterText = ((string)($param['filtertext'] ?? '') === 'true');  // default: 'false'
 
+        $hasDebug  = (
+               (string)($param['debug'] ?? '') === 'true'
+            || (bool)($param['debug'] ?? false) === true
+        );   // default: 'false'
+
         // 'filter', 'filterop', 'filtermode', 'src_id', 'dest_id', 'relation', 'sql'
         // --------------------
         // filter() now additionally returns the shared JOIN context.
+        $errorsBefore = $this->errors;
         $f       = $this->filter($p, $tableObj, $wantFilterText, $completedSchema);
         $joinCtx = $f['joinCtx'];
+        // debug: show the filter errors of this call (unknown fields, invalid values …),
+        // otherwise a dropped filter is only noticeable by its absence in the SQL
+        if ($hasDebug) {
+            foreach ($this->errors as $key => $val) {
+                if (isset($errorsBefore[$key]) && $errorsBefore[$key] === $val) continue;
+                echo htmlspecialchars((is_int($key) ? '' : $val['label'] . $this->snippet('colon')) . $val['text']) . "<br>";
+            }
+        }
 
         // 'skip', 'limit'
         // --------------------
@@ -1898,10 +1912,6 @@ class Cms {
 
         $hasCount  = ((string)($param['count']  ?? '') === 'true');   // default: 'false'
         $hasResult = ((string)($param['result'] ?? '') !== 'false');  // default: 'true'
-        $hasDebug  = (
-               (string)($param['debug'] ?? '') === 'true'
-            || (bool)($param['debug'] ?? false) === true
-        );   // default: 'false'
 
         $this->db->num_rows_unlimited = 0;
         $this->db->num_rows = 0;
@@ -2666,6 +2676,13 @@ class Cms {
                 'text'    => '',
                 'joinCtx' => $joinCtx,
             ];
+        }
+
+        // depth without parent_id has nothing to refer to - it is not the
+        // absolute tree level (depth column) but a modifier of parent_id
+        if ($hasParentId && isset($req['depth']) && $this->normalizeValues($req['depth'])
+            && !$this->normalizeValues($req['parent_id'] ?? [])) {
+            $this->error($this->snippet('error_filter_depth_without_parent'), 'depth');
         }
 
         // Group fields by MAIN field (see original).

@@ -924,7 +924,8 @@ trait TreeManagerTrait
     /**
      * Rebuild the tree of ONE content area (lft, rgt, depth, parent_ids).
      * Reads position + parent_id from the DB and calculates from them
-     * the complete nested set in one pass.
+     * the complete nested set in one pass. Only rows whose values differ
+     * from the stored ones are written.
      * Records marked as deleted remain in the tree and
      * therefore also receive current lft/rgt/depth values.
      *
@@ -954,18 +955,20 @@ trait TreeManagerTrait
         }
         $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
 
-        $sql = "SELECT `{$this->tableName}_id`, `parent_id` FROM `{$this->tableName}`"
+        // The previous values come along, so that only changed rows are written below
+        $sql = "SELECT `{$this->tableName}_id`, `parent_id`, `lft`, `rgt`, `depth`, `parent_ids`"
+             . " FROM `{$this->tableName}`"
              . $where
              . " ORDER BY `parent_id` ASC, `position` ASC, `{$this->tableName}_id` ASC" . $forUpdate;
         $this->db->query($sql, $bindTypes, $values);
-        
+
         $rows = $this->db->fetchAll();
         $this->db->free();
         $idField = $this->tableName . '_id';
         $tree    = [];
         $known   = [];
         foreach ($rows as $row) {
-            $known[(int)$row[$idField]] = true;
+            $known[(int)$row[$idField]] = $row;
         }
         foreach ($rows as $row) {
             $pId = (int)($row['parent_id'] ?? 0);
@@ -975,7 +978,7 @@ trait TreeManagerTrait
         }
         $counter = 1;
         $updates = [];
-        $traverse = function (int $nodeId, int $depth, array $parentIds) use (&$traverse, &$tree, &$counter, &$updates): void {
+        $traverse = function (int $nodeId, int $depth, array $parentIds) use (&$traverse, &$tree, &$counter, &$updates, &$known): void {
             $lft = $counter++;
             // For the children of this node: copy the current path and append own id
             $nextParentIds = $parentIds;
@@ -985,10 +988,26 @@ trait TreeManagerTrait
                     $traverse($childId, $depth + 1, $nextParentIds);
                 }
             }
+            $rgt = $counter++;
+            // Write only if something changed - a move only shifts the nodes
+            // between the old and the new place (and the rgt of their ancestors).
+            // parent_ids is compared decoded: MySQL returns the JSON column
+            // normalized ("[1, 2]"), MariaDB as stored.
+            $old = $known[$nodeId];
+            $oldParentIds = json_decode((string)($old['parent_ids'] ?? ''), true);
+            if (
+                (int)$old['lft'] === $lft
+                && (int)$old['rgt'] === $rgt
+                && (int)$old['depth'] === $depth
+                && is_array($oldParentIds)
+                && array_map('intval', $oldParentIds) === $parentIds
+            ) {
+                return;
+            }
             $updates[] = [
                 'id'         => $nodeId,
                 'lft'        => $lft,
-                'rgt'        => $counter++,
+                'rgt'        => $rgt,
                 'depth'      => $depth,
                 'parent_ids' => json_encode($parentIds) // Array als JSON speichern
             ];

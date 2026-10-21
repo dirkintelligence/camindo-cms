@@ -106,6 +106,11 @@ access to the CMS for this.
 3. ***Import.*** Import the translated file into the same content area – with “One record per file”, each file separately.
    The import overwrites only the fields of the target language; all other fields and languages remain unchanged.
 
+***Embedded content*** is translated along with the record: its multilingual fields appear in the field selection as
+“field › field of the content” and in the table below the fields of the record, numbered per content item. Fields that
+are not multilingual in the area of the embedded content do not appear. If a field embeds content from several areas,
+the area of each content item decides.
+
 For East Asian target languages, the import can convert punctuation and spaces into their ideographic forms. Passages
 in Arabic or Hebrew script within a text can be marked for correct display (right to left).
 

@@ -222,7 +222,20 @@ trait TemporaryTrait
             if ($tableName === 'record' && method_exists($this, '_tmpDataFromRecordCache')) {
                 $schemaVirtual = $this->virtualSchema((int)$areaId, false);
                 $langCtx = $this->languageContext((int)$areaId);
-                $this->_saveTmpData($tmpId, $this->_tmpDataFromRecordCache($id, $schemaVirtual, $langCtx));
+                $tmpData = $this->_tmpDataFromRecordCache($id, $schemaVirtual, $langCtx);
+                // Input fields based on columns of `record` (template_id, status_id,
+                // online_at …): the live cache carries them only as empty placeholders
+                // (no data_* row). They stay out of the working state - otherwise the
+                // final check-in of a save without this field (import, API) would take
+                // over the placeholder and empty the column; Dataset::save() takes their
+                // value from the row of the working copy. A single step that submits such
+                // a field adds its entry (saveTemporaryStep()). The tree columns are
+                // handled by Dataset::save() itself.
+                $treeColumns = ['parent_id', 'parent_ids', 'position', 'lft', 'rgt', 'depth'];
+                foreach (array_keys($tmpData) as $name) {
+                    if (isset($this->schema[$name]) && !in_array($name, $treeColumns, true)) unset($tmpData[$name]);
+                }
+                $this->_saveTmpData($tmpId, $tmpData);
             }
 
             // data aktualisieren
