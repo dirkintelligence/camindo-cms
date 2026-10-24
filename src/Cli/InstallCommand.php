@@ -28,8 +28,9 @@
  * the owner of the project directory is taken if it is not root, otherwise only a
  * warning appears (SecretFile). Never asked.
  *
- * Passwords come from files (--*-pass-file, e.g. /run/secrets/…) or the
- * environment variables CAMINDO_DB_PASS / CAMINDO_ADMIN_PASS, never as an argument.
+ * Passwords come from files (--*-pass-file or CAMINDO_DB_PASS_FILE / CAMINDO_ADMIN_PASS_FILE,
+ * e.g. /run/secrets/…) or the environment variables CAMINDO_DB_PASS / CAMINDO_ADMIN_PASS,
+ * never as an argument; a file wins over the variable with the value.
  * CAMINDO_DB_PASS also applies in operation (Config::ENV_SECRETS): if the password comes from
  * there, it stays out of .camindo.php, and .sqlpwd is not written. If
  * CAMINDO_KEY is set, no .camindo.key is created (Crypt then takes the variable). With
@@ -236,12 +237,17 @@ class InstallCommand extends Command {
             'user' => $this->value('db-user', 'CAMINDO_DB_USER', 'Database user', 'camindo'),
             'pass' => $this->secret('db-pass-file', 'CAMINDO_DB_PASS', 'Database password'),
         ];
-        // From the environment (and not via --db-pass-file): stays there, .camindo.php stays empty
-        $db['pass_from_env'] = !is_string($this->options['db-pass-file'] ?? null) && Config::env('CAMINDO_DB_PASS') !== null;
+        // From the environment (and not from a file): stays there, .camindo.php stays empty
+        $db['pass_from_env'] = $this->secretFile('db-pass-file', 'CAMINDO_DB_PASS') === '' && Config::env('CAMINDO_DB_PASS') !== null;
         while (true) {
             try {
-                $installer->testDatabase($db, !empty($this->options['create-db']));
+                $timezoneTables = $installer->testDatabase($db, !empty($this->options['create-db']));
                 $this->out('  database connection ok');
+                if (!$timezoneTables) {
+                    $this->out('  WARNING: the database server has no time zone tables - camindo falls back to the');
+                    $this->out('  current UTC offset (off by an hour after a daylight saving change). Load them:');
+                    $this->out('  mariadb-tzinfo-to-sql /usr/share/zoneinfo | mariadb mysql (MySQL: mysql_tzinfo_to_sql)');
+                }
                 break;
             }
             catch (\RuntimeException $e) {
@@ -326,7 +332,7 @@ class InstallCommand extends Command {
             $pass = $this->secret('admin-pass-file', 'CAMINDO_ADMIN_PASS', 'Admin password (' . $hint . ')', true);
             if (mb_strlen($pass) >= 8 && !PasswordPolicy::failed($pass, $rules)) break;
             if (!$this->interactive || Config::env('CAMINDO_ADMIN_PASS') !== null
-                || is_string($this->options['admin-pass-file'] ?? null)
+                || $this->secretFile('admin-pass-file', 'CAMINDO_ADMIN_PASS') !== ''
             ) {
                 throw new \RuntimeException('admin password: ' . $hint);
             }
@@ -367,16 +373,23 @@ class InstallCommand extends Command {
     /**
      * Password from file (--*-pass-file), environment variable or hidden input.
      */
+    /** Password file: the option, else the variable {$env}_FILE; '' = none */
+    private function secretFile(string $fileOption, string $env): string
+    {
+        if (is_string($this->options[$fileOption] ?? null)) return $this->options[$fileOption];
+        return (string)getenv($env . '_FILE');
+    }
+
     private function secret(string $fileOption, string $env, string $question, bool $twice = false): string
     {
-        $file = is_string($this->options[$fileOption] ?? null) ? $this->options[$fileOption] : '';
+        $file = $this->secretFile($fileOption, $env);
         if ($file !== '') {
             if (!is_readable($file)) throw new \RuntimeException("cannot read $file");
             return rtrim((string)file_get_contents($file), "\r\n");
         }
         $value = (string)Config::env($env);
         if ($value !== '' || !$this->interactive) {
-            if ($value === '') throw new \RuntimeException("missing --$fileOption (or $env)");
+            if ($value === '') throw new \RuntimeException("missing --$fileOption (or {$env}_FILE / $env)");
             return $value;
         }
         while (true) {

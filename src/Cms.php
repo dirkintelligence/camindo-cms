@@ -832,8 +832,7 @@ class Cms {
         if ($timezone === $this->userTZ) return true;
         $this->userTZ = $timezone;
         date_default_timezone_set($timezone);
-        // The identifier is checked against listIdentifiers() and may go literally into the query
-        $this->db->query("SET time_zone = '{$timezone}'");
+        $this->db->setTimezone($timezone);
         return true;
     }
 
@@ -3996,7 +3995,8 @@ class Cms {
 
         if ($type == 'timestampl' && !$isUtc) {
             // type 'timestampl': manual conversion to UTC (utc_now/utc_today already are)
-            $pp = 'CONVERT_TZ(?, @@session.time_zone, \'UTC\')';
+            // '+00:00' instead of 'UTC': works without the server's time zone tables
+            $pp = 'CONVERT_TZ(?, @@session.time_zone, \'+00:00\')';
         } else {
             $pp = '?';
         }

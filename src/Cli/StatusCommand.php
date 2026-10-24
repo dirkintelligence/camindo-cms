@@ -39,6 +39,7 @@ class StatusCommand extends Command {
             'block'           => $state->blockReason(),
             'database'        => null,
             'db_version'      => null,
+            'timezone_fallback' => false,
             'pending_core'    => [],
             'pending_components' => [],
             'htaccess_stale'  => $this->get(HtaccessWriter::class)->hasChanges(),
@@ -62,6 +63,7 @@ class StatusCommand extends Command {
         try {
             $db = $this->get(Database::class);
             $info['database'] = 'ok';
+            $info['timezone_fallback'] = $db->timezoneFallback;
             $systemTable = new SystemTable($db);
             $info['db_version'] = $systemTable->exists() ? $systemTable->get('core_version') : null;
             $from = $info['db_version'] ?? '9.0.0';
@@ -111,6 +113,9 @@ class StatusCommand extends Command {
                 : 'database not reachable';
         }
         else {
+            if ($info['timezone_fallback']) {
+                $info['actions'][] = 'database server has no time zone tables (fixed UTC offset, off by an hour after a daylight saving change) -> mariadb-tzinfo-to-sql /usr/share/zoneinfo | mariadb mysql (MySQL: mysql_tzinfo_to_sql)';
+            }
             if ($info['db_version'] === null) {
                 $info['actions'][] = 'no version in database (table system missing) -> php Core/cron/camindo.php upgrade';
             }

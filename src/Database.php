@@ -57,6 +57,15 @@
  * throw a mysqli_sql_exception, there are no silent false returns. Within
  * Dataset, transactional() catches this and rolls back.
  *
+ * TIME ZONE
+ * --------------------
+ * Every connection sets the session time zone to system.timezone by name. That needs
+ * the server's time zone tables (mysql.time_zone_name: the official MySQL/MariaDB Docker
+ * images load them, a distribution package often does not - mariadb-tzinfo-to-sql /
+ * mysql_tzinfo_to_sql). Without them the session gets the zone's current UTC offset
+ * instead and $timezoneFallback is true: values are off by an hour across a daylight
+ * saving change, so SystemHealth and `camindo.php status` warn.
+ *
  * DEBUGGING
  * --------------------
  * system.debugsql = true in .camindo.php logs every query with its values to
@@ -88,6 +97,8 @@ class Database {
     public int $transactionDepth = 0;
     /** true: an inner level called rollback(), the outer commit() must fail */
     private bool $rollbackOnly = false;
+    /** true: no time zone tables on the server, the session runs on a fixed UTC offset (class comment) */
+    public bool $timezoneFallback = false;
 
     // Key figures of the last query(), saved along by push/popResult
     public int $affected_rows = 0;
@@ -136,16 +147,41 @@ class Database {
                 }
             }
 
-            // Set timezone
-            $timezone = $systemConf['timezone'] ?? 'Europe/Berlin';
-            $query = "SET time_zone = '$timezone'";
-            $this->mysqli->query($query);
-            
+            $this->setTimezone((string)($systemConf['timezone'] ?? 'Europe/Berlin'));
+
         } catch (\mysqli_sql_exception $e) {
             throw new \Exception("Database connection failed: " . $e->getMessage());
         }
 
         $this->debug = !empty($config->get('system.debugsql')) && !empty($config->get('system.development_version'));
+    }
+
+
+    /**
+     * Session time zone by name, without time zone tables the zone's current UTC offset
+     * (class comment, TIME ZONE). Also used by Cms::setUserTZ().
+     *
+     * @param string $timezone  PHP identifier, e.g. 'Europe/Berlin'
+     */
+    public function setTimezone(string $timezone): void
+    {
+        if (!$this->timezoneFallback) {
+            try {
+                $this->mysqli->query("SET time_zone = '" . $this->mysqli->real_escape_string($timezone) . "'");
+                return;
+            }
+            catch (\mysqli_sql_exception $e) {
+                if ($e->getCode() !== 1298) throw $e;   // ER_UNKNOWN_TIME_ZONE
+            }
+        }
+        try {
+            $offset = (new \DateTimeImmutable('now', new \DateTimeZone($timezone)))->format('P');
+        }
+        catch (\Exception $e) {
+            throw new \mysqli_sql_exception("Unknown or incorrect time zone: '$timezone'", 1298);
+        }
+        $this->mysqli->query("SET time_zone = '$offset'");
+        $this->timezoneFallback = true;
     }
 
 

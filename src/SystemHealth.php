@@ -29,6 +29,8 @@
  *                   enabled (note: expired files remain)
  *     disk          free space under var/ (DISK_WARN_BYTES / DISK_DANGER_BYTES)
  *     writable      var/tmp, var/log and the media directory are writable
+ *     timezone      the database server has no time zone tables: the session runs on a
+ *                   fixed UTC offset (Database::$timezoneFallback)
  *     mail          email.noreply is missing, but two-factor sign-in needs it
  *     development   system.development_version is enabled
  *     https         admin.cookie_secure off: the session cookie also travels over http
@@ -90,7 +92,7 @@ class SystemHealth {
         $warnings = [];
         foreach ([
             'cron', 'tmp', 'maintenance', 'backup', 'scheduler', 'logcleanup', 'cachecleanup', 'disk',
-            'writable', 'keyenv', 'mail', 'development', 'https', 'backenddomain', 'securitytxt', 'audit', 'updates',
+            'writable', 'timezone', 'keyenv', 'mail', 'development', 'https', 'backenddomain', 'securitytxt', 'audit', 'updates',
         ] as $check) {
             try {
                 $warning = $this->{'check' . ucfirst($check)}();
@@ -255,6 +257,13 @@ class SystemHealth {
         }
         if (!$failed) return null;
         return $this->warning('danger', 'health_not_writable', ['dirs' => implode(', ', $failed)]);
+    }
+
+    /** No time zone tables on the database server (Database, class comment TIME ZONE) */
+    private function checkTimezone(): ?array
+    {
+        if (!$this->db->timezoneFallback) return null;
+        return $this->warning('warning', 'health_timezone_tables', ['zone' => (string)$this->config->get('system.timezone')]);
     }
 
     /** CAMINDO_KEY does not contain the current key (not updated after `key rotate`) */

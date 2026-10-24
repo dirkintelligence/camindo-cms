@@ -58,6 +58,17 @@ Versionen `utf8mb4_unicode_ci`. Die Installation passt die Tabellen selbst an de
 Server an; einen Index für die Suche in Listenfeldern, den nur MySQL kennt, lässt sie unter
 MariaDB weg.
 
+camindo CMS braucht die ***Zeitzonentabellen*** des Datenbankservers. Die offiziellen
+Docker-Images von MySQL und MariaDB bringen sie mit, Pakete der Linux-Distributionen oft
+nicht. Fehlen sie, warnen Installation und `php Core/cron/camindo.php status`; laden Sie
+sie dann einmalig als Datenbank-Administrator:
+
+```bash
+mariadb-tzinfo-to-sql /usr/share/zoneinfo | mariadb -u root -p mysql
+```
+
+Unter MySQL heißt das Programm `mysql_tzinfo_to_sql`, der Client `mysql`.
+
 ## Schritt 2 – Dateien holen
 
 Wechseln Sie in das Verzeichnis, in dem das CMS installiert werden soll (hier

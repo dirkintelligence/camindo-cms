@@ -794,6 +794,7 @@ erscheint er nicht.
 | Frontend-Cache wird nicht aufgeräumt | Templates nutzen den Ausgabe-Cache, aber es gibt keine eingeschaltete Aufgabe „Frontend-Cache aufräumen“ |
 | Wenig Speicherplatz | Unter 2 GB frei für `var/` (unter 512 MB: Alarm) |
 | Nicht beschreibbar | `var/tmp`, `var/log` oder das Medienverzeichnis |
+| Zeitzonentabellen fehlen | Dem Datenbankserver fehlen die Zeitzonentabellen; camindo CMS rechnet mit dem aktuellen UTC-Versatz der eingestellten Zeitzone, nach einer Zeitumstellung liegen Zeitangaben eine Stunde daneben. Abhilfe siehe [Kapitel 1](./01-quickstart-installation.md#schritt-1--datenbank-anlegen) |
 | E-Mail fehlt | Zwei-Faktor-Anmeldung ist an, aber keine Absendeadresse eingerichtet |
 | Entwicklungsmodus | `system.development_version` ist eingeschaltet |
 | Cookie ohne HTTPS | `admin.cookie_secure` ist `false` |

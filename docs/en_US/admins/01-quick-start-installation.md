@@ -58,6 +58,17 @@ older versions, it is `utf8mb4_unicode_ci`. The installation adjusts the tables 
 server itself; an index for searching list fields that only MySQL supports is left out on
 MariaDB.
 
+camindo CMS needs the ***time zone tables*** of the database server. The official Docker
+images of MySQL and MariaDB include them, packages of Linux distributions often do not.
+If they are missing, the installation and `php Core/cron/camindo.php status` warn; load
+them once as the database administrator:
+
+```bash
+mariadb-tzinfo-to-sql /usr/share/zoneinfo | mariadb -u root -p mysql
+```
+
+On MySQL, the program is called `mysql_tzinfo_to_sql` and the client `mysql`.
+
 ## Step 2 – Get the files
 
 Change to the directory where the CMS is to be installed (here

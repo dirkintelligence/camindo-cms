@@ -562,6 +562,7 @@ Superusers see a block ***“Operational notices”*** beneath the module tiles 
 | Frontend cache is not cleaned up | Templates use the output cache, but there is no switched-on task “Clean up frontend cache” |
 | Little free storage | Less than 2 GB free for `var/` (less than 512 MB: alarm) |
 | Not writable | `var/tmp`, `var/log` or the media directory |
+| Time zone tables missing | The database server has no time zone tables; camindo CMS uses the current UTC offset of the configured time zone, so after a daylight saving change, times are off by one hour. For the fix, see [chapter 1](./01-quick-start-installation.md#step-1--create-a-database) |
 | Email missing | two-factor sign-in is on, but no sender address is set up |
 | Development mode | `system.development_version` is switched on |
 | Cookie without HTTPS | `admin.cookie_secure` is `false` |

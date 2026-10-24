@@ -234,12 +234,14 @@ class Installer {
 
     /**
      * Check the connection with the answers; if the database is missing, it is created with
-     * $createDb angelegt.
+     * $createDb.
      *
      * @param array $db  host, port, name, user, pass
+     * @return bool      the server has time zone tables (otherwise Database falls back to
+     *                   a fixed UTC offset - Database, class comment TIME ZONE)
      * @throws \RuntimeException  with the mysqli error
      */
-    public function testDatabase(array $db, bool $createDb): void
+    public function testDatabase(array $db, bool $createDb): bool
     {
         mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
         try {
@@ -264,6 +266,9 @@ class Installer {
                 $this->log("database {$db['name']} created");
             }
             $mysqli->select_db($db['name']);
+            // NULL without time zone tables; needs no rights on the mysql schema
+            $row = $mysqli->query("SELECT CONVERT_TZ('2000-01-01 00:00:00', '+00:00', 'Europe/Berlin')")->fetch_row();
+            return ($row[0] ?? null) !== null;
         }
         catch (\mysqli_sql_exception $e) {
             throw new \RuntimeException('database: ' . $e->getMessage());
