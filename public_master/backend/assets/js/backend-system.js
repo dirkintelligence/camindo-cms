@@ -16,20 +16,34 @@
 
         // --- Spinner ---
 
+        /**
+         * Shows the overlay with the spinner (replaces one already shown).
+         * @returns {jQuery}  the overlay - for removeSpinner($spinner)
+         */
         addSpinner() {
             this.removeSpinner();
             // role="status": screen readers announce the loading (WCAG 4.1.3)
             const label = String((window.cConfig && window.cConfig.label_loading) || '')
                 .replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
-            $('body').append(
+            const $spinner = $(
                 `<div class="c9-indicator" role="status"><div class="c9-indicator-inc">` +
                 `<img src="${SPINNER_SVG}" class="c9-spinner" alt="">` +
                 `<span class="visually-hidden">${label}</span></div></div>`
-            );
-            $('.c9-indicator-inc').css('opacity', 0).animate({ opacity: 0.75 });
+            ).appendTo('body');
+            $spinner.find('.c9-indicator-inc').css('opacity', 0).animate({ opacity: 0.75 });
+            return $spinner;
         },
 
-        removeSpinner() {
+        /**
+         * Removes the overlay.
+         * @param {jQuery} [$spinner]  only this overlay (return value of addSpinner()) -
+         *                             a newer one of another request stays; without: all
+         */
+        removeSpinner($spinner) {
+            if ($spinner && $spinner.jquery && $spinner.hasClass('c9-indicator')) {
+                $spinner.remove();
+                return;
+            }
             $('.c9-indicator').remove();
         },
 

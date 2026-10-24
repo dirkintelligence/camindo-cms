@@ -101,7 +101,7 @@
          * Ajax call without target element: response as text
          */
         _request(url, done) {
-            cApp.system.addSpinner();
+            const $spinner = cApp.system.addSpinner();
             $.ajax({
                 // POST: insert/up/down/delete create, reorder and detach
                 // (developer docs, chapter 14 (Security: web)). The parameters stay in the query string, the body
@@ -116,7 +116,7 @@
                 // the CSRF token has to be added by hand here (developer docs, chapter 14 (Security: web))
                 headers: cApp.system.csrfHeaders(),
                 success: (response) => {
-                    cApp.system.removeSpinner();
+                    cApp.system.removeSpinner($spinner);
                     if (response.trim() === '##accessdenied##') {
                         cApp.layers.login();
                         return;
@@ -124,7 +124,7 @@
                     done(response);
                 },
                 error: (jqXHR, textStatus) => {
-                    cApp.system.removeSpinner();
+                    cApp.system.removeSpinner($spinner);
                     if (jqXHR.status === 0) return;
                     alert(window.cConfig.message_connection_error + ' | ' + jqXHR.status + ' | ' + textStatus);
                 }
