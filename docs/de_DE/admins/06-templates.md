@@ -42,8 +42,14 @@ Pflichtparameter sind mit * markiert. „Einfügen“ setzt den Befehl an der Cu
 den Code ein – Parameter ohne Wert bleiben weg, ab drei Parametern steht jeder in einer
 eigenen Zeile. Gespeichert wird erst mit dem Template.
 
-Ein Template lässt sich in einen anderen Template-Bereich **verschieben**; seine
-Zuweisungen bleiben erhalten.
+Ein Template lässt sich in einen anderen Template-Bereich ***verschieben*** – über die
+Schaltfläche „Verschieben“ der Template-Ansicht oder das Kontextmenü der Template-Liste.
+Zur Auswahl stehen alle Template-Bereiche, in die Sie schreiben dürfen – bei mehreren
+Instanzen nach Instanz gruppiert: der Instanzname als nicht wählbarer Eintrag, darunter
+ihre Template-Bereiche. Die Zuweisungen bleiben erhalten, die Datei
+zieht in das Verzeichnis des Zielbereichs um. Gibt es den Namen im Zielbereich schon,
+wird nicht verschoben. Kommt der Name danach in mehreren Bereichen vor, müssen Verweise
+anderer Templates den Bereich mit nennen (`bereich.name`).
 
 ## Templates den Inhaltsbereichen zuweisen
 

@@ -40,7 +40,13 @@ places the command at the cursor position in the code – parameters without a v
 out, from three parameters on each stands on its own line. It is only stored when you save the
 template.
 
-A template can be ***moved*** to another template area; its assignments are retained.
+A template can be ***moved*** to another template area – with the “Move” button of the
+template view or the context menu of the template list. All template areas you may write to
+are offered – with several instances grouped by instance: the instance name as a
+non-selectable entry, its template areas below it. The
+assignments are retained, the file moves to the directory of the target area. If the name
+already exists in the target area, the template is not moved. If the name then occurs in
+several areas, references from other templates have to name the area as well (`area.name`).
 
 ## Assigning templates to content areas
 

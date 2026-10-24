@@ -520,7 +520,7 @@ class TemplateBackend {
             $rowWritable = $access->templateWrite((int)$row['area_id']);
             $tableRow = strtr($tplTableRow, [
                 '{data_id}' => $row['template_id'],
-                '{ctx_hide}' => $rowWritable ? '' : ' data-ctx-hide="edit,copy,delete"',
+                '{ctx_hide}' => $rowWritable ? '' : ' data-ctx-hide="edit,copy,move,delete"',
                 '{checkbox_column}' => $checkboxColumn,
                 '{data_name}' => $row['name'],
                 '{data_label}' => $row['label'],
@@ -1219,9 +1219,8 @@ class TemplateBackend {
             $this->_editErrors();
         }
 
-        // Choose the target area: all template areas except its own
-        $areaOptions = $this->_areaOptions();
-        unset($areaOptions[(string)$this->areaId]);
+        // Choose the target area: all writable template areas except its own, by instance
+        $areaOptions = $this->_moveTargetOptions($this->areaId);
 
         echo '<form action="Template/template_move.php" method="post">';
         $this->backend->formInit('template.template_move_form');
@@ -1849,6 +1848,46 @@ class TemplateBackend {
             $fullPath = str_repeat('&nbsp; ', (int)$areaData['depth'] * 2) . $this->cms->textOrSnippet($areaData['label']);
             $areaId = (string)$areaData['area_id'];
             $areaOptions[$areaId] = $fullPath;
+        }
+        return $areaOptions;
+    }
+
+    /**
+     * Target areas for moving (template_move.php): with several instances each
+     * instance is a non-selectable entry ('disabled' key, Backend::formField()) with
+     * its writable template areas below it - as in the tree of the template list.
+     * Instances without a possible target area are left out.
+     *
+     * @param int $excludeAreaId  area of the template itself (no target)
+     * @return array  area_id => label
+     */
+    private function _moveTargetOptions(int $excludeAreaId): array
+    {
+        $multiple = $this->instanceCache->hasMultipleInstances();
+        $byInstance = [];
+        $this->db->query("SELECT `area_id`, `instance_id`, `depth`, `label` FROM `area`"
+            ." WHERE `type` = 'template' AND `deleted`=0 AND `area_id` != ?" . $this->backend->areaAccessSql(writable:true)
+            ." ORDER BY `lft` ASC", 'i', [$excludeAreaId]);
+        $rows = $this->db->fetchAll();
+        // Depth relative to the uppermost area of the instance (folders are not listed)
+        $minDepth = [];
+        foreach ($rows as $row) {
+            $instanceId = (int)$row['instance_id'];
+            $minDepth[$instanceId] = min($minDepth[$instanceId] ?? PHP_INT_MAX, (int)$row['depth']);
+        }
+        foreach ($rows as $row) {
+            $instanceId = (int)$row['instance_id'];
+            $indent = (int)$row['depth'] - $minDepth[$instanceId] + ($multiple ? 1 : 0);
+            $byInstance[$instanceId][(string)$row['area_id']]
+                = str_repeat('&nbsp; ', $indent * 2) . $this->cms->textOrSnippet($row['label']);
+        }
+        if (!$multiple) return $byInstance ? array_replace(...array_values($byInstance)) : [];
+
+        $areaOptions = [];
+        foreach ($this->instanceCache->instanceLabels() as $instanceId => $label) {
+            if (empty($byInstance[(int)$instanceId])) continue;
+            $areaOptions['disabled_' . $instanceId] = $this->cms->textOrSnippet($label);
+            $areaOptions += $byInstance[(int)$instanceId];
         }
         return $areaOptions;
     }
