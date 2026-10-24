@@ -3204,9 +3204,10 @@ abstract class Dataset {
      * was processed completely.
      *
      * parse() succeeds as soon as the pattern matches a prefix of the input;
-     * a remainder such as a time or "extra" would go unnoticed. The position
-     * filled by reference counts UTF-16 units (not bytes), so the comparison is made
-     * against the UTF-16 length - otherwise inputs such as "24. März 2026" would fail.
+     * a remainder such as a time or "extra" would go unnoticed. The unit of the
+     * position filled by reference depends on the PHP version (intlParseOffsetInBytes()),
+     * so the comparison is made against the matching length - otherwise inputs such as
+     * "24. März 2026" would fail.
      *
      * @return int|null  Unix timestamp, or null (no match or remainder not read)
      */
@@ -3215,8 +3216,29 @@ abstract class Dataset {
         $position = 0;
         $ts = $fmt->parse($value, $position);
         if ($ts === false) return null;
-        $utf16Length = strlen(mb_convert_encoding($value, 'UTF-16BE', 'UTF-8')) / 2;
-        return $position === $utf16Length ? (int)$ts : null;
+        $length = self::intlParseOffsetInBytes()
+            ? strlen($value)
+            : strlen(mb_convert_encoding($value, 'UTF-16BE', 'UTF-8')) / 2;
+        return $position === $length ? (int)$ts : null;
+    }
+
+    /**
+     * Whether IntlDateFormatter::parse() reports its position in UTF-8 bytes.
+     *
+     * Older PHP versions (8.3) report UTF-16 units, newer ones (8.4.27, 8.5.12 and
+     * later) bytes. Determined once with a non-ASCII probe instead of a version list.
+     */
+    private static function intlParseOffsetInBytes(): bool
+    {
+        static $inBytes = null;
+        if ($inBytes === null) {
+            $probe = new \IntlDateFormatter('en_US', \IntlDateFormatter::NONE, \IntlDateFormatter::NONE,
+                'UTC', \IntlDateFormatter::GREGORIAN, "'ä'y");
+            $position = 0;
+            $probe->parse('ä2026', $position);
+            $inBytes = $position === strlen('ä2026');
+        }
+        return $inBytes;
     }
 
     /**
@@ -3305,9 +3327,13 @@ abstract class Dataset {
                     $flexiblePattern = str_replace([', ', '، '], ' ', $originalPattern);
                     // and without the era (ar_SA: "d/M/y G" - when typing, the "م" is left out)
                     $noEraPattern = trim(preg_replace(['/\bG+\b/', '/\s+/'], ['', ' '], $flexiblePattern) ?? $flexiblePattern);
+                    // and conversely with the era, if newer ICU versions dropped it from the
+                    // pattern (ar_SA LONG: "d MMMM y G" up to ICU 7x, then "d MMMM y")
+                    $eraPatterns = $timeStyle === \IntlDateFormatter::NONE && $noEraPattern === $flexiblePattern
+                        ? [$noEraPattern . ' G'] : [];
                     // Test all patterns to be robust against missing punctuation.
                     // array_unique prevents unnecessary duplicate runs if nothing changes.
-                    $patterns = array_unique([$originalPattern, $flexiblePattern, $noEraPattern]);
+                    $patterns = array_unique([$originalPattern, $flexiblePattern, $noEraPattern, ...$eraPatterns]);
                     foreach ($patterns as $pattern) {
                         $fmt->setPattern($pattern);
                         // Only successful if the entire string was processed: parse() is satisfied with a
