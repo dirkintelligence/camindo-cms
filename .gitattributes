@@ -1,3 +1,4 @@
 # Nicht in die Composer-Pakete (dist-Zip von GitHub/Packagist)
 /.github         export-ignore
 /.gitattributes  export-ignore
+/.oss-scanner   export-ignore
