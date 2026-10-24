@@ -87,7 +87,8 @@ Back up `var/area_blueprints/` together with the other project data
 | Note | appears above the record list – keep it as short as possible. A snippet reference (`#custom.key`) appears in the language of the user, as with the label |
 | Main field | field that represents the record in lists and relations (usually title or name) – selectable only after the fields have been created |
 | Default sort order, sort direction | order of the records in the record list and default for templates |
-| Multilingual input | “All languages on one page” or “One tab per language” – how the input mask displays multilingual fields |
+| Multilingual input | “All languages on one page” or “One tab per language” – how the input mask displays multilingual fields. A new area starts with “One tab per language” |
+| Records per page | number of records the record list shows on one page; you page between the pages. `0` shows all records on one page. New areas start with the value of `admin.skiplist_default` (see [chapter 12](./12-operation.md)); an empty field uses this value as well |
 | Slug prefix | optional first part of the address of all records of the area, per language (see [below](#slug-prefix)) |
 | Deletion policy | rule according to which records and audit logs of this area are handled; cf. [chapter 15](./15-privacy.md#deleting-according-to-deletion-policy). The policy applies to every deletion – in the back end, via the API and with CMS:USER_DELETE in the frontend. The standard policy for the area type is preselected (“Delete record”, “Delete profile”, “Delete user-generated content”) |
 | Dependent area | the records belong exclusively to one record each of another area (see [Hard-linked and embedded content](./05-input-fields.md#hard-linked-and-embedded-content)). The area then does not appear in the area list of the module “Content” |

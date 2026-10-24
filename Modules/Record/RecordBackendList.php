@@ -287,11 +287,15 @@ class RecordBackendList extends RecordBackend {
             $_REQUEST['order'] = 'ASC';
         }
 
+        // records per page: that of the area (details.page_size, 0 = all),
+        // otherwise admin.skiplist_default
+        $pageSize = $this->_pageSize();
+
         // SELECT
         // --------------------
         $f = $this->cms->select([
             'request' => 'all',
-            'limit' => $this->cms->list_rows,
+            'limit' => $pageSize,
             'count' => 'true',
             'filtertext' => 'true',
             'sql' => $sql,
@@ -301,7 +305,7 @@ class RecordBackendList extends RecordBackend {
         echo $this->filterText($f);
 
         // pagination top
-        echo $this->backend->paginationTop();
+        echo $this->backend->paginationTop('', $pageSize);
         // total count right here - the rows below stack their own queries
         $count = (int)$this->db->num_rows_unlimited;
 
@@ -502,7 +506,7 @@ class RecordBackendList extends RecordBackend {
         ]);
 
         // Pagination bottom
-        echo $this->backend->paginationBottom();
+        echo $this->backend->paginationBottom($pageSize);
 
         // positional - list() splits it with [$destId, $count, $isLinked]
         return [$destId ?? null, $count, $isLinked];

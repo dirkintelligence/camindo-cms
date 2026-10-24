@@ -441,7 +441,7 @@ Die Datei enthält Zugangsdaten: Rechte `0600`, niemals in eine Versionsverwaltu
 | `admin.cookie_secure`,<br>`admin.cookie_samesite` | `true` / `'Lax'` | Sitzungs-Cookie nur über HTTPS senden. `false` nur für einen lokalen Test ohne SSL ([Schnellstart](./01-quickstart-installation.md#lokal-ohne-https-testen)); SameSite-Attribut des Cookies |
 | `admin.password_retention_days` | `0` | Gültigkeit eines Passworts in Tagen; danach muss der Benutzer bei der Anmeldung ein neues, anderes setzen (0 = unbegrenzt). Ein von einem anderen Benutzer gesetztes Passwort muss immer bei der ersten Anmeldung geändert werden |
 | `admin.allowed_origins` | `[]` | weitere Adressen, von denen aus Formulare an das Backend geschickt werden dürfen, z. B. `['https://cms.example.com']` – nur nötig, wenn ein Proxy den Hostnamen umschreibt (siehe [Sicherheits-Header](#sicherheits-header)) |
-| `admin.skiplist_default` | `20` | Datensätze je Seite in Listen |
+| `admin.skiplist_default` | `20` | Datensätze je Seite in Listen; Vorgabe für die Einstellung „Datensätze je Seite“ eines Inhaltsbereichs |
 | `admin.list_max_datasets` | `200` | maximale Einträge in Auswahllisten |
 | `admin.max_include_depth` | `20` | maximale Verschachtelungstiefe von Templates (`CMS:INCLUDE`, `CMS:SELECT`) |
 | `admin.trash_retention_days` | `7` | Aufbewahrungsfrist im Papierkorb |

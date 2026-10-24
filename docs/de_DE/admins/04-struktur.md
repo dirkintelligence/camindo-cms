@@ -91,7 +91,8 @@ Sichern Sie `var/area_blueprints/` zusammen mit den übrigen Projektdaten
 | Hinweis | erscheint über der Datensatzliste – möglichst kurz halten. Ein Snippet-Verweis (`#custom.schluessel`) erscheint wie bei der Bezeichnung in der Sprache des Benutzers |
 | Haupt-Feld | Feld, das den Datensatz in Listen und Verknüpfungen vertritt (meist Titel oder Name) – erst nach dem Anlegen der Felder wählbar |
 | Standard-Sortierung, Sortier-Richtung | Reihenfolge der Datensätze in der Datensatzliste und Vorgabe für Templates |
-| Mehrsprachige Eingabe | „Alle Sprachen auf einer Seite“ oder „Ein Reiter je Sprache“ – wie die Eingabemaske mehrsprachige Felder zeigt |
+| Mehrsprachige Eingabe | „Alle Sprachen auf einer Seite“ oder „Ein Reiter je Sprache“ – wie die Eingabemaske mehrsprachige Felder zeigt. Ein neuer Bereich startet mit „Ein Reiter je Sprache“ |
+| Datensätze je Seite | Anzahl der Datensätze, die die Datensatzliste auf einer Seite zeigt; zwischen den Seiten wird geblättert. `0` zeigt alle Datensätze auf einer Seite. Vorgabe für neue Bereiche ist der Wert aus `admin.skiplist_default` (siehe [Kapitel 12](./12-betrieb.md)); ein leeres Feld verwendet ebenfalls diesen Wert |
 | Slug-Prefix | optionaler erster Teil der Adresse aller Datensätze des Bereichs, je Sprache (siehe [unten](#slug-prefix)) |
 | Lösch-Policy | Regel, nach der Datensätze und Audit-Logs dieses Bereichs behandelt werden; vgl. [Kapitel 15](./15-datenschutz.md#löschen-nach-lösch-policy). Die Policy gilt für jedes Löschen – im Backend, über die API und mit CMS:USER_DELETE im Frontend. Vorgewählt ist die Standard-Policy zum Bereichstyp („Datensatz löschen“, „Profil löschen“, „User-Generated-Content löschen“) |
 | Abhängiger Bereich | Die Datensätze gehören exklusiv je einem Datensatz eines anderen Bereichs (siehe [Fest verknüpfte Inhalte](./05-eingabefelder.md#fest-verknüpfte-und-eingebettete-inhalte)). Der Bereich erscheint dann nicht in der Bereichsliste des Moduls „Inhalte“ |

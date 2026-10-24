@@ -55,7 +55,9 @@ Which template a record receives in the frontend is decided by camindo CMS in th
 You maintain the assignment at two equivalent places: in the
 [settings of the area](./04-structure.md#settings-of-a-content-area) or on the tab “Access”
 of the template (“Add content area”, then for each area “Default”, “Selectable” and
-“URL override”).
+“URL override”). The list “Add content area” offers only the content areas of the
+template's instance and of the instances whose content this instance may read; each
+instance appears there like a folder, with its areas indented below it.
 
 A template that is requested via the address without being released for it is not delivered.
 In this way, no internal templates can be called from outside.

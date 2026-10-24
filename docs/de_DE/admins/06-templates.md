@@ -59,7 +59,10 @@ Reihenfolge:
 Die Zuweisung pflegen Sie an zwei gleichwertigen Stellen: in den
 [Einstellungen des Bereichs](./04-struktur.md#einstellungen-eines-inhaltsbereichs)
 oder auf dem Reiter „Zugriff“ des Templates („Contentbereich
-hinzufügen“, dann je Bereich „Standard“, „Auswählbar“ und „URL-Override“).
+hinzufügen“, dann je Bereich „Standard“, „Auswählbar“ und „URL-Override“). Die Auswahl
+„Contentbereich hinzufügen“ bietet nur die Inhaltsbereiche der Instanz des Templates und
+der Instanzen an, deren Inhalte diese Instanz lesen darf; jede Instanz erscheint dort wie
+ein Ordner, ihre Bereiche darunter eingerückt.
 
 Ein Template, das über die Adresse angefordert wird, ohne dafür freigegeben zu sein,
 wird nicht ausgeliefert. So lassen sich keine internen Templates von außen aufrufen.

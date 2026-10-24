@@ -81,6 +81,7 @@ use Camindo\Core\Crypt;
 use Camindo\Core\History;
 use Camindo\Core\InstanceCache;
 use Camindo\Core\Modules\Area\Area;
+use Camindo\Core\Modules\Instance\Instance;
 use Camindo\Core\Modules\Template\Template;
 
 class TemplateBackend {
@@ -1027,29 +1028,10 @@ class TemplateBackend {
             'display_type' => 'select',
             'label' => '#template.button_add_area'
         ];
-        $areaOptions = [];
-        // Exclude the ids of the content areas already in use
-        $excludedAreaIds = implode(',', $this->system->sanitizeIds(
-            array_keys($this->data['access']), true
-        ));
-        if (!empty($excludedAreaIds)) $areaFilter = " AND `area_id` NOT IN ($excludedAreaIds)";
-        else $areaFilter = '';
-        // content areas only the readable ones of the group; folders (not selectable) remain
-        $accessSql = $this->backend->areaAccessSql();
-        if ($accessSql !== '') $areaFilter .= " AND (`type` = 'folder' OR (1=1" . $accessSql . "))";
-        $this->db->query("SELECT `area_id`,`depth`,`label`,`type` FROM `area`"
-            ." WHERE `type` != 'template' AND `deleted`=0" . $areaFilter
-            ." ORDER BY `lft` ASC");
-        while ($areaData = $this->db->fetch()) {
-            $fullPath = str_repeat('&nbsp; ', (int)$areaData['depth'] * 2) . $this->cms->textOrSnippet($areaData['label']);
-            if ($areaData['type'] === 'folder') {
-                $relAreaId = 'disabled_' . $areaData['area_id'];
-            }
-            else {
-                $relAreaId = (string)$areaData['area_id'];
-            }
-            $areaOptions[$relAreaId] = $fullPath;
-        }
+        $areaOptions = $this->_accessAreaOptions(
+            (int)($templateData['instance_id'] ?? 0),
+            array_keys($this->data['access'])
+        );
         $this->backend->formField($this->template, [
             'name' => 'add_area_id',
             'value' => $this->data['add_area_id'],
@@ -1070,6 +1052,77 @@ class TemplateBackend {
         ]);
 
         echo '</form>';
+    }
+
+    /**
+     * Options of the select list "Add content area" on the tab "Access": the content
+     * areas of the template's own instance and of the instances it may read
+     * (`readable_instances`) - a template can only output their records. Each
+     * instance appears as a folder (not selectable), its areas indented below it;
+     * folders without a selectable area are left out.
+     *
+     * @param int   $instanceId   instance of the template
+     * @param array $excludedIds  areas already assigned
+     * @return array  area_id resp. "disabled_…" => label
+     */
+    private function _accessAreaOptions(int $instanceId, array $excludedIds): array
+    {
+        $instanceIds = [$instanceId];
+        foreach ((array)($this->instanceCache->instance($instanceId)['readable_instances'] ?? []) as $readableId) {
+            $readableId = (int)$readableId;
+            if ($readableId > 0 && !in_array($readableId, $instanceIds, true)) $instanceIds[] = $readableId;
+        }
+
+        $areaFilter = '';
+        // Exclude the ids of the content areas already in use
+        $excluded = implode(',', $this->system->sanitizeIds($excludedIds, true));
+        if ($excluded !== '') $areaFilter .= " AND `a`.`area_id` NOT IN ($excluded)";
+        // content areas only the readable ones of the group; folders (not selectable) remain
+        $accessSql = $this->backend->areaAccessSql(false, '`a`.`area_id`');
+        if ($accessSql !== '') $areaFilter .= " AND (`a`.`type` = 'folder' OR (1=1" . $accessSql . "))";
+
+        $placeholders = implode(',', array_fill(0, count($instanceIds), '?'));
+        $this->db->query(
+            "SELECT `a`.`area_id`, `a`.`depth`, `a`.`label`, `a`.`type`, `a`.`instance_id`, `i`.`label` AS `instance_label`"
+            . " FROM `area` `a` JOIN `instance` `i` ON `i`.`instance_id` = `a`.`instance_id`"
+            . " WHERE `a`.`type` != 'template' AND `a`.`deleted` = 0 AND `a`.`instance_id` IN ($placeholders)" . $areaFilter
+            . " ORDER BY `a`.`instance_id` = ? DESC, " . Instance::orderSql('i') . ", `a`.`lft` ASC",
+            str_repeat('i', count($instanceIds) + 1),
+            array_merge($instanceIds, [$instanceId])
+        );
+        // Collect per instance; a folder only counts once an area follows below it
+        $groups = [];
+        while ($row = $this->db->fetch()) {
+            $rowInstanceId = (int)$row['instance_id'];
+            $groups[$rowInstanceId]['label'] ??= (string)$row['instance_label'];
+            $groups[$rowInstanceId]['rows'][] = $row;
+        }
+
+        $options = [];
+        foreach ($groups as $rowInstanceId => $group) {
+            $entries = [];
+            $folders = []; // depth => pending folder entry
+            foreach ($group['rows'] as $row) {
+                $depth = (int)$row['depth'];
+                $label = str_repeat('&nbsp; ', ($depth + 1) * 2) . $this->cms->textOrSnippet((string)$row['label']);
+                // A new row ends the pending folders of the same and deeper levels
+                foreach (array_keys($folders) as $folderDepth) {
+                    if ($folderDepth >= $depth) unset($folders[$folderDepth]);
+                }
+                if ($row['type'] === 'folder') {
+                    $folders[$depth] = ['disabled_' . $row['area_id'], $label];
+                    continue;
+                }
+                ksort($folders);
+                foreach ($folders as [$folderKey, $folderLabel]) $entries[$folderKey] = $folderLabel;
+                $folders = [];
+                $entries[(string)$row['area_id']] = $label;
+            }
+            if ($entries === []) continue;
+            $options['disabled_instance_' . $rowInstanceId] = $this->cms->textOrSnippet($group['label']);
+            $options += $entries;
+        }
+        return $options;
     }
 
     /**

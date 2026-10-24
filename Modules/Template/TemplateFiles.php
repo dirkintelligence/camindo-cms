@@ -114,6 +114,26 @@ class TemplateFiles {
         return ['instance_id' => $info['instance_id'], 'name' => $info['name']];
     }
 
+    /**
+     * Directory of an area relative to baseDir(), as it lies on disk right now:
+     * "{instance_id}/{name}", for an area in the trash ".trash/{area_id}".
+     * The name of a deleted area may already belong to a new area of the same
+     * tenant (e.g. after an import) - its directory must never be touched.
+     *
+     * @return string|null  null if the area does not exist
+     */
+    private function areaDir(int $areaId): ?string
+    {
+        if (!$info = $this->areaInfo($areaId)) return null;
+        $this->db->pushResult();
+        $this->db->query("SELECT `deleted` FROM `area` WHERE `area_id` = ?", 'i', [$areaId]);
+        $row = $this->db->fetch();
+        $this->db->popResult();
+        if (!$row) return null;
+        if (!empty($row['deleted'])) return $this->trashPath($areaId);
+        return $this->areaPath($info['instance_id'], $info['name']);
+    }
+
     // ====================
     // Single file / single directory (called from the hooks)
 
@@ -124,8 +144,8 @@ class TemplateFiles {
      */
     public function readTemplate(int $areaId, string $name): ?string
     {
-        if (!$info = $this->areaInfo($areaId)) return null;
-        $file = $this->baseDir() . '/' . $this->filePath($info['instance_id'], $info['name'], $name);
+        if (($dir = $this->areaDir($areaId)) === null) return null;
+        $file = $this->baseDir() . '/' . $dir . '/' . $name . self::EXTENSION;
         if (!is_file($file)) return null;
         $code = file_get_contents($file);
         return ($code === false) ? null : $code;
@@ -138,8 +158,8 @@ class TemplateFiles {
      */
     public function writeTemplate(int $areaId, string $name, string $code): void
     {
-        if (!$info = $this->areaInfo($areaId)) return;
-        $path = $this->filePath($info['instance_id'], $info['name'], $name);
+        if (($dir = $this->areaDir($areaId)) === null) return;
+        $path = $dir . '/' . $name . self::EXTENSION;
         $file = $this->baseDir() . '/' . $path;
         if (is_file($file) && file_get_contents($file) === $code) return;
         $this->system->filePutContents($this->baseDir(), $path, $code, lock:true);
@@ -150,8 +170,8 @@ class TemplateFiles {
      */
     public function removeTemplate(int $areaId, string $name): void
     {
-        if (!$info = $this->areaInfo($areaId)) return;
-        $file = $this->baseDir() . '/' . $this->filePath($info['instance_id'], $info['name'], $name);
+        if (($dir = $this->areaDir($areaId)) === null) return;
+        $file = $this->baseDir() . '/' . $dir . '/' . $name . self::EXTENSION;
         if (is_file($file)) unlink($file);
     }
 
@@ -183,14 +203,16 @@ class TemplateFiles {
 
     /**
      * Remove the directory of an area including its files (area finally
-     * deleted) - also from the trash.
+     * deleted). An area from the trash only has its copy there
+     * (.trash/{area_id}) - the directory {instance_id}/{name} may already belong
+     * to a new area of the same name and stays untouched.
      */
-    public function removeAreaDir(int $instanceId, string $areaName, int $areaId = 0): void
+    public function removeAreaDir(int $areaId, int $instanceId, string $areaName, bool $deleted): void
     {
-        $this->removeDir($this->baseDir() . '/' . $this->areaPath($instanceId, $areaName));
-        if ($areaId > 0) {
-            $this->removeDir($this->baseDir() . '/' . $this->trashPath($areaId));
+        if (!$deleted) {
+            $this->removeDir($this->baseDir() . '/' . $this->areaPath($instanceId, $areaName));
         }
+        $this->removeDir($this->baseDir() . '/' . $this->trashPath($areaId));
     }
 
     /**

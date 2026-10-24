@@ -39,7 +39,7 @@ all lists and selections of the back end – regardless of its position.
 | ***Frontend domains*** | |
 | Main domain | the actual address of the website, without protocol, e.g. `www.example.com` |
 | Frontend protocol | `https` or `http` |
-| Canonical requests | permanently (301) redirects every request that does not come via the main domain and the valid address of a record to that domain. Recommended for search engines |
+| Canonical requests | permanently (301) redirects every request that does not come via the main domain and the valid address of a record to that domain – including the start page: with several languages it leads to the start page of the language (`/en_US/`, without a language code in the address according to the browser language), with one language to `/`. Recommended for search engines |
 | Additional domains | requests via these domains also end up in this instance, e.g. `example.com` without `www`. With the switch “RegEx”, an entry counts as a regular expression, for example to catch all subdomains: `*\.camindo\.de` |
 | ***Access*** | |
 | Readable other instances | content of the selected instances can be retrieved in the frontend of this instance – for example a shared product catalog for several websites |

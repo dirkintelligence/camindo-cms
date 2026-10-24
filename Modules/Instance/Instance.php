@@ -543,6 +543,10 @@ class Instance extends Dataset {
         $this->mediaAccess()->rebuildAll();
         // Snippet set of the instance (module Snippets, var/custom/snippets/{id})
         $this->container->get(Snippets::class)->delete((int)($data['instance_id'] ?? 0));
+        // Tenant directory of the template sources (var/templates/{id}) - empty by now,
+        // Area::hookOnDelete() removed the area directories
+        $templateDir = $this->config->get('paths.var_dir') . '/templates/' . (int)($data['instance_id'] ?? 0);
+        if (is_dir($templateDir)) @rmdir($templateDir);
     }
 
     /**

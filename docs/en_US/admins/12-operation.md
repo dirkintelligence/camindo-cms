@@ -319,7 +319,7 @@ The file contains access data: permissions `0600`, never in a version control sy
 | `admin.cookie_secure`,<br>`admin.cookie_samesite` | `true` / `'Lax'` | send the session cookie only over HTTPS. `false` only for a local test without SSL ([quick start](./01-quick-start-installation.md#test-locally-without-https)); SameSite attribute of the cookie |
 | `admin.password_retention_days` | `0` | validity of a password in days; afterwards the user must set a new, different one at sign-in (0 = unlimited). A password set by another user must always be changed at the first sign-in |
 | `admin.allowed_origins` | `[]` | further addresses from which forms may be sent to the backend, for example `['https://cms.example.com']` – only needed if a proxy rewrites the host name (see [security headers](#security-headers)) |
-| `admin.skiplist_default` | `20` | records per page in lists |
+| `admin.skiplist_default` | `20` | records per page in lists; default for the setting “Records per page” of a content area |
 | `admin.list_max_datasets` | `200` | maximum entries in selection lists |
 | `admin.max_include_depth` | `20` | maximum nesting depth of templates (`CMS:INCLUDE`, `CMS:SELECT`) |
 | `admin.trash_retention_days` | `7` | retention period in the trash |
