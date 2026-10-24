@@ -55,9 +55,17 @@ Calculating before output (`mul`, `add`), making file sizes readable (`sizefacto
 (CMS:NUMBER filesize sizefactor=1024)                     15.2 MB
 ```
 
-`prefix`/`suffix`/`ifempty` also treat the value `0` as empty – a price
-of `0` therefore stays without ` €`. What counts is the numeric value after `mul`/`add`, not the
-formatted text: even `0.00` (with `decimals` or `format`) counts as empty.
+If the calculation results in `0`, `0` is output (formatted, e.g. `0.00` with `decimals=2`):
+
+```cms
+(CMS:NUMBER useval="{$a}" add=-1)                          0  (with $a = 1)
+```
+
+As soon as `prefix`, `suffix` or `ifempty` is given, however, the value `0` counts as
+empty – a price of `0` therefore stays without ` €`. What counts is the numeric value after
+`mul`/`add`, not the formatted text: even `0.00` (with `decimals` or `format`) then counts as
+empty. An empty source (field without content, empty `useval`) always results in empty
+output – also with `mul`/`add`.
 
 ## Parameters in detail
 
@@ -94,7 +102,7 @@ A decimal comma is understood: `useval="3,5"` gives `3.5`.
 
 ### `ifempty`
 
-With `CMS:NUMBER`, the numeric value `0` also counts as empty – regardless of how it would be formatted:
+With `ifempty`, the numeric value `0` also counts as empty – regardless of how it would be formatted:
 
 ```cms
 (CMS:NUMBER stock ifempty="sold out" suffix=" pcs")

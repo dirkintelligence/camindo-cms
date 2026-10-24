@@ -5967,6 +5967,7 @@ class Cms {
         $number = (float)str_replace(',', '.', (string)$raw);
         // 'mul' / 'add'
         $number = $number * (float)($p['mul'] ?? 1) + (float)($p['add'] ?? 0);
+        if ($number == 0.0) $number = 0.0;  // no "-0" (e.g. -1 * 0)
 
         // 'sizefactor' - readable file size (1000 or 1024)
         $sizefactor = (int)($p['sizefactor'] ?? 0);
@@ -6010,11 +6011,14 @@ class Cms {
         // 'replace' acts on the fully formatted value (e.g. ".00?")
         $value = $this->_replace((string)$value, $p);
 
-        // 'ifempty' also applies here to the value 0 - checked on the numeric value, not on the
-        // formatted text ("0.00" with format/decimals is also 0) - 'instead'
-        // has already been consumed above
+        // An empty source stays empty (also with mul/add). The value 0 counts as empty only
+        // when 'ifempty', 'prefix' or 'suffix' is given - checked on the numeric value, not on
+        // the formatted text ("0.00" with format/decimals is also 0); without them "0" is
+        // output. 'instead' has already been consumed above
         unset($p['instead']);
-        $this->_out($this->_decorate((float)$number == 0.0 ? '' : $value, $p), $p);
+        $zeroIsEmpty = isset($p['ifempty']) || isset($p['prefix']) || isset($p['suffix']);
+        if ($isEmpty || ($zeroIsEmpty && (float)$number == 0.0)) $value = '';
+        $this->_out($this->_decorate($value, $p), $p);
     }
 
     // CMS:RAW
