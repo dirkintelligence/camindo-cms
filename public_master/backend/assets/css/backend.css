@@ -872,6 +872,15 @@ table.c9-info-table strong * {
 #login-dialog {
     position: relative;
 }
+/* The <form> sits between .modal-dialog-scrollable and .modal-content: it has to pass
+   on the height limit, otherwise the dialog is cut off at the top and bottom on small
+   screens (smartphone, error message) and only .modal-body would have to scroll */
+#login-dialog > form {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    min-height: 0;
+}
 /* .modal-header, .modal-body h2: Bootstrap-Build (custom.scss) */
 
 .c9-styled-code a {
