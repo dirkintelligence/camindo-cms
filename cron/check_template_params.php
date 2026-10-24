@@ -75,6 +75,10 @@ $cases = [
     ['0 ist leer (prefix entfällt)',   'cmsNumber', ['useval' => '0', 'prefix' => '<del>', 'suffix' => '</del>'], ''],
     ['0 mit decimals ist leer',        'cmsNumber', ['useval' => '0', 'decimals' => '2', 'ifempty' => '–'], '–'],
     ['0 mit format ist leer',          'cmsNumber', ['useval' => '0', 'format' => '%.2f', 'ifempty' => 'frei'], 'frei'],
+    ['0 ohne prefix/suffix/ifempty',   'cmsNumber', ['useval' => '1', 'add' => '-1'], '0'],
+    ['0 mit decimals ohne ifempty',    'cmsNumber', ['useval' => '0', 'decimals' => '2', 'decimal' => ','], '0,00'],
+    ['kein -0',                        'cmsNumber', ['useval' => '0', 'mul' => '-1'], '0'],
+    ['leere Quelle bleibt leer',       'cmsNumber', ['useval' => '', 'add' => '1'], ''],
     ['0.004 * 1 mit decimals=2',       'cmsNumber', ['useval' => '0.004', 'decimals' => '2'], '0.00'],
     ['Wert mit prefix',                'cmsNumber', ['useval' => '5', 'decimals' => '2', 'prefix' => 'ab '], 'ab 5.00'],
 ];

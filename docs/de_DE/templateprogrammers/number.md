@@ -55,9 +55,17 @@ Rechnen vor der Ausgabe (`mul`, `add`), Dateigrößen lesbar machen (`sizefactor
 (CMS:NUMBER filesize sizefactor=1024)                     15.2 MB
 ```
 
-`prefix`/`suffix`/`ifempty` behandeln auch den Wert `0` als leer - eine Preisangabe
-mit `0` bleibt also ohne ` €`. Maßgeblich ist der Zahlenwert nach `mul`/`add`, nicht der
-formatierte Text: auch `0.00` (mit `decimals` oder `format`) gilt als leer.
+Ergibt die Rechnung `0`, erscheint `0` (formatiert, z. B. `0,00` mit `decimals=2`):
+
+```cms
+(CMS:NUMBER useval="{$a}" add=-1)                          0  (bei $a = 1)
+```
+
+Sobald `prefix`, `suffix` oder `ifempty` angegeben ist, gilt der Wert `0` dagegen als
+leer - eine Preisangabe mit `0` bleibt also ohne ` €`. Maßgeblich ist der Zahlenwert nach
+`mul`/`add`, nicht der formatierte Text: auch `0.00` (mit `decimals` oder `format`) gilt
+dann als leer. Eine leere Quelle (Feld ohne Inhalt, leeres `useval`) ergibt immer eine
+leere Ausgabe - auch mit `mul`/`add`.
 
 ## Parameter im Einzelnen
 
@@ -94,7 +102,7 @@ Komma als Dezimaltrenner wird verstanden: `useval="3,5"` ergibt `3.5`.
 
 ### `ifempty`
 
-Bei `CMS:NUMBER` gilt auch der Zahlenwert `0` als leer - egal, wie er formatiert würde:
+Mit `ifempty` gilt auch der Zahlenwert `0` als leer - egal, wie er formatiert würde:
 
 ```cms
 (CMS:NUMBER stock ifempty="ausverkauft" suffix=" Stück")
