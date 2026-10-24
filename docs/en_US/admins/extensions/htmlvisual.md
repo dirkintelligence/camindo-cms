@@ -70,23 +70,28 @@ When specified in the source, these are kept:
 
 | What | Where |
 |---|---|
-| `class`, `style`, `id`, `title` | on `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` and on `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` become `<strong>`, `<em>`, `<u>`) |
-| `<img>` with `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` | in the text, also in links and table cells; `src` only `http(s):`, relative addresses and `data:image/…` |
+| `class`, `style`, `id`, `title`, `data-…`, `aria-…`, `lang`, `role` | on `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` and on `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` become `<strong>`, `<em>`, `<u>`) |
+| `target`, `rel`, `hreflang`, `download`, `type`, `referrerpolicy` | additionally on `<a>` |
+| `<img>` with `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` as well as `data-…`, `aria-…`, `lang`, `role` | in the text, also in links and table cells; `src` only `http(s):`, relative addresses and `data:image/…` |
 
 ```html
 <p class="lead">Introduction with <span class="marker">highlight</span>.</p>
 <p><a class="button" href="/contact">Contact</a></p>
+<p><a href="https://example.com" target="_blank" rel="noopener">Partner</a></p>
+<p><a href="#" data-mail="…" data-mail-text>name (at) example (dot) com</a></p>
 <p><img src="/media/1/12/picture.jpg" alt="Showroom" width="600" loading="lazy"></p>
 ```
 
 In the formatted view, classes and styles take effect immediately (together with the
 field's stylesheet); images appear in place and can be deleted or moved like a
-character. Attributes can only be changed in the source. Alignment via the buttons
+character. Attributes such as `data-…`, `aria-…`, `target` or `id` have
+no effect in the backend; they only appear in the saved HTML – for scripts of your
+website, for example. Attributes can only be changed in the source. Alignment via the buttons
 adds `text-align` to `style`; a `text-align` in the source becomes the alignment of
 the block.
 
 Not kept: attributes on list items and table cells, `<div>` (becomes a paragraph,
-classes are dropped), other attributes (`data-…`, events such as `onclick`) and other
+classes are dropped), other attributes (events such as `onclick`) and other
 elements. ***Pasted HTML*** from the clipboard still loses classes, styles and images –
 copying within the editor, on the other hand, keeps them.
 

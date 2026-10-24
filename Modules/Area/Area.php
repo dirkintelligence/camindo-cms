@@ -227,6 +227,18 @@ class Area extends Dataset {
                 'label' => '#area.field_area_tabs',
                 'tooltip' => '#area.tooltip_field_area_tabs',
             ],
+            // Records per page in the record list of the backend (RecordBackendList);
+            // 0 = all on one page, missing = admin.skiplist_default (Cms::$list_rows).
+            // 'chars' with a pattern: an empty input stays empty (an integer would become 0)
+            'details.page_size' => [
+                'type'  => 'chars',
+                'label' => '#area.field_area_page_size',
+                'note'  => '#area.note_field_area_page_size',
+                'tooltip' => '#area.tooltip_field_area_page_size',
+                'max'   => 6,
+                'pattern' => '[0-9]+',
+                'flags' => ['trim'],
+            ],
             // Slug prefix (record areas only): stands in the URL before the slug of the
             // records - /farben/blau instead of /blau. Per language of the instance
             // (language_id => prefix, empty = that of the main language), without slash.
@@ -1051,15 +1063,17 @@ class Area extends Dataset {
         // Template area: the templates disappear with the area row
         // (fk_template_area_id ON DELETE CASCADE) - without Template::hookOnDelete().
         // Therefore their files are removed here: compiled PHP (var/php/{area_id}) and
-        // source directory (var/templates/{instance_id}/{name} or its
-        // Papierkorb-Kopie).
+        // source directory (var/templates/{instance_id}/{name} or, for an area from
+        // the trash, only its copy there - the name may be in use again).
         if ((string)($data['type'] ?? '') === 'template') {
             $phpDir = $this->config->get('paths.var_dir') . '/php/' . $areaId;
             foreach ((array)glob($phpDir . '/*.php') as $file) {
                 if (is_file($file)) unlink($file);
             }
             if (is_dir($phpDir)) @rmdir($phpDir);
-            $this->templateFiles()->removeAreaDir((int)$data['instance_id'], (string)$data['name'], $areaId);
+            $this->templateFiles()->removeAreaDir(
+                $areaId, (int)$data['instance_id'], (string)$data['name'], !empty($data['deleted'])
+            );
         }
 
         // Permanently delete the input fields of the area

@@ -11,6 +11,8 @@
  *  1. load() + checkOut() + save($fields, $data) WITHOUT previous_id leaves the
  *     record in its place - with and without `parent_id` in $fields
  *     (earlier: moved to the start of its level, e.g. RecordUser::saveRecord()).
+ *     Likewise a save whose $data carries only the changed fields (DOCX/CSV
+ *     import, API) - earlier the position of the working state, often 0.
  *  2. Re-sorting via previous_id in a flat area whose positions carry
  *     duplicates, gaps or 0 yields 1..n in the desired order
  *     (earlier e.g. 0,0,0,1).
@@ -72,12 +74,13 @@ $newArea = function (string $name, bool $tree) use ($area, $field, $instanceId, 
     $data = ['instance_id' => $instanceId, 'type' => 'record', 'name' => $name, 'label' => $name,
              'icon' => '', 'details' => '', 'note' => ''];
     if (!$areaId = (int)$area->save([], $data)) $fail("area $name");
-    $fields = [['title', 'Title', 'chars', 'text', 0, 1], ['position', 'Position', 'integer', 'select', 1, 10]];
+    // `position` with meta = 0, as the backend creates it
+    $fields = [['title', 'Title', 'chars', 'text', 0, 1], ['position', 'Position', 'integer', 'select', 0, 10]];
     if ($tree) $fields[] = ['parent_id', 'Parent', 'id', 'select', 1, 11];
     $ids = [];
     foreach ($fields as [$fname, $label, $type, $display, $meta, $pos]) {
         $data = ['area_id' => $areaId, 'name' => $fname, 'label' => $label, 'type' => $type,
-                 'display_type' => $display, 'meta' => $meta, 'position' => $pos];
+                 'display_type' => $display, 'meta' => $meta, 'position' => $pos, 'visibility_input' => 1];
         if (!$ids[$fname] = (int)$field->save([], $data)) $fail("field $fname");
     }
     return [$areaId, $ids];
@@ -133,6 +136,17 @@ try {
     // 1. without previous_id the record stays
     $resave($ids['C'], ['title'], ['title' => 'C']);
     $check('flat: load+save without previous_id keeps position', $level($flatId), 'A:1 B:2 C:3 D:4');
+
+    // ... also if $data carries only the changed fields (import, API: no
+    // position in $data - the working state must not supply it). A rebuilt
+    // content cache (Cms::createRecordCache(), e.g. after field.convert) carries
+    // `position` as an empty placeholder, which the check-out takes over
+    $db->query("DELETE FROM `record_cache` WHERE `record_id` = ?", 'i', [$ids['C']]);
+    $data = $record->load($ids['C']);
+    if (!$data || !$tmpId = $record->checkOut($data)) $fail("checkOut C");
+    $data = ['record_id' => $tmpId, 'area_id' => $flatId, 'title' => 'C'];
+    if (!$record->save(['title'], $data)) $fail('save C');
+    $check('flat: save of changed fields only keeps position', $level($flatId), 'A:1 B:2 C:3 D:4');
 
     // 2. polluted positions, then re-sort via previous_id (D C B A)
     foreach ([[1, 1, 1, 1], [0, 2, 3, 4], [0, 0, 0, 1], [3, 5, 9, 9]] as $start) {

@@ -32,9 +32,11 @@
  *     <strong> <em> <u> <code> <a href> <br> <bdi dir="rtl|ltr">
  *     style="text-align: left|center|right" on paragraph, heading, list, quote,
  *     table and cell (column alignment)
- *     from the field / source view only: id, class, style, title on p, h1-h6, ul/ol,
- *     blockquote, pre, hr, table and on span, strong, em, u, code, a; <img> with
- *     src, alt, title, width, height, loading, srcset, sizes, id, class, style
+ *     from the field / source view only: id, class, style, title, data-*, aria-*,
+ *     lang, role on p, h1-h6, ul/ol, blockquote, pre, hr, table and on span, strong,
+ *     em, u, code, a (a also target, rel, hreflang, download, type, referrerpolicy);
+ *     <img> with src, alt, title, width, height, loading, srcset, sizes, id, class,
+ *     style, data-*, aria-*, lang, role
  * Invisible special characters are entities in the HTML (&nbsp; &shy; &#8239; …); in the
  * editor they are marked, non-editable span.htv-ch. An &nbsp; set by the browser itself
  * (space at the end of a line), on the other hand, becomes a normal space.
@@ -133,14 +135,22 @@
     // ---- Own attributes (only from the HTML of the field, i.e. the source view) ----
     //
     // id, class, style and title on blocks and inline elements, <img> with its
-    // attributes. Pasted HTML loses them. In the editor the element carries them
-    // as real attributes (preview with the stylesheet; id only in the JSON) and as
+    // attributes, links also with target, rel …; everywhere data-*, aria-*, lang and
+    // role (fine-tuning for scripts of the website, e.g. data-mail). Pasted HTML loses
+    // them. In the editor the element carries class, style, title and the attributes
+    // of the image as real attributes (preview with the stylesheet), all of them as
     // JSON in data-htv-a - only the JSON counts when reading, the browser changes
-    // style attributes itself. Inline they travel through the internal Markdown as
-    // EL_OPEN id EL_MID … EL_CLOSE and EL_IMG id EL_MID (entries in elRegistry).
+    // style attributes itself; id and the attributes of EXTRA_ATTR / LINK_ATTRS are
+    // only in the JSON, so they have no effect in the backend. Inline they travel
+    // through the internal Markdown as EL_OPEN id EL_MID … EL_CLOSE and
+    // EL_IMG id EL_MID (entries in elRegistry).
 
     const OWN_ATTRS = ['id', 'class', 'style', 'title'];
     const IMG_ATTRS = ['src', 'alt', 'title', 'width', 'height', 'loading', 'srcset', 'sizes', 'id', 'class', 'style'];
+    const LINK_ATTRS = ['target', 'rel', 'hreflang', 'download', 'type', 'referrerpolicy'];
+    const A_ATTRS = OWN_ATTRS.concat(LINK_ATTRS);
+    // On every element with own attributes (data-htv-* is the editor's own)
+    const EXTRA_ATTR = /^(data-(?!htv-)[a-z0-9_.:-]+|aria-[a-z]+|lang|role)$/;
     // Inline elements that keep own attributes (b/i/ins as strong/em/u)
     const ATTR_INLINE = { SPAN: 'span', STRONG: 'strong', B: 'strong', EM: 'em', I: 'em', U: 'u', INS: 'u', CODE: 'code', A: 'a' };
     const EL_OPEN = '';
@@ -162,9 +172,15 @@
         return id;
     }
 
+    // Only in the JSON, not as real attribute in the editor
+    function hiddenAttr(k) {
+        return k === 'id' || EXTRA_ATTR.test(k) || LINK_ATTRS.includes(k);
+    }
+
     function cleanAttrs(src, names, block) {
         const out = {};
-        names.forEach((k) => {
+        const keys = names.filter((k) => k in src).concat(Object.keys(src).filter((k) => !names.includes(k) && EXTRA_ATTR.test(k)));
+        keys.forEach((k) => {
             let v = src[k];
             if (typeof v !== 'string') return;
             v = v.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim();
@@ -173,7 +189,8 @@
             else if (k === 'style' && block) v = v.replace(/(^|;)\s*text-align\s*:[^;]*/gi, '$1').replace(/;(\s*;)+/g, ';').replace(/^\s*;\s*/, '').trim();
             else if (k === 'src') v = safeSrc(v);
             else if (k === 'srcset' && v.split(',').some((c) => c.trim() !== '' && !safeSrc(c.trim().split(/\s+/)[0]))) v = '';
-            if (v !== '' || (k === 'alt' && names === IMG_ATTRS)) out[k] = v;
+            // empty: alt of an image and attributes without value (data-mail-text, download)
+            if (v !== '' || (k === 'alt' && names === IMG_ATTRS) || k === 'download' || EXTRA_ATTR.test(k)) out[k] = v;
         });
         return out;
     }
@@ -188,7 +205,9 @@
         }
         else if (ownHtml) {
             src = {};
-            names.forEach((k) => { if (el.hasAttribute(k)) src[k] = el.getAttribute(k); });
+            Array.from(el.attributes).forEach((a) => {
+                if (names.includes(a.name) || EXTRA_ATTR.test(a.name)) src[a.name] = a.value;
+            });
         }
         else return null;
         const out = cleanAttrs(src, names, block);
@@ -198,7 +217,7 @@
     // Attributes for the editor HTML
     function attrsHtml(attrs) {
         if (!attrs) return '';
-        return Object.keys(attrs).filter((k) => k !== 'id').map((k) => ' ' + k + '="' + esc(attrs[k]) + '"').join('')
+        return Object.keys(attrs).filter((k) => !hiddenAttr(k)).map((k) => ' ' + k + '="' + esc(attrs[k]) + '"').join('')
             + ' data-htv-a="' + esc(JSON.stringify(attrs)) + '"';
     }
 
@@ -1057,7 +1076,7 @@
                 return;
             }
             const m = Object.assign({}, marks);
-            const attrs = ATTR_INLINE[tag] ? ownAttrs(n, OWN_ATTRS, false) : null;
+            const attrs = ATTR_INLINE[tag] ? ownAttrs(n, tag === 'A' ? A_ATTRS : OWN_ATTRS, false) : null;
             if (attrs) {
                 // Element with own attributes: tag and attributes stay as they are
                 const entry = { tag: ATTR_INLINE[tag], attrs: attrs };
@@ -1304,8 +1323,8 @@
         box.querySelectorAll('.htv-ch').forEach((n) => n.replaceWith(document.createTextNode(n.textContent)));
         box.querySelectorAll('[data-htv-a]').forEach((n) => {
             const at = JSON.parse(n.getAttribute('data-htv-a'));
-            if (at.id) n.setAttribute('id', at.id);
             n.removeAttribute('data-htv-a');
+            Object.keys(at).forEach((k) => { if (hiddenAttr(k)) n.setAttribute(k, at[k]); });
         });
         box.querySelectorAll('[data-align]').forEach((n) => {
             const own = n.getAttribute('style');

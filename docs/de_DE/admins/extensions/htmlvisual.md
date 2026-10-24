@@ -70,23 +70,28 @@ Im Quelltext angegeben, bleiben erhalten:
 
 | Was | Wo |
 |---|---|
-| `class`, `style`, `id`, `title` | an `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` und an `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` werden zu `<strong>`, `<em>`, `<u>`) |
-| `<img>` mit `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` | im Text, auch in Links und Tabellenzellen; `src` nur `http(s):`, relative Adressen und `data:image/…` |
+| `class`, `style`, `id`, `title`, `data-…`, `aria-…`, `lang`, `role` | an `<p>`, `<h1>` … `<h6>`, `<ul>`, `<ol>`, `<blockquote>`, `<pre>`, `<hr>`, `<table>` und an `<span>`, `<strong>`, `<em>`, `<u>`, `<code>`, `<a>` (`<b>`, `<i>`, `<ins>` werden zu `<strong>`, `<em>`, `<u>`) |
+| `target`, `rel`, `hreflang`, `download`, `type`, `referrerpolicy` | zusätzlich an `<a>` |
+| `<img>` mit `src`, `alt`, `title`, `width`, `height`, `loading`, `srcset`, `sizes`, `class`, `style`, `id` sowie `data-…`, `aria-…`, `lang`, `role` | im Text, auch in Links und Tabellenzellen; `src` nur `http(s):`, relative Adressen und `data:image/…` |
 
 ```html
 <p class="lead">Einleitung mit <span class="marker">Hervorhebung</span>.</p>
 <p><a class="button" href="/kontakt">Kontakt</a></p>
+<p><a href="https://example.com" target="_blank" rel="noopener">Partner</a></p>
+<p><a href="#" data-mail="…" data-mail-text>name (at) example (Punkt) com</a></p>
 <p><img src="/media/1/12/bild.jpg" alt="Showroom" width="600" loading="lazy"></p>
 ```
 
 In der formatierten Ansicht wirken Klassen und Stile sofort (zusammen mit dem
 Stylesheet des Feldes); Bilder erscheinen an ihrer Stelle und lassen sich wie ein
-Zeichen löschen oder verschieben. Ändern lassen sich Attribute nur im Quelltext.
+Zeichen löschen oder verschieben. Attribute wie `data-…`, `aria-…`, `target` oder `id`
+wirken im Backend nicht, sie erscheinen nur im gespeicherten HTML – etwa für Skripte
+Ihrer Website. Ändern lassen sich Attribute nur im Quelltext.
 Eine Ausrichtung über die Schaltflächen ergänzt `style` um `text-align`; ein
 `text-align` im Quelltext wird zur Ausrichtung des Blocks.
 
 Nicht erhalten bleiben: Attribute an Listenpunkten und Tabellenzellen, `<div>` (wird
-zum Absatz, Klassen entfallen), andere Attribute (`data-…`, Ereignisse wie `onclick`)
+zum Absatz, Klassen entfallen), andere Attribute (Ereignisse wie `onclick`)
 und andere Elemente. ***Eingefügtes HTML*** aus der Zwischenablage verliert Klassen,
 Stile und Bilder weiterhin – kopieren Sie dagegen innerhalb des Editors, bleiben sie
 erhalten.

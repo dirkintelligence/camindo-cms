@@ -191,6 +191,19 @@ class Template extends Dataset {
         // changes container moves along with it. (Area::hookOnSaved() covers
         // the reverse case: the container changes the instance.)
         $areaId = (int)($data['area_id'] ?? $previousData['area_id'] ?? 0);
+
+        // Container in the trash (old or new): no saving. The form offers only
+        // live areas - a template from a deleted area would otherwise silently move
+        // to the first one, and its file operations would hit the directory of a
+        // new area of the same name.
+        foreach (array_unique([(int)($previousData['area_id'] ?? 0), $areaId]) as $checkId) {
+            if ($checkId > 0 && !$this->liveTemplateArea($checkId)) {
+                $errorMsg = $this->cms->snippet('template.error_area_deleted');
+                $this->cms->error($errorMsg);
+                throw new \Exception('#' . $errorMsg);
+            }
+        }
+
         if ($areaId > 0) {
             $data['instance_id'] = $this->areaInstanceId($areaId);
             if (!in_array('instance_id', $fields, true)) $fields[] = 'instance_id';
@@ -268,6 +281,16 @@ class Template extends Dataset {
 
         // Source code file (var/templates/...)
         $this->templateFiles()->removeTemplate((int)$data['area_id'], (string)$data['name']);
+    }
+
+    /** Area exists, is of type 'template' and not in the trash */
+    private function liveTemplateArea(int $areaId): bool
+    {
+        $this->db->pushResult();
+        $this->db->query("SELECT `type`, `deleted` FROM `area` WHERE `area_id` = ?", 'i', [$areaId]);
+        $row = $this->db->fetch();
+        $this->db->popResult();
+        return $row !== null && (string)$row['type'] === 'template' && empty($row['deleted']);
     }
 
     private function templateFiles(): TemplateFiles

@@ -95,7 +95,13 @@
  * without language code - Page replies with 301 to the canonical URL. Search engines
  * thus store only one address per content. The template in the URL is kept
  * (different presentations are different pages), as are the query parameters.
- * The call of the bare domain (start page of the instance) is not redirected.
+ * The start page and the overview of an area are redirected as well: the start page to
+ * "/{lang}/" as soon as the site carries several languages (language from the URL, without
+ * one negotiated from the browser - then 302 with Vary: Accept-Language, since the target
+ * depends on the browser), with only one language it stays at "/"; the overview to
+ * "/{lang}/{prefix}" (Cms::startPath(), Cms::areaUrl()). So the first call of a foreign
+ * domain already lands on the primary domain - otherwise the page would run under the foreign
+ * domain while its scripts and modules redirect to the primary one (CORS).
  *
  * URL FORMAT
  * --------------------
@@ -643,8 +649,18 @@ class Page {
 
         // Enforce the canonical URL (see class comment) - not in the preview:
         // it runs under the address of the backend and should stay there
-        if (!$isStartPage && !$isOverview && $this->mode === self::MODE_FRONTEND) {
-            $this->redirectCanonical($cms, $templateName);
+        if ($this->mode === self::MODE_FRONTEND) {
+            if ($isStartPage) {
+                // Without a language in the URL the target depends on the browser
+                $negotiated = ((string)($_REQUEST['lang'] ?? '') === '' && count($this->languages) > 1);
+                $this->redirectCanonical([], '', $this->cms->startPath(), $negotiated);
+            }
+            elseif ($isOverview) {
+                $this->redirectCanonical([], '', $this->cms->areaUrl($this->areaId));
+            }
+            else {
+                $this->redirectCanonical($cms, $templateName);
+            }
         }
 
         if (!empty($templateName) || !empty($templateFile)) {
@@ -1138,10 +1154,14 @@ class Page {
      * Protocol, host and path are compared; the query parameters of the call
      * are kept and carried along.
      *
-     * @param array  $record        loaded record ([] without record)
-     * @param string $templateName  determined template
+     * @param array       $record        loaded record ([] without record)
+     * @param string      $templateName  determined template
+     * @param string|null $path          fixed path (start page, overview) instead of the
+     *                                   record URL
+     * @param bool        $negotiated    the path depends on the browser language: 302 instead
+     *                                   of 301, so that no browser keeps the target
      */
-    private function redirectCanonical(array $record, string $templateName): void
+    private function redirectCanonical(array $record, string $templateName, ?string $path = null, bool $negotiated = false): void
     {
         if (empty($this->instance['canonical'])) return;
         if (PHP_SAPI === 'cli' || headers_sent()) return;
@@ -1149,16 +1169,22 @@ class Page {
         $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
         if ($method !== 'GET' && $method !== 'HEAD') return;
 
-        // Template only if it came from the URL - the template chosen by the CMS is
-        // the normal case and does not belong in the address
-        $urlTemplate = $this->urlTemplate ? $templateName : '';
-        $path = $this->cms->recordUrl($record, '', $urlTemplate);
-        // Hash parameters are kept
-        if (!empty($this->hash1) || !empty($this->hash2)) {
-            if ($urlTemplate === '') $path .= ',';
-            $path .= ',' . (int)$this->hash1;
-            if (!empty($this->hash2)) $path .= ',' . (int)$this->hash2;
+        if ($path === null) {
+            // Template only if it came from the URL - the template chosen by the CMS is
+            // the normal case and does not belong in the address
+            $urlTemplate = $this->urlTemplate ? $templateName : '';
+            $path = $this->cms->recordUrl($record, '', $urlTemplate);
+            // Hash parameters are kept
+            if (!empty($this->hash1) || !empty($this->hash2)) {
+                if ($urlTemplate === '') $path .= ',';
+                $path .= ',' . (int)$this->hash1;
+                if (!empty($this->hash2)) $path .= ',' . (int)$this->hash2;
+            }
         }
+        elseif ($path === '') {
+            return;
+        }
+        if ($negotiated) header('Vary: Accept-Language', false);
 
         $protocol = (string)($this->instance['protocol'] ?? '') ?: $this->protocol;
         $host = (string)($this->instance['primary_domain'] ?? '');
@@ -1178,8 +1204,7 @@ class Page {
 
         if ($requestUrl === $this->canonicalUrl) return;
 
-        header('HTTP/1.1 301 Moved Permanently');
-        header('Location: ' . $this->canonicalUrl . $query);
+        header('Location: ' . $this->canonicalUrl . $query, true, $negotiated ? 302 : 301);
         exit;
     }
 

@@ -6491,6 +6491,19 @@ class Cms {
     }
 
     /**
+     * Path of the start page: '/{code}/' with more than one language in the site
+     * (language from 'lang' resp. the running one), otherwise '/' (Page::resolveRequest()
+     * enforces it with canonical = 1).
+     *
+     * @param string $lang  language code or '' (running language)
+     */
+    public function startPath(string $lang = ''): string
+    {
+        $targetId = null;
+        return $this->languagePath($lang, $targetId);
+    }
+
+    /**
      * Area whose overview the address $path means: its slug prefix in the
      * running language is exactly $path, and it has an overview template. Only
      * areas of the instances of this site. 0 = none.

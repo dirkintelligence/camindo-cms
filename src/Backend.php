@@ -871,17 +871,20 @@ class Backend {
 
     /**
      * Pagination top
-     * @param string $snippetId  snippet id for the number of records, optional
+     * @param string   $snippetId  snippet id for the number of records, optional
+     * @param int|null $pageSize   records per page as in the limit of the query
+     *                             (0 = all on one page), null = Cms::$list_rows
      */
-    public function paginationTop(string $snippetId = ''): string
+    public function paginationTop(string $snippetId = '', ?int $pageSize = null): string
     {
-        if ($this->db->num_rows_unlimited <= $this->cms->list_rows) {
+        $pageSize ??= $this->cms->list_rows;
+        if ($pageSize < 1 || $this->db->num_rows_unlimited <= $pageSize) {
             return $this->paginationTopShort($snippetId);
         }
         else {
             // Display with skip buttons
             // Clean up skip: points to first entry of the page
-            $skip = (int)(abs((int)$_REQUEST['skip']) / $this->cms->list_rows) * $this->cms->list_rows;
+            $skip = (int)(abs((int)($_REQUEST['skip'] ?? 0)) / $pageSize) * $pageSize;
 
             $tplPaginationBack = $this->template('pagination_back');
             $tplPaginationBackInactive = $this->template('pagination_back_inactive');
@@ -894,19 +897,19 @@ class Backend {
                 'tpl_link' => $tplPaginationBack,
                 'tpl_inactive' => $tplPaginationBackInactive,
                 'replace' => "cApp.layers.replace('/backendModules?cApp.layers.replace('"
-            ]);
+            ], $pageSize);
 
             // CMS:JUMP_NEXT
             $this->nextLink = $this->pagination->jumpNext([
                 'tpl_link' => $tplPaginationForward,
                 'tpl_inactive' => $tplPaginationForwardInactive,
                 'replace' => "cApp.layers.replace('/backendModules?cApp.layers.replace('"
-            ]);
+            ], $pageSize);
 
             // {from} - {to} of {total}
             $resultNumber = strtr($this->cms->snippet('number_of_records_total'), [
                 '{from}' => (string) ($skip + 1),
-                '{to}' => (string) ($skip + $this->cms->list_rows),
+                '{to}' => (string) min($skip + $pageSize, $this->db->num_rows_unlimited),
                 '{total}' => '<strong>' . (string) ($this->db->num_rows_unlimited) . '</strong>'
             ]);
 
@@ -921,10 +924,12 @@ class Backend {
 
     /**
      * Pagination bottom
+     * @param int|null $pageSize  as paginationTop()
      */
-    public function paginationBottom(): string
+    public function paginationBottom(?int $pageSize = null): string
     {
-        if ($this->db->num_rows_unlimited <= $this->cms->list_rows) {
+        $pageSize ??= $this->cms->list_rows;
+        if ($pageSize < 1 || $this->db->num_rows_unlimited <= $pageSize) {
             return '';
         }
 
@@ -941,7 +946,7 @@ class Backend {
             'suffix' => "",
             'ellipsis' => $tplPaginationEllipsis,
             'replace' => "cApp.layers.replace('/backendModules?cApp.layers.replace('"
-        ]);
+        ], $pageSize);
 
         // Pagination bar
         return strtr($tplPagination, [

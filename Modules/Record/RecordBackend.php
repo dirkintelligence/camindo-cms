@@ -835,6 +835,19 @@ abstract class RecordBackend {
     }
 
     /**
+     * Records per page in the list of the area (area.details.page_size): 0 = all,
+     * without a value (or without a fixed area) admin.skiplist_default.
+     */
+    protected function _pageSize(): int
+    {
+        $details = $this->areaData['details'] ?? [];
+        if (is_string($details)) $details = json_decode($details, true) ?: [];
+        $pageSize = trim((string)($details['page_size'] ?? ''));
+        if ($this->areaId < 1 || !ctype_digit($pageSize)) return $this->cms->list_rows;
+        return (int)$pageSize;
+    }
+
+    /**
      * Languages of the instance to which the area belongs (primary language first).
      *
      * @return array  language_id => language row (InstanceCache::languages())

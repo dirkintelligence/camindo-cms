@@ -39,7 +39,7 @@ Auswahlen des Backends ***immer an letzter Stelle*** – unabhängig von ihrer P
 | ***Frontend-Domains*** | |
 | Haupt-Domain | die eigentliche Adresse der Website, ohne Protokoll, z. B. `www.example.com` |
 | Frontend-Protokoll | `https` oder `http` |
-| Kanonische Aufrufe | leitet jeden Aufruf, der nicht über die Haupt-Domain und die gültige Adresse eines Datensatzes kommt, dauerhaft (301) dorthin um. Für Suchmaschinen empfohlen |
+| Kanonische Aufrufe | leitet jeden Aufruf, der nicht über die Haupt-Domain und die gültige Adresse eines Datensatzes kommt, dauerhaft (301) dorthin um – auch die Startseite: Bei mehreren Sprachen führt sie auf die Startseite der Sprache (`/de_DE/`, ohne Sprachkürzel in der Adresse nach der Browsersprache), bei einer Sprache auf `/`. Für Suchmaschinen empfohlen |
 | Weitere Domains | Aufrufe über diese Domains landen ebenfalls in dieser Instanz, z. B. `example.com` ohne `www`. Mit dem Schalter „RegEx“ gilt ein Eintrag als regulärer Ausdruck, etwa um alle Subdomains abzufangen: `*\.camindo\.de` |
 | ***Zugriff*** | |
 | Lesbare andere Instanzen | Inhalte der ausgewählten Instanzen sind im Frontend dieser Instanz abrufbar – etwa ein gemeinsamer Produktkatalog für mehrere Websites |

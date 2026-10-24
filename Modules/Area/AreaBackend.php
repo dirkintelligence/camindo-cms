@@ -443,6 +443,13 @@ class AreaBackend {
             $this->backend->infoStatic($this->cms->snippet('area.default_sort'), $sortFieldName . ' ' . $sortOrder);
         }
         
+        // details.page_size (empty = admin.skiplist_default, 0 = all)
+        // --------------------
+        if (Area::isContentType($type)) {
+            $pageSize = trim((string)($data['details']['page_size'] ?? ''));
+            $this->backend->infoAdd($this->area, 'details.page_size', ctype_digit($pageSize) ? $pageSize : (string)$this->cms->list_rows);
+        }
+
         // details.slug_prefix (per language, resolved as in the URL)
         // --------------------
         if (Area::isContentType($type)) {
@@ -988,6 +995,12 @@ class AreaBackend {
         // the field references (default_field_id …) only arise with the fields
         $defaults = $this->service->blueprintDefaults($this->_blueprintArea((string)($this->data['type'] ?? '')));
         if ($defaults) $this->data = array_merge($defaults, $this->data);
+        // New content areas: one tab per language, the configured page size of the lists
+        if (Area::isContentType((string)($this->data['type'] ?? ''))) {
+            $this->data['details'] = (array)($this->data['details'] ?? []);
+            $this->data['details']['tabs'] ??= 1;
+            $this->data['details']['page_size'] ??= $this->cms->list_rows;
+        }
         $this->data = $this->area->init($this->data);
         $this->id = 0;
     }
@@ -1652,6 +1665,15 @@ class AreaBackend {
                     ],
                 ]);
             }
+
+            // details.page_size
+            // --------------------
+            // Records per page in the record list (RecordBackendList::list()), 0 = all
+            $this->backend->formField($this->area, [
+                'id' => $this->id,
+                'name' => 'details.page_size',
+                'value' => (string)($this->data['details']['page_size'] ?? ''),
+            ]);
 
             // dependent
             // --------------------

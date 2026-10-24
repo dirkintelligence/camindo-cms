@@ -840,6 +840,13 @@ abstract class Dataset {
                         $treeChanged = ($treeActive && $moved);
                     }
                 }
+                else {
+                    // No re-sort: the record keeps its place. $data may carry the
+                    // position of the working state (staged from `record_cache`, not
+                    // the live value) - without a tree buildColumnExpressions() writes
+                    // the column from $data, so take it from the live record
+                    $data['position'] = (int)($previousData['position'] ?? 0);
+                }
             }
             elseif ($positionActive && in_array('position', $affectedFields, true)) {
 

@@ -66,7 +66,7 @@ php "$CORE_DIR/.github/ci/create-instance.php"
 echo "::endgroup::"
 
 echo "::group::Selbsttests"
-for test in ${CAMINDO_SELF_TESTS:-check_dateparse check_template_params check_nested_select check_tree_positions check_batch_tree check_include_cache check_webauthn check_record_files check_field_trash}; do
+for test in ${CAMINDO_SELF_TESTS:-check_dateparse check_template_params check_nested_select check_tree_positions check_batch_tree check_include_cache check_webauthn check_record_files check_field_trash check_template_trash}; do
     echo "--- $test"
     php "Core/cron/$test.php"
 done
