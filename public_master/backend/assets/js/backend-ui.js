@@ -1055,14 +1055,18 @@
          * Initializes all .c9-textarea-grow after Ajax loads
          */
         _bindAjaxTextareaGrow() {
+            // Fields whose value and width are unchanged since the last resize are
+            // skipped - the polling requests (cApp.polling) end here every few seconds
+            const unchanged = (el) => el._c9GrowValue === el.value && el._c9GrowWidth === el.clientWidth;
             $(document).ajaxComplete((event, xhr, settings) => {
                 // 1. Normal text fields
                 $('textarea.c9-textarea-grow').each((index, element) => {
-                    this._resizeTextarea(element);
+                    if (!unchanged(element)) this._resizeTextarea(element);
                 });
                 
                 // 2. Code editors
                 $('textarea.c9-code-grow').each((index, element) => {
+                    if (unchanged(element)) return;
                     this._resizeCodeTextarea(element);
                     this._updateLineNumbers(element);
                 });
@@ -1082,11 +1086,37 @@
             if (!el._c9MinHeight) {
                 el._c9MinHeight = el.offsetHeight;
             }
-            el.style.height = 'auto';
-            el.style.height = Math.min(
-                Math.max(el.scrollHeight + 4, el._c9MinHeight),
-                window.innerHeight * 0.75
-            ) + 'px';
+            this._keepScroll(el, () => {
+                el.style.height = 'auto';
+                el.style.height = Math.min(
+                    Math.max(el.scrollHeight + 4, el._c9MinHeight),
+                    window.innerHeight * 0.75
+                ) + 'px';
+            });
+        },
+
+        /**
+         * Runs a height change of el and restores the scroll positions of the
+         * scrolling ancestors afterwards: the intermediate height 'auto' shortens
+         * the page for a moment, and the browser clamps their scrollTop - the
+         * layer would jump up (towards the top).
+         *
+         * @param {HTMLElement} el
+         * @param {Function} resize
+         */
+        _keepScroll(el, resize) {
+            const saved = [];
+            for (let p = el.parentElement; p; p = p.parentElement) {
+                if (p.scrollTop) saved.push([p, p.scrollTop]);
+            }
+            const root = document.scrollingElement;
+            if (root && root.scrollTop && !saved.some(([p]) => p === root)) saved.push([root, root.scrollTop]);
+            resize();
+            saved.forEach(([p, top]) => {
+                if (p.scrollTop !== top) p.scrollTop = top;
+            });
+            el._c9GrowValue = el.value;
+            el._c9GrowWidth = el.clientWidth;
         },
 
         /**
@@ -1101,18 +1131,20 @@
             if (!el._c9MinHeight) {
                 el._c9MinHeight = el.offsetHeight;
             }
-            el.style.height = 'auto';
+            this._keepScroll(el, () => {
+                el.style.height = 'auto';
 
-            // Check whether a horizontal scrollbar is active
-            const hasHorizontalScrollbar = el.scrollWidth > el.clientWidth;
-            const horizontalScrollbarHeight = hasHorizontalScrollbar 
-                ? (el.offsetHeight - el.clientHeight) 
-                : 0;
+                // Check whether a horizontal scrollbar is active
+                const hasHorizontalScrollbar = el.scrollWidth > el.clientWidth;
+                const horizontalScrollbarHeight = hasHorizontalScrollbar 
+                    ? (el.offsetHeight - el.clientHeight) 
+                    : 0;
 
-            el.style.height = Math.max(
-                el.scrollHeight + horizontalScrollbarHeight, 
-                el._c9MinHeight
-            ) + 'px';
+                el.style.height = Math.max(
+                    el.scrollHeight + horizontalScrollbarHeight, 
+                    el._c9MinHeight
+                ) + 'px';
+            });
         },
 
         /**
