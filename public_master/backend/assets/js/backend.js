@@ -40,7 +40,9 @@ window.cApp = window.cApp || {};
      * method   {string}     'GET' (default) or 'POST'
      * callback {function}   Called after successful loading
      * nocache  {boolean}    true (default): prevents browser caching
-     * spinner  {boolean}    true (default): show white overlay+spinner until the content is loaded
+     * spinner  {boolean}    true (default): show white overlay+spinner until the content is
+     *                       inserted, initialized and drawn (a long import log
+     *                       takes noticeable time after the response has arrived)
      * timeout  {int}        0 (default), >0 : timeout in ms
      * background {boolean}  false (default); true: request in the background (polling) -
      *                       does not extend the session (header X-Camindo-Background)
@@ -83,9 +85,8 @@ window.cApp = window.cApp || {};
             cPath += cPath.includes('?') ? `&cache=${Date.now()}` : `?cache=${Date.now()}`;
         }
 
-        if (settings.spinner) {
-            cApp.system.addSpinner();
-        }
+        const $spinner = settings.spinner ? cApp.system.addSpinner() : null;
+        const removeSpinner = () => { if ($spinner) cApp.system.removeSpinner($spinner); };
 
         const $this = $(this);
 
@@ -125,11 +126,16 @@ window.cApp = window.cApp || {};
                 ? Object.assign({ 'X-Camindo-Background': '1' }, cApp.system.csrfHeaders())
                 : cApp.system.csrfHeaders(),
             success: function (response) {
-                cApp.system.removeSpinner($this);
-
                 if (response.trim() === '##accessdenied##') {
+                    removeSpinner();
                     cApp.layers.login();
                 } else {
+                    // Spinner only once the new content has been drawn: the outer frame
+                    // callback runs before the next paint (after the initialization
+                    // below, which is queued later), the inner one after it. Queued
+                    // first, so that an error in the content cannot leave it standing
+                    requestAnimationFrame(() => requestAnimationFrame(removeSpinner));
+
                     // Cleanly shut down field extensions in the replaced content
                     if (cApp.extensions && cApp.extensions.destroyAll) {
                         cApp.extensions.destroyAll($this);
@@ -170,7 +176,7 @@ window.cApp = window.cApp || {};
                 }
             },
             error: function (jqXHR, textStatus) {
-                cApp.system.removeSpinner($this);
+                removeSpinner();
 
                 if (jqXHR.status === 0) return;
 
