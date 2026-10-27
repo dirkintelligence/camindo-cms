@@ -166,15 +166,18 @@ Nach mehreren fehlgeschlagenen Versuchen (standardmäßig drei innerhalb von zeh
 Minuten) sperrt camindo CMS die Anmeldung für diesen Benutzernamen vorübergehend. Die
 Meldung nennt die Wartezeit. Vor dem letzten erlaubten Versuch erhalten Sie einen Warnhinweis.
 
-## Einstellungen im Anmeldeformular
+## Sprache, Datumsformat und Zeitzone
 
-Unter den Zugangsdaten stehen drei Einstellungen. Sie gelten ab sofort und lassen
-sich später jederzeit in den [persönlichen Einstellungen](./03-arbeitsoberflaeche.md#persönliche-einstellungen)
-ändern.
+Unter den Zugangsdaten wählen Sie die Sprache der Backend-Oberfläche. Datumsformat und
+Zeitzone stellen Sie nach der Anmeldung in den
+[persönlichen Einstellungen](./03-arbeitsoberflaeche.md#persönliche-einstellungen) ein –
+dort lässt sich auch die Sprache jederzeit ändern. Solange Sie Datumsformat und Zeitzone
+nicht selbst einstellen, gelten die Vorgaben Ihres Systemadministrators.
 
 ### Sprache
 
-Die Sprache der Backend-Oberfläche ist unabhängig von den Sprachen Ihrer Website.  
+Die Sprache der Backend-Oberfläche ist unabhängig von den Sprachen Ihrer Website. Das
+Anmeldeformular merkt sich Ihre letzte Wahl in diesem Browser.  
 Bei der Installation von camindo CMS sind folgende Backend-Sprachen zur Auswahl (weitere
 können nachträglich installiert werden):
 

@@ -81,20 +81,20 @@
  * After a failed attempt there is therefore no way back to the code form: 'step2'
  * shows the empty login form again, and the user starts again from the beginning.
  *
- * LANGUAGE, LOCALE AND TIME ZONE ALREADY AT LOGIN
+ * BACKEND LANGUAGE ALREADY AT LOGIN
  * --------------------
- * The login form asks for backend language, locale (date and number format) and
- * time zone. They are preset by the JavaScript (cApp.ui.loginPrefsInit()): with
- * the last choice from localStorage - which AdminBackend::settings() also stores there -
- * otherwise with browser language, locale and time zone; a browser language without
- * backend translation ("nl") falls back to 'en_US' (Cms::resolveBackendLang()), a
- * locale without region or without ICU data to system.locale. The form itself is
- * already loaded in this language (Start/login.php?lang=…).
+ * The login form asks for the backend language. It is preset by the JavaScript
+ * (cApp.ui.loginPrefsInit()): with the last choice from localStorage - which
+ * AdminBackend::settings() also stores there - otherwise with the browser language;
+ * a browser language without backend translation ("nl") falls back to 'en_US'
+ * (Cms::resolveBackendLang()). The form itself is already loaded in this language
+ * (Start/login.php?lang=…). Locale (date and number format) and time zone are only
+ * set in the personal settings; without them system.locale and system.timezone apply.
  *
  * After a successful login the choice lands as a personal setting in the
  * admin record (Admin::saveSettings()) - the same place that describes the settings
- * at the top right of the backend. In the two-factor login the three values travel as
- * hidden fields through the code form. In addition, the cookie of the frontend
+ * at the top right of the backend. In the two-factor login the language travels as a
+ * hidden field through the code form. In addition, the cookie of the frontend
  * editing is set according to the saved setting.
  *
  * OPERATIONAL WARNINGS UNDER THE MODULE TILES
@@ -207,13 +207,9 @@ class StartBackend {
         // Page parameters
         $function = (string)($_POST['function'] ?? '');
 
-        // Backend language, locale and time zone: from the form (step1) resp. the preset
+        // Backend language: from the form (step1) resp. the preset
         // (?lang=… from localStorage / browser, see class comment)
         $backendCode = $this->cms->resolveBackendLang((string)($_POST['backend_code'] ?? $_REQUEST['lang'] ?? ''));
-        $timezone = trim((string)($_POST['timezone'] ?? ''));
-        if (!$this->cms->isValidTimezone($timezone)) $timezone = $this->cms->serverTZ;
-        $locale = trim((string)($_POST['locale'] ?? ''));
-        if (!$this->cms->isValidLocale($locale)) $locale = $this->cms->userLocale;
         // The form in the chosen language
         $this->cms->setLang($backendCode);
 
@@ -225,7 +221,7 @@ class StartBackend {
             '{lang}' => htmlspecialchars(str_replace('_', '-', $backendCode), ENT_QUOTES),
             '{dir}' => $this->cms->textDirection($backendCode),
         ]);
-        $tplForm = $this->backend->template('start.modal_form', $this->_loginFormOptions($backendCode, $timezone, $locale));
+        $tplForm = $this->backend->template('start.modal_form', $this->_loginFormOptions($backendCode));
         $tplFormEmpty = str_replace('{name}', '', $tplForm);
         $tplFooter = $this->backend->template('start.modal_footer');
         // http:// with admin.cookie_secure = true: the browser discards the cookie -
@@ -243,7 +239,7 @@ class StartBackend {
             echo $tplHeader;
             echo $tplFormEmpty;
             echo $tplFooter;
-            // Preset language, locale and time zone (localStorage, otherwise browser)
+            // Preset the language (localStorage, otherwise browser)
             $this->backend->script('cApp.ui.loginPrefsInit();');
         }
 
@@ -277,9 +273,9 @@ class StartBackend {
                 if (empty($data['sessid']) && empty($data['totp_setup']) && empty($data['password_renew'])) {
                     // Two-factor login: the code is on its way (e-mail) resp. in
                     // the app, but there is no session yet. Continue with form 2 -
-                    // language and time zone travel along as hidden fields.
+                    // the language travels along as a hidden field.
                     if (($data['factor'] ?? '') === 'webauthn') {
-                        $this->_passkeyForm($tplHeader, $tplFooter, $data, $backendCode, $timezone, $locale);
+                        $this->_passkeyForm($tplHeader, $tplFooter, $data, $backendCode);
                         return;
                     }
                     $totp = ($data['factor'] ?? '') === 'totp';
@@ -291,8 +287,6 @@ class StartBackend {
                         '{maxlength}' => $totp ? '16' : '5',
                         '{uid}' => htmlspecialchars((string)($data['uid'] ?? ''), ENT_QUOTES),
                         '{backend_code}' => htmlspecialchars($backendCode, ENT_QUOTES),
-                        '{timezone}' => htmlspecialchars($timezone, ENT_QUOTES),
-                        '{locale}' => htmlspecialchars($locale, ENT_QUOTES),
                     ]);
                     echo $tplFooter;
                     $this->backend->script("cApp.ui.focus('#login-code')");
@@ -300,7 +294,7 @@ class StartBackend {
                 }
 
                 // Session, renew password or set up TOTP
-                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode, $timezone, $locale);
+                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode);
             }
             else {
                 // Error messages + form
@@ -320,7 +314,7 @@ class StartBackend {
 
             if ($data = $this->admin->loginByCode($uid, $code)) {
                 // Only now does a session exist (or password / TOTP follows)
-                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode, $timezone, $locale);
+                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode);
             }
             else {
                 // The uid is used up with this attempt (see class comment),
@@ -344,10 +338,10 @@ class StartBackend {
                 // counts in the LoginGuard (Admin::loginByTotpSetup())
                 $this->auditLog->login('login_failed', 0, '');
                 $alert = str_replace('{text}', $this->cms->errorMsg(), $this->backend->template('alert_danger'));
-                $this->_totpSetupForm($tplHeader . $alert, $tplFooter, $data, $backendCode, $timezone, $locale);
+                $this->_totpSetupForm($tplHeader . $alert, $tplFooter, $data, $backendCode);
             }
             elseif ($data && !empty($data['sessid'])) {
-                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode, $timezone, $locale);
+                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode);
             }
             else {
                 $this->_loginFailed($tplHeader, $tplFormEmpty, $tplFooter, $this->cms->errorMsg(), '');
@@ -366,10 +360,10 @@ class StartBackend {
                 // Password rejected (policy, repetition, unchanged): the same
                 // form with a new uid
                 $alert = str_replace('{text}', $this->cms->errorMsg(), $this->backend->template('alert_danger'));
-                $this->_passwordChangeForm($tplHeader . $alert, $tplFooter, $data, $backendCode, $timezone, $locale);
+                $this->_passwordChangeForm($tplHeader . $alert, $tplFooter, $data, $backendCode);
             }
             elseif ($data) {
-                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode, $timezone, $locale);
+                $this->_loginNext($data, $tplHeader, $tplFooter, $backendCode);
             }
             else {
                 $this->_loginFailed($tplHeader, $tplFormEmpty, $tplFooter, $this->cms->errorMsg(), '');
@@ -384,19 +378,19 @@ class StartBackend {
      * @param array $data  result of Admin::loginBy…()
      */
     private function _loginNext(array $data, string $tplHeader, string $tplFooter,
-        string $backendCode, string $timezone, string $locale): void
+        string $backendCode): void
     {
         if (!empty($data['password_renew'])) {
-            $this->_passwordChangeForm($tplHeader, $tplFooter, $data, $backendCode, $timezone, $locale);
+            $this->_passwordChangeForm($tplHeader, $tplFooter, $data, $backendCode);
             return;
         }
         if (!empty($data['totp_setup'])) {
-            $this->_totpSetupForm($tplHeader, $tplFooter, $data, $backendCode, $timezone, $locale);
+            $this->_totpSetupForm($tplHeader, $tplFooter, $data, $backendCode);
             return;
         }
         // Set session cookie (HttpOnly, secure/SameSite from the configuration)
         $this->session->setCookie((string)$data['sessid']);
-        $this->_loginComplete((int)$data['admin_id'], $backendCode, $timezone, $locale,
+        $this->_loginComplete((int)$data['admin_id'], $backendCode,
             (array)($data['recovery_codes'] ?? []), $tplHeader, $tplFooter);
     }
 
@@ -408,7 +402,7 @@ class StartBackend {
      * any more) only the code field.
      */
     private function _passkeyForm(string $tplHeader, string $tplFooter, array $data,
-        string $backendCode, string $timezone, string $locale): void
+        string $backendCode): void
     {
         $options = $data['webauthn'] ?? null;
         $totp = !empty($data['totp_active']);
@@ -421,8 +415,6 @@ class StartBackend {
             '{code_label}' => $this->cms->snippet($totp ? 'start.label_login_code_totp_or_recovery' : 'start.label_login_recovery_code'),
             '{uid}' => htmlspecialchars((string)($data['uid'] ?? ''), ENT_QUOTES),
             '{backend_code}' => htmlspecialchars($backendCode, ENT_QUOTES),
-            '{timezone}' => htmlspecialchars($timezone, ENT_QUOTES),
-            '{locale}' => htmlspecialchars($locale, ENT_QUOTES),
         ]);
         echo $tplFooter;
         $this->backend->script(is_array($options) ? "cApp.ui.focus('#login-passkey')" : "cApp.ui.focus('#login-code')");
@@ -434,7 +426,7 @@ class StartBackend {
      * the input mask of the admin). The uid travels as a hidden field.
      */
     private function _passwordChangeForm(string $tplHeader, string $tplFooter, array $data,
-        string $backendCode, string $timezone, string $locale): void
+        string $backendCode): void
     {
         $extClass = '';
         $extAttr = '';
@@ -452,8 +444,6 @@ class StartBackend {
             '{ext_attr}' => $extAttr,
             '{uid}' => htmlspecialchars((string)($data['uid'] ?? ''), ENT_QUOTES),
             '{backend_code}' => htmlspecialchars($backendCode, ENT_QUOTES),
-            '{timezone}' => htmlspecialchars($timezone, ENT_QUOTES),
-            '{locale}' => htmlspecialchars($locale, ENT_QUOTES),
         ]);
         echo $tplFooter;
         $this->backend->script("cApp.extensions && cApp.extensions.refreshAll($('#login-dialog')); cApp.ui.focus('#login-new-password')");
@@ -468,7 +458,7 @@ class StartBackend {
      *                     with 'uid' and 'totp_setup'
      */
     private function _totpSetupForm(string $tplHeader, string $tplFooter, array $data,
-        string $backendCode, string $timezone, string $locale): void
+        string $backendCode): void
     {
         $setup = (array)$data['totp_setup'];
         echo $tplHeader;
@@ -478,8 +468,6 @@ class StartBackend {
             '{token}' => htmlspecialchars((string)$setup['token'], ENT_QUOTES),
             '{uid}' => htmlspecialchars((string)($data['uid'] ?? ''), ENT_QUOTES),
             '{backend_code}' => htmlspecialchars($backendCode, ENT_QUOTES),
-            '{timezone}' => htmlspecialchars($timezone, ENT_QUOTES),
-            '{locale}' => htmlspecialchars($locale, ENT_QUOTES),
         ]);
         echo $tplFooter;
         $this->backend->script("cApp.ui.qrCodes(); cApp.ui.focus('#login-code')");
@@ -582,8 +570,7 @@ class StartBackend {
     }
 
     /**
-     * Login completed: save the choice of language, locale and time zone as a personal
-     * setting, set the frontend editing cookie, and let the interface continue
+     * Login completed: save the chosen language as a personal setting, set the frontend editing cookie, and let the interface continue
      * running.
      *
      * Saving must not make the login fail - if it does, the previous setting remains.
@@ -594,24 +581,19 @@ class StartBackend {
      *
      * @param int    $adminId
      * @param string $backendCode  chosen backend language (already resolved)
-     * @param string $timezone     chosen time zone (already checked)
-     * @param string $locale       chosen locale (already checked)
      * @param array  $recoveryCodes  after the mandatory TOTP setup: the
      *                               recovery codes - the dialog shows them
      *                               and only closes with "Next"
      */
-    private function _loginComplete(int $adminId, string $backendCode, string $timezone, string $locale,
+    private function _loginComplete(int $adminId, string $backendCode,
         array $recoveryCodes = [], string $tplHeader = '', string $tplFooter = ''): void
     {
-        $this->admin->saveSettings($adminId, [
-            'backend_code' => $backendCode,
-            'timezone'     => $timezone,
-            'locale'       => $locale,
-        ]);
+        $this->admin->saveSettings($adminId, ['backend_code' => $backendCode]);
         $this->cms->errorsReset();
         $this->auditLog->login('login', $adminId);
 
-        // Frontend editing per saved setting (cookie of this browser)
+        // Frontend editing per saved setting (cookie of this browser); the locale for
+        // cApp.layers.loginComplete() also comes from the settings
         $settings = $this->backend->adminSettings();
         $this->backend->setFedCookie((int)($settings['fed'] ?? 0));
 
@@ -623,10 +605,9 @@ class StartBackend {
         // holds an empty token - and the layers that are reloaded right after should already
         // send the new one along (developer docs, chapter 14 (Security: web)).
         $code = json_encode($backendCode);
-        $tz = json_encode($timezone);
-        $loc = json_encode($locale);
+        $loc = json_encode((string)($settings['locale'] ?? ''));
         $token = json_encode($this->session->csrfToken());
-        $complete = "cApp.ui.loginPrefsStore({$code}, {$tz}, {$loc}); cApp.layers.loginComplete({$code}, {$loc});";
+        $complete = "cApp.ui.loginPrefsStore({$code}); cApp.layers.loginComplete({$code}, {$loc});";
 
         if ($recoveryCodes) {
             // Show codes; continue only with the button
@@ -659,17 +640,15 @@ class StartBackend {
     }
 
     /**
-     * Choice lists of the login form: backend languages, locales and time zones,
-     * with the current choice as selected.
+     * Choice list of the login form: backend languages, with the current choice
+     * as selected.
      *
      * @return array  replacements for the template start.modal_form
      */
-    private function _loginFormOptions(string $backendCode, string $timezone, string $locale): array
+    private function _loginFormOptions(string $backendCode): array
     {
         return [
             '{lang_options}' => $this->backend->options($this->backend->backendLanguageOptions(), $backendCode),
-            '{timezone_options}' => $this->backend->options($this->backend->timezoneOptions(), $timezone),
-            '{locale_options}' => $this->backend->options($this->backend->localeOptions(), $locale),
         ];
     }
 

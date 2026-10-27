@@ -44,38 +44,34 @@
             attempt();
         },
 
-        // --- Login form: backend language, locale and time zone ---
+        // --- Login form: backend language ---
         //
-        // The last choice is kept in localStorage (keys c9.backend_code,
-        // c9.locale, c9.timezone) - stored at login and when saving the
-        // personal settings (AdminBackend::settings()). Without an entry
-        // the browser language, locale and time zone decide; a language the
-        // backend does not know is resolved by the server to 'en_US' (Cms::resolveBackendLang()),
-        // an unknown locale to system.locale. Backend languages have the form
-        // de_DE; a previously remembered "de" applies to the first option with "de_".
+        // The last choice is kept in localStorage (key c9.backend_code) - stored at
+        // login and when saving the personal settings (AdminBackend::settings()).
+        // Without an entry the browser language decides; a language the backend does
+        // not know is resolved by the server to 'en_US' (Cms::resolveBackendLang()).
+        // Backend languages have the form de_DE; a previously remembered "de" applies
+        // to the first option with "de_". Locale and time zone are only set in the
+        // personal settings.
 
         /**
          * Read the remembered choice.
-         * @returns {{backend_code: string, timezone: string, locale: string}}
+         * @returns {{backend_code: string}}
          */
         loginPrefs() {
-            const prefs = { backend_code: '', timezone: '', locale: '' };
+            const prefs = { backend_code: '' };
             try {
                 prefs.backend_code = localStorage.getItem('c9.backend_code') || '';
-                prefs.timezone     = localStorage.getItem('c9.timezone') || '';
-                prefs.locale       = localStorage.getItem('c9.locale') || '';
             } catch (e) { /* localStorage blocked - then without preselection */ }
             return prefs;
         },
 
         /**
-         * Remember the choice (empty values leave the previous entry in place).
+         * Remember the choice (an empty value leaves the previous entry in place).
          */
-        loginPrefsStore(backendCode, timezone, locale) {
+        loginPrefsStore(backendCode) {
             try {
                 if (backendCode) localStorage.setItem('c9.backend_code', backendCode);
-                if (timezone)    localStorage.setItem('c9.timezone', timezone);
-                if (locale)      localStorage.setItem('c9.locale', locale);
             } catch (e) { /* see loginPrefs() */ }
         },
 
@@ -260,18 +256,6 @@
         },
 
         /**
-         * Locales of the browser in ICU notation (de-AT -> de_AT), only those with
-         * a region - only that determines a date format.
-         * @returns {string[]}
-         */
-        browserLocales() {
-            const list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ''];
-            return list
-                .map((tag) => String(tag).replace(/-/g, '_'))
-                .filter((tag) => /^[a-z]{2,3}_(?:[A-Z][a-z]{3}_)?[A-Z]{2}$/.test(tag));
-        },
-
-        /**
          * Language with which the login form is loaded: the remembered one, otherwise the
          * browser's ("de-AT"; the server chooses de_AT, otherwise the first backend
          * language with "de_", otherwise 'en_US').
@@ -283,7 +267,7 @@
         },
 
         /**
-         * Preselect the select lists of the login form - called after the
+         * Preselect the language list of the login form - called after the
          * form has loaded (StartBackend::login()). Only values that exist as an option.
          */
         loginPrefsInit() {
@@ -312,19 +296,6 @@
                 // Browser language ("de-AT"); unknown -> 'en_US'
                 if (!setLangOption($lang, navigator.language)) setIfOption($lang, 'en_US');
             }
-
-            const $tz = $('#login-timezone');
-            if (!setIfOption($tz, prefs.timezone)) {
-                let browserTz = '';
-                try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
-                setIfOption($tz, browserTz);
-            }
-
-            const $locale = $('#login-locale');
-            if (!setIfOption($locale, prefs.locale)) {
-                // First browser locale that exists as an option; otherwise system.locale stays
-                this.browserLocales().some((tag) => setIfOption($locale, tag));
-            }
         },
 
         /**
@@ -335,9 +306,7 @@
                 const $el = $(e.currentTarget);
                 const pref = $el.data('pref');
                 const value = $el.val();
-                if (pref === 'backend_code') this.loginPrefsStore(value, '', '');
-                if (pref === 'timezone')     this.loginPrefsStore('', value, '');
-                if (pref === 'locale')       this.loginPrefsStore('', '', value);
+                if (pref === 'backend_code') this.loginPrefsStore(value);
             });
         },
 

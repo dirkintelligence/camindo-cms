@@ -770,14 +770,12 @@ class AdminBackend {
     private function _settingsApplyOwn(array $settings, bool $fedChanged): void
     {
         $code = json_encode((string)($settings['backend_code'] ?? ''));
-        $timezone = json_encode((string)($settings['timezone'] ?? ''));
-        $locale = json_encode((string)($settings['locale'] ?? ''));
         $sync = $fedChanged ? $this->_fedSyncJson((int)($settings['fed'] ?? 0)) : '';
         $reload = $sync !== ''
             ? "cApp.ui.fedSync({$sync}, () => window.location.reload());"
             : 'window.location.reload();';
         $this->backend->script("
-            cApp.ui.loginPrefsStore({$code}, {$timezone}, {$locale});
+            cApp.ui.loginPrefsStore({$code});
             cApp.layers.close();
             {$reload}
         ");

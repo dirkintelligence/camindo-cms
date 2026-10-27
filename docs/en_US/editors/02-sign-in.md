@@ -168,15 +168,18 @@ After several failed attempts (by default three within ten minutes), camindo CMS
 temporarily blocks sign-in for this user name. The message states the waiting time.
 Before the last permitted attempt you receive a warning.
 
-## Settings in the sign-in form
+## Language, date format and time zone
 
-Below the credentials there are three settings. They take effect immediately and can be
-changed at any time later in the [personal settings](./03-work-surface.md#personal-settings).
+Below the credentials you choose the language of the backend user interface. You set the
+date format and time zone after signing in, in the
+[personal settings](./03-work-surface.md#personal-settings) – where you can also change the
+language at any time. As long as you have not set the date format and time zone yourself,
+the defaults of your system administrator apply.
 
 ### Language
 
 The language of the backend user interface is independent of the languages of your
-website.  
+website. The sign-in form remembers your last choice in this browser.  
 The following backend languages are available after installation (more can be installed
 later):
 
