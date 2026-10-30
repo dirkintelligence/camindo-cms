@@ -27,6 +27,10 @@
  *                   additional rights from its settings.php (Group::availableModules());
  *                   JavaScript links the additional rights to the module checkbox
  *                   (Vorlagen group_module_row / group_module_right)
+ *     assignable_groups  one checkbox per other group (not the superuser group,
+ *                   not the group itself): subordinate groups - with admin_create /
+ *                   admin_change the members also create and change admins of these
+ *                   groups (details.assignable_groups, Group::hookOnSave())
  *     instance_ids  one checkbox per instance - a newly assigned instance releases
  *                   all its areas and languages (Group::hookOnSaved())
  *     languages     je Sprache zwei Checkboxes "lesen" / "schreiben" (plus Hiddenfeld 0,
@@ -273,6 +277,18 @@ class GroupBackend {
         $this->backend->infoStatic(
             $this->cms->snippet('admin.field_group_modules'),
             $items ? $this->backend->template('ul', ['{items}' => '<li>' . implode("</li>\n<li>", $items) . '</li>']) : $this->backend->emptyPlaceholder,
+            ['html']
+        );
+
+        // Subordinate groups
+        $assignable = array_map('intval', (array)($data['details']['assignable_groups'] ?? []));
+        $items = [];
+        foreach ($this->_otherGroups($id) as $groupId => $groupLabel) {
+            if (in_array($groupId, $assignable, true)) $items[] = htmlspecialchars($groupLabel);
+        }
+        $this->backend->infoStatic(
+            $this->cms->snippet('admin.field_group_assignable_groups'),
+            $items ? implode('<br>', $items) : $this->backend->emptyPlaceholder,
             ['html']
         );
 
@@ -562,6 +578,8 @@ class GroupBackend {
         $this->data['languages'] = (array)($this->data['languages'] ?? []);
         // no checkbox ticked = no status settable
         $this->data['statuses'] = (array)($this->data['statuses'] ?? []);
+        // no checkbox ticked = no subordinate group
+        $this->data['assignable_groups'] = (array)($this->data['assignable_groups'] ?? []);
         if (!isset($this->data['details'])) $this->data['details'] = [];
 
         if ($this->group->save($fields, $this->data)) {
@@ -675,6 +693,29 @@ class GroupBackend {
         }
         $this->backend->formReplace('{data_modules}', $this->_formGroup('admin.field_group_modules', $rows, 'admin.tooltip_group_modules'));
 
+        // Subordinate groups
+        // --------------------
+        // from the form (data[assignable_groups]) or from details.assignable_groups
+        if ($this->function === 'errors') {
+            $assignable = array_map('intval', (array)($this->data['assignable_groups'] ?? []));
+        }
+        else {
+            $details = is_string($this->data['details'] ?? null) ? json_decode($this->data['details'], true) : ($this->data['details'] ?? []);
+            $assignable = array_map('intval', (array)($details['assignable_groups'] ?? []));
+        }
+        $rows = '';
+        foreach ($this->_otherGroups($this->id) as $groupId => $groupLabel) {
+            $rows .= $this->backend->template('edit_form_checkbox_with_label', [
+                '{name}' => 'data[assignable_groups][]',
+                '{value}' => (string)$groupId,
+                '{id}' => 'grp_' . $this->crypt->randomKey(8),
+                '{label}' => $this->backend->escape($groupLabel),
+                '{checked}' => in_array($groupId, $assignable, true) ? ' checked' : '',
+            ]);
+        }
+        if ($rows === '') $rows = $this->backend->emptyPlaceholder;
+        $this->backend->formReplace('{data_assignable_groups}', $this->_formGroup('admin.field_group_assignable_groups', $rows, 'admin.tooltip_group_assignable_groups'));
+
         // Instanzen
         // --------------------
         $selected = array_map('intval', (array)($this->data['instance_ids'] ?? []));
@@ -729,6 +770,19 @@ class GroupBackend {
         $this->backend->formHidden('id', $this->id);
         echo $this->backend->form('form_save_cancel_note');
         echo '</form>';
+    }
+
+    /**
+     * Groups that can be subordinate to group $groupId: all except the superuser
+     * group and the group itself (0 = new group: all).
+     *
+     * @return array  group_id => label (text), sorted by label
+     */
+    private function _otherGroups(int $groupId): array
+    {
+        $groups = $this->backend->getGroups();
+        unset($groups[InstanceCache::SUPERUSER_GROUP_ID], $groups[$groupId]);
+        return $groups;
     }
 
     /**

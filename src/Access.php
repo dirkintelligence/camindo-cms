@@ -32,6 +32,9 @@
  *                                              (recordWrite())
  *     Interface    interface()                 via which interface admins of the
  *                                              group may sign in (INTERFACES)
+ *     Groups       assignableGroupIds()        which groups admins of the group may
+ *                  groupAssignable()           give to admins (own group plus the
+ *                                              subordinate groups; module Admin)
  *
  * INTERFACES
  * --------------------
@@ -475,6 +478,31 @@ class Access {
             if ($canWrite) $ids[] = (int)$languageId;
         }
         return $ids;
+    }
+
+    // ====================
+    // Subordinate groups
+
+    /**
+     * Groups the loaded group may give to admins (create, change, copy in module
+     * Admin): its own plus `group`.`details`.`assignable_groups`; superuser: all.
+     * Not loaded: empty - there is no admin who would create someone.
+     *
+     * @return int[]
+     */
+    public function assignableGroupIds(): array
+    {
+        return array_map('intval', (array)($this->group['assignable_group_ids'] ?? []));
+    }
+
+    /**
+     * May the loaded group give this group to an admin? The superuser group only
+     * to superusers.
+     */
+    public function groupAssignable(int $groupId): bool
+    {
+        if ($this->isSuperuser()) return true;
+        return $groupId > 0 && in_array($groupId, $this->assignableGroupIds(), true);
     }
 
     // ====================

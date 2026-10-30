@@ -43,11 +43,18 @@
  * Everyone with module access sees the list of names. In addition:
  *
  *     admin_read_group    detail view (contact data) of the admins of one's own group
+ *                         and of the subordinate groups
  *     admin_read_other    detail view of the admins of other groups
- *     admin_create        create and copy admins - in one's own group, with
- *                         Startpasswort
- *     admin_change        change data of the admins of one's own group and block them
- *                         (status) - without password and without group
+ *     admin_create        create and copy admins - in one's own group or a
+ *                         subordinate one, with initial password
+ *     admin_change        change data of the admins of one's own group and of the
+ *                         subordinate groups and block them (status) - without
+ *                         password; the group only among these groups
+ *
+ * SUBORDINATE GROUPS: `group`.`details`.`assignable_groups` (maintained in the group
+ * form) lists the further groups whose admins the members of a group may create and
+ * change - Access::assignableGroupIds() = own group plus these. The superuser group
+ * is never among them: superusers are created only by superusers.
  *
  * One's own detail view is always readable. The password of another admin,
  * deleting, admins of foreign groups and the settings of other admins remain reserved for the
@@ -159,13 +166,14 @@ class AdminBackend {
         $access = $this->backend->access();
         if ($access->isSuperuser()) return true;
         if ($adminId > 0 && $adminId === (int)$this->session->get('admin_id')) return true;
-        $own = ($groupId === $access->groupId());
+        // own group and subordinate groups (Access::assignableGroupIds())
+        $own = $access->groupAssignable($groupId);
         return $access->moduleRight('Admin', $own ? 'admin_read_group' : 'admin_read_other');
     }
 
     /**
      * May an admin be created or copied (additional right admin_create; the
-     * group is fixed to one's own for non-superusers)?
+     * group of non-superusers: their own or a subordinate one, _assignableGroupId())?
      */
     private function _canCreate(): bool
     {
@@ -176,21 +184,43 @@ class AdminBackend {
 
     /**
      * May an admin of group $groupId be changed or blocked
-     * (additional right admin_change, own group only)?
+     * (additional right admin_change, own group and subordinate groups)?
      */
     private function _canChange(int $groupId): bool
     {
         $access = $this->backend->access();
         if ($access->isSuperuser()) return true;
-        return $groupId === $access->groupId() && $access->moduleRight('Admin', 'admin_change');
+        return $access->groupAssignable($groupId) && $access->moduleRight('Admin', 'admin_change');
     }
 
-    /**
-     * Group of new admins: for non-superusers, fixed to one's own.
-     */
     private function _ownGroupId(): int
     {
         return $this->backend->access()->groupId();
+    }
+
+    /**
+     * Group that a non-superuser saves: the requested one, if the own group may
+     * assign it (own or subordinate group), otherwise $fallback - the own group
+     * when creating, the stored group when changing. A manipulated form thus
+     * never reaches a foreign group or the superuser group.
+     */
+    private function _assignableGroupId(int $requested, int $fallback): int
+    {
+        return $this->backend->access()->groupAssignable($requested) ? $requested : $fallback;
+    }
+
+    /**
+     * Options of the group selection: superuser all groups, otherwise the own and
+     * the subordinate groups (order as Backend::getGroups()).
+     *
+     * @return array  group_id => label
+     */
+    private function _groupOptions(): array
+    {
+        $groups = $this->backend->getGroups();
+        if ($this->backend->isSuperuser()) return $groups;
+        $assignable = $this->backend->access()->assignableGroupIds();
+        return array_filter($groups, fn($groupId) => in_array((int)$groupId, $assignable, true), ARRAY_FILTER_USE_KEY);
     }
 
     /**
@@ -2115,8 +2145,8 @@ class AdminBackend {
         }
 
         // Additional rights: delete only superuser; create/copy with admin_create,
-        // change with admin_change - both only in the own group (superuser
-        // everything). When saving, the stored group of the record counts,
+        // change with admin_change - both only in the own and the subordinate
+        // groups (superuser everything). When saving, the stored group of the record counts,
         // not the one from the form.
         if ($this->function !== 'skip' && !$this->_editAllowed()) {
             echo $this->backend->access()->deniedHtml();
@@ -2251,9 +2281,17 @@ class AdminBackend {
      */
     private function _editSave(): void
     {
-        // Non-superuser: the group is fixed to the own one (form value does not count)
+        // Non-superuser: only the own or a subordinate group (_assignableGroupId());
+        // otherwise the own one when creating, the stored one when changing
         if (!$this->backend->isSuperuser()) {
-            $this->data['group_id'] = $this->_ownGroupId();
+            $fallback = $this->_ownGroupId();
+            if ($this->id > 0) {
+                $this->db->pushResult();
+                $this->db->query("SELECT `group_id` FROM `admin` WHERE `admin_id` = ?", 'i', [$this->id]);
+                $fallback = (int)($this->db->fetchNum()[0] ?? 0);
+                $this->db->popResult();
+            }
+            $this->data['group_id'] = $this->_assignableGroupId((int)($this->data['group_id'] ?? 0), $fallback);
         }
 
         // Check data and save
@@ -2459,25 +2497,30 @@ class AdminBackend {
        
         if (!$this->_editPasswordAllowed()) $this->backend->formReplace('{data_password}', '');
 
-        // group_id - only a superuser may select it, otherwise the own one is fixed
+        // group_id - superuser: all groups; otherwise the own and the subordinate
+        // groups (_groupOptions()) - with only one of them it is fixed
         // --------------------
         if ($this->data['name'] === 'scheduler') {
             $groupOptions = [InstanceCache::SUPERUSER_GROUP_ID => $this->cms->snippet('group_label_superuser')];
         }
         else {
-            $groupOptions = $this->backend->getGroups();
+            $groupOptions = $this->_groupOptions();
         }
-        if ($this->backend->isSuperuser()) {
+        $groupId = (int)($this->data['group_id'] ?? 0);
+        if (!$this->backend->isSuperuser() && !isset($groupOptions[$groupId])) {
+            // new admin, or a copy from a group that may not be assigned
+            $groupId = $this->_ownGroupId();
+        }
+        if ($this->backend->isSuperuser() || count($groupOptions) > 1) {
             $this->backend->formField($this->admin, [
                 'name' => 'group_id',
-                'value' => $this->data['group_id'] ?? '',
+                'value' => $this->backend->isSuperuser() ? ($this->data['group_id'] ?? '') : $groupId,
                 'id' => $this->id,
                 'options' => $groupOptions
             ]);
         }
         else {
-            $ownGroupId = $this->_ownGroupId();
-            $this->backend->formStatic($this->admin, 'group_id', htmlspecialchars((string)($groupOptions[$ownGroupId] ?? $ownGroupId)));
+            $this->backend->formStatic($this->admin, 'group_id', htmlspecialchars((string)($groupOptions[$groupId] ?? $groupId)));
         }
         // status_id
         // --------------------

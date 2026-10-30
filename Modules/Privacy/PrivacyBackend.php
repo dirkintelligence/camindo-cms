@@ -31,7 +31,7 @@
  *     website users  profile records from areas the group may read
  *                   (RecordPersonalData)
  *     users          from groups whose users the group may see in the module Users:
- *                   own group with admin_read_group, others with
+ *                   own and subordinate groups with admin_read_group, others with
  *                   admin_read_other (AdminPersonalData)
  * The disclosure is created from a template (ExportTemplate) - separately for website users
  * and users. Website users: templates of the instance of the profile - without a template no
@@ -843,7 +843,8 @@ class PrivacyBackend {
         $access = $this->backend->access();
         if ($access->isSuperuser()) return true;
         if (!$access->module('Admin')) return false;
-        return $access->moduleRight('Admin', $groupId === $access->groupId() ? 'admin_read_group' : 'admin_read_other');
+        // own group and subordinate groups count as "group" (Access::assignableGroupIds())
+        return $access->moduleRight('Admin', $access->groupAssignable($groupId) ? 'admin_read_group' : 'admin_read_other');
     }
 
     // ====================

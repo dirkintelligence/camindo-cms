@@ -96,6 +96,10 @@
  *     'modules'            module name => granted additional rights (`group`.`details`)
  *     'interfaces'         interfaces via which admins of the group may sign in
  *                          (`group`.`details`.`interfaces`, Access::INTERFACES)
+ *     'assignable_group_ids'  groups that admins of the group may give to the admins
+ *                          they create or change: the own group plus
+ *                          `group`.`details`.`assignable_groups` (existing groups
+ *                          only, never the superuser group); superuser: all groups
  *     'rights' => [
  *         'areas'     => [area_id => [group_write, group_delete, other_write,
  *                                     other_delete, set_owner] (bool)]
@@ -1161,6 +1165,12 @@ class InstanceCache {
                 'interfaces'        => $isSuperuser
                     ? Access::INTERFACES
                     : Access::normalizeInterfaces(isset($row['details']['interfaces']) ? (array)$row['details']['interfaces'] : null),
+                'assignable_group_ids' => $isSuperuser
+                    ? array_keys($groupRows)
+                    : array_values(array_unique(array_merge([$groupId], array_intersect(
+                        array_diff(array_keys($groupRows), [self::SUPERUSER_GROUP_ID]),
+                        array_map('intval', (array)($row['details']['assignable_groups'] ?? []))
+                    )))),
                 'rights'            => ['areas' => [], 'languages' => [], 'statuses' => []],
             ];
             if ($isSuperuser) {

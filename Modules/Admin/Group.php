@@ -12,6 +12,10 @@
  *     details.interfaces   interfaces through which admins of the group may log in:
  *                          backend, cli, php (Access::INTERFACES); without
  *                          specification only the backend
+ *     details.assignable_groups  further groups (group_ids) that admins of the group
+ *                          may give to the admins they create or change - besides
+ *                          their own group, which is always allowed (see "Subordinate
+ *                          groups" below)
  *     instance_ids         `rel_group_instance` - instances whose areas the group
  *                          sees in the backend (field of type 'reltable')
  *     languages            `rel_group_language` - language_id => 1 (lesen) | 2 (lesen
@@ -43,6 +47,16 @@
  * hookOnSave()/hookOnDelete() reject that. Furthermore, no group can be deleted that
  * still has admins (the foreign key admin.group_id is RESTRICT;
  * the message here is the readable version of it).
+ *
+ * SUBORDINATE GROUPS
+ * --------------------
+ * details.assignable_groups makes other groups subordinate to this one: with the
+ * additional rights admin_create / admin_change of the module Admin, its admins
+ * create and change admins of the own group AND of these groups (AdminBackend,
+ * Access::assignableGroupIds()). hookOnSave() keeps only existing groups, never the
+ * superuser group (superusers are only created by superusers) and never the group
+ * itself. The list is part of the signed details; a group deleted later simply drops
+ * out when the group files are built (InstanceCache).
  *
  * SIGNATUREN (Integrity)
  * --------------------
@@ -131,7 +145,7 @@ class Group extends Dataset {
 
     protected function hookOnCreate(array &$data): void
     {
-        $data['details'] = ['modules' => [], 'interfaces' => Access::DEFAULT_INTERFACES];
+        $data['details'] = ['modules' => [], 'interfaces' => Access::DEFAULT_INTERFACES, 'assignable_groups' => []];
         $data['instance_ids'] = [];
         $data['languages'] = [];
         // Default: all statuses settable
@@ -150,6 +164,7 @@ class Group extends Dataset {
         $data['details']['interfaces'] = Access::normalizeInterfaces(
             isset($data['details']['interfaces']) ? (array)$data['details']['interfaces'] : null
         );
+        $data['details']['assignable_groups'] = array_values(array_map('intval', (array)($data['details']['assignable_groups'] ?? [])));
 
         $this->db->query("SELECT `instance_id` FROM `rel_group_instance` WHERE `group_id` = ?", 'i', [$groupId]);
         $data['instance_ids'] = array_map('intval', $this->db->fetchColumn());
@@ -169,6 +184,8 @@ class Group extends Dataset {
      *
      *     modules       from the form (data[modules]) or already as
      *                   details.modules - only known modules, only defined rights
+     *     assignable_groups  from the form (data[assignable_groups]) or already in
+     *                   details - only existing groups, not 1, not the group itself
      *     instance_ids  only existing instances
      *     languages     language_id => LANGUAGE_*, only existing languages
      *     statuses      only existing statuses
@@ -184,7 +201,9 @@ class Group extends Dataset {
 
         // Modules and interfaces
         // --------------------
-        if (in_array('details', $fields, true) || array_key_exists('modules', $data) || array_key_exists('interfaces', $data)) {
+        if (in_array('details', $fields, true) || array_key_exists('modules', $data)
+            || array_key_exists('interfaces', $data) || array_key_exists('assignable_groups', $data)
+        ) {
             $details = is_array($data['details'] ?? null) ? $data['details'] : [];
             if (array_key_exists('modules', $data)) {
                 $details['modules'] = $this->modulesFromForm((array)$data['modules']);
@@ -198,6 +217,14 @@ class Group extends Dataset {
                 $details['interfaces'] = (array)$previousData['details']['interfaces'];
             }
             $details['interfaces'] = Access::normalizeInterfaces(isset($details['interfaces']) ? (array)$details['interfaces'] : null);
+            // Subordinate groups: like the interfaces - without specification the previous ones
+            if (array_key_exists('assignable_groups', $data)) {
+                $details['assignable_groups'] = (array)$data['assignable_groups'];
+            }
+            elseif (!isset($details['assignable_groups']) && isset($previousData['details']['assignable_groups'])) {
+                $details['assignable_groups'] = (array)$previousData['details']['assignable_groups'];
+            }
+            $details['assignable_groups'] = $this->normalizeAssignableGroups((array)($details['assignable_groups'] ?? []), $groupId);
             $data['details'] = $details;
             if (!in_array('details', $fields, true)) $fields[] = 'details';
         }
@@ -571,6 +598,22 @@ class Group extends Dataset {
             ];
         }
         return $modules;
+    }
+
+    /**
+     * details.assignable_groups: only existing groups, never the superuser group and
+     * never the group itself (it is always assignable); ascending.
+     *
+     * @param array $ids      group_ids from the form or from details
+     * @param int   $groupId  the group being saved (0 = new)
+     * @return int[]
+     */
+    private function normalizeAssignableGroups(array $ids, int $groupId): array
+    {
+        $ids = array_diff($this->system->sanitizeIds($ids, true), [InstanceCache::SUPERUSER_GROUP_ID, $groupId]);
+        $ids = $this->existingIds('group', array_values($ids));
+        sort($ids);
+        return $ids;
     }
 
     /**

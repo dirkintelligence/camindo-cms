@@ -17,7 +17,7 @@ Klicken Sie auf die Schaltfläche „Neu“ oder wählen Sie einen Eintrag aus d
 | Benutzername | Anmeldename: beginnt mit einem Kleinbuchstaben, danach Kleinbuchstaben, Ziffern und `_`. Neue Namen dürfen nicht mit `admin_` beginnen – reserviert für anonymisierte Konten |
 | Passwort | wird nur als Prüfwert (Hash) gespeichert und ist nicht lesbar; leer lassen = unverändert. Es muss die [Passwort-Richtlinie](./extensions/password.md) erfüllen – die Anforderungen erscheinen beim Tippen. Beim Anlegen vergeben Sie ein ***Startpasswort***. Das Passwort eines bestehenden anderen Benutzers ändert nur ein Superuser |
 | Bisheriges Passwort,<br>Ihr Passwort | nur für Superuser beim Ändern eines bestehenden Kontos: Wer sein ***eigenes*** Passwort ändert, gibt das bisherige ein; wer das Passwort eines ***anderen*** Benutzers ändert, bestätigt das mit seinem eigenen Passwort – eine offen stehende Sitzung reicht also nicht, um ein Konto zu übernehmen. Beim Anlegen entfällt das Feld. Alle anderen ändern ihr Passwort in den persönlichen Einstellungen |
-| Benutzergruppe | Benutzergruppe mit ihren Rechten |
+| Benutzergruppe | Benutzergruppe mit ihren Rechten. Wer kein Superuser ist, wählt nur zwischen der eigenen und den [untergeordneten Benutzergruppen](#untergeordnete-benutzergruppen) |
 | Status | „Freigeschaltet“ oder „Deaktiviert“ – ein deaktivierter Benutzer kann sich nicht anmelden |
 | Haupt- (Nach-) Name,<br>Angezeigter Name,<br>Sortierwert | Namen für Listen und Nachrichten |
 | E-Mail,<br>Mobilfunk-,<br>Festnetznummer | Kontaktdaten, verschlüsselt gespeichert. Die E-Mail-Adresse wird für den Anmelde-Code der Zwei-Faktor-Anmeldung benötigt |
@@ -73,6 +73,25 @@ Backend. Entziehen Sie einer Benutzergruppe eine Oberfläche, enden laufende Sit
 nächsten Zugriff. Für Programme empfiehlt sich ein eigener Benutzer in einer eigenen
 Benutzergruppe, die nur die nötigen Oberflächen und Rechte hat.
 
+### Untergeordnete Benutzergruppen
+
+Mit den Zusatzrechten „Benutzer anlegen“ und „Benutzer ändern und sperren“ (Modul
+„Benutzer“) verwalten die Mitglieder einer Benutzergruppe zunächst nur Benutzer ihrer
+***eigenen*** Benutzergruppe. Unter ***„Untergeordnete Benutzergruppen“*** haken Sie
+weitere Benutzergruppen an, die sie außerdem vergeben dürfen – beim Anlegen, Kopieren
+und Ändern eines Benutzers. Für die Benutzer dieser Gruppen gelten dann dieselben
+Zusatzrechte wie für die der eigenen Gruppe, auch „Benutzerdetails lesen: eigene und
+untergeordnete Benutzergruppen“.
+
+Ein Beispiel: Die Gruppe „Redakteure“ hat keine untergeordnete Benutzergruppe – ihre
+Mitglieder legen nur Redakteure an. Bei der Gruppe „Teamleiter“ haken Sie „Redakteure“
+an – Teamleiter legen dann Teamleiter **und** Redakteure an und können einen Redakteur
+auch zum Teamleiter machen (und umgekehrt).
+
+Die Gruppe „Superuser“ steht nicht zur Wahl: Ein Superuser kann nur von einem Superuser
+angelegt werden. Die Unterordnung gilt nicht weiter: Hat „Redakteure“ selbst
+untergeordnete Benutzergruppen, dürfen Teamleiter diese nicht automatisch vergeben.
+
 Die Rechte einer Benutzergruppe haben vier Ebenen:
 
 ### 1. Module und Zusatzrechte
@@ -82,7 +101,7 @@ Welche Module die Benutzergruppe öffnen darf. Einige Module haben darunter eing
 
 | Modul | Zusatzrechte |
 |---|---|
-| Benutzer | „Benutzerdetails lesen: eigene Benutzergruppe“ · „Benutzerdetails lesen: andere Benutzergruppen“ · „Benutzer anlegen: eigene Benutzergruppe (mit Startpasswort)“ · „Benutzer ändern und sperren: eigene Benutzergruppe (ohne Passwort)“ |
+| Benutzer | „Benutzerdetails lesen: eigene und untergeordnete Benutzergruppen“ · „Benutzerdetails lesen: andere Benutzergruppen“ · „Benutzer anlegen: eigene und untergeordnete Benutzergruppen (mit Startpasswort)“ · „Benutzer ändern und sperren: eigene und untergeordnete Benutzergruppen (ohne Passwort)“ – siehe [Untergeordnete Benutzergruppen](#untergeordnete-benutzergruppen) |
 | Datenschutz | „Lösch-Policies anlegen und ändern“ (nur für zugängliche Instanzen) · „Personenbezogene Daten exportieren“ (Profile aus lesbaren Bereichen, Benutzer aus sichtbaren Benutzergruppen) · „Vorlagen der Datenauskunft pflegen“ (zugängliche Instanzen) · „Gelöschte Benutzer anonymisieren“ (zugängliche Benutzergruppen) – siehe [Kapitel 15](./15-datenschutz.md) |
 | Inhalte | „CSV-Import“, „Medien-Import (Zip-Datei)“, „CSV-Export“, „DOCX-Import (Übersetzung)“, „DOCX-Export (Übersetzung)“, „Stapelverarbeitung“ |
 | Werkzeuge | je ein Recht für die Reiter „Server“, „Datenbank“, „Daten“, „Entwickler“ und „Papierkorb eines Users“ („Papierkorb eines Website-Users endgültig leeren“) |

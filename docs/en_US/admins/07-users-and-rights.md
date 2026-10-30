@@ -18,7 +18,7 @@ the list. The input/edit mask for this user appears.
 | User name | sign-in name: begins with a lowercase letter, followed by lowercase letters, digits, and `_`. New names must not begin with `admin_` – reserved for anonymized accounts |
 | Password | stored only as a check value (hash) and cannot be read; leave empty = unchanged. It must meet the [password policy](./extensions/password.md) – the requirements appear while you type. When creating, you assign a ***initial password***. Only a superuser can change the password of another existing user |
 | Previous password,<br>your password | only for superusers when changing an existing account: anyone who changes their ***own*** password enters the previous one; anyone who changes the password of ***another*** user confirms this with their own password – an open session is therefore not enough to take over an account. When creating, this field is omitted. Everyone else changes their password in the personal settings |
-| User group | user group with its rights |
+| User group | user group with its rights. Anyone who is not a superuser can only choose between their own user group and the [subordinate user groups](#subordinate-user-groups) |
 | Status | “Enabled” or “Disabled” – a disabled user cannot sign in |
 | Main (last) name,<br>Displayed name,<br>Sort value | names for lists and messages |
 | E-mail,<br>mobile,<br>landline number | contact data, stored encrypted. The e-mail address is required for the sign-in code of the two-factor sign-in |
@@ -70,6 +70,23 @@ withdraw an interface from a user group, ongoing sessions there end at the next 
 programs, it is recommended to use a separate user in a separate user group that has only the
 necessary interfaces and rights.
 
+### Subordinate user groups
+
+With the additional rights “Create users” and “Change and lock users” (module “Users”),
+the members of a user group initially manage only users of their ***own*** user group.
+Under ***“Subordinate user groups”***, tick further user groups they may also assign –
+when creating, copying, and changing a user. For the users of these groups, the same
+additional rights then apply as for those of their own group, including “Read user
+details: own and subordinate user groups”.
+
+An example: the group “Editors” has no subordinate user group – its members create only
+editors. For the group “Team leads”, tick “Editors” – team leads then create team leads
+**and** editors, and can also turn an editor into a team lead (and vice versa).
+
+The group “Superuser” cannot be selected: a superuser can only be created by a
+superuser. Subordination does not carry over: if “Editors” has subordinate user groups
+of its own, team leads may not automatically assign them.
+
 The rights of a user group have four levels:
 
 ### 1. Modules and additional rights
@@ -79,7 +96,7 @@ parts, indented below them – without an additional right, the part remains blo
 
 | Module | Additional rights |
 |---|---|
-| Users | “Read user details: own user group” · “Read user details: other user groups” · “Create users: own user group (with initial password)” · “Change and lock users: own user group (without password)” |
+| Users | “Read user details: own and subordinate user groups” · “Read user details: other user groups” · “Create users: own and subordinate user groups (with initial password)” · “Change and lock users: own and subordinate user groups (without password)” – see [Subordinate user groups](#subordinate-user-groups) |
 | Privacy | “Create and change deletion policies” (only for accessible instances) · “Export personal data” (profiles from readable areas, users from visible user groups) · “Maintain templates of the personal data report” (accessible instances) · “Anonymize deleted users” (accessible user groups) – see [chapter 15](./15-privacy.md) |
 | Content | “CSV import”, “Media import (ZIP file)”, “CSV export”, “DOCX import (translation)”, “DOCX export (translation)”, “Batch processing” |
 | Tools | one right each for the tabs “Server”, “Database”, “Data”, “Developer” and “Trash of a user” (“Permanently empty the trash of a website user”) |
