@@ -123,12 +123,13 @@ class FieldApi extends DatasetApi
         // the first field of an area becomes the title field without asking (as FieldCreateBackend)
         if (!array_key_exists('default_field', $data) && $this->area->fieldsNumber($areaId) < 1) $data['default_field'] = 1;
         $data = $this->prepareInput($type, $data);
-        // Date field: pre-select the calendar as in the input mask
-        $preset = ['type' => $type] + $data;
-        $this->field->presetExtension($preset);
-        if (isset($preset['details'])) $data['details'] = $preset['details'];
         $options = ['defaults' => ['area_id' => $areaId, 'type' => $type]] + ($sourceFields ? ['extra' => ['source_fields' => $this->sourceKeys($sourceFields)]] : []);
         [$prepared, , $fields] = $this->writer->prepare($this->field, 0, $data, $this->writableOnCreate(), $this->writeOptions($options));
+        // Date field: pre-select the calendar as in the input mask - on the prepared
+        // data, not on the input: prepare() accepts only the schema subfields of
+        // details, and details.extension_options is none (an extension given in
+        // the input stays, presetExtension() does not override it)
+        $this->field->presetExtension($prepared);
         if ($simulate) {
             $this->writer->check($this->field, [], $prepared);
             return ['id' => 0, 'simulated' => true, 'fields' => $fields, 'values' => null];
