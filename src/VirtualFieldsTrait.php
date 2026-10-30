@@ -340,6 +340,9 @@ trait VirtualFieldsTrait {
                 }
             }
             else {
+                // id without a reference: NULL, not 0 - data_rid.data is a foreign key to
+                // `record` (as Dataset::save() does for meta fields)
+                if ($type === 'id' && (int)$valueRef < 1) $valueRef = null;
                 foreach ($languageIds as $lang) {
                     $rawValues[$lang] = $valueRef;
                     $rowValues[$lang] = $valueRef;
