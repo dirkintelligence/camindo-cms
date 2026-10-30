@@ -120,6 +120,9 @@ nachholen.
 > Eingabefelder, Datensätze und Templates endgültig mitgelöscht. Instanzen haben
 > keinen Papierkorb. Die Rückfrage nennt, wie viele Elemente betroffen sind.
 
+Zum Bestätigen geben Sie in der Rückfrage den ***Namen der Instanz*** ein, genau wie er
+darüber angezeigt wird. Erst dann lässt sich die Schaltfläche „Löschen“ anklicken.
+
 ## Sprachen
 
 Im Modul „Sprachen“ legen Sie die Sprachen an, die den Instanzen zur Verfügung

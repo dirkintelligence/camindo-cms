@@ -119,6 +119,9 @@ if desired.
 > records, and templates are permanently deleted with it. Instances have no trash.
 > The confirmation prompt states how many elements are affected.
 
+To confirm, type the ***name of the instance*** in the prompt, exactly as it is shown
+above the input. Only then can the “Delete” button be clicked.
+
 ## Languages
 
 In the module “Languages”, you create the languages that are available to the instances.

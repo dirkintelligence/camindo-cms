@@ -27,7 +27,10 @@
  * `instance` has no `deleted` field - there is no trash, Dataset::delete()
  * deletes immediately and permanently. And with the instance its entire content goes:
  * content areas, their input fields, records and templates
- * (Instance::hookOnDelete()). _editDeleteForm() therefore shows the quantities beforehand.
+ * (Instance::hookOnDelete()). _editDeleteForm() therefore shows the quantities beforehand,
+ * and the deletion only runs once the editor has typed the name of the instance
+ * (its label as shown in the backend language) - the Delete button stays
+ * disabled until then, _editDeleteConfirm() compares it again on the server.
  *
  * @see Camindo\Core\Modules\Instance\Instance           Dataset/Model
  * @see Camindo\Core\Modules\Area\AreaBackend            where the container is assigned
@@ -318,7 +321,7 @@ class InstanceBackend {
         }
 
         // Load
-        if (in_array($this->function, ['edit', 'copy', 'delete'], true)) {
+        if (in_array($this->function, ['edit', 'copy', 'delete', 'delete_confirm'], true)) {
             $this->_editLoad();
         }
 
@@ -408,7 +411,7 @@ class InstanceBackend {
      */
     private function _editHeadline(): string
     {
-        if (in_array($this->function, ['delete', 'info'], true)) {
+        if (in_array($this->function, ['delete', 'delete_confirm', 'info'], true)) {
             $labelText = $this->cms->textOrSnippet($this->data['label'] ?? '');
             $labelHtml = $this->backend->template('instance.icon_instance') . ' ' . $labelText;
         }
@@ -482,10 +485,23 @@ class InstanceBackend {
      * function=delete_confirm: delete.
      *
      * Final and irrevocable, including all contents of the website - see
-     * Instance::hookOnDelete().
+     * Instance::hookOnDelete(). Only by POST and only with the typed name of the
+     * instance (confirm_label = _deleteConfirmLabel(), exact, surrounding spaces
+     * aside); otherwise the confirmation form appears again with a message.
      */
     private function _editDeleteConfirm(): void
     {
+        if (!$this->backend->requirePost()) {
+            $this->function = 'skip';
+            return;
+        }
+        if (trim((string)($_POST['confirm_label'] ?? '')) !== $this->_deleteConfirmLabel()) {
+            echo $this->backend->template('alert_danger', [
+                '{text}' => $this->cms->snippet('instance.error_delete_confirm_label'),
+            ]);
+            $this->function = 'delete';
+            return;
+        }
         if ($this->instance->delete($this->id)) {
             // Balloon Message
             $msg = $this->cms->snippet('instance.message_instance_deleted');
@@ -708,11 +724,14 @@ class InstanceBackend {
      * function=delete: deletion confirmation.
      *
      * The contents of the website disappear with it. Therefore the form shows
-     * an overview of what is lost.
+     * an overview of what is lost, and the editor must type the name of the
+     * instance: the Delete button (template delete_form_buttons) is disabled until
+     * the input matches (data-confirm of the input field).
      */
     private function _editDeleteForm(): void
     {
         $count = $this->instance->contentCount($this->id);
+        $label = $this->_deleteConfirmLabel();
 
         echo '<form action="Instance/instance_edit.php" method="post">';
 
@@ -721,15 +740,26 @@ class InstanceBackend {
             '{count_fields}' => (string)$count['fields'],
             '{count_records}' => (string)$count['records'],
             '{count_templates}' => (string)$count['templates'],
+            '{confirm_label}' => $this->backend->escape($label),
+            '{confirm_id}' => 'confirm_' . $this->crypt->randomKey(8),
         ]);
 
         $this->backend->formHidden('id', $this->id);
         $this->backend->formHidden('function', 'delete_confirm');
 
         // Print form
-        echo $this->backend->form('form_delete_cancel');
+        echo $this->backend->form('instance.delete_form_buttons');
 
         echo '</form>';
+    }
+
+    /**
+     * Name the editor types to confirm the deletion: the label of the instance as
+     * the backend shows it (a snippet reference "#…" resolved in the backend language).
+     */
+    private function _deleteConfirmLabel(): string
+    {
+        return trim($this->cms->textOrSnippet((string)($this->data['label'] ?? '')));
     }
 
     /**

@@ -12,3 +12,8 @@
 <tr><td>{#instance.count_label_templates}</td><td class="fw-bold">{count_templates}</td></tr>
 </tbody>
 </table>
+
+<div class="mt-4">
+    <label class="form-label" for="{confirm_id}">{#instance.label_delete_confirm} <strong>{confirm_label}</strong></label>
+    <input type="text" class="form-control" name="confirm_label" id="{confirm_id}" value="" autocomplete="off" spellcheck="false" data-confirm="{confirm_label}" oninput="this.form.querySelector('.c9-delete-confirm').disabled = (this.value.trim() !== this.dataset.confirm)">
+</div>
