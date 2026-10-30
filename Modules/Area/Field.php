@@ -111,6 +111,18 @@
  * tree of its area (TreeManagerTrait::isTreeArea()) - only the final deletion
  * flattens it.
  *
+ * NEW FIELD IN AN AREA WITH RECORDS
+ * --------------------
+ * Every record has one data_* row per field and language (developer docs, chapter 02
+ * (Data model)). A new field therefore gets these rows for all existing records of
+ * the area at once (fillExistingRecords(), from hookOnSaved()): the empty value of
+ * its type - '' for text and chars, [] for json, 0 for numbers and bit, DATE_MIN
+ * (1000-01-01) for dates, 00:00:00 for time, an encrypted '' for encrypted, NULL for
+ * id. Multilingual: the rows of the further languages are fallbacks (`empty` = 1).
+ * Not filled: relations, files, passwords and full text (no row without a value)
+ * and fields on meta columns. The records in the trash get the rows too, working
+ * copies do not (their working state is in `record_cache`).
+ *
  * TYPE AND MULTILINGUALISM CHANGE ONLY VIA convert()
  * --------------------
  * The type is fixed since creation, and the flag `multilingual` can no longer be
@@ -1288,6 +1300,12 @@ class Field extends Dataset {
             }
         }
 
+        // New field: empty values for the existing records (see class comment)
+        // --------------------
+        if ($isNew) {
+            $this->fillExistingRecords($fieldId, $fieldnameId, $areaId, $data);
+        }
+
         // type change
         // --------------------
         // Only via convert() - the input mask keeps the type fixed (formStatic)
@@ -1540,6 +1558,92 @@ class Field extends Dataset {
                 !empty($details['user_auth'])
             );
         }
+    }
+
+    /**
+     * New field: write the empty value of its type for every existing record of
+     * the area and every language of the instance (see class comment). One
+     * INSERT … SELECT per field - encrypted values are encrypted per row (own IV).
+     * Rows that already exist stay untouched. Afterwards the `record_cache` of the
+     * area is discarded, so that it contains the new field (rebuilt on access).
+     *
+     * @return int  number of rows written
+     */
+    private function fillExistingRecords(int $fieldId, int $fieldnameId, int $areaId, array $data): int
+    {
+        $type = (string)($data['type'] ?? '');
+        $name = (string)($data['name'] ?? '');
+        if (!empty($data['meta']) || isset($this->cms->schema[$name])) return 0;
+
+        // empty value per type; types without an entry get no rows
+        $value = match (true) {
+            in_array($type, ['chars', 'text', 'encrypted'], true) => '',
+            // (the multi-value index of data_jsn needs valid JSON)
+            $type === 'json' => '[]',
+            in_array($type, ['integer', 'currency', 'float', 'decimal', 'bit'], true) => 0,
+            in_array($type, $this->cms->dateTypes, true) => self::DATE_MIN,
+            $type === 'time' => '00:00:00',
+            $type === 'id' => null,
+            default => false,
+        };
+        $suffix = $this->cms->dataSuffix[$type] ?? '';
+        if ($value === false || $suffix === '') return 0;
+
+        // languages of the instance, primary language first (as Dataset::languageContext())
+        $this->db->query("SELECT `instance_id` FROM `area` WHERE `area_id` = ?", 'i', [$areaId]);
+        $instanceId = (int)($this->db->fetchNum()[0] ?? 0);
+        $instanceCache = $this->container->get(InstanceCache::class);
+        $languageIds = array_map('intval', array_keys($instanceCache->languages($instanceId)))
+            ?: [$instanceCache->primaryLanguageId($instanceId)];
+        $primaryId = $languageIds[0];
+        $isMultilingual = !empty($data['multilingual']) && in_array($type, $this->cms->multilingualTypes, true);
+        $hasEmptyFlag = $this->cms->hasEmptyFlag($type);
+
+        $table = "`data_{$suffix}`";
+        $columns = '`language_id`, `record_id`, `field_id`, `fieldname_id`, `data`'
+            . ($type === 'encrypted' ? ', `hash`' : '') . ($hasEmptyFlag ? ', `empty`' : '');
+        $missing = "FROM `record` `r` JOIN (SELECT " . implode(' AS `language_id` UNION ALL SELECT ', $languageIds) . " AS `language_id`) `l`"
+            . " WHERE `r`.`area_id` = ? AND `r`.`tmp` = 0"
+            . " AND NOT EXISTS (SELECT 1 FROM {$table} `d` WHERE `d`.`language_id` = `l`.`language_id`"
+            . " AND `d`.`record_id` = `r`.`record_id` AND `d`.`fieldname_id` = ?)";
+        // `empty` = 1: fallback rows of the further languages of a multilingual field
+        $emptyExpr = $isMultilingual ? "`l`.`language_id` <> {$primaryId}" : '0';
+
+        if ($type === 'encrypted') {
+            $this->db->query("SELECT `r`.`record_id`, `l`.`language_id` {$missing}", 'ii', [$areaId, $fieldnameId]);
+            $rows = $this->db->fetchAll();
+            $hash = $this->cms->encryptedHash('');
+            foreach ($rows as $row) {
+                $languageId = (int)$row['language_id'];
+                $this->db->query(
+                    "INSERT INTO {$table} ({$columns}) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    'iiiissi',
+                    [$languageId, (int)$row['record_id'], $fieldId, $fieldnameId, $this->crypt->encrypt('', '', true), $hash,
+                        ($isMultilingual && $languageId !== $primaryId) ? 1 : 0]
+                );
+            }
+            $count = count($rows);
+        }
+        else {
+            $this->db->query(
+                "INSERT INTO {$table} ({$columns}) SELECT `l`.`language_id`, `r`.`record_id`, ?, ?, ?"
+                    . ($hasEmptyFlag ? ", {$emptyExpr}" : '') . " {$missing}",
+                'ii' . (is_int($value) ? 'i' : 's') . 'ii',
+                [$fieldId, $fieldnameId, $value, $areaId, $fieldnameId]
+            );
+            $count = (int)$this->db->affected_rows;
+        }
+
+        if ($count > 0) {
+            $this->db->pushResult();
+            try {
+                $this->container->get(RecordCache::class)->clear(0, [$areaId]);
+            }
+            finally {
+                $this->db->popResult();
+            }
+        }
+        return $count;
     }
 
     /**

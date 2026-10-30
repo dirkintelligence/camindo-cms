@@ -88,6 +88,24 @@ Verknüpfung übernimmt die Beschriftung des Bereichs und erscheint dann ebenfal
 | Standardwert | Wert, der bei neuen Datensätzen in der Eingabemaske voreingetragen wird (Vorgabewert). Bei Datumsfeldern sind auch Datumsfunktionen erlaubt, [siehe unten](#datumsfunktionen) |
 | Aufbereitung | Der im Datensatz eingegebene Wert wird entsprechend der angehakten Regeln aufbereitet („Whitespace trimmen“ entfernt Leerzeichen am Anfang und Ende, „HTML-Tags entfernen“ lässt nur reinen Text übrig) |
 
+### Neues Feld bei bestehenden Datensätzen
+
+Legen Sie ein Feld in einem Inhaltsbereich an, der schon Datensätze hat, bekommen alle
+diese Datensätze – auch die im Papierkorb – sofort einen ***Leerwert*** in jeder Sprache
+der Instanz:
+
+| Feldtyp | Leerwert |
+|---|---|
+| Kurzer Text, Langer Text, Verschlüsselter Text, Text mit Mehrfachauswahl | leer |
+| Ganzzahl, Bit, Währungsbetrag, Fließkommazahl, Exakte Dezimalzahl | `0` |
+| Datum + Uhrzeit (auch zeitzonenabhängig) | `1000-01-01` (kein Datum gesetzt) |
+| Uhrzeit | `00:00:00` |
+
+Der ***Standardwert*** gilt dabei nicht – er wird nur bei neuen Datensätzen
+voreingetragen. So finden Filter und Sortierung auch die bestehenden Datensätze, etwa mit
+dem Filterwert `0` oder `(empty)`. Verknüpfungen, Dateien, Passwörter und Volltexte
+bleiben leer, bis ein Wert eingetragen wird.
+
 ### Datumsfunktionen
 
 Bei Datums- und Zeitfeldern darf der Standardwert eine ***Datumsfunktion*** sein. Sie

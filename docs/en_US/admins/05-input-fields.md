@@ -88,6 +88,24 @@ relation takes over the label of the area and then also appears translated.
 | Default value | value that is pre-filled in the input mask for new records (default value). For date fields, date functions are also allowed, [see below](#date-functions) |
 | Processing | the value entered in the record is processed according to the ticked rules (“Trim whitespace” removes spaces at the beginning and end; “Strip HTML tags” leaves only plain text) |
 
+### New field with existing records
+
+If you create a field in a content area that already has records, all these records –
+including those in the trash – immediately get an ***empty value*** in every language of
+the instance:
+
+| Field type | Empty value |
+|---|---|
+| Short text, Long text, Encrypted text, Text with multiple choice | empty |
+| Integer, Bit, Currency amount, Floating-point number, Exact decimal number | `0` |
+| Date + time (also timezone-dependent) | `1000-01-01` (no date set) |
+| Time | `00:00:00` |
+
+The ***default value*** does not apply here – it is only pre-filled for new records.
+This way, filters and sorting also find the existing records, for example with the
+filter value `0` or `(empty)`. Links, files, passwords, and full texts stay empty until a
+value is entered.
+
 ### Date functions
 
 For date and time fields, the default value may be a ***date function***. It is
