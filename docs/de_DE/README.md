@@ -1,4 +1,4 @@
-# camindo CMS – Handbücher
+# Die camindo CMS – Handbücher
 
 camindo CMS verwaltet Inhalte aller Art – Artikel, Produkte, Adressen, Bilder,
 Termine – in frei definierbaren ***Inhaltsbereichen*** und gibt sie über ***Templates***
@@ -9,7 +9,7 @@ Funktionsumfang von camindo CMS 9.
 > Fehler einschleichen. Für Richtigkeit und Vollständigkeit der Inhalte wird
 > keine Gewähr übernommen.
 
-## Die Handbücher
+## Verfügbare Handbücher
 
 ### [Handbuch für Anwender](./editors/README.md)
 
@@ -34,10 +34,12 @@ Installierte ***Zusatzkomponenten*** – Module, Extensions, Prozessoren – bri
 Handbücher mit. Im Backend erscheinen sie in dieser Übersicht unter „Handbücher der
 Zusatzkomponenten“ und in der Auswahl der Handbücher.
 
+### Handbuch für Entwickler
+
 Für die Weiterentwicklung von camindo CMS selbst – eigene Module, Medienprozessoren,
 Extensions und `(CMS:…)`-Befehle – gibt es eine eigene Entwicklerdokumentation
 (Deutsch und Englisch). Sie gehört nicht zu diesen Handbüchern, sondern liegt in einem
-separaten Repository.
+separaten Repository auf GitHub.
 
 ## Aufbau der Handbücher
 

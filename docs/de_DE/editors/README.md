@@ -30,30 +30,3 @@ und stellt die Funktionen vor, die man leicht übersieht.
 10. [Beiträge von Website-Besuchern prüfen](./10-community.md) – Prüfen von
     Kommentaren, Profilen und anderen Beiträgen, Datenexport personenbezogener Daten,
     Profile löschen
-
-## Auf einen Blick: Was camindo CMS für Redakteure besonders macht
-
-- ***Eine Oberfläche für alles.*** Ob Artikel, Produkte, Termine oder Bilder – jeder
-  Inhaltsbereich hat seine eigene, passende Eingabemaske, Suchmaske und Liste. Die
-  Bedienung ist überall gleich. Die Einarbeitung neuer Kollegen dauert Minuten, keine
-  Tage. Eine bereichsübergreifende Suche erlaubt Ihnen, sämtliche im CMS verwalteten
-  Inhalte aufzufinden.
-- ***Viele Datensätze auf einmal.*** Mit der [Stapelverarbeitung](./07-stapelverarbeitung.md)
-  ändern Sie ein Feld in Hunderten Datensätzen mit einem Klick. Über den
-  [CSV-Export](./08-export-import.md#inhalte-in-excel-nachbearbeiten) bearbeiten Sie
-  Inhalte in Excel und spielen sie wieder ein.
-- ***Nichts geht verloren.*** Sie arbeiten immer an einer Arbeitskopie; die Website
-  sieht Ihre Änderungen erst nach dem Speichern. Gleichzeitiges Bearbeiten durch
-  zwei Personen verhindert eine Bearbeitungssperre. Gelöschte Inhalte landen zuerst im
-  Papierkorb und lassen sich wiederherstellen.
-- ***Übersetzen ohne CMS-Zugang.*** Der [DOCX-Export](./08-export-import.md#übersetzen-mit-word-docx)
-  erzeugt eine Word-Datei für das Übersetzungsbüro; die übersetzte Datei wird
-  einfach wieder importiert.
-- ***Vieles lässt sich automatisieren.*** Sprechen Sie mit Ihrem Template-Programmierer,
-  wenn Sie lästige Aufgaben loswerden wollen – die Funktionalität steckt schon im System:
-  regelmäßige Übersichten per E-Mail versenden, automatische Buchungsbestätigungen per PDF,
-  Archivieren alter Einträge, u. v. m.
-- ***Hilfe durch Künstliche Intelligenz.*** Das Zusatzmodul „KI-Assistent“ steht Ihnen hilfreich
-  zur Seite: Es führt in Ihrem Auftrag Änderungen durch oder erklärt Ihnen Funktionalitäten.
-  Hat der Assistent selbst nicht die nötige Berechtigung, kann er Ihnen die entsprechende Maske
-  im Backend öffnen.

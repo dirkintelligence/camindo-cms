@@ -1,4 +1,4 @@
-# camindo CMS – Manuals
+# The camindo CMS – Manuals
 
 camindo CMS manages all kinds of content – articles, products, addresses, images, appointments –
 in freely definable ***content areas*** and outputs it via ***templates*** on one or several
@@ -7,7 +7,7 @@ websites. The manuals describe the range of functions of camindo CMS 9.
 > Despite all care in keeping the manuals up to date, errors can creep in. No guarantee is given
 > for the accuracy and completeness of the content.
 
-## The manuals
+## Available manuals
 
 ### [Editors' manual](./editors/README.md)
 
@@ -29,6 +29,8 @@ and screen designers. Basics, template sets and the reference of all `(CMS:…)`
 Installed ***add-on components*** – modules, extensions, processors – come with their own manuals.
 In the back end they appear in this overview under “Manuals of add-on components” and in the
 selection of manuals.
+
+### Manual for developers
 
 For developing camindo CMS itself – your own modules, media processors, extensions and `(CMS:…)`
 commands – there is a separate developer documentation (German and English). It does not belong to

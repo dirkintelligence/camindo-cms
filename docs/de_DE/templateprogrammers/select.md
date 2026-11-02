@@ -274,7 +274,7 @@ Die umgekehrte Richtung - Datensätze, die auf den laufenden zeigen:
 Die erste Zeile gilt für Beziehungsfelder (`relation`): Sie haben im Zielbereich ein
 Gegenfeld `rel_{bereichsname}`. Verweisfelder (`pointer`) haben keins - ihr Gegenstück
 ist der Filter auf das Verweisfeld (zweite Zeile). Siehe
-[Jeder Datensatz ist eine Seite](01-grundlagen.md#das-konzept-jeder-datensatz-ist-eine-seite).
+[Jeder Datensatz hat eine Seite](01-grundlagen.md#das-konzept-jeder-datensatz-hat-eine-seite).
 
 ### `src_id`
 
