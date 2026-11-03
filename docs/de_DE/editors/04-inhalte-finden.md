@@ -53,7 +53,10 @@ hinterlegt) und die Schaltflächen:
 - ***Hierarchie:*** In Bereichen mit Baumstruktur (etwa Seiten mit Unterseiten)
   zeigt die Liste die Datensätze in ihrer Rangfolge und eingerückt.
 - Klick auf eine Zeile öffnet die ***Detailansicht***, ein Rechtsklick das
-  Kontextmenü („Bearbeiten“, „Kopieren“, „Löschen“).
+  Kontextmenü („Bearbeiten“, „Vorschau“, „Kopieren“, „Verschieben“, „Nachricht“,
+  „In neuem Tab öffnen“, „Löschen“ – je nach Ihren Rechten). Eine Zeile, die Sie in einen anderen Tab
+  ziehen, öffnet dort die Detailansicht
+  ([Arbeitsoberfläche](./03-arbeitsoberflaeche.md#listen-und-kontextmenüs)).
 
 Ist eine Suche aktiv, steht über der Liste, wonach gesucht wurde. Die Liste merkt
 sich Suche, Sortierung und Blätterposition, solange Sie in dieser Ebene arbeiten.

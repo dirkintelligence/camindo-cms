@@ -1,6 +1,10 @@
 <div class="c9-ctx-menu dropdown-menu shadow">
     <a class="dropdown-item" data-ctx="edit" data-action="Record/record_edit.php?id=#{params}"><span class="icon" aria-hidden="true">edit</span> {#button_edit}</a>
+{preview_items}
     <a class="dropdown-item" data-ctx="copy" data-action="Record/record_edit.php?id=#&function=copy{params}"><span class="icon" aria-hidden="true">content_copy</span> {#button_copy}</a>
+    <a class="dropdown-item" data-ctx="move" data-action="Record/record_move.php?id=#{params}"><span class="icon icon-dir" aria-hidden="true">drive_file_move</span> {#button_move}</a>
+    <a class="dropdown-item" data-ctx="message" data-action="Messaging/message_edit.php?function=create&record_id=#"><span class="icon" aria-hidden="true">mail</span> {#messaging.button_mail}</a>
+    <a class="dropdown-item" data-ctx="tab" data-layer-href="Record/record_info.php?id=#"><span class="icon" aria-hidden="true">open_in_new</span> {#record.button_open_new_tab}</a>
     <div class="dropdown-divider"></div>
     <a class="dropdown-item text-danger" data-ctx="delete" data-action="Record/record_edit.php?id=#&function=delete{params}"><span class="icon" aria-hidden="true">delete</span> {#button_delete}</a>
 </div>

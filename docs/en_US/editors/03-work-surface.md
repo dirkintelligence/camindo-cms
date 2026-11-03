@@ -115,6 +115,25 @@ In all lists of the backend, the following applies:
 - The menu ![more_vert](../_/more_vert.svg) at the top right of a list contains further
   functions – in the record list, for example, “Export”, “Import” and “Batch processing”.
 
+In the ***record list***, the context menu offers the same functions as the detail view of
+a record: ![edit](../_/edit.svg) “Edit”, ![visibility](../_/visibility.svg) “Preview” (in a
+new window; with several languages one entry per language, for example “Preview: German
+(de_DE)”), ![content_copy](../_/content_copy.svg) “Copy”,
+![drive_file_move](../_/drive_file_move.svg) “Move”, ![mail](../_/mail.svg) “Message”,
+![open_in_new](../_/open_in_new.svg) “Open in new tab” (the detail view in a new tab) and
+![delete](../_/delete.svg) “Delete”. “Preview” only appears if a template is set for the
+record.
+
+“Preview” and “Open in new tab” are ordinary links: ***right-clicking the entry*** opens the
+browser's context menu – in Chrome, it can also open the link in split view.
+
+***Dragging a row to another tab:*** drag a row of the record list with the mouse to another
+tab or window in which the backend is open – for example into the other half of a split
+view – and the detail view of the record opens there as a new layer; the layers below are
+kept. This way you have the list and a record in view at the same time. If you drop the row
+elsewhere, for example on the tab bar, the browser opens the detail view in a tab; over an
+input field it inserts its address.
+
 ## Keyboard operation
 
 The backend can be used entirely without a mouse and with a screen reader. The

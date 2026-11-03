@@ -795,7 +795,7 @@ class Backend {
      */
     public function buttonAddPreview(string|array $path, int $instanceId): void
     {
-        $base = $this->config->get('paths.backend') . '/preview.php?instance=' . $instanceId . '&request=';
+        $base = $this->previewUrl($instanceId, '');
         $languages = $this->container->get(InstanceCache::class)->languages($instanceId);
         if (is_array($path)) {
             $path = array_filter($path, fn($p) => (string)$p !== '');
@@ -821,6 +821,20 @@ class Backend {
         }
         if ($items === '') return;
         $this->buttons[] = $this->template('button_preview_dropdown', ['{items}' => $items]);
+    }
+
+    /**
+     * Address of the preview (preview.php, Page::resolvePreview()) - unescaped,
+     * for an attribute value it must go through htmlspecialchars().
+     *
+     * @param int    $instanceId  instance of the record resp. template
+     * @param string $path        frontend path without leading slash, e.g. "42"
+     * @param string $lang        language code; '' = Accept-Language decides
+     */
+    public function previewUrl(int $instanceId, string $path, string $lang = ''): string
+    {
+        return $this->config->get('paths.backend') . '/preview.php?instance=' . $instanceId
+            . '&request=' . rawurlencode($path) . ($lang !== '' ? '&lang=' . rawurlencode($lang) : '');
     }
 
     /**

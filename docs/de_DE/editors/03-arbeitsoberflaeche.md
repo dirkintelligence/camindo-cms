@@ -118,6 +118,28 @@ In allen Listen des Backends gilt:
   weitere Funktionen – in der Datensatzliste etwa „Export“, „Import“ und
   „Stapelverarbeitung“.
 
+In der ***Datensatzliste*** bietet das Kontextmenü dieselben Funktionen wie die
+Detailansicht eines Datensatzes: ![edit](../_/edit.svg) „Bearbeiten“,
+![visibility](../_/visibility.svg) „Vorschau“ (in einem neuen Fenster; bei mehreren
+Sprachen ein Eintrag je Sprache, etwa „Vorschau: Deutsch (de_DE)“),
+![content_copy](../_/content_copy.svg) „Kopieren“,
+![drive_file_move](../_/drive_file_move.svg) „Verschieben“, ![mail](../_/mail.svg)
+„Nachricht“, ![open_in_new](../_/open_in_new.svg) „In neuem Tab öffnen“ (die
+Detailansicht in einem neuen Tab) und ![delete](../_/delete.svg) „Löschen“. „Vorschau“
+erscheint nur, wenn für den Datensatz ein Template festgelegt ist.
+
+„Vorschau“ und „In neuem Tab öffnen“ sind gewöhnliche Links: Ein ***Rechtsklick auf
+den Eintrag*** öffnet das Kontextmenü des Browsers – in Chrome lässt sich der Link
+darüber auch in der geteilten Ansicht öffnen.
+
+***Zeile in einen anderen Tab ziehen:*** Ziehen Sie eine Zeile der Datensatzliste mit
+der Maus in einen anderen Tab oder ein anderes Fenster, in dem das Backend geöffnet
+ist – etwa in die zweite Hälfte der geteilten Ansicht –, öffnet sich dort die
+Detailansicht des Datensatzes als neue Ebene; die Ebenen darunter bleiben erhalten.
+So haben Sie die Liste und einen Datensatz gleichzeitig vor Augen. Legen Sie die Zeile
+an anderer Stelle ab, etwa in der Tableiste, öffnet der Browser die Detailansicht in
+einem Tab; über einem Eingabefeld fügt er ihre Adresse ein.
+
 ## Bedienung mit der Tastatur
 
 Das Backend lässt sich vollständig ohne Maus bedienen und mit einem Screenreader

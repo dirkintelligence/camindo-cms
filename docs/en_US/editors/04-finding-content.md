@@ -49,7 +49,10 @@ following buttons:
 - ***Hierarchy:*** in areas with a tree structure (for example pages with subpages), the list
   shows the records in their order and indented.
 - Clicking a row opens the ***detail view***, right-clicking opens the context menu
-  (“Edit”, “Copy”, “Delete”).
+  (“Edit”, “Preview”, “Copy”, “Move”, “Message”, “Open in new tab”, “Delete” – depending on
+  your rights). A
+  row that you drag to another tab opens the detail view there
+  ([Work surface](./03-work-surface.md#lists-and-context-menus)).
 
 While a search is active, the list shows above it what was searched for. The list remembers
 the search, the sort order and the page position as long as you stay in this layer.

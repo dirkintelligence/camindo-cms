@@ -376,6 +376,8 @@ class RecordBackendList extends RecordBackend {
         $tplTableRow = $this->backend->template('record.record_table_row');
         $tableRows = '';
         $destId = 0;
+        $relationsReadable = []; // area_id => bool, for the context menu entry "Move"
+        $previewEntries = [];    // context menu "Preview": key => language label ('' = one language)
         for ($i = 0; $i < $this->db->num_rows; $i++) {
             $row = $this->cms->fetch();
             $this->db->pushResult();
@@ -475,18 +477,35 @@ class RecordBackendList extends RecordBackend {
                 }
             }
             // context menu: hide entries without the right for this record
-            // (owner group decides on edit/delete, copy = create)
+            // (owner group decides on edit/delete, copy = create) - the same
+            // conditions as the buttons of the info page (RecordBackendInfo::info())
             $rowAreaId = (int)$row['area_id'];
             $rowOwnerId = isset($row['owner_id']) ? (int)$row['owner_id'] : null;
             $hide = [];
             if (!$access->recordWrite($rowAreaId, $rowOwnerId, (int)($row['status_id'] ?? 0))) $hide[] = 'edit';
             if (!$access->areaCreate($rowAreaId)) $hide[] = 'copy';
             if (!$access->areaDelete($rowAreaId, $rowOwnerId)) $hide[] = 'delete';
+            // preview: one address per language of the instance (the menu shows
+            // entries without an address of the row hidden, backend-ctx-menu.js)
+            $previewAttrs = '';
+            foreach ($this->_rowPreviewUrls($row) as $key => [$url, $label]) {
+                $previewEntries[$key] ??= $label;
+                $previewAttrs .= ' data-url-preview' . ($key !== '' ? '-' . $key : '') . '="' . htmlspecialchars($url) . '"';
+            }
+            // move: write + delete in the source area, readable targets of all link
+            // fields; move and message not from a lookup (as on the info page)
+            if ($this->hasLookup() || !$access->areaWrite($rowAreaId, $rowOwnerId)
+                || !$access->areaDelete($rowAreaId, $rowOwnerId)
+                || !($relationsReadable[$rowAreaId] ??= $this->record->relationTargetsReadable($rowAreaId))) {
+                $hide[] = 'move';
+            }
+            if ($this->hasLookup() || !$access->script('Messaging', 'message_edit.php')) $hide[] = 'message';
 
             // add to the row collection
             $tableRows .= strtr($tplTableRow, [
                 '{data_id}' => $row['record_id'],
                 '{ctx_hide}' => $hide ? ' data-ctx-hide="' . implode(',', $hide) . '"' : '',
+                '{preview_url}' => $previewAttrs,
                 '{columns}' => $tableCols
             ]);
             $this->db->popResult();
@@ -500,9 +519,17 @@ class RecordBackendList extends RecordBackend {
         ]);
 
 
-        // Context menu
+        // Context menu - one entry "Preview" per language of the rows
+        $previewItems = '';
+        foreach ($previewEntries as $key => $label) {
+            $previewItems .= $this->backend->template('record.record_context_menu_preview', [
+                '{key}' => $key !== '' ? 'preview-' . $key : 'preview',
+                '{label}' => $label !== '' ? htmlspecialchars($this->cms->snippet('colon') . $label) : '',
+            ]);
+        }
         echo $this->backend->template('record.record_context_menu', [
-            '{params}' => $this->params ? "&{$this->params}" : ''
+            '{params}' => $this->params ? "&{$this->params}" : '',
+            '{preview_items}' => $previewItems,
         ]);
 
         // Pagination bottom
@@ -512,6 +539,34 @@ class RecordBackendList extends RecordBackend {
         return [$destId ?? null, $count, $isLinked];
     }
 
+
+    /**
+     * Preview addresses of a list row for the context menu (as the button of the
+     * info page: only if the area has a default template or the record has its own
+     * template). One instance language: key '' without a language code; several:
+     * key language_id, one address and label per language (Backend::buttonAddPreview()).
+     *
+     * @return array  key => [address, label]; empty = no preview
+     */
+    private function _rowPreviewUrls(array $row): array
+    {
+        $areaId = (int)$row['area_id'];
+        if (empty($row['template_id']) && empty($this->backend->areaData($areaId)['default_template_id'])) return [];
+        $instanceId = $this->instanceCache->areaInstanceId($areaId);
+        $recordId = (string)(int)$row['record_id'];
+        $languages = $this->instanceCache->languages($instanceId);
+        if (count($languages) < 2) {
+            return ['' => [$this->backend->previewUrl($instanceId, $recordId), '']];
+        }
+        $urls = [];
+        foreach ($languages as $languageId => $language) {
+            $code = (string)($language['code'] ?? '');
+            if ($code === '') continue;
+            $label = $this->cms->textOrSnippet((string)($language['label'] ?? $code)) . ' (' . $code . ')';
+            $urls[(int)($language['language_id'] ?? $languageId)] = [$this->backend->previewUrl($instanceId, $recordId, $code), $label];
+        }
+        return $urls;
+    }
 
     /**
      * SQL condition that excludes the edited record and its branch.
