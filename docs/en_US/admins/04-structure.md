@@ -61,8 +61,8 @@ Rules:
   area in the file. Other types do not appear.
 - The ***label*** of the area appears as the heading in the selection and its ***note*** below
   it. Both may be a text or a snippet reference (`#label_articles`) – a reference appears in
-  the language of the user. The labels of the fields are taken over in the language of the
-  user when creating.
+  the language of the user. This also applies to the labels of the fields: a reference is
+  kept in the new area, so the label appears in the language of the respective user.
 - Only the first area in the file is evaluated; records in it are ignored. Label and note of
   the new area remain empty and are entered in the mask; name, icon, and sort direction come
   from the file.

@@ -3,7 +3,7 @@
   Blueprint "Pages": title, teaser, text, image, date and status.
   Export format (RecordExport::XML_FORMAT 2), one area without records - see
   AreaBackend::create(). Label and note: text or snippet reference (#key or #module.key),
-  also for the fields (RecordImport::importBlueprint() resolves them on creation).
+  also for the fields (RecordImport::importBlueprint() keeps the references).
 -->
 <camindo-export format="2">
   <areas>

@@ -63,9 +63,9 @@ Regeln:
   Bereich in der Datei. Andere Typen erscheinen nicht.
 - In der Auswahl steht das ***Label*** des Bereichs als Überschrift und sein
   ***Hinweis*** darunter. Beides darf ein Text oder ein Snippet-Verweis sein
-  (`#label_articles`) – ein Verweis erscheint in der Sprache des Benutzers. Die
-  Beschriftungen der Felder werden beim Anlegen in der Sprache des Benutzers
-  übernommen.
+  (`#label_articles`) – ein Verweis erscheint in der Sprache des Benutzers. Das
+  gilt auch für die Beschriftungen der Felder: Ein Verweis bleibt im neuen Bereich
+  erhalten, das Label erscheint also in der Sprache des jeweiligen Benutzers.
 - Ausgewertet wird nur der erste Bereich der Datei, Datensätze darin werden
   ignoriert. Label und Hinweis des neuen Bereichs bleiben leer und werden in der
   Maske eingegeben; Name, Icon und Sortier-Richtung kommen aus der Datei.

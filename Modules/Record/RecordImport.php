@@ -2086,17 +2086,6 @@ class RecordImport {
         $this->pendingTriggers = [];
         $this->fileAreas = [$fileAreaId => ['name' => (string)$area['name'], 'type' => (string)$area['type']]];
         $this->schemaMemo = [];
-        // resolve snippet references (#module.key) of the fields in the language of the admin -
-        // except custom snippets whose texts the file brings along (copy of an
-        // area, areaBlueprintFile()): _saveField() takes those over as a reference
-        foreach ($area['fields'] as &$field) {
-            foreach (['label', 'note', 'tooltip'] as $col) {
-                if (!isset($field[$col]) || !str_starts_with((string)$field[$col], '#')) continue;
-                if (preg_match(Snippets::REFERENCE_PATTERN, (string)$field[$col], $m) && isset($this->fileSnippets[(int)$m[1]][$m[2]])) continue;
-                $field[$col] = $this->cms->textOrSnippet((string)$field[$col]);
-            }
-        }
-        unset($field);
         $result = ['total' => 0, 'done' => 0, 'failed' => 0, 'skipped' => 0, 'inserted' => 0, 'updated' => 0, 'replaced' => 0, 'items' => []];
         // converters of the thumbnail fields: blueprints are foreign - matches by hash,
         // otherwise create, skip without processor (CONVERTERS)
