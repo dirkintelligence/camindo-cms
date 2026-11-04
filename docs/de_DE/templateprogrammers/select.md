@@ -9,13 +9,13 @@ Durchsucht die Datenbank anhand der angegebenen (Filter-)Kriterien und liefert d
 ***Methode:*** `Cms::cmsSelect()`  
 ***Ohne Schlüssel:*** der erste Wert ohne `=` gilt als `resulttemplate`  
 ***Mindestens einer von:*** `filter`, `relation`  
-***PHP-Schnipsel:*** `push_result` (davor) · `include`, `pop_result` (danach)
+***PHP-Schnipsel:*** `push_result` (davor) · `include`, `pop_result`, `select_count` (danach)
 
 ## Parameter
 
 | Parameter | Wert | Standard | Pflicht | Beschreibung |
 |---|---|---|:-:|---|
-| `resulttemplate` ¹ | `Templatename` | – | ja | Listentemplate, das zur Verarbeitung der Ergebnisse eingebunden wird. |
+| `resulttemplate` ¹ | `Templatename` | – | ³ | Listentemplate, das zur Verarbeitung der Ergebnisse eingebunden wird. Pflicht, außer bei hits=false. |
 | `noresulttemplate` | `Templatename` | – |  | Detailtemplate, das eingebunden wird, falls die Abfrage keine Ergebnisse liefert. |
 | `noresult` | `Text` | – |  | Text, der unmittelbar ausgegeben wird, falls die Abfrage keine Ergebnisse liefert. |
 | `filter[…][…]` | `Wert oder EMPTY` | – | ² | Im Index: Name des zu durchsuchenden Feldes (relation_any für ein beliebiges Verweisfeld; area für den Namen des Inhaltsbereichs, eine Zahl gilt dort als area_id). Im Wert: der zu suchende Wert. |
@@ -31,7 +31,7 @@ Durchsucht die Datenbank anhand der angegebenen (Filter-)Kriterien und liefert d
 | `dest_id` | `Datensatz-ID` | – |  | Rückrichtung zu relation: die Datensätze, die über relation auf diesen Datensatz verweisen (relation=ANY: über irgendein Verweisfeld). Ohne src_id wird dann kein aktueller Datensatz als Quelle eingesetzt. |
 | `nextof` | `Datensatz-ID` | – |  | Nur mit relation: Nachbarn des angegebenen Datensatzes in der Verweisliste - die Einträge hinter ihm (order=asc) bzw. vor ihm (order=desc), in der Reihenfolge der Liste; mit limit=1 der nächste bzw. vorige Datensatz. |
 | `count` | `true / false` | `false` |  | true: Die Anzahl der Datensätze in der Ergebnismenge wird ermittelt, unabhängig von "limit" und "skip" (im resulttemplate in $this->db->num_rows_unlimited; Grundlage der JUMP-Befehle). |
-| `hits` | `true / false` | `true` |  | false: Es wird nur gezählt (schließt count=true ein), es werden keine Datensätze geladen und kein resulttemplate eingebunden. Die Gesamtzahl steht danach im aufrufenden Template in $this->db->num_rows_unlimited; noresult/noresulttemplate gelten, wenn sie 0 ist. |
+| `hits` | `true / false` | `true` |  | false: Es wird nur gezählt (schließt count=true ein), es werden keine Datensätze geladen und kein resulttemplate eingebunden (die Angabe entfällt). Die Gesamtzahl steht danach nur im aufrufenden Template in $this->db->num_rows_unlimited und überschreibt dort einen vorhandenen Wert; noresult/noresulttemplate gelten, wenn sie 0 ist. |
 | `archive` | `true / false` | `false` |  | true: Auch abgelaufene Datensätze (offline_at erreicht) werden in die Abfrage einbezogen. |
 | `future` | `true / false` | `false` |  | true: Auch vordatierte Datensätze (online_at noch nicht erreicht) werden in die Abfrage einbezogen. |
 | `debug` | `true / false` | `false` |  | true: Der erzeugte Datenbank-Query wird für Support-Analysen ausgegeben. |
@@ -41,7 +41,8 @@ Durchsucht die Datenbank anhand der angegebenen (Filter-)Kriterien und liefert d
 | `set` | `Array-Index von $set` | – |  | Die gesamte Ausgabe (samt eingebundenem Template) wird nicht ausgegeben, sondern in der Variable $set gespeichert. |
 
 ¹ kann ohne Schlüssel als erster Wert angegeben werden.  
-² mindestens einer der mit ² markierten Parameter muss angegeben werden.
+² mindestens einer der mit ² markierten Parameter muss angegeben werden.  
+³ Pflicht, außer bei `hits=false`.
 
 `[…]` – der Parameter nimmt Unterschlüssel an, z. B. `name[schlüssel]=wert`.
 
@@ -110,6 +111,10 @@ Listentemplate für die Treffer; darf ohne Schlüssel stehen. Name oder `bereich
 (CMS:SELECT artikel_teaser filter[area]=artikel)
 (CMS:SELECT artikeltemplates.artikel_teaser filter[area]=artikel)
 ```
+
+Der Parameter ist Pflicht, nur mit [`hits=false`](#hits) entfällt er. Fehlt er sonst, meldet der
+Parser das auf der Infoseite des Templates, und im Frontend bricht die Ausgabe an dieser Stelle
+mit einer Fehlermeldung ab.
 
 ### `noresulttemplate`
 
@@ -339,29 +344,34 @@ Treffer der Abfrage:
 
 Beide Zahlen gelten ***nur im `resulttemplate`***: Nach dem `CMS:SELECT` ist wieder
 das umgebende Ergebnis aktiv – dieselbe Regel, die verschachtelte Listen möglich macht.
-Wird nur die Zahl gebraucht, zählt [`hits=false`](#hits) im aufrufenden Template.
+Wird die Zahl im aufrufenden Template gebraucht, zählt dort [`hits=false`](#hits):
+
+| Angabe | `$this->db->num_rows_unlimited` steht | Im aufrufenden Template |
+|---|---|---|
+| `count=true` | ***nur im `resulttemplate`*** | ein vorhandener Wert bleibt unverändert |
+| `hits=false` | ***nur im aufrufenden Template***, nach dem `CMS:SELECT` | ein vorhandener Wert wird überschrieben |
 
 ### `hits`
 
 `hits=false` zählt nur (`count=true` ist damit eingeschlossen): Es werden keine
-Datensätze geladen und ***kein*** `resulttemplate` eingebunden – der Name muss trotzdem
-angegeben werden. Die Gesamtzahl steht danach ***im aufrufenden Template*** in
+Datensätze geladen und ***kein*** `resulttemplate` eingebunden, die Angabe entfällt
+daher. Die Gesamtzahl steht danach ***nur im aufrufenden Template*** in
 `$this->db->num_rows_unlimited`:
 
 ```cms
-(CMS:SELECT x filter[area]=artikel filter[topics]=42 hits=false)
+(CMS:SELECT filter[area]=artikel filter[topics]=42 hits=false)
 (CMS:NUMBER useval="{$this->db->num_rows_unlimited}") Artikel zu diesem Thema
 ```
 
 Ist die Zahl 0, gelten `noresult` bzw. `noresulttemplate` wie gewohnt:
 
 ```cms
-(CMS:SELECT x filter[area]=artikel filter[topics]=42 hits=false noresult="Noch keine Artikel zu diesem Thema.")
+(CMS:SELECT filter[area]=artikel filter[topics]=42 hits=false noresult="Noch keine Artikel zu diesem Thema.")
 ```
 
-Steht das zählende `CMS:SELECT` in einem `resulttemplate`, ersetzt die Zahl dort die
-Gesamtzahl des umgebenden Ergebnisses; `$this->db->num_rows` und die laufende
-Ergebnisschleife bleiben unberührt. Eine Blätterleiste
+Steht das zählende `CMS:SELECT` in einem `resulttemplate`, ***überschreibt*** die Zahl dort
+die Gesamtzahl des umgebenden Ergebnisses bis zum Ende dieses Templates;
+`$this->db->num_rows` und die laufende Ergebnisschleife bleiben unberührt. Eine Blätterleiste
 ([CMS:JUMP_LIST](jump-list.md)) des umgebenden Ergebnisses gehört dann ***vor*** das
 zählende `CMS:SELECT`.
 

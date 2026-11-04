@@ -868,6 +868,13 @@ trait TemplateParserTrait
                 $errors[] = 'Line ' . ($cmd['baseLine'] + 1)
                     . ": Missing mandatory parameter '$pname' for command '$upper'.";
             }
+            if (!empty($pdef['mandatory_unless']) && !isset($seen[$pname])
+                && !$this->mandatoryWaived($cmd, (array)$pdef['mandatory_unless'])) {
+                $conditions = [];
+                foreach ($pdef['mandatory_unless'] as $key => $value) $conditions[] = "$key=$value";
+                $errors[] = 'Line ' . ($cmd['baseLine'] + 1) . ": Missing parameter '$pname' for command "
+                    . "'$upper' - it can only be omitted with " . implode(' or ', $conditions) . '.';
+            }
         }
 
         $this->depthWithoutParentNote($cmd, $errors);
@@ -887,6 +894,28 @@ trait TemplateParserTrait
                     . 'least one of these parameters: ' . implode(', ', $list) . '.';
             }
         }
+    }
+
+    /**
+     * Does a condition of 'mandatory_unless' (commands.php) release the parameter? A key or
+     * value with a PHP part counts as released: only the run decides, and the called method
+     * checks it there. Needs staticKey from validateCmsCommand().
+     *
+     * @param array $cmd     command including its parameters
+     * @param array $unless  parameter name => value that makes the parameter optional
+     */
+    private function mandatoryWaived(array $cmd, array $unless): bool
+    {
+        foreach ($cmd['params'] as $p) {
+            if ($p['standalone'] || !empty($p['drop'])) continue;
+            $key = $p['staticKey'] ?? null;
+            if ($key === null) return true;
+            if (!isset($unless[$key]) || $p['value'] === null) continue;
+            if (!empty($p['value']['php'])) return true;
+            $value = $p['value']['quote'] !== null ? substr($p['value']['text'], 1, -1) : $p['value']['text'];
+            if ($value === $unless[$key]) return true;
+        }
+        return false;
     }
 
     /**

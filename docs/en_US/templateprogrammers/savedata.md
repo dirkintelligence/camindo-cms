@@ -50,7 +50,7 @@ If you only need to ***output*** fields of another record, you do not need
 The array contains the meta fields (`record_id`, `area_id`, `online_at` …) and the
 fields of the area in the current language; upload fields as a file array (`filename`,
 `mime_type`, `size` …). ***Relation fields are missing*** – their targets are provided by
-`CMS:SELECT relation=…`, their count by `(CMS:SELECT x relation=topics hits=false)` –
+`CMS:SELECT relation=…`, their count by `(CMS:SELECT relation=topics hits=false)` –
 afterwards it is available in `$this->db->num_rows_unlimited`.
 If the record does not exist, the array is empty.
 

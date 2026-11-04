@@ -6186,6 +6186,14 @@ class Cms {
             if (isset($p[$from]) && !isset($p[$to])) $p[$to] = $p[$from];
         }
 
+        // hits=false: only count - without count=true there would be nothing to count
+        $countOnly = ((string)($p['result'] ?? '') === 'false');
+        if ($countOnly) $p['count'] = 'true';
+        // The parser cannot decide this for values with a PHP part (commands.php: mandatory_unless)
+        elseif (trim((string)($p['resulttemplate'] ?? '')) === '') {
+            $this->_cmsError('CMS:SELECT error: parameter "resulttemplate" required (only hits=false can omit it).');
+        }
+
         // 'request' of a template: only named keys, see templateRequestKeys()
         if (isset($p['request'])) $p['request'] = $this->templateRequestKeys($p['request']);
 
@@ -6209,9 +6217,6 @@ class Cms {
         if ($published !== '') {
             $p['sql'] = array_merge((array)($p['sql'] ?? []), [$published]);
         }
-        // hits=false: only count - without count=true there would be nothing to count
-        $countOnly = ((string)($p['result'] ?? '') === 'false');
-        if ($countOnly) $p['count'] = 'true';
 
         $this->select($p);
 

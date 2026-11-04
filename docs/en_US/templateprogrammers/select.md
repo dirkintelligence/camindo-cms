@@ -9,13 +9,13 @@ Searches the database using the given (filter) criteria and returns the records 
 ***Method:*** `Cms::cmsSelect()`  
 ***Without key:*** the first value without `=` is the `resulttemplate`  
 ***At least one of:*** `filter`, `relation`  
-***PHP fragments:*** `push_result` (before) · `include`, `pop_result` (after)
+***PHP fragments:*** `push_result` (before) · `include`, `pop_result`, `select_count` (after)
 
 ## Parameters
 
 | Parameter | Value | Default | Required | Description |
 |---|---|---|:-:|---|
-| `resulttemplate` ¹ | `templatename` | – | yes | List template that is included to process the results. |
+| `resulttemplate` ¹ | `templatename` | – | ³ | List template that is included to process the results. Required, except with hits=false. |
 | `noresulttemplate` | `templatename` | – |  | Detail template that is included if the query returns no results. |
 | `noresult` | `text` | – |  | Text that is output directly if the query returns no results. |
 | `filter[…][…]` | `value or EMPTY` | – | ² | In the key: name of the field to search (relation_any for any link field; area for the name of the content area, a number there counts as area_id). In the value: the value to search for. |
@@ -31,7 +31,7 @@ Searches the database using the given (filter) criteria and returns the records 
 | `dest_id` | `record ID` | – |  | Reverse direction to relation: the records that point to this record via relation (relation=ANY: via any pointer field). Without src_id, no current record is then used as the source. |
 | `nextof` | `record ID` | – |  | Only with relation: neighbors of the given record in the link list – the entries after it (order=asc) or before it (order=desc), in the order of the list; with limit=1 the next or previous record. |
 | `count` | `true / false` | `false` |  | true: The number of records in the result set is determined, regardless of "limit" and "skip" (in the resulttemplate in $this->db->num_rows_unlimited; basis of the JUMP commands). |
-| `hits` | `true / false` | `true` |  | false: Only counts (includes count=true); no records are loaded and no resulttemplate is included. The total is then available in the calling template in $this->db->num_rows_unlimited; noresult/noresulttemplate apply if it is 0. |
+| `hits` | `true / false` | `true` |  | false: Only counts (includes count=true); no records are loaded and no resulttemplate is included (it can be omitted). The total is then available only in the calling template in $this->db->num_rows_unlimited, where it overwrites an existing value; noresult/noresulttemplate apply if it is 0. |
 | `archive` | `true / false` | `false` |  | true: Expired records (offline_at reached) are included in the query as well. |
 | `future` | `true / false` | `false` |  | true: Pre-dated records (online_at not yet reached) are included in the query as well. |
 | `debug` | `true / false` | `false` |  | true: The generated database query is output for support analysis. |
@@ -41,7 +41,8 @@ Searches the database using the given (filter) criteria and returns the records 
 | `set` | `array index of $set` | – |  | The entire output (including the included template) is not output, but stored in the variable $set. |
 
 ¹ can be given without a key as the first value.  
-² at least one of the parameters marked with ² must be given.
+² at least one of the parameters marked with ² must be given.  
+³ required, except with `hits=false`.
 
 `[…]` – the parameter accepts subkeys, for example `name[key]=value`.
 
@@ -109,6 +110,10 @@ List template for the hits; may stand without a key. Name or `area.name`:
 (CMS:SELECT article_teaser filter[area]=articles)
 (CMS:SELECT articletemplates.article_teaser filter[area]=articles)
 ```
+
+The parameter is required; only [`hits=false`](#hits) can omit it. If it is missing otherwise,
+the parser reports this on the info page of the template, and in the frontend the output stops
+at this point with an error message.
 
 ### `noresulttemplate`
 
@@ -332,28 +337,34 @@ In the `resulttemplate` `list` there are then two numbers: `$this->db->num_rows`
 ```
 
 Both numbers apply ***only in the `resulttemplate`***: after the `CMS:SELECT`, the surrounding
-result is active again – the same rule that makes nested lists possible. If only the number is
-needed, count in the calling template with [`hits=false`](#hits).
+result is active again – the same rule that makes nested lists possible. If the number is needed
+in the calling template, count there with [`hits=false`](#hits):
+
+| Setting | `$this->db->num_rows_unlimited` is available | In the calling template |
+|---|---|---|
+| `count=true` | ***only in the `resulttemplate`*** | an existing value stays unchanged |
+| `hits=false` | ***only in the calling template***, after the `CMS:SELECT` | an existing value is overwritten |
 
 ### `hits`
 
 `hits=false` only counts (`count=true` is thereby included): no records are loaded and ***no***
-`resulttemplate` is included – the name must nevertheless be given. The total is then available
-***in the calling template*** in `$this->db->num_rows_unlimited`:
+`resulttemplate` is included, so it can be omitted. The total is then available
+***only in the calling template*** in `$this->db->num_rows_unlimited`:
 
 ```cms
-(CMS:SELECT x filter[area]=articles filter[topics]=42 hits=false)
+(CMS:SELECT filter[area]=articles filter[topics]=42 hits=false)
 (CMS:NUMBER useval="{$this->db->num_rows_unlimited}") articles on this topic
 ```
 
 If the number is 0, `noresult` or `noresulttemplate` apply as usual:
 
 ```cms
-(CMS:SELECT x filter[area]=articles filter[topics]=42 hits=false noresult="No articles on this topic yet.")
+(CMS:SELECT filter[area]=articles filter[topics]=42 hits=false noresult="No articles on this topic yet.")
 ```
 
-If the counting `CMS:SELECT` stands in a `resulttemplate`, the number there replaces the total of
-the surrounding result; `$this->db->num_rows` and the running result loop remain untouched. A page
+If the counting `CMS:SELECT` stands in a `resulttemplate`, the number ***overwrites*** the total of
+the surrounding result there until the end of this template; `$this->db->num_rows` and the running
+result loop remain untouched. A page
 navigation ([CMS:JUMP_LIST](jump-list.md)) of the surrounding result then belongs ***before*** the
 counting `CMS:SELECT`.
 

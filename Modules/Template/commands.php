@@ -53,6 +53,11 @@
  * KEYS OF A PARAMETER
  * --------------------
  *     mandatory    required? The parser reports a missing one as an error.
+ *     mandatory_unless  required, except when one of these parameters has the given value:
+ *                  ['hits' => 'false'] (CMS:SELECT resulttemplate). The parser reports a
+ *                  missing one as an error; a value or key with a PHP part is decided only
+ *                  at runtime, so the called method checks it as well. 'mandatory' stays
+ *                  false: the command reference marks only unconditional parameters.
  *     subparam     allowed depth of sub-keys: 0 = none (only key=value),
  *                  1 = key['a']=value, 2 = key['a']['b']=value. Empty brackets (key[]=…)
  *                  do not count as a level, they only force appending to an array.
@@ -83,7 +88,8 @@
  *     extra_*      control entries for the command reference
  *
  * The parser actually evaluates only method, do, oneof, params,
- * params[*].mandatory, params[*].subparam, params[*].operator, params[*].php_value,
+ * params[*].mandatory, params[*].mandatory_unless, params[*].subparam, params[*].operator,
+ * params[*].php_value,
  * no_action, php_prefix, php_suffix and buffer_set.
  * Everything else - note, value, description, default, extra_*, include - is
  * documentation: note, description, value and default appear in the command picker of the
@@ -1546,7 +1552,8 @@ return [
             'resulttemplate' => [
                 'ref' => 'template',
                 'list' => true,
-                'mandatory' => true,
+                'mandatory' => false,
+                'mandatory_unless' => ['hits' => 'false'],
                 'subparam' => 0,
                 'default' => '',
                 'value' => '#template.cmdval_template_name',

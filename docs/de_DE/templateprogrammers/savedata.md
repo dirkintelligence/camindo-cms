@@ -50,7 +50,7 @@ Geht es nur um die ***Ausgabe*** von Feldern eines anderen Datensatzes, brauchen
 Das Array enthält die Metafelder (`record_id`, `area_id`, `online_at` …) und die
 Felder des Bereichs in der aktuellen Sprache; Upload-Felder als Datei-Array (`filename`,
 `mime_type`, `size` …). ***Verweisfelder fehlen*** – ihre Ziele liefert
-`CMS:SELECT relation=…`, ihre Anzahl `(CMS:SELECT x relation=topics hits=false)` –
+`CMS:SELECT relation=…`, ihre Anzahl `(CMS:SELECT relation=topics hits=false)` –
 danach steht sie in `$this->db->num_rows_unlimited`.
 Gibt es den Datensatz nicht, ist das Array leer.
 

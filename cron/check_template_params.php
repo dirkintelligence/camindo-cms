@@ -10,9 +10,11 @@
  *     (if="1?x", if[]="1?x") - PHP turns "1" into an int key (Cms::_pairs())
  *   - CMS:NUMBER 'decimals' and the empty check on the numeric value (0 / "0.00")
  *   - parser note for filter[depth] without filter[parent_id]
+ *   - resulttemplate of CMS:SELECT: mandatory unless hits=false (parser and runtime)
  * Exit code 1 on deviations.
  */
 use Camindo\Core\Cms;
+use Camindo\Core\Database;
 use Camindo\Core\Modules\Template\Template;
 
 // Reachable only on the command line, not via the web server
@@ -28,6 +30,21 @@ define('CAMINDO_CLI', true);
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
 $cms = $app->get(Cms::class);
+
+// Child process of the runtime cases below: a query that is certain to find nothing
+$filter = ['record_id' => ['0']];
+switch ($argv[1] ?? '') {
+    case 'select-none':
+        $cms->cmsSelect(['filter' => $filter]);
+        exit("no error\n");
+    case 'select-empty':
+        $cms->cmsSelect(['resulttemplate' => '', 'filter' => $filter]);
+        exit("no error\n");
+    case 'select-count':
+        $file = $cms->cmsSelect(['filter' => $filter, 'hits' => 'false']);
+        $cms->selectCountEnd();
+        exit('file=' . $file . ' count=' . $app->get(Database::class)->num_rows_unlimited . "\n");
+}
 
 // Capture the output of a command
 $run = function (string $method, array $p) use ($cms): string {
@@ -117,6 +134,42 @@ foreach ($parserCases as [$label, $source, $expected]) {
     if (!$ok) $failed++;
     printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : ($expected ? 'Hinweis fehlt' : 'unerwarteter Hinweis'));
 }
-$total = count($cases) + count($parserCases);
+
+// resulttemplate of CMS:SELECT: mandatory unless hits=false (commands.php: mandatory_unless)
+// [description, source, error expected]
+$resultTemplateCases = [
+    ['hits=false ohne Template',       '(CMS:SELECT filter[area_id]=1 hits=false)', false],
+    ['hits="false" ohne Template',     '(CMS:SELECT filter[area_id]=1 hits="false")', false],
+    ['hits=false mit Template',        '(CMS:SELECT liste filter[area_id]=1 hits=false)', false],
+    ['hits dynamisch ohne Template',   '(CMS:SELECT filter[area_id]=1 hits="{$h}")', false],
+    ['dynamischer Schlüssel',          '(CMS:SELECT filter[area_id]=1 {$k}=false)', false],
+    ['Template ohne Schlüssel',        '(CMS:SELECT liste filter[area_id]=1)', false],
+    ['Template mit Schlüssel',         '(CMS:SELECT resulttemplate=liste filter[area_id]=1)', false],
+    ['ohne Template',                  '(CMS:SELECT filter[area_id]=1)', true],
+    ['count=true ohne Template',       '(CMS:SELECT filter[area_id]=1 count=true)', true],
+    ['hits=true ohne Template',        '(CMS:SELECT filter[area_id]=1 hits=true)', true],
+];
+foreach ($resultTemplateCases as [$label, $source, $expected]) {
+    $notes = preg_grep("/parameter 'resulttemplate'/", $template->parse($source, 0)['errors']);
+    $ok = ((bool)$notes === $expected);
+    if (!$ok) $failed++;
+    printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : ($expected ? 'Fehler fehlt' : 'unerwarteter Fehler'));
+}
+
+// The same at runtime. _cmsError() ends the process, hence a process of its own per case.
+$runtimeCases = [
+    ['Laufzeit: ohne Template',        'select-none',  true],
+    ['Laufzeit: leeres Template',      'select-empty', true],
+    ['Laufzeit: hits=false',           'select-count', false],
+];
+foreach ($runtimeCases as [$label, $case, $expected]) {
+    $output = (string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__FILE__) . ' ' . $case . ' 2>&1');
+    $ok = (str_contains($output, 'parameter "resulttemplate" required') === $expected)
+        && ($expected || str_contains($output, 'count=0'));
+    if (!$ok) $failed++;
+    printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : "Ausgabe '" . trim($output) . "'");
+}
+
+$total = count($cases) + count($parserCases) + count($resultTemplateCases) + count($runtimeCases);
 echo $failed ? "\n$failed Abweichung(en)\n" : "\nalle $total Fälle ok\n";
 exit($failed ? 1 : 0);

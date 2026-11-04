@@ -73,6 +73,9 @@ class TemplateCommand extends Command {
                     'subparam'    => (int)($pdef['subparam'] ?? 0),
                     'operator'    => !empty($pdef['operator']),
                 ];
+                if (!empty($pdef['mandatory_unless'])) {
+                    $params[$param]['mandatory_unless'] = (array)$pdef['mandatory_unless'];
+                }
             }
             $commands[$name] = [
                 'note'   => $text($def['note'] ?? ''),
