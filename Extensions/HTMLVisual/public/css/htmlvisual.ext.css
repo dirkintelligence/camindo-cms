@@ -93,6 +93,9 @@
     pointer-events: none;
 }
 .c9-htv-content img { max-width: 100%; height: auto; }
+/* Icons in the text: inline-block instead of the backend's inline-flex - behind an inline-flex
+   element Chromium moves the caret back to the start of the paragraph when moving right by word */
+.c9-htv-content .icon { display: inline-block; }
 .c9-htv-content > :first-child { margin-top: 0; }
 .c9-htv-content > :last-child { margin-bottom: 0; }
 .c9-htv-content p,
