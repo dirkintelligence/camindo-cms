@@ -128,3 +128,7 @@ editing area is `.c9-htv-content`:
 .c9-htmlvisual-text .c9-htv-content h1 { color: #036; }
 .c9-htmlvisual-text .c9-htv-content { font-family: Georgia, serif; }
 ```
+
+Avoid `display: inline-flex` and `display: inline-grid` for elements in the text: behind
+such elements, Chrome moves the cursor back to the start of the paragraph when moving
+right by word (Mac: Option+Right Arrow). Use `inline-block` instead.

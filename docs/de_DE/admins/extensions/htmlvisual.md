@@ -129,3 +129,8 @@ Bearbeitungsfläche ist `.c9-htv-content`:
 .c9-htmlvisual-text .c9-htv-content h1 { color: #036; }
 .c9-htmlvisual-text .c9-htv-content { font-family: Georgia, serif; }
 ```
+
+Vermeiden Sie für Elemente im Text `display: inline-flex` und `display: inline-grid`:
+Hinter solchen Elementen springt der Cursor in Chrome beim wortweisen Bewegen nach rechts
+(Mac: Option+Pfeil rechts) zurück an den Absatzanfang. Verwenden Sie stattdessen
+`inline-block`.
