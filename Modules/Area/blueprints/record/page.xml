@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Blueprint "Pages": title, teaser, text, image, date and status.
+  Export format (RecordExport::XML_FORMAT 2), one area without records - see
+  AreaBackend::create(). Label and note: text or snippet reference (#key or #module.key),
+  also for the fields (RecordImport::importBlueprint() resolves them on creation).
+-->
+<camindo-export format="2">
+  <areas>
+    <area area_id="1" type="record" name="pages" icon="draft" sort_order="DESC" default_field_id="1" sort_field_id="6">
+      <label>#label_area_pages</label>
+      <note>#label_area_pages_note</note>
+      <details>{"tabs":0}</details>
+      <fields>
+        <field field_id="1" type="chars" name="title" display_type="text" min_op="&gt;=" max_op="&lt;=" position="0" flags="[&quot;not_empty&quot;]" visibility_input="1" visibility_search="1" visibility_list="1" default_field="1" multilingual="1">
+          <label>#label_title</label>
+        </field>
+        <field field_id="2" type="text" name="teaser" display_type="textarea" height="3" min_op="&gt;=" max_op="&lt;=" position="1" flags="[]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="1">
+          <label>#label_teaser</label>
+        </field>
+        <field field_id="3" type="text" name="text" display_type="textarea" height="12" min_op="&gt;=" max_op="&lt;=" position="2" flags="[]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="1">
+          <label>#label_text</label>
+        </field>
+        <field field_id="4" type="file" name="image" display_type="upload" position="3" flags="[]" visibility_input="1" visibility_search="0" visibility_list="1" multilingual="0">
+          <label>#label_image</label>
+          <details>{"media_types":["image"]}</details>
+        </field>
+        <field field_id="5" parent_field_id="4" type="file" name="thumbnail" display_type="thumbnail" position="4" flags="[]" visibility_input="0" visibility_search="0" visibility_list="1" multilingual="0">
+          <label>#label_thumbnail</label>
+          <converter_ids>
+            <converter_id>1</converter_id>
+          </converter_ids>
+        </field>
+        <field field_id="6" type="timestampl" name="online_at" display_type="text" min_op="&gt;=" max_op="&lt;=" position="5" flags="[]" visibility_input="1" visibility_search="1" visibility_list="1" multilingual="0">
+          <label>#record.field_online_at</label>
+          <default>now</default>
+        </field>
+        <field field_id="7" type="timestampl" name="offline_at" display_type="text" min_op="&gt;=" max_op="&lt;=" position="6" flags="[]" visibility_input="1" visibility_search="1" visibility_list="0" multilingual="0">
+          <label>#record.field_offline_at</label>
+          <default>9000-01-01 00:00:00</default>
+        </field>
+        <field field_id="8" type="integer" name="status_id" display_type="select" min="0" min_op="&gt;=" max_op="&lt;=" position="7" flags="[]" visibility_input="1" visibility_search="1" visibility_list="1" multilingual="0">
+          <label>#record.field_status_id</label>
+        </field>
+      </fields>
+    </area>
+  </areas>
+  <converters>
+    <converter converter_id="1" hash="de4e626a1f4d07b0ca4fa0a781ccfcacb4219ead" processor="ImageGd" type="image" extension="jpg">
+      <label>#converter.image_preview_gd</label>
+      <media_types_incl>image/jpeg
+image/png
+image/gif
+image/webp
+image/bmp
+image/avif</media_types_incl>
+      <details>{"width":200,"height":300,"crop":0,"resize_when":"always","unit":"px","max_pixels":0,"quality":80,"indexed_colors":0,"alpha":0,"bgcolor":"ffffff"}</details>
+    </converter>
+  </converters>
+</camindo-export>

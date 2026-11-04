@@ -33,7 +33,7 @@ fertige Vorlagen, die den Bereich mit passenden Eingabefeldern anlegen.
 
 | Bauplan | Typ | Felder |
 |---|---|---|
-| Artikel | RECORD | Titel, Datum, Teaser, Text und Bild |
+| Seiten | RECORD | Titel, Anreißer, Text, Bild, Datum und Status |
 | Mitglieder | PROFILE | Name, E-Mail (Anmeldename) und Passwort |
 | Kommentare | UGC | Name und Kommentartext |
 
@@ -58,7 +58,7 @@ Regeln:
 
 - Der ***Dateiname*** ohne `.xml` ist der Name des Bauplans: Buchstaben, Ziffern,
   Unterstrich und Minus. Heißt eine Datei wie ein mitgelieferter Bauplan
-  (`article`, `member`, `comment`) und hat sie denselben Typ, ersetzt sie diesen.
+  (`page`, `member`, `comment`) und hat sie denselben Typ, ersetzt sie diesen.
 - Unter welchem Typ der Bauplan erscheint (RECORD, PROFILE oder UGC), bestimmt der
   Bereich in der Datei. Andere Typen erscheinen nicht.
 - In der Auswahl steht das ***Label*** des Bereichs als Überschrift und sein

@@ -172,7 +172,7 @@ Because content areas are settings and not programming, they can be copied and t
 
 - ***Copy area*** – a copy of a content area with all input fields and template
   assignments, but without records.
-- ***Blueprints*** – prepared templates for new areas (for example “Articles”, “Members”,
+- ***Blueprints*** – prepared templates for new areas (for example “Pages”, “Members”,
   “Comments”) create the area and its fields in one step.
 - ***XML export and import*** – entire structure trees with folders, content areas, input
   fields, templates, and, if desired, all records and files. With it, you transfer a

@@ -182,7 +182,7 @@ kopieren und übertragen:
 
 - ***Bereich kopieren*** – eine Kopie eines Inhaltsbereichs mit allen Eingabefeldern
   und Template-Zuweisungen, aber ohne Datensätze.
-- ***Baupläne*** – vorbereitete Vorlagen für neue Bereiche (etwa „Artikel“,
+- ***Baupläne*** – vorbereitete Vorlagen für neue Bereiche (etwa „Seiten“,
   „Mitglieder“, „Kommentare“) legen Bereich und Felder in einem Schritt an.
 - ***XML-Export und -Import*** – ganze Strukturbäume mit Ordnern, Inhaltsbereichen,
   Eingabefeldern, Templates und auf Wunsch allen Datensätzen und Dateien. Damit

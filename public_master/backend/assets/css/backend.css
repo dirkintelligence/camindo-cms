@@ -322,10 +322,9 @@ aside {
     justify-content: center;
     border-radius:0;
 }
-/* Optical centering: the glyphs sit low in their line box, the bottom border takes 1px */
+/* Optical centering: the general .icon rule moves the glyphs down by 2px */
 .c9-head-btn > .icon {
-    position: relative;
-    top: -1px;
+    top: 0;
 }
 .c9-head-btn:hover {
     color:white;
@@ -367,8 +366,8 @@ aside {
 .c9-head-btn#c9-logo {
     width: auto;
     font-size: 1.4rem;
-    padding: 0 10px;
-    line-height: 32px; /* < Buttonhöhe (40px): Text sitzt optisch mittig (4px höher), <small> auf derselben Baseline */
+    padding: 0 10px 2px; /* the button centers its content: 2px at the bottom = text 1px higher */
+    line-height: 32px; /* <small> on the same baseline */
     display: inline-block; /* kein Flex: align-items:baseline packt die Zeile sonst an den oberen Rand */
     white-space: nowrap;
     direction: ltr; /* Markenname: "camindo" + <small>CMS</small> bei dir="rtl" nicht tauschen */

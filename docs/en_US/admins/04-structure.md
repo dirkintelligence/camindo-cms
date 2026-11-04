@@ -31,7 +31,7 @@ ready-made templates that create the area with suitable input fields.
 
 | Blueprint | Type | Fields |
 |---|---|---|
-| Article | RECORD | Title, date, teaser, text, and image |
+| Pages | RECORD | Title, teaser, text, image, date, and status |
 | Members | PROFILE | Name, e-mail (sign-in name), and password |
 | Comments | UGC | Name and comment text |
 
@@ -56,7 +56,7 @@ Rules:
 
 - The ***file name*** without `.xml` is the name of the blueprint: letters, digits,
   underscore, and hyphen. If a file has the same name as a supplied blueprint
-  (`article`, `member`, `comment`) and the same type, it replaces that blueprint.
+  (`page`, `member`, `comment`) and the same type, it replaces that blueprint.
 - The type under which the blueprint appears (RECORD, PROFILE, or UGC) is determined by the
   area in the file. Other types do not appear.
 - The ***label*** of the area appears as the heading in the selection and its ***note*** below
