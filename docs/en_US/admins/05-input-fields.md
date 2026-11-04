@@ -179,6 +179,9 @@ Target areas must belong to the same instance or to an instance that may read th
 If you deselect a target area in which relations still exist, camindo CMS asks whether these
 relations should be deleted.
 
+In a dropdown, the records of a target area with a tree structure appear in the order of the
+tree and indented by their depth.
+
 A relation “n:1” is not merely a restriction to one record: templates can sort and filter
 very quickly by fields of the linked record. Choose this relation type where only one target
 makes sense in terms of content, for example a category for the article.

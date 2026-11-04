@@ -2219,7 +2219,9 @@ class RecordBackendEdit extends RecordBackend {
      * With several target areas (pointer) they are processed one after the other;
      * within an area its default sort order applies, and the content of its default
      * field is shown. Both can differ per area, which is why the
-     * loop is used instead of a single query.
+     * loop is used instead of a single query. A tree area is listed in tree order
+     * (lft ASC) and indented by depth: `position` counts per parent record, and any
+     * other order would separate children from their parent (as _parentOptions()).
      *
      * The total number is limited to admin.list_max_datasets (default 200) - the
      * counter runs across all areas, and the limit of the next query is reduced
@@ -2253,9 +2255,10 @@ class RecordBackendEdit extends RecordBackend {
             $defaultFieldType = (string)$areaData['default_field_type'] ?? 'text';
             $param = [];
             $param['filter']['area_id'] = $areaId;
-            // default sort order of the area
-            $param['sort'] = (string)$areaData['sort_field_name'];
-            $param['order'] = $areaData['sort_order'];
+            $isTree = $this->record->isTreeArea((int)$areaId);
+            // default sort order of the area, tree areas in tree order
+            $param['sort'] = $isTree ? 'lft' : (string)$areaData['sort_field_name'];
+            $param['order'] = $isTree ? 'ASC' : $areaData['sort_order'];
             // load +1 to check whether more exist, minus the number from previous rounds
             $param['limit'] = $limit + 1 - $count;
             $this->cms->select($param);
@@ -2266,7 +2269,7 @@ class RecordBackendEdit extends RecordBackend {
             for ($i = 0; $i < $displayNumber; $i++) {
                 $data = $this->record->fetch();
                 $value = $this->backend->backendValue($data[$defaultFieldName] ?? '', $colDef);
-                $options[(string)$data['record_id']] = $value;
+                $options[(string)$data['record_id']] = ($isTree ? $this->_treeIndent((int)($data['depth'] ?? 0)) : '') . $value;
             }
             // add newly loaded records to the total counter
             $count += $numRows;

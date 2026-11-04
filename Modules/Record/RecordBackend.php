@@ -669,14 +669,22 @@ abstract class RecordBackend {
                 $data[$defaultFieldName] ?? '',
                 ['type' => $defaultFieldType]
             );
-            $depth = $isTree ? (int)($data['depth'] ?? 0) : 0;
-            $indent = $depth > 0 ? str_repeat('&nbsp;&nbsp;&nbsp;', $depth) . '└ ' : '';
-            $options[$data['record_id']] = $indent . $label;
+            $options[$data['record_id']] = ($isTree ? $this->_treeIndent((int)($data['depth'] ?? 0)) : '') . $label;
         }
         if ($numRows > $limit) {
             $options['disabled'] = $this->cms->snippet('ellipsis_spoken');
         }
         return $options;
+    }
+
+    /**
+     * Indentation of a selection list entry by its depth in the record tree.
+     *
+     * @param int $depth  0-based: root records are not indented
+     */
+    protected function _treeIndent(int $depth): string
+    {
+        return $depth > 0 ? str_repeat('&nbsp;&nbsp;&nbsp;', $depth) . '└ ' : '';
     }
 
     /**

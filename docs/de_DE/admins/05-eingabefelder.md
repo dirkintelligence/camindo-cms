@@ -179,6 +179,9 @@ Zielbereiche müssen zur selben Instanz gehören oder zu einer Instanz, die dies
 darf. Wählen Sie einen Zielbereich ab, in dem noch Verknüpfungen bestehen, fragt
 camindo CMS, ob diese Verknüpfungen gelöscht werden sollen.
 
+Im Dropdown erscheinen die Datensätze eines Zielbereichs mit Baumstruktur in der
+Reihenfolge des Baumes und nach ihrer Tiefe eingerückt.
+
 Eine Verknüpfung „n:1“ ist nicht nur eine Beschränkung auf einen Datensatz: Templates
 können nach Feldern des verknüpften Datensatzes besonders schnell sortieren und
 filtern. Wählen Sie diesen Verknüpfungs-Typ dort, wo inhaltlich nur ein Ziel sinnvoll ist,
