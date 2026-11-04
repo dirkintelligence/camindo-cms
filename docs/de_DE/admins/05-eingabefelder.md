@@ -43,7 +43,7 @@ Beim Anlegen wählen Sie, was das Feld speichern soll:
 | | Eingebettete Inhalte (1:n) | wie oben, bearbeitet in der Maske des Datensatzes |
 | ***Datei*** | Datei-Upload | Upload-Feld für Dateien |
 | | Dateiversion (Thumbnail) | automatisch erzeugte Version einer hochgeladenen Datei – generiertes Vorschaubild, verkleinertes Video … (siehe [Kapitel 8](./08-medien.md)) |
-| ***Meta-Information*** | Veröffentlichungsdatum, Ablaufdatum, Gestaltungsvorlage, Status, Prüfung nötig, Eltern-Datensatz, Position | Metafelder, siehe [unten](#metafelder) |
+| ***Metafelder*** | Veröffentlichungsdatum, Ablaufdatum, Gestaltungsvorlage, Status, Prüfung nötig, Eltern-Datensatz, Position | siehe [unten](#metafelder) |
 
 Wählen Sie den Typ mit Bedacht – er bestimmt, wie Eingaben geprüft, sortiert und durchsucht werden.
 Zahlen in einem Textfeld sortieren alphabetisch (`10` vor `9`),

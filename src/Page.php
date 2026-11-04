@@ -115,6 +115,13 @@
  *                                   and passes it as its own parameter
  *     /                             start page of the instance (`instance`.`record_id` /
  *                                   `template_id`)
+ *     ?id={slug|id}                 query parameters instead of the path, also combined
+ *     ?template={template}          (/?id=7&template=print); each only applies where the
+ *                                   path leaves it open (/?id=, /{slug}?template=), and
+ *                                   only in the frontend. With canonical = 1 the call is
+ *                                   redirected to the path form (the two parameters are
+ *                                   dropped from the query), otherwise it is delivered
+ *                                   directly
  *
  * After the rewrite exactly two parameters arrive: `request` (everything after the language part)
  * and optionally `lang`. `request` is split at commas:
@@ -209,6 +216,7 @@ class Page {
     public int $areaId = 0;            // record area_id
     public string $templateName = '';  // template name that is included
     public bool $urlTemplate = false;  // flag: true if the template is explicitly given in the URL
+    private array $queryParams = [];   // query parameters used instead of the path ('id', 'template')
     public ?int $hash1 = null;         // additional parameter 1
     public ?int $hash2 = null;         // additional parameter 2
 
@@ -505,6 +513,21 @@ class Page {
         $templateName = preg_replace('/[^a-z0-9_.]/', '', (string)($parts[1] ?? ''));
         $this->hash1 = (int)($parts[2] ?? 0);
         $this->hash2 = (int)($parts[3] ?? 0);
+
+        // ?id={slug|id} and ?template={template} instead of the path (see class comment)
+        $this->queryParams = [];
+        if ($this->mode === self::MODE_FRONTEND) {
+            $queryId = is_string($_GET['id'] ?? null) ? trim($_GET['id'], " /") : '';
+            if ($slug === '' && $queryId !== '') {
+                $slug = $queryId;
+                $this->queryParams[] = 'id';
+            }
+            $queryTemplate = is_string($_GET['template'] ?? null) ? preg_replace('/[^a-z0-9_.]/', '', $_GET['template']) : '';
+            if ($templateName === '' && $queryTemplate !== '') {
+                $templateName = $queryTemplate;
+                $this->queryParams[] = 'template';
+            }
+        }
         $this->urlTemplate = !empty($templateName);
 
         // Start page of the instance: only the domain was called
@@ -1152,7 +1175,8 @@ class Page {
      * if it deviates (see class comment).
      *
      * Protocol, host and path are compared; the query parameters of the call
-     * are kept and carried along.
+     * are kept and carried along - except those that stood in for the path
+     * (?id=, ?template=): they are in the path now, so there is always a redirect.
      *
      * @param array       $record        loaded record ([] without record)
      * @param string      $templateName  determined template
@@ -1198,11 +1222,16 @@ class Page {
             $query      = substr($requestUri, $pos);
             $requestUri = substr($requestUri, 0, $pos);
         }
+        if ($this->queryParams !== []) {
+            $keep = array_filter(explode('&', substr($query, 1)), fn($pair) => $pair !== ''
+                && !in_array(urldecode(explode('=', $pair, 2)[0]), $this->queryParams, true));
+            $query = $keep !== [] ? '?' . implode('&', $keep) : '';
+        }
         $requestHost = mb_strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
         if (($colon = strpos($requestHost, ':')) !== false) $requestHost = substr($requestHost, 0, $colon);
         $requestUrl = $this->protocol . '://' . $requestHost . rawurldecode($requestUri);
 
-        if ($requestUrl === $this->canonicalUrl) return;
+        if ($requestUrl === $this->canonicalUrl && $this->queryParams === []) return;
 
         header('Location: ' . $this->canonicalUrl . $query, true, $negotiated ? 302 : 301);
         exit;

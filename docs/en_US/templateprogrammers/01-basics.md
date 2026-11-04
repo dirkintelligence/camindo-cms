@@ -52,6 +52,13 @@ result template; see [Lists, SELECT and the result loop](#lists-select-and-the-r
 | `/company-party-2026,print` | Record with the template `print` – only if it is released as a URL override for the area |
 | `/0,search` | Template `search` without a record – only if it is marked as “Standalone” |
 
+Record and template can also be given as ***query parameters*** – individually or
+combined: `/?id=1758`, `/?id=company-party-2026`, `/?template=search`,
+`/?id=1758&template=print`. If “Canonical requests” is turned on for the instance,
+camindo CMS redirects to the regular address (`/company-party-2026,print`); other
+parameters are kept. Otherwise the page is delivered directly at this address. The same
+releases apply to the template as in the address.
+
 Pure digit sequences are always record numbers; anything else is a slug. If the first part
 of the address is the slug prefix of a content area, the rest is searched only in this
 area; otherwise the whole path is searched in the areas without a prefix. The language code

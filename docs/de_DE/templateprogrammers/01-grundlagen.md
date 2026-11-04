@@ -53,6 +53,13 @@ Datensätze in gleicher Weise im Ergebnis-Template zur Verfügung; siehe unten [
 | `/betriebsfeier-2026,druck` | Datensatz mit dem Template `druck` – nur wenn es für den Bereich als URL-Override freigegeben ist |
 | `/0,suche` | Template `suche` ohne Datensatz – nur wenn es als „Standalone“ markiert ist |
 
+Datensatz und Template lassen sich auch als ***Query-Parameter*** angeben – einzeln oder
+kombiniert: `/?id=1758`, `/?id=betriebsfeier-2026`, `/?template=suche`,
+`/?id=1758&template=druck`. Ist für die Instanz „Kanonische Aufrufe“ eingeschaltet, leitet
+camindo CMS auf die reguläre Adresse um (`/betriebsfeier-2026,druck`); weitere Parameter
+bleiben erhalten. Sonst wird die Seite direkt unter dieser Adresse ausgeliefert. Für das
+Template gelten dieselben Freigaben wie in der Adresse.
+
 Reine Ziffernfolgen sind immer Datensatznummern, alles andere ist ein Slug. Ist der
 erste Teil der Adresse der Slug-Prefix eines Inhaltsbereichs, wird der Rest nur in
 diesem Bereich gesucht; sonst der ganze Pfad in den Bereichen ohne Präfix. Das

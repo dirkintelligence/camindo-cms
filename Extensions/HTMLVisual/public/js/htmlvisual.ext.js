@@ -547,8 +547,11 @@
 
     const INLINE_TAGS = { u: 'u', ins: 'u', b: 'strong', strong: 'strong', i: 'em', em: 'em' };
 
-    function tokenizeInline(src) {
+    // inLink: text of a link - addresses in it are not linked again (as in Parsedown);
+    // the same applies within an element marker of a link with own attributes
+    function tokenizeInline(src, inLink) {
         const nodes = [];
+        const elLinks = [];
         let text = '';
         const flush = () => { if (text) { nodes.push({ type: 'text', v: text }); text = ''; } };
         const push = (node) => { flush(); nodes.push(node); };
@@ -593,7 +596,7 @@
             if (c === '[') {
                 const link = parseLinkAt(src, i);
                 if (link) {
-                    const inner = tokenizeInline(link.text);
+                    const inner = tokenizeInline(link.text, true);
                     pairIsolates(inner);
                     processEmphasis(inner);
                     push({ type: 'link', href: safeUrl(link.dest), children: inner });
@@ -633,6 +636,7 @@
                 continue;
             }
             if (c === RLI || c === LRI || c === PDI || c === EL_CLOSE) {
+                if (c === EL_CLOSE) elLinks.pop();
                 push({ type: 'iso', ch: c });
                 i++;
                 continue;
@@ -641,6 +645,7 @@
                 const e = src.indexOf(EL_MID, i + 1);
                 const id = e > i ? src.slice(i + 1, e) : '';
                 if (/^\d+$/.test(id) && elRegistry[+id]) {
+                    if (c === EL_OPEN) elLinks.push(elRegistry[+id].tag === 'a' && !!elRegistry[+id].href);
                     push(c === EL_IMG ? { type: 'img', id: +id } : { type: 'iso', ch: c, id: +id });
                     i = e + 1;
                     continue;
@@ -680,8 +685,8 @@
                 i = k;
                 continue;
             }
-            if ((c === 'h' || c === 'H') && !/[A-Za-z0-9]/.test(src[i - 1] || '')) {
-                const m = src.slice(i, i + 2048).match(/^https?:\/\/[^\s<]+/i);
+            if ((c === 'h' || c === 'H') && !inLink && !elLinks.includes(true) && !/[A-Za-z0-9]/.test(src[i - 1] || '')) {
+                const m = src.slice(i, i + 2048).match(/^https?:\/\/[^\s<\\]+/i);
                 if (m) {
                     const url = m[0].replace(/[.,:;!?'")\]*_~]+$/, '');
                     if (url.length > 8) {
@@ -1237,7 +1242,8 @@
             else if (r.url === 'raw') out += text;
             else if (r.url === 'angle') out += '<' + text + '>';
             else if (r.marks.code) out += codeSpan(text, ctx);
-            else out += escapeInline(text, ctx);
+            // Link text: addresses are not linked there, so they are escaped like any text
+            else out += r.marks.inLink ? escapePlain(text, ctx) : escapeInline(text, ctx);
         });
         closeTo(0);
         return out.replace(/ +$/, '');

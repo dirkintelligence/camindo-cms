@@ -43,7 +43,7 @@ When creating, you choose what the field is to store:
 | | Embedded content (1:n) | as above, edited in the mask of the record |
 | ***File*** | File upload | upload field for files |
 | | File version (thumbnail) | automatically generated version of an uploaded file – generated preview image, reduced video … (see [chapter 8](./08-media.md)) |
-| ***Meta information*** | Publication date, expiry date, design template, status, review required, parent record, position | meta fields, see [below](#meta-fields) |
+| ***Meta fields*** | Publication date, expiry date, design template, status, review required, parent record, position | see [below](#meta-fields) |
 
 Choose the type with care – it determines how inputs are validated, sorted, and searched.
 Numbers in a text field sort alphabetically (`10` before `9`), and a date in a text field
