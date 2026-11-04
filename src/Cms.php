@@ -5483,11 +5483,18 @@ class Cms {
     }
 
     /**
-     * Decode all &...; character references
+     * Decode &...; character references from U+0100 up. Below that they stay as they
+     * are: &lt; &gt; &amp; &quot; decoded would turn escaped text into markup.
      */
     public function _decodeSpecialchars(string $input): string {
-        $decoded = html_entity_decode($input, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        return $decoded;
+        return (string)preg_replace_callback(
+            '/&(?:[a-zA-Z][a-zA-Z0-9]{0,30}|#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6});/',
+            function (array $m): string {
+                $char = html_entity_decode($m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                return $char !== $m[0] && mb_ord($char, 'UTF-8') >= 0x100 ? $char : $m[0];
+            },
+            $input
+        );
     }
 
 
@@ -6329,12 +6336,17 @@ class Cms {
             return;
         }
 
-        // 'entitydecode' (default on) - &...; back to real characters
+        // 'entitydecode' (default on) - &...; back to real characters from U+0100 up;
+        // with 'specialchars' all of them, as everything is masked again right after
+        // (otherwise &lt; would become &amp;lt;)
+        $specialchars = $this->_bool($p['specialchars'] ?? false);
         if ($this->_bool($p['entitydecode'] ?? true)) {
-            $value = $this->_decodeSpecialchars($value);
+            $value = $specialchars
+                ? html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                : $this->_decodeSpecialchars($value);
         }
         // 'specialchars' - and back again, this time fully masked
-        if ($this->_bool($p['specialchars'] ?? false)) {
+        if ($specialchars) {
             $value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         }
         // 'ampconvert' (default on) - mask single &, leave existing entities alone

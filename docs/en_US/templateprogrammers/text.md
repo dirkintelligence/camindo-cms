@@ -19,7 +19,7 @@ Outputs a text with formatting applied.
 | `useval` | `text` | – | ² | Value in text form that is used as the source. |
 | `ifempty` | `text` | – |  | Text that becomes the source if the original source is empty (further parameters, except 'set', are then ignored). |
 | `instead` | `text` | – |  | Text that becomes the source if the original source is not empty. |
-| `entitydecode` | `true / false` | `true` |  | true: Entities in the format &...; are converted back to Unicode characters. |
+| `entitydecode` | `true / false` | `true` |  | true: Entities in the format &...; are converted to Unicode characters from U+0100 up; below that (angle brackets, &, umlauts) they stay entities. |
 | `trim` | `true / false` | `false` |  | true: Spaces at the beginning and end of the text are removed. |
 | `striptags` | `true / false` | `false` |  | true: HTML and script tags are removed. |
 | `if[…]` | `text?text` | – |  | If the source corresponds to the text before the question mark, the text after the question mark becomes the new source. |
@@ -144,8 +144,12 @@ counts:
 
 ### `entitydecode`
 
-By default, entities (`&amp;`, `&auml;`, `&#8211;`) are converted back into characters. For content
-that should keep the entities (for example for XML feeds):
+By default, entities from character 256 (U+0100) up are converted back into characters, for example
+`&euro;` or `&#8211;`. Characters below that stay entities (`&lt;`, `&gt;`, `&amp;`, `&quot;`,
+`&nbsp;`, `&auml;`): escaped text stays escaped, and code does not turn into HTML. With
+`specialchars=true`, everything is converted back and then escaped, so nothing is escaped twice.
+
+For content that should keep all entities (for example for XML feeds):
 
 ```cms
 (CMS:TEXT text entitydecode=false)

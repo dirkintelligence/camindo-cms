@@ -47,8 +47,18 @@ $cases = [
     ['if[]="1?on" if[]="2?zwei"',      'cmsText', ['useval' => '2', 'if' => [0 => '1?on', 1 => '2?zwei']], 'zwei'],
     ['if[de_DE]=de (Text-Schlüssel)',  'cmsText', ['useval' => 'de_DE', 'if' => ['en_US' => 'us', 'de_DE' => 'de']], 'de'],
     ['if ohne Treffer, ohne else',     'cmsText', ['useval' => '7', 'if' => [1 => 'on']], '7'],
+    // entitydecode: only from U+0100 up, escaped text stays escaped
+    ['entitydecode Latin-1 bleibt',    'cmsText', ['useval' => '&lt;b&gt; &amp; &quot; &#39; &#60; &#x3C; &nbsp; &auml;', 'lbrconvert' => 'false'],
+        '&lt;b&gt; &amp; &quot; &#39; &#60; &#x3C; &nbsp; &auml;'],
+    ['entitydecode ab U+0100',         'cmsText', ['useval' => '&euro; &#8211; &#x2013; &Scaron; &#256;', 'lbrconvert' => 'false'], "€ – – Š \u{0100}"],
+    ['entitydecode Code-Block',        'cmsText', ['useval' => '<pre><code>&lt;div&gt;x&lt;/div&gt;</code></pre>', 'lbrconvert' => 'false'],
+        '<pre><code>&lt;div&gt;x&lt;/div&gt;</code></pre>'],
+    ['entitydecode=false',             'cmsText', ['useval' => '&euro; &lt;', 'entitydecode' => 'false', 'lbrconvert' => 'false'], '&euro; &lt;'],
+    ['specialchars einfach maskiert',  'cmsText', ['useval' => '&lt;b&gt; <i> A &amp; B', 'specialchars' => 'true', 'lbrconvert' => 'false'],
+        '&lt;b&gt; &lt;i&gt; A &amp; B'],
+    ['einzelnes & wird maskiert',      'cmsText', ['useval' => 'A & B &foo;', 'lbrconvert' => 'false'], 'A &amp; B &foo;'],
     // replace: digit keys and short form
-    ['replace[0]=null',                'cmsText', ['useval' => 'A0B', 'replace' => [0 => 'null']], 'AnullB'],
+    ['replace[0]=null',               'cmsText', ['useval' => 'A0B', 'replace' => [0 => 'null']], 'AnullB'],
     ['replace=".?,"',                  'cmsText', ['useval' => '3.5', 'replace' => '.?,'], '3,5'],
     // markdown: syntax of the extension MarkdownVisual (Camindo\Core\Markdown)
     ['markdown Inline',                'cmsText', ['useval' => '**f** *k* ++u++ `c` [L](https://x.de) <b>', 'markdown' => 'true'],

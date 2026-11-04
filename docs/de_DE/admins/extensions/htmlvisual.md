@@ -110,14 +110,14 @@ seiner Sprache, einsprachige Felder in der Richtung des Backends. Ein markierter
 Abschnitt in der Gegenrichtung wird zu `<bdi dir="…">`; im Editor ist er gestrichelt
 umrandet.
 
-Im Template geben Sie das Feld ohne Umwandlung aus:
+Im Template geben Sie das Feld ohne Zeilenumwandlung aus:
 
 ```cms
-<div class="text">(CMS:TEXT feldname entitydecode=false lbrconvert=false)</div>
+<div class="text">(CMS:TEXT feldname lbrconvert=false)</div>
 ```
 
-`entitydecode=false` lässt maskierten Text (`&lt;`) maskiert, `lbrconvert=false`
-verhindert zusätzliche `<br>` an den Zeilenumbrüchen des Quelltextes.
+`lbrconvert=false` verhindert zusätzliche `<br>` an den Zeilenumbrüchen des Quelltextes,
+auch in Codeblöcken. Maskierter Text (`&lt;`) bleibt maskiert.
 
 ## Stylesheet
 

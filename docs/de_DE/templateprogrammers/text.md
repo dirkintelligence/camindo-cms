@@ -19,7 +19,7 @@ Gibt einen Text formatiert aus.
 | `useval` | `Text` | – | ² | Wert in Textform, der als Quelle genutzt wird. |
 | `ifempty` | `Text` | – |  | Text, der zur Quelle wird, wenn die ursprüngliche Quelle leer ist (weitere Parameter, außer 'set', werden dann ignoriert). |
 | `instead` | `Text` | – |  | Text, der zur Quelle wird, wenn die ursprüngliche Quelle nicht leer ist. |
-| `entitydecode` | `true / false` | `true` |  | true: Entities im Format &...; werden zurück in Unicode-Zeichen gewandelt. |
+| `entitydecode` | `true / false` | `true` |  | true: Entities im Format &...; werden ab U+0100 in Unicode-Zeichen gewandelt; darunter (spitze Klammern, &, Umlaute) bleiben sie Entities. |
 | `trim` | `true / false` | `false` |  | true: Leerzeichen am Textanfang und -ende werden entfernt. |
 | `striptags` | `true / false` | `false` |  | true: HTML- und Script-Tags werden entfernt. |
 | `if[…]` | `Text?Text` | – |  | Wenn die Quelle dem Text vor dem Fragezeichen entspricht, wird der Text nach dem Fragezeichen zur neuen Quelle. |
@@ -146,8 +146,12 @@ nur das Vorhandensein zählt:
 
 ### `entitydecode`
 
-Standardmäßig werden Entities (`&amp;`, `&auml;`, `&#8211;`) zurück in Zeichen gewandelt.
-Für Inhalte, die die Entities behalten sollen (z. B. für XML-Feeds):
+Standardmäßig werden Entities ab Zeichen 256 (U+0100) zurück in Zeichen gewandelt, etwa
+`&euro;` oder `&#8211;`. Zeichen darunter bleiben Entities (`&lt;`, `&gt;`, `&amp;`, `&quot;`,
+`&nbsp;`, `&auml;`): Maskierter Text bleibt so maskiert, und Code wird nicht zu HTML. Mit
+`specialchars=true` wird alles zurückgewandelt und danach maskiert, also nichts doppelt.
+
+Für Inhalte, die alle Entities behalten sollen (z. B. für XML-Feeds):
 
 ```cms
 (CMS:TEXT text entitydecode=false)

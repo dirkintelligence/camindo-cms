@@ -109,14 +109,14 @@ its language, single-language fields in the direction of the backend. A selected
 section in the opposite direction becomes `<bdi dir="…">`; in the editor it has a
 dashed outline.
 
-In the template, output the field without conversion:
+In the template, output the field without line break conversion:
 
 ```cms
-<div class="text">(CMS:TEXT fieldname entitydecode=false lbrconvert=false)</div>
+<div class="text">(CMS:TEXT fieldname lbrconvert=false)</div>
 ```
 
-`entitydecode=false` leaves escaped text (`&lt;`) escaped, `lbrconvert=false`
-prevents additional `<br>` at the line breaks of the source.
+`lbrconvert=false` prevents additional `<br>` at the line breaks of the source, also
+in code blocks. Escaped text (`&lt;`) stays escaped.
 
 ## Stylesheet
 
