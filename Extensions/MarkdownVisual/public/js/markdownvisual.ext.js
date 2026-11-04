@@ -2490,7 +2490,7 @@
             if (!r) return;
             if (!r.collapsed) {
                 const pre = closestIn(root, r.startContainer, 'pre');
-                if (pre && pre === closestIn(root, r.endContainer, 'pre')) { this.preEnter(pre); return; }
+                if (pre && pre === closestIn(root, r.endContainer, 'pre')) { if (shift) this.preInsert(pre, '\n'); else this.preEnter(pre); return; }
                 document.execCommand('delete');
                 r = getRange(root);
                 if (!r) return;
@@ -2759,26 +2759,30 @@
             this.setPre(pre, st.text.slice(0, st.s) + str + st.text.slice(st.e), st.s + str.length);
         }
 
+        // Enter ends the code block, the code stays whole (a line break is Shift+Enter)
         preEnter(pre) {
             const st = this.preState(pre);
-            const before = st.text.slice(0, st.s);
-            const after = st.text.slice(st.e);
-            // Enter on the empty last line: out of the code block
-            if (after === '' && before.endsWith('\n')) {
-                this.setPre(pre, before.slice(0, -1), before.length - 1);
-                let p = pre.nextElementSibling;
-                if (!p || p.nodeName !== 'P' || !isEmptyBlock(p)) { p = newP(); pre.after(p); }
-                caretInto(p, false);
-                return;
-            }
-            // Enter at the start of the first block: paragraph before it
-            if (st.s === 0 && st.e === 0 && st.text !== '' && !pre.previousElementSibling) {
+            // Empty code block: becomes a paragraph
+            if (st.text === '') {
                 const p = newP();
-                pre.before(p);
+                pre.replaceWith(p);
                 caretInto(p, false);
                 return;
             }
-            this.setPre(pre, before + '\n' + after, st.s + 1);
+            // At the very start: paragraph before the code block
+            if (st.s === 0 && st.e === 0) {
+                let p = pre.previousElementSibling;
+                if (!p || p.nodeName !== 'P' || !isEmptyBlock(p)) { p = newP(); pre.before(p); }
+                caretInto(p, false);
+                return;
+            }
+            // Otherwise paragraph after it; an empty last line does not stay behind
+            if (st.s === st.e && st.e === st.text.length && st.text.endsWith('\n')) {
+                this.setPre(pre, st.text.slice(0, -1), st.s - 1);
+            }
+            let p = pre.nextElementSibling;
+            if (!p || p.nodeName !== 'P' || !isEmptyBlock(p)) { p = newP(); pre.after(p); }
+            caretInto(p, false);
         }
 
         // ---- Tables ----

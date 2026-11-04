@@ -17,10 +17,15 @@ Ausrichtung links, zentriert, rechts, ***Schreibrichtung*** für markierte Absch
 Tabellen mit Kopfzeile. Bilder, Klassen und Stile lassen sich im Quelltext angeben
 (siehe unten).
 
+Formatiert wird nur über die Symbolleiste und Tastenkombinationen. Anders als bei
+Markdown (visuell) bleiben Markdown-Schreibweisen wie `#` oder `-` am Zeilenanfang
+normaler Text, auch beim Einfügen. Auch Adressen werden nicht automatisch verlinkt:
+Ist eine Adresse markiert, trägt die Schaltfläche **Link** sie als Ziel ein, mit
+`https://`, sofern der Text nicht selbst `http://` enthält.
+
 Beim ***Einfügen*** übernimmt der Editor nur, was er darstellen kann: Formatierter Text
-aus Word, Google Docs oder Webseiten wird auf die unterstützten Formate gestutzt,
-eingefügter Klartext, der wie Markdown aussieht, übersetzt. Bilder, Farben, Schriften,
-Klassen und Durchstreichen entfallen, der Text bleibt.
+aus Word, Google Docs oder Webseiten wird auf die unterstützten Formate gestutzt.
+Bilder, Farben, Schriften, Klassen und Durchstreichen entfallen, der Text bleibt.
 
 Im ***Quelltext*** (**<>**) geht mehr: Dort geschriebenes oder geändertes HTML behält
 zusätzlich ***eigene Attribute*** und ***Bilder*** (siehe „Klassen, Stile und Bilder“

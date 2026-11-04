@@ -98,7 +98,7 @@ for headings, emphasis, lists and links. They work like a word processor.
 | ![format_bold](../_/format_bold.svg) | Ctrl+B (Mac: ⌘B) | bold |
 | ![format_italic](../_/format_italic.svg) | Ctrl+I (Mac: ⌘I) | italic |
 | ![format_underlined](../_/format_underlined.svg) | Ctrl+U (Mac: ⌘U) | underlined |
-| ![link](../_/link.svg) | Ctrl+K (Mac: ⌘K) | link |
+| ![link](../_/link.svg) | Ctrl+K (Mac: ⌘K) | link; in the HTML editor, a selected address is entered as the target |
 | ![title](../_/title.svg) | Ctrl+Alt+1 … 6, Ctrl+Alt+0 | heading 1–6 or paragraph |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Ctrl+Z, Ctrl+Y (Mac: ⌘Z, ⌘⇧Z) | undo, redo |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | horizontal line |
@@ -106,8 +106,8 @@ for headings, emphasis, lists and links. They work like a word processor.
 | ![table](../_/table.svg) | — | create or change a table |
 | ![format_textdirection_l_to_r](../_/format_textdirection_l_to_r.svg) ![format_textdirection_r_to_l](../_/format_textdirection_r_to_l.svg) | — | the symbol shows the current ***writing direction***; clicking it reverses the direction |
 | ![code](../_/code.svg) | — | view the source code – Markdown or HTML, depending on the editor |
-|  | ⇧⏎ | `Shift`+`Return` creates a line break within the paragraph, list item or table cell |
-|  | ⏎ | `Return` creates a new paragraph, list item or table row |
+|  | ⇧⏎ | `Shift`+`Return` creates a line break within the paragraph, list item, code block or table cell |
+|  | ⏎ | `Return` creates a new paragraph, list item or table row; in a code block it ends the block and starts a new paragraph after it (at the start of the block, before it) |
 |  | ⏎ ⏎ | two × `Return` ends text alignment, a list or a table |
 
 ***Writing direction:*** a field writes in the direction of its language – an Arabic text from right to

@@ -110,7 +110,7 @@ einem Textprogramm.
 | ![format_bold](../_/format_bold.svg) | Strg+B (Mac: ⌘B) | fett |
 | ![format_italic](../_/format_italic.svg) | Strg+I (Mac: ⌘I) | kursiv |
 | ![format_underlined](../_/format_underlined.svg) | Strg+U (Mac: ⌘U) | unterstrichen |
-| ![link](../_/link.svg) | Strg+K (Mac: ⌘K) | Link |
+| ![link](../_/link.svg) | Strg+K (Mac: ⌘K) | Link; im HTML-Editor wird eine markierte Adresse als Ziel eingetragen |
 | ![title](../_/title.svg) | Strg+Alt+1 … 6, Strg+Alt+0 | Überschrift 1–6 bzw. Absatz |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Strg+Z, Strg+Y (Mac: ⌘Z, ⌘⇧Z) | rückgängig, wiederholen |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | Horizontale Linie |
@@ -118,8 +118,8 @@ einem Textprogramm.
 | ![table](../_/table.svg) | — | Tabelle erzeugen oder verändern |
 | ![format_textdirection_l_to_r](../_/format_textdirection_l_to_r.svg) ![format_textdirection_r_to_l](../_/format_textdirection_r_to_l.svg) | — | Das Symbol zeigt die aktuelle ***Schreibrichtung***; ein Klick darauf kehrt die Richtung um |
 | ![code](../_/code.svg) | — | Quellcode ansehen – abhängig vom Editor Markdown oder HTML |
-|  | ⇧⏎ | `Umschalt`+`Return` erzeugt Zeilenumbruch innerhalb des Absatzes, Listenpunktes oder einer Tabellenzelle |
-|  | ⏎ | `Return` erzeugt neuen Absatz, Listenpunkt oder Tabellenzeile |
+|  | ⇧⏎ | `Umschalt`+`Return` erzeugt Zeilenumbruch innerhalb des Absatzes, Listenpunktes, Codeblocks oder einer Tabellenzelle |
+|  | ⏎ | `Return` erzeugt neuen Absatz, Listenpunkt oder Tabellenzeile; im Codeblock beendet es den Block und beginnt dahinter einen neuen Absatz (am Blockanfang davor) |
 |  | ⏎ ⏎ | 2 × `Return` beendet Textausrichtung, Liste, Tabelle |
 
 

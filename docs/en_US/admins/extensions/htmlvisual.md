@@ -17,10 +17,15 @@ align left, center, right, ***text direction*** for selected sections, and
 tables with a header row. Images, classes and styles can be specified in the source
 (see below).
 
+Formatting is applied only through the toolbar and keyboard shortcuts. Unlike
+Markdown (visual), Markdown notation such as `#` or `-` at the start of a line stays
+plain text, also when pasting. Addresses are not linked automatically either: if an
+address is selected, the **Link** button enters it as the target, with `https://` unless
+the text itself contains `http://`.
+
 When ***pasting***, the editor only takes over what it can display: formatted text
-from Word, Google Docs or web pages is trimmed to the supported formats, pasted
-plain text that looks like Markdown is converted. Images, colors, fonts,
-classes and strikethrough are dropped; the text remains.
+from Word, Google Docs or web pages is trimmed to the supported formats.
+Images, colors, fonts, classes and strikethrough are dropped; the text remains.
 
 The ***source*** (**<>**) allows more: HTML written or changed there additionally
 keeps ***own attributes*** and ***images*** (see “Classes, styles and images” below).
