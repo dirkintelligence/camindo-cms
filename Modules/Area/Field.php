@@ -596,6 +596,10 @@ class Field extends Dataset {
             // is visualized in the list anyway
             $data['visibility_list'] = 0;
         }
+        if ($name === 'offline_at') {
+            // Expiration date: mostly empty, not worth a list column
+            $data['visibility_list'] = 0;
+        }
         // Date field: preselect the calendar (not for meta fields)
         if (!isset($this->cms->schema[$name])) {
             // init() pre-fills details.extension with '' - this is not a choice here
