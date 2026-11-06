@@ -26,6 +26,10 @@ if (PHP_SAPI !== 'cli') {
 define('CAMINDO_STARTED', true);
 define('CAMINDO_CLI', true);
 
+// Config::env() removes secrets such as CAMINDO_DB_PASS from the environment during bootstrap;
+// the child processes of the runtime cases below need them
+$childEnv = getenv();
+
 // Load bootstrap
 require_once dirname(__DIR__, 2) . '/load_camindo.php';
 
@@ -163,7 +167,9 @@ $runtimeCases = [
     ['Laufzeit: hits=false',           'select-count', false],
 ];
 foreach ($runtimeCases as [$label, $case, $expected]) {
-    $output = (string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__FILE__) . ' ' . $case . ' 2>&1');
+    $process = proc_open([PHP_BINARY, __FILE__, $case], [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $childEnv);
+    $output = (string)stream_get_contents($pipes[1]);
+    proc_close($process);
     $ok = (str_contains($output, 'parameter "resulttemplate" required') === $expected)
         && ($expected || str_contains($output, 'count=0'));
     if (!$ok) $failed++;
