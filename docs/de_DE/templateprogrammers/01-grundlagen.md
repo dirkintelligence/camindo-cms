@@ -92,7 +92,8 @@ Template –, antworten mit dem Status ***404***.
 - ***Unterschlüssel*** in eckigen Klammern: `filter[area]=artikel`. Leere Klammern
   hängen an eine Liste an: `sort[]=datum sort[]=titel`. Wird derselbe Unterschlüssel
   mehrfach angegeben, entsteht ebenfalls eine Liste (`[]` ist im Gegensatz zur PHP-Syntax
-  für Arrays optional).
+  für Arrays optional). Ein Parameter ohne Unterschlüssel hält dagegen meist nur einen Wert:
+  Wird er mehrfach angegeben, gilt der letzte, auch gegenüber dem Hauptparameter.
 - Statt `=` darf ein ***Vergleichsoperator*** zwischen Parameter und Wert stehen –
   `==`, `!=`, `!`, `!!`, `<`, `>`, `<=`, `>=`, `<<`, `>>`:
   `filter[preis] >= 100` ist dasselbe wie `filter[preis]=">=100"`. Der Wert gilt dann
@@ -107,6 +108,16 @@ Fehler – ein unbekannter Befehl, ein unbekannter Parameter, eine fehlende Klam
 verhindern das Speichern nicht. Die Detailansicht des Templates zeigt sie mit
 Zeilennummer an. Sie erscheinen auch auf der Startseite im Widget „Template-Meldungen“ – für den
 Fall, dass Templates über das Dateisystem bearbeitet werden.
+
+### Falsche Argumente
+
+***Falsche Argumente führen im Frontend nie zu einer Fehlermeldung.*** Ein Befehl mit einem
+unbekannten Template-Namen, einer fehlenden Pflichtangabe, einer ungültigen Bedingung in `sql`
+oder einem unbekannten Zeichensatz gibt nichts aus (bzw. den Text unverändert), und die Seite läuft
+weiter. Den Grund finden Sie im Modul „Logdateien“ als PHP-Warnung; was sich schon im Code erkennen
+lässt, zeigt außerdem die Detailansicht des Templates. Zwei Ausnahmen beenden die Seite bewusst:
+[`CMS:USER_PROTECT`](user-protect.md) ohne auffindbares `errortemplate`, damit der geschützte Inhalt
+geschützt bleibt, und Templates, die sich [endlos selbst einbinden](include.md).
 
 ## CMS-Befehl und PHP-Code kombinieren
 

@@ -358,7 +358,7 @@ class Email {
         }
 
         $GLOBALS['set']['email_sent'] = true;
-        return $cms->templateFile((string)($p['successtemplate'] ?? ''));
+        return $cms->commandTemplate((string)($p['successtemplate'] ?? ''), 'CMS:EMAIL');
     }
 
     /**

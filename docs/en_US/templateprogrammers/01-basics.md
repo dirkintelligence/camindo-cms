@@ -88,7 +88,9 @@ unknown language, template not released – respond with the status ***404***.
   `(CMS:TEXT field="title")` is the same as `(CMS:TEXT field='title')`.
 - ***Subkeys*** in square brackets: `filter[area]=news`. Empty brackets append to a list:
   `sort[]=date sort[]=title`. If the same subkey is given several times, a list is created
-  as well (in contrast to PHP array syntax, `[]` is optional).
+  as well (in contrast to PHP array syntax, `[]` is optional). A parameter without subkeys, on
+  the other hand, usually holds one value: if it is given several times, the last one applies,
+  also over the main parameter.
 - Instead of `=`, a ***comparison operator*** may stand between parameter and value –
   `==`, `!=`, `!`, `!!`, `<`, `>`, `<=`, `>=`, `<<`, `>>`:
   `filter[price] >= 100` is the same as `filter[price]=">=100"`. The value then applies
@@ -102,6 +104,16 @@ unknown language, template not released – respond with the status ***404***.
 Errors – an unknown command, an unknown parameter, a missing bracket – do not prevent saving.
 The detail view of the template shows them with the line number. They also appear on the start
 page in the widget “Template messages” – in case templates are edited through the file system.
+
+### Wrong arguments
+
+***Wrong arguments never lead to an error message in the frontend.*** A command with an unknown
+template name, a missing required value, an invalid condition in `sql`, or an unknown charset
+outputs nothing (or the text unchanged), and the page continues. You will find the reason in the
+module “Log files” as a PHP warning; whatever can already be detected in the code is also shown in
+the detail view of the template. Two exceptions end the page on purpose:
+[`CMS:USER_PROTECT`](user-protect.md) without an `errortemplate` that can be found, so that the
+protected content stays protected, and templates that [include themselves endlessly](include.md).
 
 ## Combining CMS commands and PHP code
 

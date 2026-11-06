@@ -95,8 +95,7 @@ Template, seine Abfragen und eingebundenen Templates laufen dann nicht.
 (CMS:INCLUDE teaser caching="{$set['cache_time']}")
 ```
 
-Ein ungültiger Wert (`caching=5x`) erscheint als Fehlermeldung; das Template läuft dann
-ohne Cache.
+Ein ungültiger Wert (`caching=5x`) wird protokolliert; das Template läuft dann ohne Cache.
 
 ### `cacheparams`
 

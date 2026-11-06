@@ -113,8 +113,8 @@ Listentemplate für die Treffer; darf ohne Schlüssel stehen. Name oder `bereich
 ```
 
 Der Parameter ist Pflicht, nur mit [`hits=false`](#hits) entfällt er. Fehlt er sonst, meldet der
-Parser das auf der Infoseite des Templates, und im Frontend bricht die Ausgabe an dieser Stelle
-mit einer Fehlermeldung ab.
+Parser das auf der Infoseite des Templates. Im Frontend gibt der Befehl dann nichts aus, und die
+Seite läuft weiter; siehe [Falsche Argumente](01-grundlagen.md#falsche-argumente).
 
 ### `noresulttemplate`
 

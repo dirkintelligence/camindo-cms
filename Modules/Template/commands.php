@@ -62,6 +62,10 @@
  *                  1 = key['a']=value, 2 = key['a']['b']=value. Empty brackets (key[]=…)
  *                  do not count as a level, they only force appending to an array.
  *                  This is needed mainly by CMS:SELECT (filter, sort, …).
+ *     multiple     true: the parameter may hold a list although it has no sub-keys
+ *                  (sql, request …). Every other parameter with subparam 0 holds one
+ *                  value: given several times, the last one applies and the parser
+ *                  adds a note (TemplateParserTrait::singleValueParams()).
  *     default      default value - for documentation; it is not applied here,
  *                  but in the called method.
  *     operator     true: between key and value a comparison operator may stand instead of '='
@@ -474,6 +478,7 @@ return [
             'requiredfields' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'default' => '',
                 'value' => '#template.cmdval_field_names_comma',
                 'description' => '#template.cmd_email__requiredfields'
@@ -698,6 +703,7 @@ return [
             'cacheparams' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'php_value' => true,
                 'default' => '',
                 'value' => '#template.cmdval_cacheparams',
@@ -1713,6 +1719,7 @@ return [
             'sql' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'default' => '',
                 'value' => '',
                 'description' => '#template.cmd_select__sql'
@@ -1727,6 +1734,7 @@ return [
             'request' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'default' => '',
                 'value' => '#template.cmdval_select_request',
                 'description' => '#template.cmd_select__request'
@@ -2544,6 +2552,7 @@ return [
             'fields' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'default' => '',
                 'value' => '#template.cmdval_comma_list',
                 'description' => '#template.cmd_user_input__fields'
@@ -3052,6 +3061,7 @@ return [
             'fields' => [
                 'mandatory' => false,
                 'subparam' => 0,
+                'multiple' => true,
                 'default' => '',
                 'value' => '#template.cmdval_comma_list',
                 'description' => '#template.cmd_user_register__fields'

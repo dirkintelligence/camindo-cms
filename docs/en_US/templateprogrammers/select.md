@@ -112,8 +112,8 @@ List template for the hits; may stand without a key. Name or `area.name`:
 ```
 
 The parameter is required; only [`hits=false`](#hits) can omit it. If it is missing otherwise,
-the parser reports this on the info page of the template, and in the frontend the output stops
-at this point with an error message.
+the parser reports this on the info page of the template. In the frontend, the command then
+outputs nothing and the page continues; see [Wrong arguments](01-basics.md#wrong-arguments).
 
 ### `noresulttemplate`
 

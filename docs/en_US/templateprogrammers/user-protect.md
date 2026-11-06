@@ -23,7 +23,7 @@ Protects a template from access by visitors who are not signed in.
 ## Usage
 
 Blocks a template for visitors who are not signed in. If nobody is signed in (or `filter` does not
-apply), `errortemplate` is included and the page ends. Otherwise the template continues, and
+apply), `errortemplate` is included and the page ends. If the template cannot be found, the page ends as well, without output (status 403). Otherwise the template continues, and
 `$set['user_id']` and `$set['user']` are filled:
 
 ```cms

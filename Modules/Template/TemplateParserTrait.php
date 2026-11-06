@@ -859,8 +859,13 @@ trait TemplateParserTrait
             if ($depth > $allowed) {
                 $errors[] = "Line $line: Parameter '$static' of command '$upper' allows a "
                     . "sub-parameter depth of $allowed, $depth given.";
+                if ($allowed === 0 && empty($def['params'][$static]['multiple'])) {
+                    $cmd['params'][$i]['drop'] = true;
+                }
             }
         }
+
+        $this->singleValueParams($cmd, $errors);
 
         // Pflichtparameter
         foreach (($def['params'] ?? []) as $pname => $pdef) {
@@ -893,6 +898,36 @@ trait TemplateParserTrait
                 $errors[] = 'Line ' . ($cmd['baseLine'] + 1) . ": Command '$upper' requires at "
                     . 'least one of these parameters: ' . implode(', ', $list) . '.';
             }
+        }
+    }
+
+    /**
+     * A parameter without sub-keys and without 'multiple' (commands.php) holds one value. Wrong
+     * arguments must not break the page, so the compiled code never passes it an array:
+     * given several times - also as the parameter without a key - the last one applies,
+     * and key[]=value counts as key=value. Each case adds a note, saving is not prevented.
+     */
+    private function singleValueParams(array &$cmd, array &$errors): void
+    {
+        $def   = $cmd['def'];
+        $upper = 'CMS:' . strtoupper($cmd['name']);
+        $last  = [];
+        foreach ($cmd['params'] as $i => $p) {
+            if (!empty($p['drop'])) continue;
+            $name = $p['standalone'] ? ($p['mappedKey'] ?? null) : ($p['staticKey'] ?? null);
+            $pdef = $name !== null ? ($def['params'][$name] ?? null) : null;
+            if ($pdef === null || (int)($pdef['subparam'] ?? 0) > 0 || !empty($pdef['multiple'])) continue;
+
+            $line = $cmd['baseLine'] + $p['key']['line'] + 1;
+            if (!$p['standalone'] && !empty($p['subs'])) {
+                $cmd['params'][$i]['subs'] = [];
+                $errors[] = "Line $line: Note: Parameter '$name' of command '$upper' holds one value - '[]' is ignored.";
+            }
+            if (isset($last[$name])) {
+                $cmd['params'][$last[$name]]['drop'] = true;
+                $errors[] = "Line $line: Note: Parameter '$name' of command '$upper' is given more than once - the last value applies.";
+            }
+            $last[$name] = $i;
         }
     }
 

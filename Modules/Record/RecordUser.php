@@ -187,7 +187,12 @@ class RecordUser {
     public function cmsProtect($p): string
     {
         if ($this->authenticate($p)) return '';
-        return $this->_template((string)($p['errortemplate'] ?? ''));
+        $file = $this->_template((string)($p['errortemplate'] ?? ''));
+        if ($file !== '') return $file;
+
+        // No usable error template: the rest of the template stays protected
+        if (!headers_sent()) http_response_code(403);
+        exit();
     }
 
     /**
@@ -2137,6 +2142,6 @@ class RecordUser {
      */
     private function _template(string $s): string
     {
-        return $this->cms->templateFile($s);
+        return $this->cms->commandTemplate($s, 'CMS:USER_*');
     }
 }

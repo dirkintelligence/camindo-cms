@@ -403,8 +403,10 @@ class Cms {
     public bool $includeCacheOff = false;
     // per running CMS:INCLUDE: error counter at the start of a recording, otherwise null
     private array $includeCacheStack = [];
-    // number of calls to error() - whether errors occurred during a recording
+    // number of calls to error() and commandProblem() - whether errors occurred during a recording
     private int $errorCount = 0;
+    // problems already logged in this request, see commandProblem()
+    private array $commandProblems = [];
     public int $row_no = 0;
     // row counter and template variable $cms of the enclosing result loop,
     // set aside by php/push_result.php (see pushRow())
@@ -2404,6 +2406,42 @@ class Cms {
         $file = (int)$rows[0]['area_id'] . '/' . $rows[0]['name'];
         $this->templateFiles[$key] = $file;
         return $file;
+    }
+
+    /**
+     * Template named by a command parameter. A wrong name must not break the page: the
+     * problem is logged and nothing is included. templateFile() keeps throwing for callers
+     * that handle the failure themselves.
+     *
+     * @param string $ref      "[area.]name"
+     * @param string $command  for the log, e.g. 'CMS:SELECT'
+     * @return string          "{area_id}/{name}", '' = nothing to include
+     */
+    public function commandTemplate(string $ref, string $command): string
+    {
+        try {
+            return $this->templateFile($ref);
+        }
+        catch (\RuntimeException $e) {
+            $this->commandProblem($command, $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
+     * A command received an unusable argument: the visitor sees no message, the command
+     * outputs nothing, the page continues. The log entry appears once per request and
+     * counts as a PHP warning (Logfiles::classify()). An output cache recording in
+     * progress is discarded, see includeEnd().
+     */
+    public function commandProblem(string $command, string $problem): void
+    {
+        $this->errorCount++;
+        $text = str_replace(["\r", "\n"], ' ', "$command: $problem");
+        if (isset($this->commandProblems[$text])) return;
+        $this->commandProblems[$text] = true;
+        $uri = str_replace(["\r", "\n"], '', (string)($_SERVER['REQUEST_URI'] ?? ''));
+        error_log("PHP Warning:  $text" . ($uri !== '' ? " (request: $uri)" : ''));
     }
 
     /**
@@ -5709,14 +5747,14 @@ class Cms {
     // to include); otherwise IncludeCache records the output of the template, and
     // includeEnd() stores it - only if no command reported an error in the process.
     // Without cache, preview, frontend editing (buttons only for the admin) and
-    // admin.include_cache = false stay in effect. An invalid value reports an error, the
+    // admin.include_cache = false stay in effect. An invalid value is logged, the
     // template then runs uncached.
     public function cmsInclude($p): string
     {
         if ($this->includeDepth > (int)$this->config->get('admin.max_include_depth')) {
             $this->_cmsError('CMS:INCLUDE error: maximum inclusion depth exceeded.');
         }
-        $file = $this->templateFile((string)($p['template'] ?? ''));
+        $file = $this->commandTemplate((string)($p['template'] ?? ''), 'CMS:INCLUDE');
 
         $recording = null;
         if ($file !== '' && isset($p['caching']) && !$this->includeCacheOff
@@ -5741,7 +5779,7 @@ class Cms {
                 }
             }
             catch (\InvalidArgumentException $e) {
-                $this->error('CMS:INCLUDE: ' . $e->getMessage());
+                $this->commandProblem('CMS:INCLUDE', $e->getMessage());
             }
         }
         $this->includeCacheStack[] = $recording;
@@ -6175,7 +6213,9 @@ class Cms {
             $this->_cmsError('CMS:SELECT error: maximum inclusion depth exceeded.');
         }
         if (!$this->_oneOf(['filter','relation'],$p)) {
-            $this->_cmsError('CMS:SELECT error: parameter "filter" or "relation" required.');
+            $this->commandProblem('CMS:SELECT', 'parameter "filter" or "relation" required.');
+            $this->selectCountStack[] = null;
+            return '';
         }
 
         // Bring the parameter names of the command to those of select(): the template
@@ -6191,7 +6231,9 @@ class Cms {
         if ($countOnly) $p['count'] = 'true';
         // The parser cannot decide this for values with a PHP part (commands.php: mandatory_unless)
         elseif (trim((string)($p['resulttemplate'] ?? '')) === '') {
-            $this->_cmsError('CMS:SELECT error: parameter "resulttemplate" required (only hits=false can omit it).');
+            $this->commandProblem('CMS:SELECT', 'parameter "resulttemplate" required (only hits=false can omit it).');
+            $this->selectCountStack[] = null;
+            return '';
         }
 
         // 'request' of a template: only named keys, see templateRequestKeys()
@@ -6218,7 +6260,15 @@ class Cms {
             $p['sql'] = array_merge((array)($p['sql'] ?? []), [$published]);
         }
 
-        $this->select($p);
+        try {
+            $this->select($p);
+        }
+        catch (\mysqli_sql_exception $e) {
+            // e.g. a wrong condition in 'sql': no hits instead of a broken page
+            $this->commandProblem('CMS:SELECT', $e->getMessage());
+            $this->db->num_rows = 0;
+            $this->db->num_rows_unlimited = 0;
+        }
 
         // Remember the total for select_count.php (null = take nothing over): without
         // hit rows, hits=false includes no resulttemplate, and popResult()
@@ -6233,7 +6283,7 @@ class Cms {
 
         if ($this->db->num_rows > 0) {
             // 'resulttemplate'
-            return $this->templateFile((string)($p['resulttemplate'] ?? ''));
+            return $this->commandTemplate((string)($p['resulttemplate'] ?? ''), 'CMS:SELECT');
         }
         if (!empty($p['noresult'])) {
             // 'noresult'
@@ -6241,7 +6291,7 @@ class Cms {
             return '';
         }
         // 'noresulttemplate'
-        return $this->templateFile((string)($p['noresulttemplate'] ?? ''));
+        return $this->commandTemplate((string)($p['noresulttemplate'] ?? ''), 'CMS:SELECT');
     }
 
     // Counterpart to cmsSelect() (PHP snippet select_count after pop_result): with
@@ -6287,7 +6337,7 @@ class Cms {
             $this->db->setArrayResult($rows);
         }
         if ($this->db->num_rows < 1) return '';
-        return $this->templateFile((string)($p['resulttemplate'] ?? ''));
+        return $this->commandTemplate((string)($p['resulttemplate'] ?? ''), 'CMS:SELECT_LANGVERSION');
     }
 
     // CMS:TEXT
@@ -6376,7 +6426,12 @@ class Cms {
         // 'iso' / 'charset' - re-encode output
         $charset = $this->_bool($p['iso'] ?? false) ? 'ISO-8859-1' : (string)($p['charset'] ?? '');
         if ($charset !== '' && strtolower($charset) !== 'utf-8') {
-            $value = mb_convert_encoding($value, $charset, 'UTF-8');
+            try {
+                $value = mb_convert_encoding($value, $charset, 'UTF-8');
+            }
+            catch (\ValueError $e) {
+                $this->commandProblem('CMS:TEXT', "unknown charset \"$charset\".");
+            }
         }
 
         $this->_out($this->_decorate($value, $p), $p);
@@ -7184,7 +7239,8 @@ class Cms {
         return ($areaName !== '') ? $areaName . '.' . $name : $name;
     }
 
-    // output error message
+    // Stop the page: only for endless inclusion, where continuing is impossible. Wrong
+    // arguments go through commandProblem().
     private function _cmsError($t): void
     {
         die($t);

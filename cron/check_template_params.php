@@ -11,6 +11,9 @@
  *   - CMS:NUMBER 'decimals' and the empty check on the numeric value (0 / "0.00")
  *   - parser note for filter[depth] without filter[parent_id]
  *   - resulttemplate of CMS:SELECT: mandatory unless hits=false (parser and runtime)
+ *   - wrong arguments never stop the page: a parameter of one value given several times
+ *     (every command, parser), wrong template names, conditions and charsets (runtime);
+ *     CMS:USER_PROTECT stays closed without a usable error template
  * Exit code 1 on deviations.
  */
 use Camindo\Core\Cms;
@@ -44,6 +47,9 @@ switch ($argv[1] ?? '') {
     case 'select-empty':
         $cms->cmsSelect(['resulttemplate' => '', 'filter' => $filter]);
         exit("no error\n");
+    case 'protect-unknown':
+        $app->get(\Camindo\Core\Modules\Record\RecordUser::class)->cmsProtect(['errortemplate' => 'no_such_template']);
+        exit("page continued\n");
     case 'select-count':
         $file = $cms->cmsSelect(['filter' => $filter, 'hits' => 'false']);
         $cms->selectCountEnd();
@@ -160,7 +166,7 @@ foreach ($resultTemplateCases as [$label, $source, $expected]) {
     printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : ($expected ? 'Fehler fehlt' : 'unerwarteter Fehler'));
 }
 
-// The same at runtime. _cmsError() ends the process, hence a process of its own per case.
+// The same at runtime, in a process of its own per case: nothing may end it early.
 $runtimeCases = [
     ['Laufzeit: ohne Template',        'select-none',  true],
     ['Laufzeit: leeres Template',      'select-empty', true],
@@ -170,12 +176,88 @@ foreach ($runtimeCases as [$label, $case, $expected]) {
     $process = proc_open([PHP_BINARY, __FILE__, $case], [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $childEnv);
     $output = (string)stream_get_contents($pipes[1]);
     proc_close($process);
-    $ok = (str_contains($output, 'parameter "resulttemplate" required') === $expected)
-        && ($expected || str_contains($output, 'count=0'));
+    // a missing template is logged, the page goes on
+    $ok = str_contains($output, $expected ? 'no error' : 'count=0') && !str_contains($output, 'Fatal');
     if (!$ok) $failed++;
     printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : "Ausgabe '" . trim($output) . "'");
 }
 
-$total = count($cases) + count($parserCases) + count($resultTemplateCases) + count($runtimeCases);
+// Wrong arguments, parser: every parameter of one value of every command, given twice,
+// reaches the method as a single value - the last one
+$singleValue = 0;
+foreach (include dirname(__DIR__) . '/Modules/Template/commands.php' as $name => $def) {
+    foreach (($def['params'] ?? []) as $param => $pdef) {
+        if ((int)($pdef['subparam'] ?? 0) > 0 || !empty($pdef['multiple'])) continue;
+        $singleValue++;
+        foreach (["$param=erster $param=letzter", "$param=erster {$param}[]=letzter"] as $arguments) {
+            $parsed = $template->parse('(CMS:' . strtoupper($name) . " $arguments)", 0);
+            $notes = preg_grep("/Note: Parameter '$param'/", $parsed['errors']);
+            $ok = $notes && !str_contains($parsed['phpCode'], "\$_a[\"$param\"][]")
+                && str_contains($parsed['phpCode'], "\$_a[\"$param\"] = \"letzter\"")
+                && !str_contains($parsed['phpCode'], 'erster');
+            if (!$ok) {
+                $failed++;
+                printf("FAIL  einfacher Wert: CMS:%s %s\n", strtoupper($name), $arguments);
+            }
+        }
+    }
+}
+$parsed = $template->parse('(CMS:SELECT erster filter[area_id]=1 resulttemplate=letzter)', 0);
+$ok = (bool)preg_grep("/Note: Parameter 'resulttemplate'/", $parsed['errors'])
+    && str_contains($parsed['phpCode'], '$_a["resulttemplate"] = "letzter"') && !str_contains($parsed['phpCode'], 'erster');
+if (!$ok) $failed++;
+printf("%s  %-32s\n", $ok ? 'ok  ' : 'FAIL', 'Hauptparameter und Schlüssel');
+$parsed = $template->parse('(CMS:SELECT liste filter[area_id]=1 sql="1=1" sql="2=2" request[]=a request[]=b)', 0);
+$ok = substr_count($parsed['phpCode'], '$_a["sql"][]') === 2 && substr_count($parsed['phpCode'], '$_a["request"][]') === 2;
+if (!$ok) $failed++;
+printf("%s  %-32s\n", $ok ? 'ok  ' : 'FAIL', 'multiple: Liste bleibt');
+printf("ok    einfacher Wert: %d Parameter geprüft\n", $singleValue);
+
+// Wrong arguments, runtime: no exception, no output, the page goes on
+$db = $app->get(Database::class);
+$db->query('SELECT area_id FROM record WHERE tmp = 0 AND deleted = 0 LIMIT 1');
+$hits = ['filter' => ['area_id' => (string)($db->fetch()['area_id'] ?? 0)]];
+$wrongCases = [
+    ['Include: unbekanntes Template',  fn() => $cms->cmsInclude(['template' => 'no_such_template'])],
+    ['Select: unbekanntes Template',   fn() => $cms->cmsSelect($hits + ['resulttemplate' => 'no_such_template'])],
+    ['Select: unbekanntes noresult',   fn() => $cms->cmsSelect(['filter' => $filter, 'noresulttemplate' => 'no_such_template', 'resulttemplate' => 'x'])],
+    ['Select: falsche Bedingung',      fn() => $cms->cmsSelect($hits + ['resulttemplate' => 'x', 'sql' => 'no_such_column = 1'])],
+    ['Select: ohne filter',            fn() => $cms->cmsSelect(['resulttemplate' => 'x'])],
+    ['Sprachen: unbekanntes Template', fn() => $cms->cmsSelectLanguages(['resulttemplate' => 'no_such_template'])],
+];
+foreach ($wrongCases as [$label, $call]) {
+    try {
+        ob_start();
+        $file = $call();
+        $output = (string)ob_get_clean();
+        $cms->selectCountEnd();
+        $ok = ($file === '' && $output === '');
+    }
+    catch (\Throwable $e) {
+        ob_end_clean();
+        [$ok, $output] = [false, get_class($e) . ': ' . $e->getMessage()];
+    }
+    if (!$ok) $failed++;
+    printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', $label, $ok ? '' : "Ausgabe '" . trim($output) . "'");
+}
+try {
+    $output = $run('cmsText', ['useval' => 'äx', 'charset' => 'no_such_charset']);
+    $ok = str_contains($output, 'äx');
+}
+catch (\Throwable $e) {
+    [$ok, $output] = [false, get_class($e) . ': ' . $e->getMessage()];
+}
+if (!$ok) $failed++;
+printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', 'Text: unbekannter Zeichensatz', $ok ? '' : "Ausgabe '" . trim($output) . "'");
+
+// CMS:USER_PROTECT stays closed: the rest of the page must not run
+$process = proc_open([PHP_BINARY, __FILE__, 'protect-unknown'], [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $childEnv);
+$output = (string)stream_get_contents($pipes[1]);
+proc_close($process);
+$ok = !str_contains($output, 'page continued') && !str_contains($output, 'Fatal');
+if (!$ok) $failed++;
+printf("%s  %-32s %s\n", $ok ? 'ok  ' : 'FAIL', 'Protect ohne Fehler-Template', $ok ? '' : "Ausgabe '" . trim($output) . "'");
+
+$total = count($cases) + count($parserCases) + count($resultTemplateCases) + count($runtimeCases) + count($wrongCases) + 4 + 2 * $singleValue;
 echo $failed ? "\n$failed Abweichung(en)\n" : "\nalle $total Fälle ok\n";
 exit($failed ? 1 : 0);

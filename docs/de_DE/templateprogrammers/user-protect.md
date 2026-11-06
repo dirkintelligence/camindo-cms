@@ -23,7 +23,7 @@ Schützt ein Template vor dem Zugriff nicht angemeldeter Website-Besucher.
 ## Anwendung
 
 Sperrt ein Template für nicht angemeldete Besucher: Ist niemand angemeldet (oder trifft
-`filter` nicht zu), wird `errortemplate` eingebunden und die Seite beendet. Sonst läuft
+`filter` nicht zu), wird `errortemplate` eingebunden und die Seite beendet. Lässt sich das Template nicht finden, endet die Seite ebenfalls, ohne Ausgabe (Status 403). Sonst läuft
 das Template weiter, `$set['user_id']` und `$set['user']` sind gefüllt:
 
 ```cms

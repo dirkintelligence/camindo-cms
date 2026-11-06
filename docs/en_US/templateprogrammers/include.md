@@ -95,8 +95,7 @@ templates then do not run.
 (CMS:INCLUDE teaser caching="{$set['cache_time']}")
 ```
 
-An invalid value (`caching=5x`) appears as an error message; the template then runs
-without a cache.
+An invalid value (`caching=5x`) is logged; the template then runs without a cache.
 
 ### `cacheparams`
 
