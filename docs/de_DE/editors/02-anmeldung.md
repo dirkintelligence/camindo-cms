@@ -18,14 +18,13 @@ Passwort ein und klicken Sie auf „Absenden“.
 ## Zwei-Faktor-Anmeldung
 
 Entsprechend dem heutigen Standard sollte Ihr Administrator eine 2-Faktor-Anmeldung
-einschalten. Ohne zweiten Faktor haben Sie dann keinen Zugang zum Backend, trotz korrektem
-Passwort.
-camindo CMS bietet insgesamt vier Wege für den zweiten Faktor:
+einschalten. Nach Eingabe von Benutzername und Passwort ist dann ein zusätzlicher Authentifizierungsschritt
+notwendig.
+camindo CMS bietet insgesamt drei Wege für den zweiten Faktor:
 
 - Code per E-Mail
 - Code aus einer Authenticator-App (TOTP)
 - Passkey (WebAuthn)
-- Bekanntes Gerät
 
 ## Anmelde-Code per E-Mail
 

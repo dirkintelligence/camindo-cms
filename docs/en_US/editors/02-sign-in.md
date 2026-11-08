@@ -21,14 +21,12 @@ Access always requires signing in. Enter your user name and password and click
 ## Two-factor sign-in
 
 According to current standards, your administrator should enable two-factor sign-in.
-Without a second factor you have no access to the backend, even with the correct
-password.  
-camindo CMS offers four ways to provide the second factor:
+After entering your username and password, an additional authentication step is then required.
+camindo CMS offers three ways to provide the second factor:
 
 - Code by email
 - Code from an authenticator app (TOTP)
 - Passkey (WebAuthn)
-- Known device
 
 ## Sign-in code by email
 
