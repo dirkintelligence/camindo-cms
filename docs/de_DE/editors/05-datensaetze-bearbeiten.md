@@ -112,6 +112,7 @@ einem Textprogramm.
 | ![format_underlined](../_/format_underlined.svg) | Strg+U (Mac: ⌘U) | unterstrichen |
 | ![link](../_/link.svg) | Strg+K (Mac: ⌘K) | Link; im HTML-Editor wird eine markierte Adresse als Ziel eingetragen |
 | ![title](../_/title.svg) | Strg+Alt+1 … 6, Strg+Alt+0 | Überschrift 1–6 bzw. Absatz |
+| ![height](../_/height.svg) | — | nur HTML-Editor: ***Abstand oben*** (Abstand 1–8 oder Standard) für Absatz, Überschrift, Codeblock, Liste oder Tabelle |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Strg+Z, Strg+Y (Mac: ⌘Z, ⌘⇧Z) | rückgängig, wiederholen |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | Horizontale Linie |
 | ![special_character](../_/special_character.svg) | — | Sonderzeichen |
@@ -120,8 +121,14 @@ einem Textprogramm.
 | ![code](../_/code.svg) | — | Quellcode ansehen – abhängig vom Editor Markdown oder HTML |
 |  | ⇧⏎ | `Umschalt`+`Return` erzeugt Zeilenumbruch innerhalb des Absatzes, Listenpunktes, Codeblocks oder einer Tabellenzelle |
 |  | ⏎ | `Return` erzeugt neuen Absatz, Listenpunkt oder Tabellenzeile; im Codeblock beendet es den Block und beginnt dahinter einen neuen Absatz (am Blockanfang davor) |
-|  | ⏎ ⏎ | 2 × `Return` beendet Textausrichtung, Liste, Tabelle |
+|  | ⏎ ⏎ | 2 × `Return` beendet Textausrichtung, Liste, Zitat |
+|  | ↑ ↓ | am oberen bzw. unteren Rand einer Tabelle oder eines Codeblocks: neuer Absatz davor bzw. dahinter, wenn dort keiner ist |
 
+
+***Leerzeilen*** (Editor für Markdown): Mehrere `Return` bzw. `Umschalt+Return` hintereinander
+ergeben leere Zeilen, die auch auf der Website erscheinen – ebenso Leerzeilen am Textanfang.
+Leerzeilen am Textende entfallen. Leerzeichen am Zeilenanfang bleiben erhalten; der Editor
+zeigt sie danach grau hinterlegt als geschützte Leerzeichen.
 
 ***Schreibrichtung:*** Ein Feld schreibt in der Richtung seiner Sprache – ein arabischer
 Text von rechts nach links, ein deutscher von links nach rechts. Steht in einem
@@ -136,6 +143,26 @@ Befindet sich der Cursor in einer Zelle, bietet die Auswahl ![table](../_/table.
 Zeile einfügen oder entfernen, Spalte einfügen oder entfernen. Änderung der Textausrichtung
 betrifft immer die ganze Spalte.  
 `Umschalt+Return` erzeugt einen Zeilenumbruch innerhalb der Zelle. `Return` beginnt eine neue Zeile.
+
+***Absatz zwischen Tabellen und Codeblöcken:*** Folgen zwei Tabellen, Codeblöcke oder
+Linien direkt aufeinander (oder steht eine Tabelle ganz am Anfang), gibt es dazwischen
+keinen Platz für den Cursor. So fügen Sie dort einen Absatz ein:
+
+- Zeigen Sie mit der Maus auf die Tabelle oder den Codeblock – am oberen bzw. unteren Rand
+  erscheint ![add](../_/add.svg); ein Klick darauf setzt dort einen neuen Absatz ein.
+- Mit den Pfeiltasten ↑ und ↓ verlassen Sie die Tabelle oder den Codeblock nach oben bzw.
+  unten – der Cursor landet in einem neuen Absatz dazwischen.
+- In einer Tabelle bietet die Auswahl ![table](../_/table.svg) außerdem
+  **Absatz davor einfügen** und **Absatz danach einfügen**.
+
+Bleibt der neue Absatz leer, verschwindet er wieder, sobald Sie ihn verlassen.
+
+***Abstand oben*** (nur HTML-Editor): Die Auswahl ![height](../_/height.svg) setzt für den
+Absatz oder die Überschrift am Cursor (bzw. die markierten Absätze), für den Codeblock, die ganze
+Liste oder die ganze Tabelle einen zusätzlichen Abstand nach oben – **Abstand 1** bis
+**Abstand 8** oder **Standard (ohne)**. Neben jeder Stufe steht ihre Größe im Backend; wie
+groß der Abstand auf der Website ist, legt deren Stylesheet fest. Ein neuer Absatz per
+`Return` übernimmt den Abstand nicht.
 
 ***Sonderzeichen*** wie geschützte oder schmale Leerzeichen und das weiche
 Trennzeichen sind im Editor grau hinterlegt, damit Sie sie sehen.

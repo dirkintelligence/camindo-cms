@@ -14,8 +14,13 @@ The same as Markdown (visual): bold, italic, underline, inline code,
 paragraph format (paragraph, heading 1–6), bulleted and numbered lists with
 sub-items, quote, code block, link, horizontal line, line break, special characters,
 align left, center, right, ***text direction*** for selected sections, and
-tables with a header row. Images, classes and styles can be specified in the source
-(see below).
+tables with a header row. HTML editor only: ***space above*** for paragraphs, headings,
+code blocks, lists and tables (classes `mt-1` … `mt-8`, see below). Images, classes and
+styles can be specified in the source (see below).
+
+Between two tables, code blocks or lines, where the cursor otherwise has no place,
+editors insert a paragraph with the arrow keys, with a **+** at the edge of the block or
+from the table menu.
 
 Formatting is applied only through the toolbar and keyboard shortcuts. Unlike
 Markdown (visual), Markdown notation such as `#` or `-` at the start of a line stays
@@ -41,7 +46,7 @@ How editors work with it is described in the [Manual for editors](../../editors/
 | Setting | Meaning |
 |---|---|
 | Toolbar | *all buttons*, *basic* (bold, italic, paragraph format, lists, link), *custom* |
-| Custom buttons | only with *custom*: names separated by comma or space, `\|` as separator – `bold italic underline code heading ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
+| Custom buttons | only with *custom*: names separated by comma or space, `\|` as separator – `bold italic underline code heading margin ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
 | Minimum height / Maximum height | in pixels; without a maximum, the editor grows with the content |
 | Stylesheet | a `.css` file from `var/extensions/htmlvisual/` |
 | CSS class | class on the editor container; empty = `c9-htmlvisual-{fieldname}` |
@@ -91,7 +96,12 @@ In the formatted view, classes and styles take effect immediately (together with
 field's stylesheet); images appear in place and can be deleted or moved like a
 character. Attributes such as `data-…`, `aria-…`, `target` or `id` have
 no effect in the backend; they only appear in the saved HTML – for scripts of your
-website, for example. Attributes can only be changed in the source. Alignment via the buttons
+website, for example. Attributes can only be changed in the source – with one exception:
+the ***space above*** button (`margin`) sets or removes one of the classes `mt-1` … `mt-8` on
+`<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`, `<ol>` and `<table>`; other classes of the element are
+kept. The classes come from Bootstrap; the editor preview shows the sizes of the backend. For
+the space to take effect on the website, its stylesheet must define `mt-1` … `mt-8`
+(Bootstrap itself only has `mt-0` … `mt-5`). Alignment via the buttons
 adds `text-align` to `style`; a `text-align` in the source becomes the alignment of
 the block.
 

@@ -36,6 +36,10 @@
  *     em, u, code, a (a also target, rel, hreflang, download, type, referrerpolicy);
  *     <img> with src, alt, title, width, height, loading, srcset, sizes, id, class,
  *     style, data-*, aria-*, lang, role
+ *     class mt-1 … mt-8 (space above) also from the toolbar (button margin) on paragraph,
+ *     heading, code block, list and table - other classes stay
+ * Between two tables, code blocks or rules the editor offers a "gap" paragraph
+ * (arrow keys, + buttons on the block edges, table menu), see insertGap().
  * Invisible special characters are entities in the HTML (&nbsp; &shy; &#8239; …); in the
  * editor they are marked, non-editable span.htv-ch. An &nbsp; set by the browser itself
  * (space at the end of a line), on the other hand, becomes a normal space.
@@ -1287,6 +1291,43 @@
         return n;
     }
 
+    // ---- Space above a block: class mt-1 … mt-8 (Bootstrap) ----
+    //
+    // Part of the own attributes (data-htv-a) - other classes of the block stay; the
+    // class also sits as a real attribute on the element (preview with the backend CSS).
+
+    const MARGIN_RE = /^mt-[0-8]$/;
+    const MARGIN_MAX = 8;
+
+    function blockAttrs(el) {
+        try {
+            const at = JSON.parse(el.getAttribute('data-htv-a') || '{}');
+            return at && typeof at === 'object' ? at : {};
+        }
+        catch (e) { return {}; }
+    }
+
+    function marginOf(el) {
+        const m = String(blockAttrs(el).class || '').match(/(?:^|\s)mt-([1-8])(?:\s|$)/);
+        return m ? +m[1] : 0;
+    }
+
+    function setMargin(el, n) {
+        const at = blockAttrs(el);
+        const cls = String(at.class || '').split(/\s+/).filter((c) => c && !MARGIN_RE.test(c));
+        if (n) cls.push('mt-' + n);
+        if (cls.length) {
+            at.class = cls.join(' ');
+            el.setAttribute('class', at.class);
+        }
+        else {
+            delete at.class;
+            el.removeAttribute('class');
+        }
+        if (Object.keys(at).length) el.setAttribute('data-htv-a', JSON.stringify(at));
+        else el.removeAttribute('data-htv-a');
+    }
+
     function unwrapEl(el) {
         const parent = el.parentNode;
         while (el.firstChild) parent.insertBefore(el.firstChild, el);
@@ -1394,6 +1435,7 @@
         underline:    { icon: 'format_underlined', key: 'Mod+U' },
         code:         { icon: 'data_object' },
         heading:      { icon: 'title', menu: true },
+        margin:       { icon: 'height', menu: true },
         ul:           { icon: 'format_list_bulleted' },
         ol:           { icon: 'format_list_numbered' },
         outdent:      { icon: 'format_indent_decrease', key: 'Shift+Tab' },
@@ -1414,7 +1456,7 @@
     };
 
     const PRESETS = {
-        full: ['bold', 'italic', 'underline', 'code', '|', 'heading', '|', 'ul', 'ol', 'outdent', 'indent', '|',
+        full: ['bold', 'italic', 'underline', 'code', '|', 'heading', 'margin', '|', 'ul', 'ol', 'outdent', 'indent', '|',
             'quote', 'codeblock', '|', 'link', 'hr', 'br', 'special', '|', 'align_left', 'align_center', 'align_right', 'dir', '|',
             'table', '|', 'undo', 'redo'],
         basic: ['bold', 'italic', '|', 'heading', '|', 'ul', 'ol', '|', 'link', '|', 'undo', 'redo']
@@ -1443,6 +1485,8 @@
         table_note: 'The first row is the header row.', col_left: 'Insert column left', col_right: 'Insert column right',
         col_delete: 'Delete column', row_above: 'Insert row above', row_below: 'Insert row below',
         row_delete: 'Delete row', table_delete: 'Delete table',
+        margin: 'Space above', margin_none: 'Default', margin_n: 'Space {n}',
+        para_before: 'Insert paragraph before', para_after: 'Insert paragraph after',
         group_currency: 'Currency', group_symbols: 'Symbols', group_quotes: 'Quotation marks', group_dashes: 'Dashes',
         group_spaces: 'Spaces and hyphenation', ch_ndash: 'En dash', ch_mdash: 'Em dash', ch_nbhy: 'Non-breaking hyphen',
         ch_minus: 'Minus sign', ch_nbsp: 'Non-breaking space', ch_nnbsp: 'Narrow non-breaking space', ch_ensp: 'En space',
@@ -1535,6 +1579,7 @@
             el.style.display = 'none';
 
             this.buildToolbar();
+            if (!this.readonly) this.buildGapButtons();
 
             this.handlers = {
                 keydown: (e) => this.onKeydown(e),
@@ -1702,6 +1747,8 @@
             if (this.sourceMode || this.readonly) return;
             this.commitTyping();
             if (!getRange(this.content)) this.focusEnd();
+            // a command makes a gap paragraph a normal one
+            this.gap = null;
             this.busy = true;
             try { fn(); }
             finally { this.busy = false; }
@@ -1763,6 +1810,12 @@
             const inPre = !!(tb && tb.nodeName === 'PRE');
             const cell = node ? closestIn(root, node, 'td,th') : null;
             const li = node ? closestIn(root, node, 'li') : null;
+            if (node) {
+                this.dropGap(node);
+                this.caretUnit = this.gapUnitAt(node);
+            }
+            else if (this.sourceMode) this.caretUnit = null;
+            this.placeGapButtons();
             const qs = (cmd) => {
                 if (!r || inPre) return false;
                 try { return document.queryCommandState(cmd); } catch (e) { return false; }
@@ -1777,6 +1830,7 @@
                 underline: qs('underline'),
                 code: !!(node && closestIn(root, node, 'code')),
                 heading: !!(tb && /^H[1-6]$/.test(tb.nodeName)),
+                margin: !!(this.buttons.margin && r && this.marginUnits().some(marginOf)),
                 ul: !!(li && li.parentNode.nodeName === 'UL'),
                 ol: !!(li && li.parentNode.nodeName === 'OL'),
                 quote: !!(node && closestIn(root, node, 'blockquote')),
@@ -1829,6 +1883,7 @@
                 case 'underline': this.exec(() => this.inline(name)); break;
                 case 'code': this.exec(() => this.toggleCode()); break;
                 case 'heading': this.menuHeading(btn); break;
+                case 'margin': this.menuMargin(btn); break;
                 case 'ul': this.exec(() => this.toggleList('UL')); break;
                 case 'ol': this.exec(() => this.toggleList('OL')); break;
                 case 'indent': this.exec(() => this.indent(false)); break;
@@ -1881,6 +1936,8 @@
                 case 'Delete': this.onDelete(e); break;
                 case 'Tab': this.onTab(e); break;
                 case 'ArrowRight': this.onArrowRight(e); break;
+                case 'ArrowUp':
+                case 'ArrowDown': this.onArrowVertical(e); break;
             }
         }
 
@@ -2334,6 +2391,9 @@
             cleanupEmptyInline(n);
             fixEmpty(tb);
             fixEmpty(n);
+            // The space above stays with the text: the new block does not take it over -
+            // unless the caret was at the start (the text moves into the new block)
+            if (marginOf(tb)) setMargin(isEmptyBlock(tb) && !isEmptyBlock(n) ? tb : n, 0);
             return n;
         }
 
@@ -2436,6 +2496,193 @@
                 if (u && !units.includes(u)) units.push(u);
             });
             units.forEach(set);
+        }
+
+        // ---- Space above (margin) ----
+
+        // Blocks the space applies to: paragraph, heading, code block; in a list the
+        // whole list, in a table the table
+        marginUnits() {
+            const root = this.content;
+            const r = getRange(root);
+            if (!r) return [];
+            const units = [];
+            const add = (u) => { if (u && !units.includes(u)) units.push(u); };
+            const cell = closestIn(root, r.startContainer, 'td,th');
+            if (cell) add(closestIn(root, cell, 'table'));
+            this.selectedBlocks().forEach((b) => {
+                const c = closestIn(root, b, 'td,th');
+                if (c) add(closestIn(root, c, 'table'));
+                else if (b.nodeName === 'LI') add(topList(b));
+                else add(b);
+            });
+            return units;
+        }
+
+        setMarginOf(n) {
+            const s = saveSel(this.content);
+            let last = null;
+            this.marginUnits().forEach((u) => {
+                // a <div> of the browser becomes a paragraph (only those keep attributes)
+                last = u.nodeName === 'DIV' ? renameEl(u, 'P') : u;
+                setMargin(last, n);
+            });
+            restoreSel(this.content, s, last);
+        }
+
+        // ---- Paragraph between blocks ----
+        //
+        // Between two tables, code blocks or rules (and before such a block at the very
+        // start) there is no place for the caret. A "gap" paragraph fills it: from the
+        // arrow keys at the edge of the block, from the + buttons on its edges (mouse) and from the
+        // table menu. Left empty, it disappears again as soon as the caret leaves it - empty
+        // paragraphs are not saved anyway.
+
+        // Table, code block or rule at node as a block of the text flow, otherwise null
+        gapUnitAt(node) {
+            const el = closestIn(this.content, node, 'table,pre,hr');
+            if (!el) return null;
+            return el.parentNode === this.content || el.parentNode.nodeName === 'BLOCKQUOTE' ? el : null;
+        }
+
+        // Is there no place for the caret before (after) unit?
+        needsGap(unit, before) {
+            const sib = before ? unit.previousElementSibling : unit.nextElementSibling;
+            return !sib || /^(TABLE|PRE|HR)$/.test(sib.nodeName);
+        }
+
+        insertGap(unit, before) {
+            this.commitTyping();
+            this.dropGap();
+            const p = newP();
+            if (before) unit.before(p);
+            else unit.after(p);
+            this.gap = p;
+            this.content.focus({ preventScroll: true });
+            caretInto(p, false);
+            this.updateState();
+            return p;
+        }
+
+        // An empty gap paragraph without the caret is removed (keep: the caret is inside)
+        dropGap(node) {
+            const g = this.gap;
+            if (!g) return;
+            if (!this.content.contains(g) || g.nodeName !== 'P' || !isEmptyBlock(g)) { this.gap = null; return; }
+            if (node && g.contains(node)) return;
+            this.gap = null;
+            g.remove();
+        }
+
+        // Arrow up/down at the edge of a table or code block: into a gap paragraph
+        onArrowVertical(e) {
+            if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+            const root = this.content;
+            const r = getRange(root);
+            if (!r || !r.collapsed) return;
+            const unit = this.gapUnitAt(r.startContainer);
+            if (!unit || unit.nodeName === 'HR') return;
+            const up = e.key === 'ArrowUp';
+            if (!this.needsGap(unit, up)) return;
+            const sib = up ? unit.previousElementSibling : unit.nextElementSibling;
+            if (!sib && unit.parentNode === root) {
+                // first (last) block of the field: the browser cannot leave it - from the
+                // start of the first (end of the last) cell or line
+                let edge = unit;
+                if (unit.nodeName === 'TABLE') {
+                    const row = unit.rows[up ? 0 : unit.rows.length - 1];
+                    edge = row.cells[up ? 0 : row.cells.length - 1];
+                }
+                const at = up ? isAtStartOf(edge, r.startContainer, r.startOffset) : isAtEndOf(edge, r.startContainer, r.startOffset);
+                if (at) {
+                    e.preventDefault();
+                    this.insertGap(unit, up);
+                }
+                return;
+            }
+            // otherwise the browser moves the caret - did it leave the block in that direction?
+            setTimeout(() => {
+                const nr = getRange(root);
+                if (!nr || !root.contains(unit) || unit.contains(nr.startContainer)) return;
+                const pos = unit.compareDocumentPosition(nr.startContainer);
+                if (!(pos & (up ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING))) return;
+                if (this.needsGap(unit, up)) this.insertGap(unit, up);
+            }, 0);
+        }
+
+        // + buttons on the upper and lower edge of a table, code block or rule (mouse)
+        buildGapButtons() {
+            this.gapBtns = {};
+            ['before', 'after'].forEach((k) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'c9-htv-gapbtn';
+                b.tabIndex = -1;
+                b.hidden = true;
+                b.title = this.t(k === 'before' ? 'para_before' : 'para_after');
+                b.setAttribute('aria-label', b.title);
+                b.innerHTML = '<span class="icon" aria-hidden="true">add</span>';
+                b.addEventListener('mousedown', (e) => e.preventDefault());
+                b.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const u = this.gapFor;
+                    if (!u || !this.content.contains(u) || this.sourceMode) return;
+                    this.hoverUnit = null;
+                    this.insertGap(u, k === 'before');
+                });
+                this.wrap.appendChild(b);
+                this.gapBtns[k] = b;
+            });
+            this.onHover = (e) => {
+                // in the space between blocks the buttons stay (that is where they are)
+                if (e.target === this.content || (e.target.nodeName === 'BLOCKQUOTE' && this.content.contains(e.target))) return;
+                const u = this.gapUnitAt(e.target);
+                if (u !== this.hoverUnit) {
+                    this.hoverUnit = u;
+                    this.placeGapButtons();
+                }
+            };
+            this.onLeave = () => {
+                this.hoverUnit = null;
+                this.placeGapButtons();
+            };
+            this.onScroll = () => this.placeGapButtons();
+            this.content.addEventListener('mousemove', this.onHover);
+            this.content.addEventListener('blur', this.onScroll);
+            this.content.addEventListener('focus', this.onScroll);
+            this.wrap.addEventListener('mouseleave', this.onLeave);
+            this.content.addEventListener('scroll', this.onScroll);
+        }
+
+        // Buttons for the block under the mouse, otherwise at the caret - only where a
+        // paragraph is missing; centered in the space before (after) the block
+        placeGapButtons() {
+            if (!this.gapBtns) return;
+            // the caret only counts while the editor has the focus
+            const caret = document.activeElement === this.content ? this.caretUnit : null;
+            let unit = this.sourceMode ? null : (this.hoverUnit || caret || null);
+            if (unit && !this.content.contains(unit)) unit = this.hoverUnit = this.caretUnit = null;
+            this.gapFor = unit;
+            const wr = unit ? this.wrap.getBoundingClientRect() : null;
+            const cr = unit ? this.content.getBoundingClientRect() : null;
+            ['before', 'after'].forEach((k) => {
+                const b = this.gapBtns[k];
+                const before = k === 'before';
+                if (!unit || !this.needsGap(unit, before)) { b.hidden = true; return; }
+                const ur = unit.getBoundingClientRect();
+                const sib = before ? unit.previousElementSibling : unit.nextElementSibling;
+                let y;
+                if (sib) {
+                    const sr = sib.getBoundingClientRect();
+                    y = before ? (sr.bottom + ur.top) / 2 : (ur.bottom + sr.top) / 2;
+                }
+                else y = before ? ur.top - 2 : ur.bottom + 2;
+                // not outside the visible part of the editing area
+                if (y < cr.top || y > cr.bottom) { b.hidden = true; return; }
+                b.hidden = false;
+                b.style.top = (y - wr.top - b.offsetHeight / 2) + 'px';
+                b.style.left = (ur.left - wr.left + ur.width / 2 - b.offsetWidth / 2) + 'px';
+            });
         }
 
         // ---- Inline ----
@@ -3031,6 +3278,35 @@
             });
         }
 
+        menuMargin(btn) {
+            const units = this.marginUnits();
+            const cur = units.length ? marginOf(units[0]) : -1;
+            // the sizes as the backend CSS defines them (custom Bootstrap build)
+            const probe = document.createElement('div');
+            probe.style.cssText = 'position:absolute;visibility:hidden;height:0';
+            this.wrap.appendChild(probe);
+            this.openPop(btn, (pop) => {
+                pop.classList.add('c9-htv-menu');
+                for (let n = 0; n <= MARGIN_MAX; n++) {
+                    const item = this.menuItem(n ? this.t('margin_n').replace('{n}', n) : this.t('margin_none'), () => {
+                        this.closePop();
+                        this.exec(() => this.setMarginOf(n));
+                    });
+                    if (n) {
+                        probe.className = 'mt-' + n;
+                        const px = Math.round(parseFloat(getComputedStyle(probe).marginTop) || 0);
+                        const hint = document.createElement('span');
+                        hint.className = 'c9-htv-hint';
+                        hint.textContent = 'mt-' + n + (px ? ' · ' + px + ' px' : '');
+                        item.appendChild(hint);
+                    }
+                    if (n === cur) item.classList.add('active');
+                    pop.appendChild(item);
+                }
+            });
+            probe.remove();
+        }
+
         menuSpecial(btn) {
             this.openPop(btn, (pop) => {
                 pop.classList.add('c9-htv-special');
@@ -3084,6 +3360,16 @@
                     op(this.t('col_left'), 'add_column_left', (c) => this.addCol(c, 'left'));
                     op(this.t('col_right'), 'add_column_right', (c) => this.addCol(c, 'right'));
                     op(this.t('col_delete'), 'variable_remove', (c) => this.deleteCol(c));
+                    pop.appendChild(Object.assign(document.createElement('div'), { className: 'c9-htv-divider' }));
+                    // paragraph before / after the table (gap paragraph, no command)
+                    const gap = (label, icon, before) => pop.appendChild(this.menuItem(label, () => {
+                        this.closePop();
+                        this.restoreRange();
+                        const c = this.tableCtx();
+                        if (c) this.insertGap(c.table, before);
+                    }, icon));
+                    gap(this.t('para_before'), 'vertical_align_top', true);
+                    gap(this.t('para_after'), 'vertical_align_bottom', false);
                     pop.appendChild(Object.assign(document.createElement('div'), { className: 'c9-htv-divider' }));
                     op(this.t('table_delete'), 'delete', (c) => this.deleteTable(c));
                     return;
@@ -3218,6 +3504,14 @@
             Object.keys(this.handlers).forEach((k) => this.content.removeEventListener(k, this.handlers[k]));
             document.removeEventListener('selectionchange', this.onSelection);
             document.removeEventListener('mousedown', this.onDocDown);
+            if (this.gapBtns) {
+                this.content.removeEventListener('mousemove', this.onHover);
+                this.content.removeEventListener('scroll', this.onScroll);
+                this.content.removeEventListener('blur', this.onScroll);
+                this.content.removeEventListener('focus', this.onScroll);
+                this.wrap.removeEventListener('mouseleave', this.onLeave);
+            }
+            this.dropGap();
             this.el.removeEventListener('input', this.onSourceInput);
             this.el.classList.remove('c9-htv-source');
             if (this.elStyle === null) this.el.removeAttribute('style');

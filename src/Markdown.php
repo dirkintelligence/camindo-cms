@@ -22,9 +22,20 @@
  *                           text that looks like an entity or a tag; line consisting
  *                           only of "=")
  *
- * Hard line breaks: two spaces at the end of the line. Parsedown 1.8 does not reliably
- * understand the backslash at the end of the line (CommonMark), so MarkdownVisual does
- * not write it.
+ * LINE BREAKS AND EMPTY LINES (unlike CommonMark, like a plain text field)
+ * --------------------
+ *     1 line break          a line break (<br>) - also without two spaces at the end
+ *     1 blank line          a new paragraph
+ *     n blank lines         a new paragraph, starting with n - 1 empty lines; before a
+ *                           heading, list, table … a paragraph of its own; at the very start
+ *                           of the text every blank line is an empty line
+ *     &nbsp;                a line that is only "&nbsp;" is an empty line - the way
+ *                           MarkdownVisual writes empty lines (unlike <br>, it survives
+ *                           strip_tags)
+ * Parsedown 1.8 does not reliably understand the backslash at the end of the line
+ * (CommonMark), so MarkdownVisual does not write it. MarkdownVisual itself writes empty
+ * lines as "&nbsp;", the indentation of a line as non-breaking spaces and < > in the text
+ * as &lt; &gt;.
  *
  * The syntax is the same as in Extensions/MarkdownVisual/public/js/markdownvisual.ext.js
  * (parser and serializer in the editor) - whoever changes it changes both.
@@ -39,6 +50,7 @@ class Markdown extends \Parsedown
     public function __construct()
     {
         $this->setSafeMode(true);
+        $this->setBreaksEnabled(true);
         $this->BlockTypes[':'][] = 'Align';
         $this->InlineTypes['+'] = ['Underline'];
         array_unshift($this->InlineTypes['<'], 'BreakTag');
@@ -52,7 +64,62 @@ class Markdown extends \Parsedown
     /** Markdown -> HTML; empty text yields '' */
     public function toHtml(string $markdown): string
     {
-        return trim($markdown) === '' ? '' : (string)$this->text($markdown);
+        return trim($markdown) === '' ? '' : (string)$this->text($this->emptyLines($markdown));
+    }
+
+    // ---- Empty lines ----
+
+    /**
+     * Runs of blank lines -> empty lines: the first blank line between two blocks separates
+     * them, every further one (and every blank line at the start of the text) becomes a line
+     * "&nbsp;" at the start of the next paragraph, or a paragraph of its own before another
+     * block. Fenced
+     * code stays as it is; before a line indented by four or more columns (code, deeper list
+     * content) the blank lines stay as well.
+     */
+    private function emptyLines(string $markdown): string
+    {
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $markdown));
+        $out = [];
+        $blanks = 0;
+        $started = false;
+        $fence = null;
+        foreach ($lines as $i => $line) {
+            if ($fence !== null) {
+                $out[] = $line;
+                if (preg_match('/^ {0,3}' . preg_quote($fence[0], '/') . '{' . strlen($fence) . ',}[ \t]*$/', $line)) $fence = null;
+                continue;
+            }
+            if (trim($line, " \t") === '') { $blanks++; continue; }
+            preg_match('/^[ \t]*/', $line, $m);
+            $indent = $m[0];
+            $width = strlen(str_replace("\t", '    ', $indent));
+            $extra = $started ? $blanks - 1 : $blanks;
+            if ($width >= 4 && $started) $extra = 0;
+            if ($started && $blanks > 0) array_push($out, ...array_fill(0, $extra > 0 ? 1 : $blanks, ''));
+            if ($extra > 0) {
+                $empty = array_fill(0, $extra, $indent . '&nbsp;');
+                if ($this->startsOtherBlock($line, $lines[$i + 1] ?? '')) array_push($out, ...$empty, ...['']);
+                else array_push($out, ...$empty);
+            }
+            $out[] = $line;
+            $blanks = 0;
+            $started = true;
+            if (preg_match('/^ {0,3}(`{3,}|~{3,})/', $line, $m)) $fence = $m[1];
+        }
+        return implode("\n", $out);
+    }
+
+    /** Does the line start a block other than a paragraph (as the editor reads it)? */
+    private function startsOtherBlock(string $line, string $next): bool
+    {
+        if (preg_match('/^ {0,3}(#{1,6}([ \t]|$)|>|[-*+][ \t]+\S|\d{1,9}[.)][ \t]+\S|`{3,}|~{3,})/', $line)) return true;
+        if (preg_match('/^:::[ \t]*[A-Za-z-]+[ \t]*$/', $line)) return true;
+        if (preg_match('/^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$/', $line)) return true;
+        // setext heading, table
+        if (preg_match('/^ {0,3}(=+|-+)[ \t]*$/', $next)) return true;
+        return str_contains($line, '|') && str_contains($next, '-')
+            && preg_match('/^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/', $next) === 1;
     }
 
     // ---- ::: alignment … ::: ----

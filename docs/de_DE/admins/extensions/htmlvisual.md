@@ -14,8 +14,13 @@ Dasselbe wie Markdown (visuell): Fett, kursiv, unterstrichen, Code im Text,
 Absatzformat (Absatz, Überschrift 1–6), Aufzählung und nummerierte Liste mit
 Unterpunkten, Zitat, Codeblock, Link, horizontale Linie, Zeilenumbruch, Sonderzeichen,
 Ausrichtung links, zentriert, rechts, ***Schreibrichtung*** für markierte Abschnitte und
-Tabellen mit Kopfzeile. Bilder, Klassen und Stile lassen sich im Quelltext angeben
-(siehe unten).
+Tabellen mit Kopfzeile. Nur im HTML-Editor: ***Abstand oben*** für Absätze, Überschriften,
+Codeblöcke, Listen und Tabellen (Klassen `mt-1` … `mt-8`, siehe unten). Bilder, Klassen und
+Stile lassen sich im Quelltext angeben (siehe unten).
+
+Zwischen zwei Tabellen, Codeblöcken oder Linien, wo der Cursor sonst keinen Platz hat,
+fügen Redakteure einen Absatz mit den Pfeiltasten, über ein **+** am Rand des Blocks oder
+über das Tabellenmenü ein.
 
 Formatiert wird nur über die Symbolleiste und Tastenkombinationen. Anders als bei
 Markdown (visuell) bleiben Markdown-Schreibweisen wie `#` oder `-` am Zeilenanfang
@@ -41,7 +46,7 @@ Wie Redakteure damit arbeiten, beschreibt das [Handbuch für Anwender](../../edi
 | Einstellung | Bedeutung |
 |---|---|
 | Werkzeugleiste | *alle Schaltflächen*, *einfach* (Fett, Kursiv, Absatzformat, Listen, Link), *eigene Auswahl* |
-| Eigene Schaltflächen | nur bei *eigene Auswahl*: Namen durch Komma oder Leerzeichen getrennt, `\|` als Trennstrich – `bold italic underline code heading ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
+| Eigene Schaltflächen | nur bei *eigene Auswahl*: Namen durch Komma oder Leerzeichen getrennt, `\|` als Trennstrich – `bold italic underline code heading margin ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
 | Mindesthöhe / Maximale Höhe | in Pixeln; ohne Maximum wächst der Editor mit dem Inhalt |
 | Stylesheet | eine `.css`-Datei aus `var/extensions/htmlvisual/` |
 | CSS-Klasse | Klasse am Editor-Container; leer = `c9-htmlvisual-{feldname}` |
@@ -91,7 +96,12 @@ In der formatierten Ansicht wirken Klassen und Stile sofort (zusammen mit dem
 Stylesheet des Feldes); Bilder erscheinen an ihrer Stelle und lassen sich wie ein
 Zeichen löschen oder verschieben. Attribute wie `data-…`, `aria-…`, `target` oder `id`
 wirken im Backend nicht, sie erscheinen nur im gespeicherten HTML – etwa für Skripte
-Ihrer Website. Ändern lassen sich Attribute nur im Quelltext.
+Ihrer Website. Ändern lassen sich Attribute nur im Quelltext – mit einer Ausnahme:
+Die Schaltfläche ***Abstand oben*** (`margin`) setzt an `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`,
+`<ol>` und `<table>` eine der Klassen `mt-1` … `mt-8` bzw. entfernt sie; andere Klassen des
+Elements bleiben erhalten. Die Klassen stammen aus Bootstrap, die Vorschau im Editor zeigt die
+Größen des Backends. Damit der Abstand auf der Website wirkt, muss deren Stylesheet `mt-1` …
+`mt-8` definieren (Bootstrap kennt von Haus aus nur `mt-0` … `mt-5`).
 Eine Ausrichtung über die Schaltflächen ergänzt `style` um `text-align`; ein
 `text-align` im Quelltext wird zur Ausrichtung des Blocks.
 

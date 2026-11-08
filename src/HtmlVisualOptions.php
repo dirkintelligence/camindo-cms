@@ -9,4 +9,10 @@ namespace Camindo\Core;
 class HtmlVisualOptions extends MarkdownVisualOptions {
 
     protected const PREFIX = 'ext.htmlvisual.ui_';
+
+    /** In addition: space above (mt-1 … mt-8) */
+    public const TEXT_KEYS = [
+        ...parent::TEXT_KEYS,
+        'margin', 'margin_none', 'margin_n',
+    ];
 }

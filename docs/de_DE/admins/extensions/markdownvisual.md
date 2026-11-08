@@ -13,7 +13,15 @@ Fett, kursiv, unterstrichen, Code im Text, Absatzformat (Absatz, Überschrift 1�
 Aufzählung und nummerierte Liste mit Unterpunkten, Zitat, Codeblock, Link, horizontale
 Linie, Zeilenumbruch, Sonderzeichen (Währungen, ®, ™, Striche, geschützte und schmale
 Leerzeichen, weiches Trennzeichen …), Ausrichtung links, zentriert, rechts,
-***Schreibrichtung*** für markierte Abschnitte und Tabellen mit Kopfzeile. Bilder unterstützt er nicht.
+***Schreibrichtung*** für markierte Abschnitte und Tabellen mit Kopfzeile. ***Bilder*** gibt es nicht als Schaltfläche, damit Redakteure
+kein eigenes Layout bauen; im Quelltext (**<>**) geschrieben, bleiben sie aber erhalten:
+`![Alternativtext](/media/1/12/bild.jpg)` – als Adresse `http(s):`, relative Pfade und
+`data:image/…`. Im Editor erscheint das Bild an seiner Stelle und lässt sich wie ein Zeichen
+löschen oder verschieben.
+
+Zwischen zwei Tabellen, Codeblöcken oder Linien, wo der Cursor sonst keinen Platz hat,
+fügen Redakteure einen Absatz mit den Pfeiltasten, über ein **+** am Rand des Blocks oder
+über das Tabellenmenü ein.
 
 Beim ***Einfügen*** übernimmt der Editor nur, was er darstellen kann: Formatierter Text
 aus Word, Google Docs oder Webseiten wird in Markdown übersetzt, eingefügtes Markdown
@@ -38,7 +46,23 @@ Einfügen wirken unabhängig davon, welche Schaltflächen Sie auswählen.
 
 ## Markdown im Feld
 
-Der Editor schreibt übliches Markdown und vier Erweiterungen:
+Der Editor schreibt übliches Markdown und vier Erweiterungen. ***Zeilenumbrüche und Leerzeilen***
+zählen dabei wie in einem einfachen Textfeld:
+
+| Im Markdown | Ergebnis |
+|---|---|
+| 1 Zeilenumbruch | Zeilenumbruch (auch ohne zwei Leerzeichen am Zeilenende) |
+| 2 Zeilenumbrüche (eine Leerzeile) | neuer Absatz |
+| *x* Zeilenumbrüche | neuer Absatz, davor *x* – 2 Leerzeilen |
+| eine Zeile `&nbsp;` | Leerzeile |
+
+Leerzeilen, die Redakteure im Editor erzeugen (leere Absätze, mehrere Umbrüche hintereinander,
+auch am Textanfang), speichert der Editor als Zeile `&nbsp;` – im Editor selbst erscheinen sie
+als leere Zeilen. Anders als `<br>` übersteht `&nbsp;` auch `strip_tags`. Leerzeilen am Textende entfallen. Führende ***Leerzeichen*** einer Zeile bleiben
+als geschützte Leerzeichen erhalten (im Editor grau hinterlegt). Spitze Klammern im Text
+schreibt der Editor als `&lt;` und `&gt;` – eingefügter HTML-Code wie `<p>` bleibt so Text.
+
+Die Erweiterungen:
 
 | Markdown | Bedeutung |
 |---|---|
@@ -57,7 +81,7 @@ einen markierten Abschnitt auf die Gegenrichtung um – im Markdown umschlossen 
 Unicode-Zeichen RLI (`U+2067`, rechts nach links) bzw. LRI (`U+2066`, links nach
 rechts) und PDI (`U+2069`, Ende). Browser werten diese Zeichen selbst aus; die Ausgabe
 im Template braucht nichts Besonderes. Im Editor ist ein solcher Abschnitt gestrichelt
-umrandet. Ein harter Zeilenumbruch sind zwei Leerzeichen am Zeilenende.
+umrandet.
 
 Im Template geben Sie das Feld mit `(CMS:TEXT feldname markdown=true)` aus – der
 Parameter kennt die Erweiterungen (siehe Handbuch für Template-Programmierer, CMS:TEXT).

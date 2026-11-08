@@ -145,6 +145,8 @@
     color: var(--bs-code-color, #d63384);
 }
 .c9-mdv-content a { text-decoration: underline; cursor: text; }
+/* Images in their own size (width/height as given) - wider ones scroll the editing
+   area horizontally (overflow-y: auto makes overflow-x auto as well) */
 .c9-mdv-content hr {
     margin: 1rem 0;
     border: 0;
@@ -268,3 +270,24 @@
 .c9-mdv-form input { margin-bottom: .5rem; }
 .c9-mdv-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
 .c9-mdv-error { margin: -.25rem 0 .5rem; font-size: .8rem; color: var(--bs-danger, #dc3545); }
+
+/* + buttons: paragraph before / after a table, code block or rule */
+.c9-mdv-gapbtn {
+    position: absolute;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--bs-primary, #0d6efd);
+    border-radius: 50%;
+    background: var(--bs-body-bg, #fff);
+    color: var(--bs-primary, #0d6efd);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+    cursor: pointer;
+}
+.c9-mdv-gapbtn[hidden] { display: none; }
+.c9-mdv-gapbtn .icon { font-size: 16px; }
+.c9-mdv-gapbtn:hover { background: var(--bs-primary, #0d6efd); color: #fff; }

@@ -18,7 +18,7 @@ class MarkdownVisualOptions {
         'align_left', 'align_center', 'align_right', 'dir', 'dir_ltr', 'dir_rtl', 'table', 'undo', 'redo', 'source',
         'link_url', 'link_text', 'link_apply', 'link_remove', 'link_invalid', 'cancel',
         'table_cols', 'table_rows', 'table_insert', 'table_note', 'col_left', 'col_right', 'col_delete',
-        'row_above', 'row_below', 'row_delete', 'table_delete',
+        'row_above', 'row_below', 'row_delete', 'table_delete', 'para_before', 'para_after',
         'group_currency', 'group_symbols', 'group_quotes', 'group_dashes', 'group_spaces',
         'ch_ndash', 'ch_mdash', 'ch_nbhy', 'ch_minus', 'ch_nbsp', 'ch_nnbsp', 'ch_ensp', 'ch_thinsp', 'ch_shy',
     ];
@@ -32,7 +32,7 @@ class MarkdownVisualOptions {
     public function clientOptions(array $options): array
     {
         $texts = [];
-        foreach (self::TEXT_KEYS as $key) {
+        foreach (static::TEXT_KEYS as $key) {
             // a missing snippet returns its index - then the script's default applies
             $index = static::PREFIX . $key;
             $text = $this->cms->snippet($index);

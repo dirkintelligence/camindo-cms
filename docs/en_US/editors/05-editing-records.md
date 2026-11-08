@@ -100,6 +100,7 @@ for headings, emphasis, lists and links. They work like a word processor.
 | ![format_underlined](../_/format_underlined.svg) | Ctrl+U (Mac: ⌘U) | underlined |
 | ![link](../_/link.svg) | Ctrl+K (Mac: ⌘K) | link; in the HTML editor, a selected address is entered as the target |
 | ![title](../_/title.svg) | Ctrl+Alt+1 … 6, Ctrl+Alt+0 | heading 1–6 or paragraph |
+| ![height](../_/height.svg) | — | HTML editor only: ***space above*** (space 1–8 or default) for a paragraph, heading, code block, list or table |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Ctrl+Z, Ctrl+Y (Mac: ⌘Z, ⌘⇧Z) | undo, redo |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | horizontal line |
 | ![special_character](../_/special_character.svg) | — | special character |
@@ -108,7 +109,13 @@ for headings, emphasis, lists and links. They work like a word processor.
 | ![code](../_/code.svg) | — | view the source code – Markdown or HTML, depending on the editor |
 |  | ⇧⏎ | `Shift`+`Return` creates a line break within the paragraph, list item, code block or table cell |
 |  | ⏎ | `Return` creates a new paragraph, list item or table row; in a code block it ends the block and starts a new paragraph after it (at the start of the block, before it) |
-|  | ⏎ ⏎ | two × `Return` ends text alignment, a list or a table |
+|  | ⏎ ⏎ | two × `Return` ends text alignment, a list or a quote |
+|  | ↑ ↓ | at the top or bottom edge of a table or code block: a new paragraph before or after it, if there is none |
+
+***Empty lines*** (Markdown editor): several `Return` or `Shift+Return` in a row produce empty lines
+that also appear on the website – as do empty lines at the start of the text. Empty lines at the end
+of the text are dropped. Spaces at the start of a line are kept; afterwards the editor shows them
+highlighted in gray as non-breaking spaces.
 
 ***Writing direction:*** a field writes in the direction of its language – an Arabic text from right to
 left, a German one from left to right. If an Arabic text contains a German word or a formula (or vice
@@ -121,6 +128,25 @@ programmer includes. If the cursor is in a cell, the table button ![table](../_/
 options: insert or remove a row, insert or remove a column. Changing the text alignment always affects the
 whole column.  
 `Shift+Return` creates a line break within the cell. `Return` starts a new row.
+
+***Paragraph between tables and code blocks:*** if two tables, code blocks or lines follow each
+other directly (or a table is at the very beginning), there is no place for the cursor between them.
+To insert a paragraph there:
+
+- Point the mouse at the table or code block – ![add](../_/add.svg) appears at its top or bottom
+  edge; clicking it inserts a new paragraph there.
+- With the arrow keys ↑ and ↓ you leave the table or code block upward or downward – the cursor
+  lands in a new paragraph in between.
+- In a table, the table button ![table](../_/table.svg) also offers **Insert paragraph before** and
+  **Insert paragraph after**.
+
+If the new paragraph stays empty, it disappears again as soon as you leave it.
+
+***Space above*** (HTML editor only): the button ![height](../_/height.svg) adds extra space above
+the paragraph or heading at the cursor (or the selected paragraphs), the code block, the whole list or
+the whole table – **Space 1** to **Space 8** or **Default (none)**. Next to each level you see its size in
+the backend; how large the space is on the website depends on its stylesheet. A new paragraph created
+with `Return` does not take over the space.
 
 ***Special characters*** such as non-breaking or narrow spaces and the soft hyphen are highlighted in gray
 in the editor, so that you can see them.

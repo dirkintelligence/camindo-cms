@@ -13,7 +13,15 @@ Bold, italic, underline, inline code, paragraph format (paragraph, heading 1–6
 bulleted and numbered lists with sub-items, quote, code block, link, horizontal
 line, line break, special characters (currencies, ®, ™, dashes, non-breaking and narrow
 spaces, soft hyphen …), align left, center, right, ***text direction*** for selected
-sections, and tables with a header row. It does not support images.
+sections, and tables with a header row. There is no button for ***images***, so that editors do not
+build their own layout; written in the source (**<>**), they are kept, though:
+`![alternative text](/media/1/12/image.jpg)` – as the address `http(s):`, relative paths and
+`data:image/…`. In the editor the image appears in place and can be deleted or moved like a
+character.
+
+Between two tables, code blocks or lines, where the cursor otherwise has no place,
+editors insert a paragraph with the arrow keys, with a **+** at the edge of the block or
+from the table menu.
 
 When ***pasting***, the editor only takes over what it can display: formatted text
 from Word, Google Docs or web pages is converted to Markdown, pasted Markdown is
@@ -38,7 +46,23 @@ pasting work regardless of which buttons you select.
 
 ## Markdown in the field
 
-The editor writes common Markdown and four extensions:
+The editor writes common Markdown and four extensions. ***Line breaks and empty lines***
+count as in a plain text field:
+
+| In the Markdown | Result |
+|---|---|
+| 1 line break | line break (also without two spaces at the end of the line) |
+| 2 line breaks (one blank line) | new paragraph |
+| *x* line breaks | new paragraph, preceded by *x* – 2 empty lines |
+| a line `&nbsp;` | empty line |
+
+Empty lines that editors create in the editor (empty paragraphs, several breaks in a row, also
+at the start of the text) are stored as a line `&nbsp;` – in the editor itself they appear as
+empty lines. Unlike `<br>`, `&nbsp;` also survives `strip_tags`. Empty lines at the end of the text are dropped. Leading ***spaces*** of a line are kept
+as non-breaking spaces (highlighted in gray in the editor). The editor writes angle brackets
+in the text as `&lt;` and `&gt;` – pasted HTML code such as `<p>` stays text that way.
+
+The extensions:
 
 | Markdown | Meaning |
 |---|---|
@@ -57,7 +81,7 @@ a selected section to the opposite direction – in Markdown enclosed by the
 Unicode characters RLI (`U+2067`, right to left) or LRI (`U+2066`, left to
 right) and PDI (`U+2069`, end). Browsers evaluate these characters themselves; the
 output in the template needs nothing special. In the editor, such a section has a
-dashed outline. A hard line break is two spaces at the end of the line.
+dashed outline.
 
 In the template, output the field with `(CMS:TEXT fieldname markdown=true)` – the
 parameter knows the extensions (see Manual for template programmers, CMS:TEXT).

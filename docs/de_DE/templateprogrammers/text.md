@@ -302,6 +302,9 @@ Parameter die Formate der Extension Markdown (visuell):
 | `::: center` … `:::` | die eingeschlossenen Absätze zentriert (`left`, `center`, `right`; als `<div style="text-align: …">`) |
 | `<br>` | Zeilenumbruch, auch in Tabellenzellen |
 | `&shy;`, `&nbsp;` … | bleiben Sonderzeichen |
+| 1 Zeilenumbruch | Zeilenumbruch (`<br>`), auch ohne zwei Leerzeichen am Zeilenende |
+| *x* Zeilenumbrüche (ab 3) | neuer Absatz, davor *x* – 2 Leerzeilen – Leerzeilen bleiben erhalten |
+| Zeile `&nbsp;` | Leerzeile (so schreibt sie die Extension; übersteht `strip_tags`) |
 
 `markdown` beendet die Verarbeitung: `entitydecode`, `specialchars`, `lbrconvert`,
 `urlconvert` usw. entfallen. `prefix`, `suffix`, `ifempty` und `set` wirken wie

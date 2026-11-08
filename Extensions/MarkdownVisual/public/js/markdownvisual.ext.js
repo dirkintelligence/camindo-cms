@@ -23,13 +23,23 @@
  * --------------------
  *     **bold**  *italic*  ++underlined++  `code`  [text](target)  <https://…>
  *     # … ######   - list   1. list (sub-items indented by the width of the marker)
- *     > quote   ``` code block   --- rule   two spaces at the end of a line = line break
+ *     > quote   ``` code block   --- rule
+ *     ![alt](src)  image - only from the field and the source view (no button, pasted
+ *                  Markdown and HTML lose it); src http(s), relative or data:image/…
+ *     line breaks as in a plain text field: 1 = line break, 2 (a blank line) = new
+ *     paragraph, x = new paragraph starting with x - 2 empty lines; a line "&nbsp;" is an
+ *     empty line - that is how the editor writes them (an empty paragraph: a paragraph
+ *     "&nbsp;"); the indentation of a line as non-breaking spaces, < > in the text as
+ *     &lt; &gt; (both survive strip_tags, unlike <br> and \<)
  *     | GFM | table |  (first row = header row, :-: column alignment,
  *                         <br> = line break in a cell)
  *     ::: center … :::    alignment of the enclosed blocks (left, center, right)
  *     RLI … PDI, LRI … PDI  writing direction: Unicode isolates RLI (U+2067, right to left)
  *                         or LRI (U+2066, left to right) up to PDI (U+2069) - in the
  *                         editor bdi[dir], toggle "dir"
+ * Between two tables, code blocks or rules the editor offers a "gap" paragraph
+ * (arrow keys, + buttons on the block edges, table menu), see insertGap().
+ *
  * Invisible special characters (non-breaking space, soft hyphen …) are
  * characters in the Markdown; in the editor they are marked, non-editable
  * span.mdv-ch. An &nbsp; set by the browser itself (space at the end of a line),
@@ -62,6 +72,7 @@
         '­': 'shy',
         '‑': 'nbhy'
     };
+    const NBSP = '\u00a0';
     const INVISIBLE_RE = /[    ­‑]/g;
     const ZW_RE = /[​﻿]/g;
 
@@ -108,6 +119,15 @@
     }
 
     // Link targets: http(s), mailto, tel, ftp and relative addresses - otherwise ''
+    // Image sources: http(s), relative addresses and data:image/… - otherwise ''
+    function safeSrc(url) {
+        url = String(url || '').trim();
+        if (url === '' || /[\u0000-\u001F\u007F]/.test(url)) return '';
+        if (/^data:image\/(png|gif|jpe?g|webp|avif|bmp)[;,]/i.test(url)) return url;
+        const scheme = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+        return scheme && !/^https?$/i.test(scheme[1]) ? '' : url;
+    }
+
     function safeUrl(url) {
         url = String(url || '').trim();
         if (url === '' || /[\u0000-\u001F\u007F]/.test(url)) return '';
@@ -167,6 +187,12 @@
             else break;
         }
         return line.slice(i);
+    }
+
+    // Indentation of a paragraph line: kept as non-breaking spaces (tab = four)
+    function keepIndent(line) {
+        const w = indentWidth(line);
+        return NBSP.repeat(w) + line.replace(/^[ \t]+/, '');
     }
 
     function isHr(s) {
@@ -264,12 +290,21 @@
         return { block: block, next: i };
     }
 
-    function parseBlocks(lines) {
+    // top: the whole text - there every blank line at the very start is an empty line
+    function parseBlocks(lines, top) {
         const blocks = [];
+        // Empty lines: the first blank line between two blocks separates them, every
+        // further one becomes a <br> - at the start of the following paragraph, or
+        // as a paragraph of its own before another block (applied after the loop)
+        const empties = [];
+        let blanks = 0;
         let i = 0;
         while (i < lines.length) {
             const line = lines[i];
-            if (isBlank(line)) { i++; continue; }
+            if (isBlank(line)) { blanks++; i++; continue; }
+            const extra = blocks.length ? blanks - 1 : (top ? blanks : 0);
+            if (extra > 0) empties.push({ at: blocks.length, n: extra });
+            blanks = 0;
             const ind = indentWidth(line);
             const s = line.replace(/^[ \t]+/, '');
             let m;
@@ -346,8 +381,9 @@
                 const r = parseTable(lines, i);
                 if (r) { blocks.push(r.block); i = r.next; continue; }
             }
-            // Paragraph, possibly setext heading
-            const para = [s];
+            // Paragraph, possibly setext heading; every line break is a break, the
+            // indentation of the lines stays (non-breaking spaces)
+            const para = [EMPTY_LINE.test(line) ? '' : NBSP.repeat(ind) + s];
             let level = 0;
             i++;
             while (i < lines.length) {
@@ -358,17 +394,24 @@
                 if (indentWidth(l) <= 3 && /^-+[ \t]*$/.test(ls)) { level = 2; i++; break; }
                 if (startsBlock(l)) break;
                 if (ls.includes('|') && isDelimRow(lines[i + 1])) break;
-                para.push(ls);
+                para.push(EMPTY_LINE.test(l) ? '' : keepIndent(l));
                 i++;
             }
+            // a line "&nbsp;" is an empty line ('' between the line breaks)
             const inl = para.join('\n').replace(/[ \t]+$/, '');
-            blocks.push(level ? { t: 'h', level: level, inl: inl.replace(/\n/g, ' ') } : { t: 'p', inl: inl });
+            blocks.push(level ? { t: 'h', level: level, inl: inl.replace(/\n/g, ' ').replace(/^\u00a0+/, '') } : { t: 'p', inl: inl });
+        }
+        for (let k = empties.length - 1; k >= 0; k--) {
+            const e = empties[k];
+            const b = blocks[e.at];
+            if (b && b.t === 'p') b.inl = '\n'.repeat(e.n) + b.inl;
+            else blocks.splice(e.at, 0, { t: 'p', inl: '\n'.repeat(e.n - 1), align: b && b.t !== 'hr' && b.t !== 'code' ? b.align || '' : '' });
         }
         return blocks;
     }
 
     function parseMarkdown(md) {
-        return parseBlocks(splitLines(md));
+        return parseBlocks(splitLines(md), true);
     }
 
     // =====================================================================
@@ -479,9 +522,15 @@
                 continue;
             }
             if (c === '!' && src[i + 1] === '[') {
-                // Images are not supported - they are dropped entirely
+                // Images only from the field and the source view (no toolbar button) -
+                // pasted Markdown loses them
                 const link = parseLinkAt(src, i + 1);
-                if (link) { i = link.end; continue; }
+                if (link) {
+                    const url = ownMarkdown ? safeSrc(link.dest) : '';
+                    if (url) push({ type: 'img', src: url, alt: link.text.replace(/\\([!-\/:-@\[-`{-~])/g, '$1').replace(/\s+/g, ' ') });
+                    i = link.end;
+                    continue;
+                }
                 text += c;
                 i++;
                 continue;
@@ -575,9 +624,10 @@
                     }
                 }
             }
+            // Every line break is a break (also without two spaces at the end of the line)
             if (c === '\n') {
-                if (/ {2,}$/.test(text)) { text = text.replace(/ +$/, ''); push({ type: 'br' }); }
-                else text = text.replace(/ +$/, '') + ' ';
+                text = text.replace(/ +$/, '');
+                push({ type: 'br' });
                 i++;
                 while (src[i] === ' ' || src[i] === '\t') i++;
                 continue;
@@ -650,6 +700,7 @@
                 case 'text': out += escText(n.v); break;
                 case 'code': out += '<code>' + esc(n.v) + '</code>'; break;
                 case 'br': out += '<br>'; break;
+                case 'img': out += '<img src="' + esc(n.src) + '" alt="' + esc(n.alt) + '">'; break;
                 case 'delim': if (!n.html) out += escText(n.ch.repeat(n.len)); break;
                 case 'link':
                     out += inLink || !n.href
@@ -666,11 +717,14 @@
         return out;
     }
 
-    function parseInline(src) {
+    // keepBreaks: paragraph - breaks at the start and end are empty lines (<br> in the
+    // Markdown); elsewhere (heading, cell, list item) they are dropped
+    function parseInline(src, keepBreaks) {
         const nodes = tokenizeInline(String(src || ''));
         pairIsolates(nodes);
         processEmphasis(nodes);
-        return renderInlineNodes(nodes, false).replace(/^(?:<br>)+|(?:<br>)+$/g, '');
+        const html = renderInlineNodes(nodes, false);
+        return keepBreaks ? html : html.replace(/^(?:<br>)+|(?:<br>)+$/g, '');
     }
 
     // =====================================================================
@@ -689,7 +743,11 @@
         const al = alignAttr(b.align);
         switch (b.t) {
             case 'p':
-                return '<p' + al + '>' + (parseInline(b.inl) || '<br>') + '</p>';
+            {
+                // an empty last line needs the browser's placeholder <br>
+                const html = parseInline(b.inl, true);
+                return '<p' + al + '>' + html + (html === '' || /<br>$/.test(html) ? '<br>' : '') + '</p>';
+            }
             case 'h':
                 return '<h' + b.level + al + '>' + (parseInline(b.inl) || '<br>') + '</h' + b.level + '>';
             case 'hr':
@@ -742,8 +800,15 @@
         return [];
     }
 
+    // true while the Markdown of the field (or of the source view) is read - only there
+    // images are kept
+    let ownMarkdown = false;
+
+    // Markdown of the field -> HTML of the editor
     function toHtml(md) {
-        return renderBlocks(parseMarkdown(md));
+        ownMarkdown = true;
+        try { return renderBlocks(parseMarkdown(md)); }
+        finally { ownMarkdown = false; }
     }
 
     // =====================================================================
@@ -795,6 +860,11 @@
         return out.replace(ZW_RE, '').replace(/ /g, ' ');
     }
 
+    // true while the editor's own DOM is read (toMarkdown) - there empty lines (empty
+    // paragraphs, several breaks) and the indentation of lines count; pasted HTML
+    // loses them
+    let editorDom = false;
+
     function domToBlocks(parent, align) {
         const out = [];
         let inline = [];
@@ -808,7 +878,7 @@
             if (n.nodeType === 3) { inline.push(n); return; }
             if (n.nodeType !== 1) return;
             const tag = tagOf(n);
-            if (SKIP_TAGS.test(tag)) return;
+            if (SKIP_TAGS.test(tag) && tag !== 'IMG') return;
             if (!BLOCK_TAGS.test(tag)) {
                 // Inline element with blocks inside (Google Docs: <b id="docs-internal-guid…">)
                 if (hasBlockDescendant(n)) { flush(); out.push(...domToBlocks(n, alignOf(n) || align)); }
@@ -816,6 +886,8 @@
                 return;
             }
             flush();
+            // an empty helper paragraph of the editor (after a table, gap …) is not text
+            if (editorDom && n.hasAttribute('data-mdv-gap') && isEmptyBlock(n)) return;
             const a = alignOf(n) || align || '';
             const h = tag.match(/^H([1-6])$/);
             if (h) {
@@ -859,7 +931,7 @@
                 if (items.length) items[items.length - 1].children.push(sub);
                 else items.push({ children: [sub] });
             }
-            else if (n.nodeType === 3 || (n.nodeType === 1 && !SKIP_TAGS.test(tag))) {
+            else if (n.nodeType === 3 || (n.nodeType === 1 && (!SKIP_TAGS.test(tag) || tag === 'IMG'))) {
                 const inl = inlineMd([n], {});
                 if (inl !== '') items.push({ children: [{ t: 'p', inl: inl }] });
             }
@@ -903,20 +975,28 @@
     // of a marker.
 
     function inlineMd(nodes, ctx) {
+        ctx = ctx || {};
         const runs = [];
         collectRuns(nodes, {}, runs);
-        return emitRuns(normalizeRuns(runs), ctx || {});
+        return emitRuns(normalizeRuns(runs, editorDom && !ctx.table && !ctx.heading), ctx);
     }
 
     function collectRuns(nodes, marks, runs) {
         nodes.forEach((n) => {
             if (n.nodeType === 3) {
-                const s = n.data.replace(ZW_RE, '').replace(/ /g, ' ').replace(/[ \t\r\n\f]+/g, ' ');
+                // non-breaking spaces of the browser stay until normalizeRuns() (line start)
+                const s = n.data.replace(ZW_RE, '').replace(/[ \t\r\n\f]+/g, ' ');
                 if (s) runs.push({ text: s, marks: marks });
                 return;
             }
             if (n.nodeType !== 1) return;
             const tag = tagOf(n);
+            // Images: only the editor's own (from the field) - pasted HTML loses them
+            if (tag === 'IMG') {
+                const src = editorDom ? safeSrc(n.getAttribute('src')) : '';
+                if (src) runs.push({ img: { src: src, alt: n.getAttribute('alt') || '' }, marks: marks });
+                return;
+            }
             if (SKIP_TAGS.test(tag)) return;
             if (tag === 'BR') { runs.push({ br: true }); return; }
             if (n.classList && n.classList.contains('mdv-ch')) {
@@ -957,7 +1037,9 @@
         });
     }
 
-    function normalizeRuns(runs) {
+    // lines: the editor's own text - breaks at the start and end of the block (empty
+    // lines) and the indentation of lines (spaces the browser shows as &nbsp;) stay
+    function normalizeRuns(runs, lines) {
         const out = [];
         runs.forEach((r) => {
             const prev = out[out.length - 1];
@@ -972,28 +1054,54 @@
             }
             out.push(Object.assign({}, r));
         });
-        // Remove whitespace at the start of lines and double whitespace
+        // Remove whitespace at the start of lines and double whitespace; the indentation
+        // of a line in the editor stays as non-breaking spaces
         let lineStart = true;
         let space = false;
         out.forEach((r) => {
             if (r.br) { lineStart = true; space = false; return; }
-            if (!r.keep && (lineStart || space)) r.text = r.text.replace(/^ +/, '');
-            if (r.text !== '') { lineStart = false; space = !r.keep && / $/.test(r.text); }
+            if (r.img) { lineStart = false; space = false; return; }
+            if (r.keep) {
+                if (r.text !== '') { lineStart = false; space = false; }
+                return;
+            }
+            let lead = '';
+            if (lines && lineStart) {
+                const m = r.text.match(/^ *(\u00a0[ \u00a0]*)/);
+                if (m) { lead = NBSP.repeat(m[1].length); r.text = r.text.slice(m[0].length); }
+            }
+            r.text = r.text.replace(/\u00a0/g, ' ').replace(/ {2,}/g, ' ');
+            if (lineStart || space) r.text = r.text.replace(/^ +/, '');
+            r.text = lead + r.text;
+            if (r.text !== '') {
+                if (r.text !== lead) lineStart = false;
+                space = / $/.test(r.text);
+            }
         });
         // … and at the end of lines
         for (let k = out.length - 1, end = true; k >= 0; k--) {
             const r = out[k];
             if (r.br) { end = true; continue; }
+            if (r.img) { end = false; continue; }
             if (end && !r.keep) {
                 r.text = r.text.replace(/ +$/, '');
                 if (r.text === '') continue;
             }
             end = false;
         }
-        const res = out.filter((r) => r.br || r.text !== '');
-        // Line breaks at the beginning and end (placeholders) are dropped
-        while (res.length && res[0].br) res.shift();
-        while (res.length && res[res.length - 1].br) res.pop();
+        const res = out.filter((r) => r.br || r.img || r.text !== '');
+        // Line breaks at the beginning and end (placeholders) are dropped - in the
+        // editor only a single break after the text (it does not show); more breaks
+        // and breaks before the text are empty lines
+        if (!lines) {
+            while (res.length && res[0].br) res.shift();
+            while (res.length && res[res.length - 1].br) res.pop();
+            return res;
+        }
+        while (res.length && res[0].br && res[0].soft) res.shift();
+        while (res.length && res[res.length - 1].br && res[res.length - 1].soft) res.pop();
+        const n = res.length;
+        if (n >= 2 && res[n - 1].br && !res[n - 2].br) res.pop();
         return res;
     }
 
@@ -1011,11 +1119,11 @@
         const merged = [];
         runs.forEach((r) => {
             const prev = merged[merged.length - 1];
-            if (!r.br && prev && !prev.br && sameMarks(prev.marks, r.marks)) prev.text += r.text;
+            if (!r.br && !r.img && prev && !prev.br && !prev.img && sameMarks(prev.marks, r.marks)) prev.text += r.text;
             else merged.push(Object.assign({}, r));
         });
         merged.forEach((r, k) => {
-            if (r.br) return;
+            if (r.br || r.img) return;
             // Formats on pure whitespace are dropped
             if (r.text.trim() === '' && !r.marks.code) r.marks = {};
             // Link whose text is the address: write it as an address
@@ -1044,14 +1152,14 @@
             if (r.br) {
                 closeTo(0);
                 out = out.replace(/ +$/, '');
-                out += ctx.table ? '<br>' : (ctx.heading ? ' ' : '  \n');
+                out += ctx.table ? '<br>' : (ctx.heading ? ' ' : '\n');
                 return;
             }
             const want = MARK_ORDER.filter((k) => r.marks[k]).map((k) => ({ key: k, value: r.marks[k] }));
             let keep = 0;
             while (keep < stack.length && keep < want.length && stack[keep].key === want[keep].key && stack[keep].value === want[keep].value) keep++;
             closeTo(keep);
-            let text = r.text;
+            let text = r.img ? '' : r.text;
             if (keep < want.length) {
                 const lead = text.match(/^ +/);
                 if (lead) { out += lead[0]; text = text.slice(lead[0].length); }
@@ -1060,15 +1168,29 @@
                     stack.push(want[k]);
                 }
             }
-            if (r.url === 'raw') out += text;
+            if (r.img) out += '![' + escapePlain(r.img.alt, ctx) + '](' + linkDest(r.img.src) + ')';
+            else if (r.url === 'raw') out += text;
             else if (r.url === 'angle') out += '<' + text + '>';
             else if (r.marks.code) out += codeSpan(text, ctx);
             // Link text: addresses are not linked there, so they are escaped like any text
             else out += r.marks.inLink ? escapePlain(text, ctx) : escapeInline(text, ctx);
         });
         closeTo(0);
-        return out.replace(/ +$/, '');
+        out = out.replace(/ +$/, '');
+        if (ctx.table || ctx.heading) return out;
+        return emptyLines(out);
     }
+
+    // Lines of a paragraph: an empty line is written as "&nbsp;" (a blank line would be a
+    // new paragraph); a break at the very end does not show in the browser - dropped
+    function emptyLines(text) {
+        const lines = text.split('\n');
+        if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+        return lines.map((l) => (l === '' ? '&nbsp;' : l)).join('\n');
+    }
+
+    // A line that is only an empty line ("&nbsp;", as the editor writes it)
+    const EMPTY_LINE = /^[ \t]*(&nbsp;|&#160;|&#[xX][aA]0;|\u00a0)[ \t]*$/;
 
     function linkDest(url) {
         return url.replace(/[ ()<>]/g, (c) => ({ ' ': '%20', '(': '%28', ')': '%29', '<': '%3C', '>': '%3E' })[c]);
@@ -1099,9 +1221,11 @@
     }
 
     function escapePlain(s, ctx) {
+        // < and > as entities - they survive a strip_tags() of the text
         s = s.replace(/[\\`*_\[\]]/g, '\\$&')
-            .replace(/<(?=[A-Za-z\/!?])/g, '\\<')
             .replace(/&(?=#?[A-Za-z0-9]+;)/g, '\\&')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
             .replace(/\+{2,}/g, (m) => '\\+'.repeat(m.length))
             .replace(/~{2,}/g, (m) => '\\~'.repeat(m.length));
         if (ctx.table) s = s.replace(/\|/g, '\\|');
@@ -1214,7 +1338,13 @@
     }
 
     function toMarkdown(el) {
-        return writeBlocks(mergeAdjacentLists(domToBlocks(el, ''))).replace(/^\n+|\s+$/g, '');
+        let blocks;
+        editorDom = true;
+        try { blocks = mergeAdjacentLists(domToBlocks(el, '')); }
+        finally { editorDom = false; }
+        // Empty lines at the end of the text do not count
+        while (blocks.length && blocks[blocks.length - 1].t === 'p' && /^&nbsp;(\n&nbsp;)*$/.test(blocks[blocks.length - 1].inl)) blocks.pop();
+        return writeBlocks(blocks).replace(/^\n+|[ \t\r\n]+$/g, '');
     }
 
     // ---- Paste: clipboard -> block list ----
@@ -1373,7 +1503,7 @@
     function hasText(n) {
         if (n.nodeType === 3) return n.data.replace(ZW_RE, '') !== '';
         if (n.nodeType !== 1) return false;
-        if (n.classList.contains('mdv-ch') || n.nodeName === 'HR') return true;
+        if (n.classList.contains('mdv-ch') || n.nodeName === 'HR' || n.nodeName === 'IMG' || n.querySelector('img')) return true;
         return n.textContent.replace(ZW_RE, '') !== '';
     }
 
@@ -1385,8 +1515,11 @@
         return document.createElement('br');
     }
 
+    // Empty helper paragraph (after a table or code block, gap, end of the text): left
+    // empty, it is not an empty line (data-mdv-gap) - until the user works in it (exec)
     function newP() {
         const p = document.createElement('p');
+        p.setAttribute('data-mdv-gap', '');
         p.appendChild(newBr());
         return p;
     }
@@ -1416,7 +1549,7 @@
     // Remove empty inline leftovers after splitting (<strong></strong>)
     function cleanupEmptyInline(el) {
         Array.from(el.querySelectorAll('strong,b,em,i,u,code,a,span:not(.mdv-ch)')).reverse().forEach((n) => {
-            if (!n.textContent.replace(ZW_RE, '') && !n.querySelector('br,.mdv-ch')) n.remove();
+            if (!n.textContent.replace(ZW_RE, '') && !n.querySelector('br,.mdv-ch,img')) n.remove();
         });
     }
 
@@ -1563,6 +1696,7 @@
         table_note: 'The first row is the header row.', col_left: 'Insert column left', col_right: 'Insert column right',
         col_delete: 'Delete column', row_above: 'Insert row above', row_below: 'Insert row below',
         row_delete: 'Delete row', table_delete: 'Delete table',
+        para_before: 'Insert paragraph before', para_after: 'Insert paragraph after',
         group_currency: 'Currency', group_symbols: 'Symbols', group_quotes: 'Quotation marks', group_dashes: 'Dashes',
         group_spaces: 'Spaces and hyphenation', ch_ndash: 'En dash', ch_mdash: 'Em dash', ch_nbhy: 'Non-breaking hyphen',
         ch_minus: 'Minus sign', ch_nbsp: 'Non-breaking space', ch_nnbsp: 'Narrow non-breaking space', ch_ensp: 'En space',
@@ -1655,6 +1789,7 @@
             el.style.display = 'none';
 
             this.buildToolbar();
+            if (!this.readonly) this.buildGapButtons();
 
             this.handlers = {
                 keydown: (e) => this.onKeydown(e),
@@ -1822,6 +1957,11 @@
             if (this.sourceMode || this.readonly) return;
             this.commitTyping();
             if (!getRange(this.content)) this.focusEnd();
+            // a command makes a gap or helper paragraph a normal one (Enter in it = empty line)
+            this.gap = null;
+            const r0 = getRange(this.content);
+            const helper = r0 ? closestIn(this.content, r0.startContainer, 'p[data-mdv-gap]') : null;
+            if (helper) helper.removeAttribute('data-mdv-gap');
             this.busy = true;
             try { fn(); }
             finally { this.busy = false; }
@@ -1882,6 +2022,12 @@
             const inPre = !!(tb && tb.nodeName === 'PRE');
             const cell = node ? closestIn(root, node, 'td,th') : null;
             const li = node ? closestIn(root, node, 'li') : null;
+            if (node) {
+                this.dropGap(node);
+                this.caretUnit = this.gapUnitAt(node);
+            }
+            else if (this.sourceMode) this.caretUnit = null;
+            this.placeGapButtons();
             const qs = (cmd) => {
                 if (!r || inPre) return false;
                 try { return document.queryCommandState(cmd); } catch (e) { return false; }
@@ -2000,6 +2146,8 @@
                 case 'Delete': this.onDelete(e); break;
                 case 'Tab': this.onTab(e); break;
                 case 'ArrowRight': this.onArrowRight(e); break;
+                case 'ArrowUp':
+                case 'ArrowDown': this.onArrowVertical(e); break;
             }
         }
 
@@ -2459,6 +2607,7 @@
             }
             const next = node.nextElementSibling;
             if (!next || !/^(P|DIV|H[1-6]|UL|OL|BLOCKQUOTE)$/.test(next.nodeName)) node.after(newP());
+            else if (next.nodeName === 'P' && isEmptyBlock(next)) next.setAttribute('data-mdv-gap', '');
         }
 
         insertHr() {
@@ -2601,6 +2750,161 @@
                 if (u && !units.includes(u)) units.push(u);
             });
             units.forEach(set);
+        }
+
+        // ---- Paragraph between blocks ----
+        //
+        // Between two tables, code blocks or rules (and before such a block at the very
+        // start) there is no place for the caret. A "gap" paragraph fills it: from the
+        // arrow keys at the edge of the block, from the + buttons on its edges (mouse) and from the
+        // table menu. Left empty, it disappears again as soon as the caret leaves it - empty
+        // paragraphs are not saved anyway.
+
+        // Table, code block or rule at node as a block of the text flow, otherwise null
+        gapUnitAt(node) {
+            const el = closestIn(this.content, node, 'table,pre,hr');
+            if (!el) return null;
+            return el.parentNode === this.content || el.parentNode.nodeName === 'BLOCKQUOTE' ? el : null;
+        }
+
+        // Is there no place for the caret before (after) unit?
+        needsGap(unit, before) {
+            const sib = before ? unit.previousElementSibling : unit.nextElementSibling;
+            return !sib || /^(TABLE|PRE|HR)$/.test(sib.nodeName);
+        }
+
+        insertGap(unit, before) {
+            this.commitTyping();
+            this.dropGap();
+            const p = newP();
+            if (before) unit.before(p);
+            else unit.after(p);
+            this.gap = p;
+            this.content.focus({ preventScroll: true });
+            caretInto(p, false);
+            this.updateState();
+            return p;
+        }
+
+        // An empty gap paragraph without the caret is removed (keep: the caret is inside)
+        dropGap(node) {
+            const g = this.gap;
+            if (!g) return;
+            if (!this.content.contains(g) || g.nodeName !== 'P' || !isEmptyBlock(g)) { this.gap = null; return; }
+            if (node && g.contains(node)) return;
+            this.gap = null;
+            g.remove();
+        }
+
+        // Arrow up/down at the edge of a table or code block: into a gap paragraph
+        onArrowVertical(e) {
+            if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+            const root = this.content;
+            const r = getRange(root);
+            if (!r || !r.collapsed) return;
+            const unit = this.gapUnitAt(r.startContainer);
+            if (!unit || unit.nodeName === 'HR') return;
+            const up = e.key === 'ArrowUp';
+            if (!this.needsGap(unit, up)) return;
+            const sib = up ? unit.previousElementSibling : unit.nextElementSibling;
+            if (!sib && unit.parentNode === root) {
+                // first (last) block of the field: the browser cannot leave it - from the
+                // start of the first (end of the last) cell or line
+                let edge = unit;
+                if (unit.nodeName === 'TABLE') {
+                    const row = unit.rows[up ? 0 : unit.rows.length - 1];
+                    edge = row.cells[up ? 0 : row.cells.length - 1];
+                }
+                const at = up ? isAtStartOf(edge, r.startContainer, r.startOffset) : isAtEndOf(edge, r.startContainer, r.startOffset);
+                if (at) {
+                    e.preventDefault();
+                    this.insertGap(unit, up);
+                }
+                return;
+            }
+            // otherwise the browser moves the caret - did it leave the block in that direction?
+            setTimeout(() => {
+                const nr = getRange(root);
+                if (!nr || !root.contains(unit) || unit.contains(nr.startContainer)) return;
+                const pos = unit.compareDocumentPosition(nr.startContainer);
+                if (!(pos & (up ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING))) return;
+                if (this.needsGap(unit, up)) this.insertGap(unit, up);
+            }, 0);
+        }
+
+        // + buttons on the upper and lower edge of a table, code block or rule (mouse)
+        buildGapButtons() {
+            this.gapBtns = {};
+            ['before', 'after'].forEach((k) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'c9-mdv-gapbtn';
+                b.tabIndex = -1;
+                b.hidden = true;
+                b.title = this.t(k === 'before' ? 'para_before' : 'para_after');
+                b.setAttribute('aria-label', b.title);
+                b.innerHTML = '<span class="icon" aria-hidden="true">add</span>';
+                b.addEventListener('mousedown', (e) => e.preventDefault());
+                b.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const u = this.gapFor;
+                    if (!u || !this.content.contains(u) || this.sourceMode) return;
+                    this.hoverUnit = null;
+                    this.insertGap(u, k === 'before');
+                });
+                this.wrap.appendChild(b);
+                this.gapBtns[k] = b;
+            });
+            this.onHover = (e) => {
+                // in the space between blocks the buttons stay (that is where they are)
+                if (e.target === this.content || (e.target.nodeName === 'BLOCKQUOTE' && this.content.contains(e.target))) return;
+                const u = this.gapUnitAt(e.target);
+                if (u !== this.hoverUnit) {
+                    this.hoverUnit = u;
+                    this.placeGapButtons();
+                }
+            };
+            this.onLeave = () => {
+                this.hoverUnit = null;
+                this.placeGapButtons();
+            };
+            this.onScroll = () => this.placeGapButtons();
+            this.content.addEventListener('mousemove', this.onHover);
+            this.content.addEventListener('blur', this.onScroll);
+            this.content.addEventListener('focus', this.onScroll);
+            this.wrap.addEventListener('mouseleave', this.onLeave);
+            this.content.addEventListener('scroll', this.onScroll);
+        }
+
+        // Buttons for the block under the mouse, otherwise at the caret - only where a
+        // paragraph is missing; centered in the space before (after) the block
+        placeGapButtons() {
+            if (!this.gapBtns) return;
+            // the caret only counts while the editor has the focus
+            const caret = document.activeElement === this.content ? this.caretUnit : null;
+            let unit = this.sourceMode ? null : (this.hoverUnit || caret || null);
+            if (unit && !this.content.contains(unit)) unit = this.hoverUnit = this.caretUnit = null;
+            this.gapFor = unit;
+            const wr = unit ? this.wrap.getBoundingClientRect() : null;
+            const cr = unit ? this.content.getBoundingClientRect() : null;
+            ['before', 'after'].forEach((k) => {
+                const b = this.gapBtns[k];
+                const before = k === 'before';
+                if (!unit || !this.needsGap(unit, before)) { b.hidden = true; return; }
+                const ur = unit.getBoundingClientRect();
+                const sib = before ? unit.previousElementSibling : unit.nextElementSibling;
+                let y;
+                if (sib) {
+                    const sr = sib.getBoundingClientRect();
+                    y = before ? (sr.bottom + ur.top) / 2 : (ur.bottom + sr.top) / 2;
+                }
+                else y = before ? ur.top - 2 : ur.bottom + 2;
+                // not outside the visible part of the editing area
+                if (y < cr.top || y > cr.bottom) { b.hidden = true; return; }
+                b.hidden = false;
+                b.style.top = (y - wr.top - b.offsetHeight / 2) + 'px';
+                b.style.left = (ur.left - wr.left + ur.width / 2 - b.offsetWidth / 2) + 'px';
+            });
         }
 
         // ---- Inline ----
@@ -3250,6 +3554,16 @@
                     op(this.t('col_right'), 'add_column_right', (c) => this.addCol(c, 'right'));
                     op(this.t('col_delete'), 'variable_remove', (c) => this.deleteCol(c));
                     pop.appendChild(Object.assign(document.createElement('div'), { className: 'c9-mdv-divider' }));
+                    // paragraph before / after the table (gap paragraph, no command)
+                    const gap = (label, icon, before) => pop.appendChild(this.menuItem(label, () => {
+                        this.closePop();
+                        this.restoreRange();
+                        const c = this.tableCtx();
+                        if (c) this.insertGap(c.table, before);
+                    }, icon));
+                    gap(this.t('para_before'), 'vertical_align_top', true);
+                    gap(this.t('para_after'), 'vertical_align_bottom', false);
+                    pop.appendChild(Object.assign(document.createElement('div'), { className: 'c9-mdv-divider' }));
                     op(this.t('table_delete'), 'delete', (c) => this.deleteTable(c));
                     return;
                 }
@@ -3382,6 +3696,14 @@
             Object.keys(this.handlers).forEach((k) => this.content.removeEventListener(k, this.handlers[k]));
             document.removeEventListener('selectionchange', this.onSelection);
             document.removeEventListener('mousedown', this.onDocDown);
+            if (this.gapBtns) {
+                this.content.removeEventListener('mousemove', this.onHover);
+                this.content.removeEventListener('scroll', this.onScroll);
+                this.content.removeEventListener('blur', this.onScroll);
+                this.content.removeEventListener('focus', this.onScroll);
+                this.wrap.removeEventListener('mouseleave', this.onLeave);
+            }
+            this.dropGap();
             this.el.removeEventListener('input', this.onSourceInput);
             this.el.classList.remove('c9-mdv-source');
             if (this.elStyle === null) this.el.removeAttribute('style');

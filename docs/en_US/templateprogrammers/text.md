@@ -299,6 +299,9 @@ formats of the extension Markdown (visual):
 | `::: center` … `:::` | the enclosed paragraphs centered (`left`, `center`, `right`; as `<div style="text-align: …">`) |
 | `<br>` | line break, also in table cells |
 | `&shy;`, `&nbsp;` … | remain special characters |
+| 1 line break | line break (`<br>`), also without two spaces at the end of the line |
+| *x* line breaks (3 or more) | new paragraph, preceded by *x* – 2 empty lines – empty lines are kept |
+| line `&nbsp;` | empty line (the way the extension writes it; survives `strip_tags`) |
 
 `markdown` ends the processing: `entitydecode`, `specialchars`, `lbrconvert`, `urlconvert` and so on
 do not apply. `prefix`, `suffix`, `ifempty` and `set` work as usual.
