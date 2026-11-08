@@ -590,13 +590,17 @@ class Docs {
     }
 
     /**
-     * Strip spaces, punctuation and quotation marks of all manual languages
-     * („“ “” ‘’ «» ‹› 「」 …) from both ends of a keyword. Character by character
-     * (/u) - trim() works on bytes and would cut multibyte characters apart.
+     * Normalize a keyword: double quotation marks of all manual languages
+     * („“ “” «» ‹› 「」 …) are removed everywhere - “Changes” tab and Tab “Changes”
+     * become Changes tab and Tab Changes; spaces, punctuation and single quotes
+     * only at both ends (inside, ’ is an apostrophe: user’s). Character by
+     * character (/u) - trim() works on bytes and would cut multibyte characters apart.
      */
     public static function trimTerm(string $term): string
     {
-        $edge = '[\s.,:;!?–—\-"\'`„“”‚‘’«»‹›「」『』]+';
+        $term = (string)preg_replace('/["„“”«»‹›「」『』]/u', '', $term);
+        $term = (string)preg_replace('/\s{2,}/u', ' ', $term);
+        $edge = '[\s.,:;!?–—\-\'`‚‘’]+';
         return (string)preg_replace('/^' . $edge . '|' . $edge . '$/u', '', $term);
     }
 
