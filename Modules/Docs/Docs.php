@@ -568,7 +568,7 @@ class Docs {
             $terms = [];
             if (preg_match_all('~<strong><em>(.*?)</em></strong>|<em><strong>(.*?)</strong></em>~s', $chunk, $b)) {
                 foreach (array_merge($b[1], $b[2]) as $term) {
-                    $term = trim(self::plain($term), " .,:;!?–-\"'`„“");
+                    $term = self::trimTerm(self::plain($term));
                     if (self::isTerm($term)) $terms[mb_strtolower($term)] = $term;
                 }
             }
@@ -587,6 +587,17 @@ class Docs {
     {
         $this->db->query("SELECT 1 FROM `doc_section` WHERE `lang` = ? LIMIT 1", 's', [$lang]);
         return $this->db->num_rows > 0;
+    }
+
+    /**
+     * Strip spaces, punctuation and quotation marks of all manual languages
+     * („“ “” ‘’ «» ‹› 「」 …) from both ends of a keyword. Character by character
+     * (/u) - trim() works on bytes and would cut multibyte characters apart.
+     */
+    public static function trimTerm(string $term): string
+    {
+        $edge = '[\s.,:;!?–—\-"\'`„“”‚‘’«»‹›「」『』]+';
+        return (string)preg_replace('/^' . $edge . '|' . $edge . '$/u', '', $term);
     }
 
     /**
