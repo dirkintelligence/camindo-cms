@@ -194,6 +194,12 @@ class RecordBackendEdit extends RecordBackend {
         // Create
         if ($this->function === 'create' && !empty($this->areaId)) {
             $this->_editCreate();
+            // defaults of date fields in the local format, placeholders (no end) empty -
+            // as for a loaded record. Only dates: the other defaults stay as they
+            // are (preselected links, numbers from the field definition)
+            if ($this->function === 'create') {
+                $this->_editFormatDefaultDates($schemaVirtual);
+            }
         }
 
         // add cleared fields to the request (see _editNormalizeSubmitted())
@@ -1215,7 +1221,8 @@ class RecordBackendEdit extends RecordBackend {
                 }
                 elseif (!is_array($current) && $languageId === $primaryId) {
                     // 3. single value (cache of the primary language / default)
-                    $values[$languageId] = ($this->function === 'create')
+                    // (create: only dates are formatted, see _editFormatDefaultDates())
+                    $values[$languageId] = ($this->function === 'create' && !in_array($type, $this->cms->dateTypes, true))
                         ? $current
                         : $this->_editFormatValue($type, $displayType, $current);
                 }
@@ -1657,6 +1664,22 @@ class RecordBackendEdit extends RecordBackend {
                 $this->data[$name] = $this->_editFormatValue($type, $displayType, $this->data[$name] ?? null);
             }
         }    
+    }
+
+    /**
+     * Date fields of a new record (function=create) in the input format - the defaults
+     * of tmpInit() are ISO in the user's time zone ('now' already resolved, DATE_MAX for
+     * offline_at). Multilingual fields are formatted by _editLanguageValues().
+     */
+    private function _editFormatDefaultDates(array $schemaVirtual): void
+    {
+        foreach ($schemaVirtual as $name => $colDef) {
+            if ((int)($colDef['visibility_input'] ?? 0) === 0) continue;
+            $type = (string)($colDef['type'] ?? 'text');
+            if (!in_array($type, $this->cms->dateTypes, true)) continue;
+            if (!is_scalar($this->data[$name] ?? null)) continue;
+            $this->data[$name] = $this->_editFormatValue($type, (string)($colDef['display_type'] ?? 'text'), $this->data[$name]);
+        }
     }
 
     /**

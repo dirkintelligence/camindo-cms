@@ -162,7 +162,9 @@ abstract class RecordBackend {
      *
      * The content comes from an input field and is escaped.
      *
-     * @param bool $displayIcon  true: prepend status icon
+     * @param bool $displayIcon  true: prepend the status icon (area with a status field);
+     *                           the symbol of the publication window (scheduled/expired)
+     *                           comes in any case (Backend::recordStatus())
      */
     protected function headline(bool $displayIcon = false) {
         $icon = '';
@@ -171,10 +173,8 @@ abstract class RecordBackend {
             $defaultField = $this->backend->getDefaultField($this->areaId);
             $defaultFieldName = $defaultField['name'];
             $label = htmlspecialchars($this->data[$defaultFieldName] ?? $this->data['record_id']);
-            if ($displayIcon) {
-                $statusId = (int)($this->data['status_id'] ?? 0);
-                $icon = $this->backend->teaser('status', $statusId, icon:true, label:false) . ' ';
-            }
+            $icon = $this->backend->recordStatus($this->data, withStatus: $displayIcon);
+            if ($icon !== '') $icon .= ' ';
         }
         else {
             $label = $this->cms->snippet('record.headline_record_info');
@@ -791,7 +791,8 @@ abstract class RecordBackend {
      * (details.lookup_detailed, RecordBackendEdit) and in the list of the last
      * changed records (RecordBackendFolderList): the list fields of its area one below the other (RecordPresenter::listFields() /
      * listValue(), the same as in the record list, shortened), the default field
-     * in bold; then the output of the list template of the area, if one is
+     * in bold, preceded by the symbols of the status column (status, publication window);
+     * empty fields are left out; then the output of the list template of the area, if one is
      * selected (listTemplateHtml()). From the second entry on with spacing
      * (record.lookup_table_row_div).
      *
@@ -813,12 +814,27 @@ abstract class RecordBackend {
         $schemaVirtual = &$schemas[$areaId];
 
         $items = [];
+        $statusHtml = '';
+        $defaultIndex = null;
         foreach ($this->presenter->listFields($schemaVirtual) as $name) {
             $value = $this->presenter->listValue($name, $data, $schemaVirtual);
-            if ((int)($schemaVirtual[$name]['default_field'] ?? 0) === 1) {
+            if ($name === 'status_id') {
+                // status / publication window: in front of the default field, not a line of its own
+                $statusHtml = $value;
+                continue;
+            }
+            $isDefault = (int)($schemaVirtual[$name]['default_field'] ?? 0) === 1;
+            // empty fields are left out (not "---" line by line) - except the default field
+            if (!$isDefault && ($value === '' || $value === $this->backend->emptyPlaceholder)) continue;
+            if ($isDefault) {
                 $value = '<strong>' . $value . '</strong>';
+                $defaultIndex = count($items);
             }
             $items[] = $value;
+        }
+        if ($statusHtml !== '') {
+            $index = $defaultIndex ?? 0;
+            $items[$index] = $statusHtml . ' ' . ($items[$index] ?? '');
         }
         $templateHtml = $this->presenter->listTemplateHtml($areaId, $data);
         if ($templateHtml !== '') $items[] = $templateHtml;

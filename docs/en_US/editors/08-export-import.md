@@ -51,7 +51,8 @@ separated by ` | `, in the order of the input form (`bilder.titel` = `Front | Si
 as well – on re-import, camindo CMS uses these values to match the existing content, in the order given.
 
 Please note: encrypted fields appear in the CSV file ***in plain text***. Times are in the file as they are
-stored (UTC).
+stored (UTC). A date field without a value – such as an expiration date with no end – stays empty; on import,
+an empty cell sets the default value of the field again.
 
 ### DOCX and XML
 

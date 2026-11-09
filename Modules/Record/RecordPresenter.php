@@ -6,12 +6,15 @@
  *
  * WHICH COLUMNS
  * --------------------
- * field.visibility_list decides (listFields()); status_id is always first.
- * Without a visible field, the record_id remains.
+ * field.visibility_list decides (listFields()). The status column comes first
+ * whenever the area has an input field for status_id, online_at or offline_at
+ * (statusSources()) - it shows the status (only with a status field) and the symbol
+ * of the publication window (scheduled/expired, always). Without a visible field,
+ * the record_id remains.
  *
  * WHAT A VALUE LOOKS LIKE
  * --------------------
- * listValue(): status_id as a symbol (with a read-back hint), template_id,
+ * listValue(): status_id as symbols (Backend::recordStatus(), with a read-back hint), template_id,
  * parent_id and position (= the preceding record) as plain text, everything else
  * via Backend::backendValue() in the short form of the list. The result is HTML.
  *
@@ -40,10 +43,33 @@ class RecordPresenter
     {
     }
 
+    /** Input fields behind the status column (statusSources()) */
+    public const STATUS_SOURCES = ['status_id', 'online_at', 'offline_at'];
+
     /**
-     * Fields of an area that appear in the record list (visibility_list = 1) -
-     * status_id always first (quick filter in the column header). Without a visible
-     * field, the record_id remains; it is added to the schema for this purpose.
+     * Which of the input fields behind the status column the area has:
+     * ['status_id' => bool, 'online_at' => bool, 'offline_at' => bool]. Only input
+     * fields count (field_id) - not the meta field that listFields() adds to the schema
+     * for the column.
+     *
+     * @param array $schemaVirtual  Schema of the area (Record::virtualSchema())
+     */
+    public function statusSources(array $schemaVirtual): array
+    {
+        $sources = [];
+        foreach (self::STATUS_SOURCES as $name) {
+            $sources[$name] = (int)($schemaVirtual[$name]['field_id'] ?? 0) > 0;
+        }
+        return $sources;
+    }
+
+    /**
+     * Fields of an area that appear in the record list (visibility_list = 1).
+     * The status column (status_id) comes first as soon as the area has one of the
+     * input fields status_id, online_at, offline_at (statusSources()) - regardless of
+     * visibility_list; without a status field its meta definition is added to the schema.
+     * Without a visible field, the record_id remains; it is added to the schema for
+     * this purpose.
      *
      * @param array &$schemaVirtual  Schema of the area (Record::virtualSchema())
      * @return string[]              Field names in list order
@@ -52,9 +78,13 @@ class RecordPresenter
     {
         $fields = [];
         foreach ($schemaVirtual as $name => $colDef) {
+            if ($name === 'status_id') continue;
             if ((int)($colDef['visibility_list'] ?? 0) !== 1) continue;
-            if ($name === 'status_id') array_unshift($fields, $name);
-            else $fields[] = $name;
+            $fields[] = $name;
+        }
+        if (in_array(true, $this->statusSources($schemaVirtual), true)) {
+            $schemaVirtual['status_id'] ??= $this->cms->schema['status_id'];
+            array_unshift($fields, 'status_id');
         }
         if (empty($fields)) {
             $fields = ['record_id'];
@@ -80,7 +110,8 @@ class RecordPresenter
         $unreviewed = fn() => $this->backend->template('user.icon_unreviewed')
             . '<span class="visually-hidden">' . $this->cms->snippet('user.status_unreviewed') . '</span>';
         if ($name === 'status_id') {
-            $value = $this->backend->teaser('status', (int)($row['status_id'] ?? 0), icon:true, label:false);
+            // the status only with its input field, the publication window always
+            $value = $this->backend->recordStatus($row, withStatus: $this->statusSources($schemaVirtual)['status_id']);
             if (!empty($row['needs_review'])) {
                 $value .= $unreviewed();
             }

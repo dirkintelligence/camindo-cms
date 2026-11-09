@@ -74,10 +74,6 @@ class RecordPersonalData {
     /** Upper limit per list (user contents, references, log) */
     public const MAX_RECORDS = 500;
 
-    /** date placeholders "no date" / "no end" (as Cms::_formatDate()) */
-    private const DATE_MIN_DISPLAY = '1000-01-02 00:00:00';
-    private const DATE_MAX_DISPLAY = '8999-12-31 00:00:00';
-
     /** meta fields that appear in the disclosure */
     private const META_FIELDS = ['record_id', 'created_at', 'changed_at', 'online_at', 'offline_at', 'status_id'];
 
@@ -241,7 +237,7 @@ class RecordPersonalData {
             $label = $name === 'record_id' ? 'Id' : $this->cms->textOrSnippet((string)($this->cms->schema[$name]['label'] ?? $name));
             $value = (string)($row[$name] ?? '');
             if (in_array($name, ['created_at', 'changed_at', 'online_at', 'offline_at'], true)) {
-                $value = $value !== '' && $value >= self::DATE_MIN_DISPLAY && $value < self::DATE_MAX_DISPLAY
+                $value = $value !== '' && !$this->cms->isDatePlaceholder($value)
                     ? substr($value, 0, 19) . ' UTC' : '';
             }
             $meta[$label] = $value;

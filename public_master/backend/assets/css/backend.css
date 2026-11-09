@@ -56,6 +56,11 @@
 .icon.icon-lg {
     font-size:120%;
 }
+/* Status of a record outside its publication window (Backend::teaser('status'), timing):
+   a notch lighter than text-body-tertiary, in light and dark mode */
+.c9-status-inactive {
+    color: rgba(var(--bs-body-color-rgb), .35) !important;
+}
 /* Icon hinter einer Feldbeschriftung (Schloss bei verschlüsselten Feldern) */
 .icon.icon-label {
     font-size: 0.9em;

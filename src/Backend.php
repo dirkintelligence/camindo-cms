@@ -1563,6 +1563,60 @@ class Backend {
     }
 
     /**
+     * Status of a record as a symbol (teaser('status')), taking its publication
+     * window into account (publicationTiming()).
+     *
+     * The symbol of the publication window (timingIcon()) appears whenever the record
+     * is scheduled or expired - also without an input field for the status, and also if
+     * the input fields for online_at/offline_at were deleted in the meantime: their
+     * values stay and still keep the record from the frontend.
+     *
+     * @param array $row         record (Cms::fetch()): status_id, online_at, offline_at
+     * @param bool  $label       true: icon + label, false: icon only (label for screen readers)
+     * @param bool  $withStatus  false: the area has no input field for the status -
+     *                           only the symbol of the publication window ('' if none)
+     */
+    public function recordStatus(array $row, bool $label = false, bool $withStatus = true): string
+    {
+        $timing = $this->publicationTiming($row);
+        if (!$withStatus) return $this->timingIcon($timing);
+        return $this->teaser('status', (int)($row['status_id'] ?? 0), icon: true, label: $label,
+            timing: $timing);
+    }
+
+    /**
+     * Symbol of the publication window: 'schedule' ("scheduled") resp. 'adjust'
+     * ("expired") in light gray, with aria-label and title; '' for any other value.
+     *
+     * @param string $timing  publicationTiming()
+     */
+    public function timingIcon(string $timing): string
+    {
+        if ($timing !== 'scheduled' && $timing !== 'expired') return '';
+        return $this->template('status.icon_timing', [
+            '{icon}'  => $timing === 'scheduled' ? 'schedule' : 'adjust',
+            '{label}' => $this->cms->snippet('status.status_' . $timing),
+        ]);
+    }
+
+    /**
+     * Publication window of a record relative to now: 'expired' if offline_at
+     * lies in the past, 'scheduled' if online_at lies in the future, otherwise ''.
+     * Such a record does not appear in the frontend regardless of its status
+     * (Cms::publishedSql()). The dates come from Cms::fetch() in the PHP time zone
+     * ('Y-m-d H:i:s', comparable as strings); missing ones count as within the window.
+     */
+    public function publicationTiming(array $row): string
+    {
+        $now = date('Y-m-d H:i:s');
+        $offline = (string)($row['offline_at'] ?? '');
+        if ($offline !== '' && $offline <= $now) return 'expired';
+        $online = (string)($row['online_at'] ?? '');
+        if ($online !== '' && $online > $now) return 'scheduled';
+        return '';
+    }
+
+    /**
      * Return an object in readable format
      * Objects:
      *   status, admin, group
@@ -1571,9 +1625,12 @@ class Backend {
      * @param int $id       primary key
      * @param bool $linked  true (default): linked to the info page of the object
      * @param bool $icon    true (default): with icon
+     * @param string $timing only 'status': publication window of the record
+     *                      (publicationTiming()) - 'scheduled'/'expired' make the
+     *                      status icon light gray and prepend a symbol of its own
      * @return string       label or ''
      */
-    public function teaser(string $type, int $id, bool $linked = true, bool $icon = true, $label = true): string {
+    public function teaser(string $type, int $id, bool $linked = true, bool $icon = true, $label = true, string $timing = ''): string {
         // Link only if the group may open the module of the info page - otherwise
         // only the text (developer docs, chapter 11 (Permissions))
         if ($linked) {
@@ -1616,7 +1673,13 @@ class Backend {
                     $labelText = $this->cms->textOrSnippet($keySnippet);
                 }
                 if (!empty($icon)) {
-                    $iconHtml = $this->template('status.icon_status', [
+                    $timingHtml = $this->timingIcon($timing);
+                    if ($timingHtml !== '') {
+                        // outside the publication window: not visible in the frontend
+                        // despite the status
+                        $keyClass = 'c9-status-inactive';
+                    }
+                    $iconHtml = $timingHtml . $this->template('status.icon_status', [
                         '{color_class}' => $keyClass,
                         '{icon}' => $keyIcon
                     ]);
@@ -1936,6 +1999,11 @@ class Backend {
             $html = 'Error: param[name] not defined.<br>';
             $this->form = str_replace($placeholder, $html, $this->form);
             return;
+        }
+        // Date placeholder (no date / no end): an empty field, not "9000-01-01 00:00:00" -
+        // an empty input is saved as the default of the field again (Dataset::validateValue())
+        if (is_string($value) && in_array($type, $this->cms->dateTypes, true) && $this->cms->isDatePlaceholder($value)) {
+            $value = '';
         }
         if ($type == '') {
             $html = 'Error: type of field "' . htmlspecialchars($name) . '" is empty.<br>';

@@ -46,10 +46,16 @@ hinterlegt) und die Schaltflächen:
 
 - ***Sortieren:*** Klick auf eine Spaltenüberschrift. Ohne Auswahl gilt die
   Standard-Sortierung des Bereichs.
+- ***Status-Spalte:*** Sie erscheint, sobald der Bereich ein Eingabefeld für den Status,
+  das Veröffentlichungs- oder das Ablaufdatum hat. Sie zeigt den Status (nur mit Status-Feld)
+  und davor ![schedule](../_/schedule.svg) „vordatiert“ bzw. ![adjust](../_/adjust.svg)
+  „abgelaufen“, wenn der Datensatz außerhalb seines Veröffentlichungszeitraums liegt.
 - ***Nach Status filtern:*** Die Überschrift der Status-Spalte hat ein eigenes Menü.
   Damit werden nur Datensätze mit einem bestimmten Zustand angezeigt,
   zum Beispiel nur deaktivierte Datensätze oder nur Beiträge von
-  Website-Besuchern, die noch geprüft werden müssen („Ungeprüft“).
+  Website-Besuchern, die noch geprüft werden müssen („Ungeprüft“, nur mit dem Eingabefeld
+  „Prüfung nötig“). Hat der Bereich ein
+  Veröffentlichungs- bzw. Ablaufdatum, stehen dort auch „vordatiert“ und „abgelaufen“.
 - ***Hierarchie:*** In Bereichen mit Baumstruktur (etwa Seiten mit Unterseiten)
   zeigt die Liste die Datensätze in ihrer Rangfolge und eingerückt.
 - Klick auf eine Zeile öffnet die ***Detailansicht***, ein Rechtsklick das

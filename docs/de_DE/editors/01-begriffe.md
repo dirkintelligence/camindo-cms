@@ -104,6 +104,10 @@ Vordatierte Datensätze (Veröffentlichungsdatum in der Zukunft) sind im Fronten
 Abgelaufene Datensätze werden nicht mehr in automatisch generierten Listen aufgeführt, können
 aber noch aufgerufen werden (Archivierung alter Inhalte).
 
+In Datensatzlisten und auf der Infoseite erkennen Sie solche Datensätze am Status-Symbol: Es
+erscheint hellgrau, davor steht ![schedule](../_/schedule.svg) „vordatiert“ (Veröffentlichungsdatum
+in der Zukunft) bzw. ![adjust](../_/adjust.svg) „abgelaufen“ (Ablaufdatum in der Vergangenheit).
+
 ## Workflow
 
 camindo CMS unterstützt flache Workflows. Beispiele:

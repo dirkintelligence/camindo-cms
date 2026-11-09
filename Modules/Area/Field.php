@@ -190,6 +190,10 @@ class Field extends Dataset {
     // InstanceCache::rebuild() is due after the next commit (queueCacheRebuild())
     private bool $cacheRebuildPending = false;
 
+    // true while Area::hookOnSoftDelete() moves the fields of a deleted area to the
+    // trash: the records go along and keep their status (hookOnSoftDelete(), status_id)
+    public bool $areaCascade = false;
+
     // Types that can be converted into each other (convert()): within and
     // between the two groups. Including relation <-> relation1 and pointer <-> pointer1,
     // relation <-> pointer with the same cardinality (pointer -> relation only with
@@ -1765,11 +1769,37 @@ class Field extends Dataset {
      *     media        the media directory is locked (MediaAccess), the files stay
      *     caches       record_cache of the area (rebuilt on the next access),
      *                  full text of the areas using the field marked as stale
+     *     status       field on status_id: all records of the area (also working copies
+     *                  and records in the trash) are reset to status 0 (enabled) -
+     *                  without the input field nobody could change a status any more,
+     *                  and records that are not enabled would stay invisible. Not
+     *                  undone by restore(); not when the whole area is deleted
+     *                  ($areaCascade - its records go to the trash with their status).
+     *                  Fields on online_at/offline_at change nothing: the dates stay.
+     *     needs_review field on needs_review: the flag of all records of the area is
+     *                  cleared (nobody could clear it any more) - likewise not
+     *                  undone and not when the whole area is deleted.
      */
     protected function hookOnSoftDelete(array $data): void
     {
         $fieldId = (int)$data['field_id'];
         $areaId  = (int)$data['area_id'];
+
+        // meta columns that only the input field can change: back to 0
+        $resetColumn = match ((string)($data['name'] ?? '')) {
+            'status_id'    => 'status_id',
+            'needs_review' => 'needs_review',
+            default        => '',
+        };
+        if ($resetColumn !== '' && !$this->areaCascade) {
+            $this->db->pushResult();
+            try {
+                $this->db->query("UPDATE `record` SET `$resetColumn` = 0 WHERE `area_id` = ? AND `$resetColumn` != 0", 'i', [$areaId]);
+            }
+            finally {
+                $this->db->popResult();
+            }
+        }
 
         // Counter field and thumbnail fields: same operation (timestamp).
         // The counter field points back - $trashCascade stops the recursion.

@@ -99,6 +99,10 @@ Records with a future publication date cannot be accessed on the frontend yet.
 Expired records are no longer listed in automatically generated lists, but can still
 be accessed directly (archiving of old content).
 
+In record lists and on the info page, you can recognize such records by their status icon: it is
+shown in light gray, preceded by ![schedule](../_/schedule.svg) “scheduled” (publication date in the
+future) or ![adjust](../_/adjust.svg) “expired” (expiration date in the past).
+
 ## Workflow
 
 camindo CMS supports flat workflows. Examples:

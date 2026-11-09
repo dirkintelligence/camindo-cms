@@ -64,8 +64,11 @@ class RecordBackendList extends RecordBackend {
      * list template (`area`.`list_template_id`), its output per record follows as the last
      * column without a header (RecordPresenter::listTemplateHtml()).
      *
-     * The status column additionally carries a quick filter menu in the header and is
-     * therefore always placed first (array_unshift).
+     * The status column (RecordPresenter::listFields(): as soon as the area has an input
+     * field for status_id, online_at or offline_at) additionally carries a quick filter
+     * menu in the header and is therefore always placed first: the statuses (with a status
+     * field), "scheduled" (online_at > now) and "expired" (offline_at <= now) with the
+     * respective date field, "unreviewed" with an input field on needs_review.
      *
      * pushResult()/popResult() bracket each loop iteration: teaser() and
      * backendValue() run queries themselves and would otherwise overwrite the
@@ -343,17 +346,42 @@ class RecordBackendList extends RecordBackend {
             foreach ($visibleFields as $name) {
                 $headColumn = $this->backend->tableHeadColumn($schemaVirtual[$name], $f, $name);
                 if ($name == 'status_id') {
-                    // status has dropdown
+                    // status column with a quick filter menu - its entries follow the
+                    // input fields of the area (RecordPresenter::statusSources())
+                    $sources = $this->presenter->statusSources($schemaVirtual);
+                    if (!$sources['status_id']) {
+                        // without a status field there is nothing to sort by
+                        $headColumn = $this->cms->textOrSnippet((string)($schemaVirtual[$name]['label'] ?? $name));
+                    }
                     $statusItems = [];
-                    $statusDropdownItems = $this->_statusDropdownItems(icon:true);
-                    foreach ($statusDropdownItems as $statusValue => $statusLabel) {
-                        $statusItems[] = $this->backend->template('record.record_table_dropdown_item', [
-                            '{name}' => 'status_id',
-                            '{value}' => $statusValue,
-                            '{label}' => $statusLabel
+                    if ($sources['status_id']) {
+                        foreach ($this->_statusDropdownItems(icon:true) as $statusValue => $statusLabel) {
+                            $statusItems[] = $this->backend->template('record.record_table_dropdown_item', [
+                                '{name}' => 'status_id',
+                                '{value}' => $statusValue,
+                                '{label}' => $statusLabel
+                            ]);
+                        }
+                    }
+                    // publication window: "now" is resolved by Cms::select() according to
+                    // the field type (timestampl in UTC), like filter[online_at] > "now" in
+                    // CMS:SELECT; expired as in Cms::publishedSql(): offline_at <= now
+                    foreach (['online_at' => ['scheduled', 'schedule', '>'], 'offline_at' => ['expired', 'adjust', '<=']]
+                             as $timingField => [$timing, $timingIcon, $timingOp]) {
+                        if (!$sources[$timingField]) continue;
+                        $statusItems[] = $this->backend->template('record.record_table_dropdown_item_now', [
+                            '{name}'  => $timingField,
+                            '{op}'    => rawurlencode($timingOp),
+                            '{label}' => $this->backend->template('status.icon_status', [
+                                    '{color_class}' => 'c9-status-inactive',
+                                    '{icon}' => $timingIcon,
+                                ]) . ' ' . $this->cms->snippet('status.status_' . $timing),
                         ]);
                     }
-                    $statusItems[] = $this->backend->template('record.dropdown_items_review');
+                    // "unreviewed" only with an input field on needs_review
+                    if ((int)($schemaVirtual['needs_review']['field_id'] ?? 0) > 0) {
+                        $statusItems[] = $this->backend->template('record.dropdown_items_review');
+                    }
                     $statusLabelDropdown = $this->backend->template('record.record_table_head_column_dropdown',[
                         '{dropdown_id}' => $this->crypt->randomKey(16),
                         '{column_label}' => $headColumn,
@@ -466,6 +494,10 @@ class RecordBackendList extends RecordBackend {
                                 '{text}' => $value
                             ]);
                         }
+                    }
+                    elseif ($name === 'status_id') {
+                        // status and publication window side by side
+                        $tableCols .= '<td class="text-nowrap">' . $value . "</td>\n";
                     }
                     else {
                         $tableCols .= '<td>' .$value . "</td>\n";

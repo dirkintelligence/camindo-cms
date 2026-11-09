@@ -278,7 +278,7 @@ Depending on the setup, the input form contains some of the following fields:
 |---|---|
 | Status | editing state. Only **enabled** records appear on the website |
 | Publication date | the record appears on the website only from this point in time |
-| Expiration date | from this point in time the record no longer appears in the lists of the website; it remains reachable via its address |
+| Expiration date | from this point in time the record no longer appears in the lists of the website; it remains reachable via its address. Empty = no expiration |
 | Design template | template for this record, if it is to be displayed differently than usual. “(Default)” uses the default template of the area |
 | Parent dataset | parent record in areas with a tree structure, for example the page above a subpage |
 | Position after... | allows manual sorting: the preceding record is selected |

@@ -407,6 +407,16 @@ As long as the field is in the trash, its ***name is taken in the area***: a new
 the same name can only be created once the old one has been deleted permanently or restored.
 A field `parent_id` keeps the tree structure of the area until the permanent deletion.
 
+![warning](../_/warning.svg) If the field `status_id` is deleted, ***all records of the area get the
+status “Enabled”*** – without the field no status could be changed any more, and disabled records
+would stay invisible. They thus appear on the website, as far as their publication period allows.
+The delete dialog states the number of affected records beforehand; restoring the field does not
+bring back the previous statuses. If the whole area is deleted, the records keep their status.  
+Likewise, deleting the field `needs_review` removes the “Needs review” mark from all records.  
+Deleting the fields `online_at` and `offline_at`, on the other hand, changes nothing about the
+stored dates: scheduled and expired records stay so and can still be recognized by their icon in
+the record list.
+
 Superusers restore deleted fields in the [trash](./10-modules.md#trash) – with contents,
 counter field and file versions. After the [retention period](./12-operation.md#trash), the
 scheduler task “Empty trash” deletes the field and its contents permanently. If a whole area

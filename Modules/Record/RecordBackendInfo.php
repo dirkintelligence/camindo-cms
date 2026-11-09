@@ -529,7 +529,7 @@ class RecordBackendInfo extends RecordBackend {
             // it is the state of the workflow (Access::statusWrite())
             if ($name === 'status_id') {
                 if ($depth === 0 && (int)($colDef['field_id'] ?? 0) > 0) {
-                    $this->backend->infoAdd($this->record, $name, $this->backend->teaser('status', (int)($this->data['status_id'] ?? 0)),
+                    $this->backend->infoAdd($this->record, $name, $this->backend->recordStatus($this->data, label: true),
                         ['html', 'primary'], $schemaVirtual, id: $this->id);
                 }
                 continue;
@@ -764,8 +764,7 @@ class RecordBackendInfo extends RecordBackend {
                 $flags = ['html'];
             }
             elseif ($name === 'status_id') {
-                $statusId = (int)($this->data[$name] ?? 0); 
-                $value = $this->backend->teaser('status', $statusId);
+                $value = $this->backend->recordStatus($this->data, label: true);
                 $flags = ['html'];
             }
             elseif (in_array($name, ['created_by', 'changed_by', 'owner_id'], true)) {

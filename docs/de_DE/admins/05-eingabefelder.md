@@ -421,6 +421,18 @@ Feld mit demselben Namen lässt sich erst anlegen, wenn das alte endgültig gel�
 wiederhergestellt ist. Ein Feld `parent_id` behält die Baumstruktur des Bereichs bis
 zum endgültigen Löschen.
 
+![warning](../_/warning.svg) Wird das Feld `status_id` gelöscht, erhalten ***alle Datensätze
+des Bereichs den Status „Freigeschaltet“*** – ohne das Feld ließe sich kein Status mehr
+ändern, und deaktivierte Datensätze blieben unsichtbar. Sie erscheinen damit auf der
+Website, sofern ihr Veröffentlichungszeitraum es zulässt. Der Löschdialog nennt vorher die
+Anzahl der betroffenen Datensätze; das Wiederherstellen des Feldes bringt die früheren Status
+nicht zurück. Wird der ganze Bereich gelöscht, behalten die Datensätze ihren Status.  
+Ebenso verlieren beim Löschen des Feldes `needs_review` alle Datensätze die Markierung
+„Prüfung nötig“.  
+Die Felder `online_at` und `offline_at` zu löschen ändert dagegen nichts an den gespeicherten
+Daten: Vordatierte und abgelaufene Datensätze bleiben es und sind in der Datensatzliste
+weiterhin an ihrem Symbol zu erkennen.
+
 Superuser stellen gelöschte Felder im [Papierkorb](./10-module.md#papierkorb) wieder
 her – samt Inhalten, Gegenfeld und Dateiversionen. Nach der
 [Aufbewahrungsfrist](./12-betrieb.md#papierkorb) löscht die Zeitplaner-Aufgabe

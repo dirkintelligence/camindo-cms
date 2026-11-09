@@ -5308,6 +5308,19 @@ class Cms {
     }
 
     /**
+     * True if a date value (ISO, from the database or in the user's time zone) is one of
+     * the placeholders "no date" (DATE_MIN, also the null date 0000-00-00) or
+     * "no end" (DATE_MAX) - outside the display window it is shown and exported
+     * as an empty value; Dataset::validateValue() turns an empty input back into
+     * the default of the field (DATE_MAX for offline_at) resp. DATE_MIN.
+     */
+    public function isDatePlaceholder(string $value): bool
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) return false;
+        return $value < self::DATE_MIN_DISPLAY || $value >= self::DATE_MAX_DISPLAY;
+    }
+
+    /**
      * Converts a date + time from the database (ISO format) into a readable format (short form)
      * according to the user's locale.
      * If the time is 00:00:00, omit the time
@@ -5317,7 +5330,7 @@ class Cms {
     public function _formatDate(string $isoDate, bool $displayTimezone = false): string {
         if (empty(trim($isoDate))) return '';
         // Placeholder (no date / no end) is not output as a date
-        if ($isoDate < self::DATE_MIN_DISPLAY || $isoDate >= self::DATE_MAX_DISPLAY) return '';
+        if ($this->isDatePlaceholder($isoDate)) return '';
         try {
             // DateTimeImmutable is best practice to avoid unwanted state changes
             $date = new \DateTimeImmutable($isoDate);
@@ -7070,8 +7083,7 @@ class Cms {
         if ($value === '') return '';
         // Placeholder (no date / no end, e.g. an unlimited offline_at)
         // always count as empty - with and without 'format' ('ifempty' applies)
-        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $value)
-            && ($value < self::DATE_MIN_DISPLAY || $value >= self::DATE_MAX_DISPLAY)) return '';
+        if ($this->isDatePlaceholder($value)) return '';
 
         // 'timezone' - see _formatDate() / _formatTime()
         $displayTimezone = $this->_bool($p['timezone'] ?? false);

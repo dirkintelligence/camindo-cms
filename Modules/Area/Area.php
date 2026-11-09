@@ -1014,10 +1014,17 @@ class Area extends Dataset {
             $field->cascadeIds('area_id', $areaId, 'delete'),
             $field->cascadeIds('rel_area_id', $areaId, 'delete')
         ));
-        foreach ($fieldIds as $fieldId) {
-            if (!$field->softDelete($fieldId)) {
-                throw new \Exception('#' . $this->cms->errorMsgLast());
+        // (the records keep their status - Field::$areaCascade)
+        $field->areaCascade = true;
+        try {
+            foreach ($fieldIds as $fieldId) {
+                if (!$field->softDelete($fieldId)) {
+                    throw new \Exception('#' . $this->cms->errorMsgLast());
+                }
             }
+        }
+        finally {
+            $field->areaCascade = false;
         }
 
         // Deletion policy of the area, trigger "area was deleted" (module Privacy) -

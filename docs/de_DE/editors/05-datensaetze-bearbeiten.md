@@ -311,7 +311,7 @@ Je nach Einrichtung enthält die Eingabemaske einige der folgenden Felder:
 |---|---|
 | Status | Bearbeitungszustand. Auf der Website erscheinen nur **freigeschaltete** Datensätze |
 | Veröffentlichungsdatum | Der Datensatz erscheint erst ab diesem Zeitpunkt auf der Website |
-| Ablaufdatum | Ab diesem Zeitpunkt erscheint der Datensatz nicht mehr in Listen der Website; über seine Adresse bleibt er erreichbar |
+| Ablaufdatum | Ab diesem Zeitpunkt erscheint der Datensatz nicht mehr in Listen der Website; über seine Adresse bleibt er erreichbar. Leer = kein Ablauf |
 | Gestaltungsvorlage | Template für diesen Datensatz, falls er anders dargestellt werden soll als üblich. „(Standard)“ verwendet das Standard-Template des Bereichs |
 | Eltern-Datensatz | übergeordneter Datensatz in Bereichen mit Baumstruktur, etwa die Seite, unter der eine Unterseite steht |
 | Position nach … | erlaubt manuelle Sortierung: Der vorangehende Datensatz wird ausgewählt |

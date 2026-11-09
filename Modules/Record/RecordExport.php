@@ -64,7 +64,8 @@
  *           languages (resolved, i.e. with fallback from the primary language). Multilingual
  *           fields get one column per language if there is more than one language
  *           ("{name}.{code}"). Encrypted contents in plain text, passwords
- *           as hash, date/time values as stored (UTC). Multi-value cells
+ *           as hash, date/time values as stored (UTC), the placeholders "no date" /
+ *           "no end" (Cms::isDatePlaceholder()) as an empty cell. Multi-value cells
  *           (links) separated by " | ".
  *     docx  for translation: one table per record, gray rows carry the metadata for the
  *           re-import (record_id, language_id, field), the white rows the content of the
@@ -1298,7 +1299,10 @@ class RecordExport {
      */
     private function _scalarValue(string $name, array $cache, array $row, int $recordId, int $languageId): string
     {
-        if (!isset($cache[$name]) && array_key_exists($name, $row)) {
+        // columns of `record` (also as input fields of the area, e.g. online_at)
+        // always from the row: the content cache only carries an empty stand-in
+        // for them (Cms::fetch() lets the row take precedence as well)
+        if (array_key_exists($name, $row) && (!isset($cache[$name]) || isset($this->cms->schema[$name]))) {
             return $this->_metaValue($row, $name);
         }
         $entry = (array)($cache[$name] ?? []);
@@ -1312,6 +1316,8 @@ class RecordExport {
             return $this->crypt->decrypt((string)$value);
         }
         if (is_array($value)) return json_encode($value, JSON_UNESCAPED_UNICODE);
+        // placeholder "no date" / "no end": empty cell (the import sets the default again)
+        if (in_array($type, $this->cms->dateTypes, true) && $this->cms->isDatePlaceholder((string)$value)) return '';
         return (string)$value;
     }
 
@@ -1322,6 +1328,9 @@ class RecordExport {
     {
         $value = $row[$name] ?? null;
         if ($value === null) return '';
+        // placeholder "no date" / "no end" (online_at, offline_at): empty cell
+        if (in_array((string)($this->cms->schema[$name]['type'] ?? ''), $this->cms->dateTypes, true)
+            && $this->cms->isDatePlaceholder((string)$value)) return '';
         return (string)$value;
     }
 

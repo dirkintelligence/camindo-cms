@@ -307,14 +307,21 @@ class RecordApi
 
     /**
      * Value of a list column as text (RecordPresenter::listValue() without HTML);
-     * the status with its label instead of the symbol.
+     * the status with its label instead of the symbol - only with a status field -,
+     * followed by "scheduled"/"expired" outside the publication window.
      */
     private function listText(string $name, array $row, array $schemaVirtual): string
     {
         if ($name === 'status_id') {
-            $text = $this->plainTeaser('status', (int)($row['status_id'] ?? 0));
+            $parts = [];
+            if ($this->presenter->statusSources($schemaVirtual)['status_id']) {
+                $parts[] = $this->plainTeaser('status', (int)($row['status_id'] ?? 0));
+            }
+            $timing = $this->backend->publicationTiming($row);
+            if ($timing !== '') $parts[] = $this->cms->snippet('status.status_' . $timing);
+            $text = implode(', ', $parts);
             if (!empty($row['needs_review'])) $text .= ' (' . $this->cms->snippet('user.status_unreviewed') . ')';
-            return $text;
+            return trim($text);
         }
         if ($name === 'needs_review') return !empty($row['needs_review']) ? '1' : '0';
         if ($this->maskedField($schemaVirtual[$name] ?? [])) return (string)$this->context->maskedValue((string)($row[$name] ?? ''));

@@ -1096,6 +1096,16 @@ class FieldEditBackend extends FieldBackend {
      */
     private function _editDeleteForm(): void
     {
+        // field on status_id: all records go to status "enabled" (Field::hookOnSoftDelete())
+        if ((string)($this->data['name'] ?? '') === 'status_id') {
+            $this->db->query("SELECT COUNT(*) AS `n` FROM `record` WHERE `area_id` = ? AND `status_id` != 0 AND `tmp` = 0",
+                'i', [(int)($this->data['area_id'] ?? 0)]);
+            $count = (int)($this->db->fetch()['n'] ?? 0);
+            echo $this->backend->template('alert_warning', [
+                '{text}' => str_replace('{count}', (string)$count, $this->cms->snippet('area.alert_field_delete_status')),
+            ]);
+        }
+
         echo '<form action="Area/field_edit.php" method="post">';
 
         $this->backend->formInit('area.field_delete_form');

@@ -58,7 +58,9 @@ Exportieren Sie `bilder.record_id` mit – beim Re-Import ordnet camindo CMS die
 darüber den vorhandenen Inhalten zu, in der angegebenen Reihenfolge.
 
 Beachten Sie: Verschlüsselte Felder erscheinen in der CSV-Datei ***im Klartext***.
-Zeitpunkte stehen so in der Datei, wie sie gespeichert sind (Weltzeit).
+Zeitpunkte stehen so in der Datei, wie sie gespeichert sind (Weltzeit). Ein Datumsfeld ohne
+Wert – etwa ein Ablaufdatum ohne Ende – bleibt leer; eine leere Zelle setzt beim Import
+wieder den Standardwert des Feldes.
 
 ### DOCX und XML
 

@@ -43,9 +43,15 @@ following buttons:
 
 - ***Sorting:*** click a column heading. Without a selection, the default sort order of the
   area applies.
+- ***Status column:*** it appears as soon as the area has an input field for the status, the
+  publication date or the expiration date. It shows the status (only with a status field),
+  preceded by ![schedule](../_/schedule.svg) “scheduled” or ![adjust](../_/adjust.svg) “expired”
+  if the record lies outside its publication period.
 - ***Filtering by status:*** the heading of the status column has its own menu. It shows
   only records in a certain state, for example only disabled records or only contributions
-  from website visitors that still need review (“Unreviewed”).
+  from website visitors that still need review (“Unreviewed”, only with the input field
+  “Needs review”). If the area has a publication
+  or expiration date, “scheduled” and “expired” are available there as well.
 - ***Hierarchy:*** in areas with a tree structure (for example pages with subpages), the list
   shows the records in their order and indented.
 - Clicking a row opens the ***detail view***, right-clicking opens the context menu
