@@ -175,6 +175,39 @@ class Trash {
     }
 
     /**
+     * Deleted records whose default field (`data_dft`) matches a LIKE pattern in the
+     * preferred language version of the administrator (Cms::languageExpr(), as in the
+     * record lists) - for the quick search (StartQuickSearch). Same roots as records():
+     * superusers see the records of all administrators, everyone else only their own.
+     *
+     * @param string $like        LIKE pattern, already escaped (e.g. 'abc%' or '%abc%')
+     * @param int    $limit
+     * @param int[]  $excludeIds  record_ids that are already in the result
+     * @return array  rows: record_id, area_id, instance_id, changed_by, title
+     */
+    public function searchRecords(string $like, int $limit, array $excludeIds = []): array
+    {
+        [$where, $types, $values] = $this->recordConditions(true);
+        $excludeIds = array_values(array_filter(array_map('intval', $excludeIds), fn(int $id): bool => $id > 0));
+        if ($excludeIds) $where .= " AND `r`.`record_id` NOT IN (" . implode(',', $excludeIds) . ")";
+        $sql = "SELECT `r`.`record_id`, `r`.`area_id`, `r`.`instance_id`, `r`.`changed_by`, `d`.`data` AS `title`"
+             . " FROM `record` `r`"
+             . " JOIN `area` `a` ON `a`.`area_id` = `r`.`area_id` AND `a`.`deleted` = 0"
+             . " JOIN `data_dft` `d` ON `d`.`record_id` = `r`.`record_id`"
+             . "     AND `d`.`language_id` = " . $this->cms->languageExpr('r') . " AND `d`.`data` LIKE ?"
+             . " LEFT JOIN `record` `p` ON `p`.`record_id` = `r`.`parent_id`"
+             . " WHERE " . $where
+             . " ORDER BY `title`, `r`.`record_id`"
+             . " LIMIT " . max(1, $limit);
+        $this->db->pushResult();
+        $this->db->query($sql, 's' . $types, array_merge([$like], $values));
+        $rows = [];
+        while ($row = $this->db->fetch()) $rows[] = $row;
+        $this->db->popResult();
+        return $rows;
+    }
+
+    /**
      * Number of entries for the widget: own records plus - for superusers -
      * deleted areas and input fields. Roots are counted, i.e. what the list shows.
      *

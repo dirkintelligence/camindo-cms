@@ -60,11 +60,52 @@ class ToolsBackend {
 
     // Tabs of the tools page: name => entry script. The name also serves as
     // snippet key (#tools.tab_label_{name}).
-    protected $tabs = [
-        'server' => 'Tools/index.php',
-        'database' => 'Tools/index_database.php',
-        'data' => 'Tools/index_data.php',
-        'developer' => 'Tools/index_developer.php',
+    protected $tabs = self::TAB_SCRIPTS;
+
+    /**
+     * The tools of each tab for the quick search (StartQuickSearch, prefix "tool:"):
+     * tab => [snippet of the label => script that opens it]. The tab itself is
+     * always found by its label (#tools.tab_label_{tab}); the script is subject to
+     * the same additional right as the tab (settings.php 'script_access').
+     */
+    public const QUICK_SEARCH = [
+        'server' => [
+            'tools.headline_htaccess_file' => 'Tools/index.php',
+            'tools.headline_record_cache'  => 'Tools/index.php',
+            'tools.headline_cli_tools'     => 'Tools/index.php',
+            'tools.database_software'      => 'Tools/tool_db_info.php',
+            'tools.script_language'        => 'Tools/tool_phpinfo.php',
+        ],
+        'database' => [
+            'tools.headline_trash' => 'Tools/index_database.php',
+            'tools.headline_tmp'   => 'Tools/index_database.php',
+        ],
+        'data' => [
+            'tools.headline_thumbnails' => 'Tools/index_data.php',
+            'tools.headline_tree'       => 'Tools/index_data.php',
+        ],
+        // the buttons of ToolDeveloper::list() run their action when opened - the
+        // quick search only leads to the tab
+        'developer' => [
+            'Renew snippet cache'          => 'Tools/index_developer.php',
+            'Renew backend-template cache' => 'Tools/index_developer.php',
+            'Renew instance cache'         => 'Tools/index_developer.php',
+            'Rebuild template files'       => 'Tools/index_developer.php',
+            'Renew media htaccess'         => 'Tools/index_developer.php',
+            'Index manuals'                => 'Tools/index_developer.php',
+            'Debug session data'           => 'Tools/index_developer.php',
+        ],
+        'trash_user' => [
+            'tools.headline_trash_user' => 'Tools/index_trash_user.php',
+        ],
+    ];
+
+    /** Entry script of each tab ($tabs, the quick search) */
+    public const TAB_SCRIPTS = [
+        'server'     => 'Tools/index.php',
+        'database'   => 'Tools/index_database.php',
+        'data'       => 'Tools/index_data.php',
+        'developer'  => 'Tools/index_developer.php',
         'trash_user' => 'Tools/index_trash_user.php',
     ];
 

@@ -136,6 +136,11 @@
         </button>
     </div>
     <div class="d-flex align-items-center c9-head-end">
+        <!-- Quick search (backend-quicksearch.js): also Ctrl+G / Cmd+G -->
+        <button type="button" id="c9-quicksearch-btn" class="btn c9-head-btn p-0" title="<?php echo htmlspecialchars($cms->snippet('start.quicksearch_button')); ?>"
+            aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="Control+G Meta+G">
+            <span class="icon" aria-hidden="true">search</span><span class="visually-hidden"><?php echo htmlspecialchars($cms->snippet('start.quicksearch_button')); ?></span>
+        </button>
         <button type="button" id="c9-bgproc-btn" class="btn c9-head-btn p-0 position-relative" title="<?php echo $cms->snippet('bgproc_headline'); ?>"
             aria-haspopup="true" aria-expanded="false" aria-controls="c9-bgproc-container">
             <span class="icon" aria-hidden="true">hourglass</span><span class="visually-hidden"><?php echo $cms->snippet('bgproc_headline'); ?></span>
@@ -264,6 +269,7 @@
     <script src="assets/js/backend-smartrows.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-embedded.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-extensions.js<?php echo $nocache; ?>"></script>
+    <script src="assets/js/backend-quicksearch.js<?php echo $nocache; ?>"></script>
 <?php foreach ($moduleAssets['js'] as $assetPath): ?>
     <script src="<?php echo htmlspecialchars($assetPath); ?>"></script>
 <?php endforeach; ?>

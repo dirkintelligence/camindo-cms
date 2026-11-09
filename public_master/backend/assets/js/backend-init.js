@@ -16,5 +16,6 @@ $(document).ready(() => {
     cApp.polling.init && cApp.smartrows.init();  // Row manipulation in forms
     cApp.embedded.init && cApp.embedded.init();  // Embedded content (field type 'link')
     cApp.extensions && cApp.extensions.fieldForm.init(); // Field extensions: selection in the field mask
+    cApp.quicksearch && cApp.quicksearch.init();  // Quick search (Ctrl+G / Cmd+G)
     cApp.layers.init  && cApp.layers.init();     // Layers + hash routing (last!)
 });

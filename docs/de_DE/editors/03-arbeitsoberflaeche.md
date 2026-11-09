@@ -149,6 +149,9 @@ Umschalt+Tab zurück; das gerade gewählte Element ist umrandet.
 - ***Zum Inhalt springen:*** Beim ersten Druck auf die Tabulatortaste erscheint oben
   links „Zum Inhalt springen“ und – beim zweiten – „Zur Pfadnavigation springen“.
   Mit der Eingabetaste überspringen Sie die Kopfleiste mit Hauptmenü und Symbolen.
+- ***Schnellsuche:*** Strg+G (Mac: ⌘+G) öffnet von jeder Seite aus ein Suchfeld für
+  Datensätze, Bereiche, Templates, Benutzer und mehr – siehe
+  [Schnellsuche](04-inhalte-finden.md#schnellsuche).
 - ***Hauptmenü:*** Die Schaltfläche ![menu](../_/menu.svg) öffnet es, der erste
   Eintrag ist sofort gewählt. Die Esc-Taste schließt es wieder; das gilt auch für die
   Liste der Hintergrundprozesse.

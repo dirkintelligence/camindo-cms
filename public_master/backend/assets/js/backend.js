@@ -14,6 +14,8 @@
  *   backend-polling.js   (cApp.polling)
  *   backend-smartrows.js (cApp.smartrows)
  *   backend-embedded.js  (cApp.embedded)
+ *   backend-extensions.js (cApp.extensions)
+ *   backend-quicksearch.js (cApp.quicksearch)
  *   backend-init.js      ($(document).ready → all .init())
  */
 

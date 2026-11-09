@@ -143,6 +143,9 @@ has a frame.
 - ***Skip to content:*** The first press of the Tab key shows “Skip to content” at the top
   left and – on the second press – “Skip to path navigation”. Press Enter to skip the
   header bar with the main menu and the symbols.
+- ***Quick search:*** Ctrl+G (Mac: ⌘+G) opens a search field from any page for records,
+  areas, templates, users and more – see
+  [Quick search](04-finding-content.md#quick-search).
 - ***Main menu:*** The button ![menu](../_/menu.svg) opens it with the first entry
   selected. The Esc key closes it again; the same applies to the list of background
   processes.

@@ -13,7 +13,7 @@ this manual clarifies the connections and presents the functions that are easy t
 3. [The work surface](./03-work-surface.md) – start page, layers, keyboard operation,
    background processes, messages, AI assistant, personal settings, widgets
 4. [Finding content](./04-finding-content.md) – folder tree, record list, search form,
-   search operators, cross-area search
+   search operators, cross-area search, quick search (Ctrl+G)
 5. [Editing records](./05-editing-records.md) – creating, editing, copying, moving, deleting,
    trash; input fields, relations, files, publication, edit lock
 6. [Multilingual content](./06-multilingual-content.md) – language versions, translating,

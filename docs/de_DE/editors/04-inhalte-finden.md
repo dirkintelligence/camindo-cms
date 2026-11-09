@@ -285,3 +285,55 @@ Eigenschaften hinzu, die alle Datensätze haben:
 | Instanz | Website, zu der der Datensatz gehört (nur bei mehreren Websites) |
 | Prüfung nötig | Beiträge von Website-Besuchern, die noch geprüft werden müssen |
 | Template | Template, mit dem der Datensatz ausgegeben wird |
+
+
+## Schnellsuche
+
+Von jeder Seite des Backends aus öffnet ***Strg+G*** (auf dem Mac ***⌘+G***) die
+***Schnellsuche***: ein Suchfeld oben in der Mitte des Fensters. Auf dem Smartphone
+tippen Sie dafür auf die Lupe ![search](../_/search.svg) in der Kopfleiste.
+
+Zuerst wählen Sie, ***wo*** gesucht wird – mit einem ***Präfix*** vor dem Doppelpunkt.
+Das leere Feld zeigt alle Präfixe, die Ihre Benutzergruppe verwenden darf; Tippen
+verkürzt die Liste. Mit der Pfeiltaste nach unten wählen Sie einen Eintrag, die
+Eingabetaste übernimmt ihn samt Doppelpunkt ins Feld.
+
+| Präfix | sucht in | nach |
+|---|---|---|
+| `area:` | Struktur | Name und Beschriftung der Bereiche |
+| `content:` | Inhalte | Standardfeld der Datensätze in Ihrer bevorzugten Sprachversion |
+| `instance:` | Instanzen | Beschriftung und Domains |
+| `template:` | Templates | Name und Beschriftung |
+| `converter:` | Medienkonverter | Beschriftung |
+| `tool:` | Werkzeuge | Name des Werkzeugs bzw. Reiters |
+| `snippet:` | Snippets | Schlüssel |
+| `user:` | Benutzer | Volltext (Name, Anzeigename, Vor- und Sortiername) |
+| `group:` | Benutzergruppen | Bezeichnung (nur Superuser) |
+| `trash:` | Papierkorb | Standardfeld gelöschter Datensätze (bevorzugte Sprachversion), Name und Beschriftung gelöschter Bereiche und Eingabefelder |
+| `task:` | Zeitplaner | Bezeichnung der Aufgabe |
+
+Nach dem Doppelpunkt geben Sie den Suchbegriff ein, etwa `content:sch`. Gesucht wird
+erst, wenn Sie eine Sekunde lang nichts getippt haben – schnelles Tippen löst also nur
+eine Suche aus. Groß- und Kleinschreibung spielen keine Rolle.
+
+Die Trefferliste hat zwei Gruppen: ***„Beginnt mit“*** zeigt bis zu acht Treffer,
+deren Hauptfeld mit dem Begriff anfängt (`sch` findet „Schlüsselband“). Sind es
+weniger als acht, folgen unter ***„Enthält“*** bis zu acht weitere, die den Begriff an
+anderer Stelle enthalten („Beistelltisch“). Unter Datensätzen und Templates steht klein
+der Bereich, bei mehreren Websites außerdem die Instanz.
+
+- ***Pfeiltasten*** wählen einen Treffer, die ***Eingabetaste*** (oder ein Klick)
+  öffnet seine Detailansicht als neue Ebene.
+- Die ***Eingabetaste ohne Auswahl*** öffnet das Suchergebnis des Moduls: bei
+  `content:` die [bereichsübergreifende Suche](#bereichsübergreifende-suche) im
+  Volltext, bei `user:` die Benutzerliste mit dem Suchbegriff. Die übrigen Präfixe
+  öffnen die Übersicht ihres Moduls.
+- ***Esc*** oder ein Klick neben das Feld schließt die Schnellsuche, ebenso ein
+  zweites Strg+G im Suchfeld.
+
+Sie finden nur, was Sie auch im jeweiligen Modul sehen dürfen – Datensätze also nur aus
+Bereichen und Sprachen, die Ihre Benutzergruppe lesen darf. Datensätze werden in der
+***„Bevorzugten Sprachversion“*** Ihrer [persönlichen Einstellungen](03-arbeitsoberflaeche.md#persönliche-einstellungen)
+durchsucht – derselben Sprache, die auch die Datensatzlisten zeigen. Pflegt eine
+Website diese Sprache nicht, gilt dort ihre Hauptsprache. Treffer im Papierkorb
+öffnen den Papierkorb, weil gelöschte Inhalte keine Detailansicht haben.

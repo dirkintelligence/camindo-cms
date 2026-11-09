@@ -15,7 +15,7 @@ und stellt die Funktionen vor, die man leicht übersieht.
    Bedienung mit der Tastatur, Hintergrundprozesse, Nachrichten, KI-Assistent,
    persönliche Einstellungen, Widgets
 4. [Inhalte finden](./04-inhalte-finden.md) – Bereichsbaum, Datensatzliste,
-   Suchmaske, Suchoperatoren, bereichsübergreifende Suche
+   Suchmaske, Suchoperatoren, bereichsübergreifende Suche, Schnellsuche (Strg+G)
 5. [Datensätze bearbeiten](./05-datensaetze-bearbeiten.md) – Anlegen, Bearbeiten,
    Kopieren, Verschieben, Löschen, Papierkorb; Eingabefelder, Verknüpfungen,
    Dateien, Veröffentlichung, Bearbeitungssperre

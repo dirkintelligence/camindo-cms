@@ -269,3 +269,54 @@ have:
 | Instance | the website to which the record belongs (only with several websites) |
 | Needs review | contributions from website visitors that still need review |
 | Template | the template with which the record is output |
+
+
+## Quick search
+
+From any page of the backend, ***Ctrl+G*** (on a Mac ***⌘+G***) opens the
+***quick search***: a search field at the top centre of the window. On a phone, tap the
+magnifier ![search](../_/search.svg) in the header instead.
+
+First you choose ***where*** to search – with a ***prefix*** before the colon. The
+empty field lists all prefixes your user group may use; typing shortens the list. The
+down arrow key selects an entry, Enter writes it into the field including the colon.
+
+| Prefix | searches in | for |
+|---|---|---|
+| `area:` | Structure | name and label of the areas |
+| `content:` | Contents | default field of the records in your preferred language version |
+| `instance:` | Instances | label and domains |
+| `template:` | Templates | name and label |
+| `converter:` | Media converter | label |
+| `tool:` | Tools | name of the tool or tab |
+| `snippet:` | Snippets | key |
+| `user:` | Users | full text (name, display name, first and sort name) |
+| `group:` | User groups | label (superusers only) |
+| `trash:` | Trash | default field of deleted records (preferred language version), name and label of deleted areas and input fields |
+| `task:` | Scheduler | label of the task |
+
+After the colon, type the search term, e.g. `content:sch`. The search only starts once
+you have not typed anything for one second – fast typing triggers a single search.
+Upper and lower case do not matter.
+
+The hit list has two groups: ***“Starts with”*** shows up to eight hits whose main
+field begins with the term (`sch` finds “Schedule”). If there are fewer than eight,
+***“Contains”*** adds up to eight more that contain the term elsewhere (“Rescheduled”).
+Below records and templates the area appears in small print, with several websites also
+the instance.
+
+- The ***arrow keys*** select a hit, ***Enter*** (or a click) opens its detail view as
+  a new layer.
+- ***Enter without a selection*** opens the search result of the module: for
+  `content:` the [cross-area search](#cross-area-search) in the full text, for `user:`
+  the user list with the search term. The other prefixes open the overview of their
+  module.
+- ***Esc*** or a click next to the field closes the quick search, as does a second
+  Ctrl+G in the search field.
+
+You only find what you may also see in the respective module – records only from areas
+and languages your user group may read. Records are searched in the ***“Preferred
+language version”*** of your [personal settings](03-work-surface.md#personal-settings) –
+the same language the record lists show. If a website does not maintain this language,
+its main language applies there. Hits in the trash open the trash, because
+deleted content has no detail view.
