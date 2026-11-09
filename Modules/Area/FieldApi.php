@@ -188,9 +188,11 @@ class FieldApi extends DatasetApi
      * @param string $toType          target type (conversion_targets from field.info)
      * @param bool   $toMultilingual  mehrsprachig danach
      * @param bool   $simulate        only check, convert nothing
+     * @param string $name            new field name on a type change ('' = keep it),
+     *                                e.g. to fit the prefix to the new type
      */
     #[ApiMethod('field.convert', '#area.api_field_convert', write: true, level: ApiMethod::LEVEL_ADMIN)]
-    public function convert(int $fieldId, string $toType, bool $toMultilingual, bool $simulate = false): array
+    public function convert(int $fieldId, string $toType, bool $toMultilingual, bool $simulate = false, string $name = ''): array
     {
         $this->writer->requireScript(self::MODULE, 'field_convert.php');
         $data = $this->writer->load($this->field, $fieldId);
@@ -212,14 +214,19 @@ class FieldApi extends DatasetApi
         if ($open > 0) {
             $this->context->warn("{$open} record(s) of the area are open for editing - their working state is converted as well, the edit lock is not respected");
         }
+        // relation -> pointer: the counter field in the target area is deleted
+        if ($counter = $this->field->conversionDropsCounterField($data, $toType)) {
+            $result['drops_counter_field'] = ['id' => (int)$counter['field_id'], 'name' => (string)$counter['name'], 'area_id' => (int)$counter['area_id']];
+            $this->context->warn("the counter field \"{$counter['name']}\" (area {$counter['area_id']}) is deleted - templates using it must be adapted");
+        }
         if ($simulate) {
             // Preconditions as in convert() (target, name, prefix) - nothing is copied over
             $this->cms->errorsReset();
-            if (!$this->field->conversionAllowed($data, $toType, (int)$toMultilingual)) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
+            if (!$this->field->conversionAllowed($data, $toType, (int)$toMultilingual, $toType !== $fromType ? $name : '')) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
             return $result;
         }
         $this->cms->errorsReset();
-        if (!$this->field->convert($fieldId, $toType, (int)$toMultilingual)) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
+        if (!$this->field->convert($fieldId, $toType, (int)$toMultilingual, $name)) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
         $this->cms->errorsReset();
         return $result;
     }

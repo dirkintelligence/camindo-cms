@@ -23,10 +23,15 @@
  *
  * RESERVED NAME PREFIXES
  * --------------------
- * $fieldPrefixes is built from Cms::$dataSuffix (txt_, int_, fil_, …) plus four
- * special cases. A name must not begin with the prefix of a DIFFERENT type - `txt_x`
- * as an integer field is rejected. The point: the name alone should reveal the type,
- * without having to look in `fieldname`.
+ * $fieldPrefixes (prefix => allowed types) is built from Cms::$dataSuffix (txt_, int_,
+ * fil_, …) plus the link types, which share the table suffix 'rel': `rel_` relation,
+ * `rn1_` relation1, `ptr_` pointer, `pn1_` pointer1, `lnk_` link. A name must not
+ * begin with the prefix of another type - `txt_x` as an integer field is rejected.
+ * The point: the name alone reveals the type (relation and relation1 are queried
+ * differently), without having to look in `fieldname`; and the automatic counter
+ * field `rel_{area name}` can never collide with a field of another type. On a type
+ * change convert() takes a new name in the same step (conversionName() swaps the
+ * prefix).
  *
  * FIELD TYPES WITH SPECIAL HANDLING
  * --------------------
@@ -163,8 +168,8 @@ class Field extends Dataset {
         'parent_id'
     ];
 
-    // Reserved name prefixes, filled in hookDefinition(): type => prefix.
-    // A field name must not begin with the prefix of another type.
+    // Reserved name prefixes, filled in hookDefinition(): prefix => allowed types.
+    // A field name must not begin with a prefix reserved for other types.
     private array $fieldPrefixes = [];
 
     /** Name of the standard full-text field (see class comment) - reserved */
@@ -186,7 +191,9 @@ class Field extends Dataset {
     private bool $cacheRebuildPending = false;
 
     // Types that can be converted into each other (convert()): within and
-    // between the two groups. Including relation <-> relation1 and pointer <-> pointer1
+    // between the two groups. Including relation <-> relation1 and pointer <-> pointer1,
+    // relation <-> pointer with the same cardinality (pointer -> relation only with
+    // exactly one target area, pointerRelationArea())
     // as well as switching single/multilingual for all types capable of multilingualism.
     // Not included: id (foreign key to `record`), password (hash), json, date/
     // time, file, fulltext - for them there is no sensible target type.
@@ -208,8 +215,10 @@ class Field extends Dataset {
         'currency'  => ['float', 'decimal', 'chars', 'text', 'encrypted'],
         'float'     => ['chars', 'text', 'encrypted'],
         'decimal'   => ['chars', 'text', 'encrypted'],
-        'relation1' => ['relation'],
-        'pointer1'  => ['pointer'],
+        'relation'  => ['pointer'],
+        'relation1' => ['relation', 'pointer1'],
+        'pointer'   => ['relation'],
+        'pointer1'  => ['pointer', 'relation1'],
     ];
 
     // Assignment of predefined MIME types to values in the field 'media_types'
@@ -548,16 +557,67 @@ class Field extends Dataset {
         // Reserved prefix at the start of a field name, depending on the type
         // ('reltable' has no data_* table and is not a selectable field type -
         //  its placeholder suffix does not belong in the prefix list)
-        $this->fieldPrefixes = array_diff_key(
-            $this->cms->dataSuffix,
-            array_flip($this->cms->noColumnTypes)
-        );
-        // Special cases:
-        $this->fieldPrefixes['pointer'] = 'ptr';
-        $this->fieldPrefixes['pointer1'] = 'pn1';
-        $this->fieldPrefixes['link'] = 'lnk';
-        $this->fieldPrefixes['relation'] = 'rel';
-        $this->fieldPrefixes['relation1'] = 'rn1';
+        // The link types share the table suffix 'rel' and get their own prefixes
+        $linkPrefixes = [
+            'rel_' => ['relation'],
+            'rn1_' => ['relation1'],
+            'ptr_' => ['pointer'],
+            'pn1_' => ['pointer1'],
+            'lnk_' => ['link'],
+        ];
+        $this->fieldPrefixes = [];
+        $skip = array_merge($this->cms->noColumnTypes, ...array_values($linkPrefixes));
+        foreach ($this->cms->dataSuffix as $type => $suffix) {
+            if (!in_array($type, $skip, true)) $this->fieldPrefixes[$suffix . '_'][] = $type;
+        }
+        $this->fieldPrefixes += $linkPrefixes;
+    }
+
+    /**
+     * Own name prefix of a type (`rn1_` for relation1, `txt_` for text …), or ''.
+     */
+    public function typePrefix(string $type): string
+    {
+        foreach ($this->fieldPrefixes as $prefix => $types) {
+            if (in_array($type, $types, true)) return $prefix;
+        }
+        return '';
+    }
+
+    /**
+     * Reserved name prefix that $name begins with but $type may not use, or ''.
+     */
+    private function reservedPrefix(string $name, string $type): string
+    {
+        foreach ($this->fieldPrefixes as $prefix => $types) {
+            if (str_starts_with($name, $prefix) && !in_array($type, $types, true)) return $prefix;
+        }
+        return '';
+    }
+
+    /**
+     * Snippet key of the type label. The counter-field of a relation1 field is of
+     * type 'relation', but behaves as 1:n: linking a record of the target area
+     * releases its other links in that field (rel_field_id points to the n:1 side).
+     *
+     * @param array $data  field data with type and rel_field_id
+     */
+    public function typeLabelKey(array $data): string
+    {
+        $type = (string)($data['type'] ?? '');
+        $relFieldId = (int)($data['rel_field_id'] ?? 0);
+        if ($type === 'relation' && $relFieldId > 0) {
+            $this->db->pushResult();
+            try {
+                $this->db->query("SELECT `type` FROM `field` WHERE `field_id` = ?", 'i', [$relFieldId]);
+                $counterType = (string)($this->db->fetchNum()[0] ?? '');
+            }
+            finally {
+                $this->db->popResult();
+            }
+            if ($counterType === 'relation1') return 'area.label_field_type_relation_1n';
+        }
+        return 'area.label_field_type_' . $type;
     }
 
     /**
@@ -904,14 +964,16 @@ class Field extends Dataset {
                 $this->createFieldError('area.error_field_name_in_trash', 'name', $schema['name']['label'] ?? '', $name);
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
+            // A prefix alone is no name (the form prefills it for link types)
+            if (isset($this->fieldPrefixes[$name])) {
+                $this->createFieldError('area.error_field_name_prefix_only', 'name', $schema['name']['label'] ?? '', $name);
+                throw new \Exception('#' . $this->cms->errorMsgLast());
+            }
             // Check reserved prefixes
-            foreach ($this->fieldPrefixes as $long => $short) {
-                $prefix = $short . '_';
-                if (str_starts_with($name, $prefix) && $type != $long) {
-                    // Prefix is reserved for another type
-                    $this->createFieldError('error_field_reserved_prefix', 'name', $schema['name']['label'] ?? '', $prefix);
-                    throw new \Exception('#' . $this->cms->errorMsgLast());
-                }
+            $prefix = $this->reservedPrefix($name, (string)$type);
+            if ($prefix !== '') {
+                $this->createFieldError('area.error_field_reserved_prefix', 'name', $schema['name']['label'] ?? '', $prefix);
+                throw new \Exception('#' . $this->cms->errorMsgLast());
             }
         }
 
@@ -1372,58 +1434,7 @@ class Field extends Dataset {
             // It stays invisible (visibility_* stay 0, because they do not occur in the
             // INSERT at all and the column defaults apply).
             if ($isNew || $flagCreateNewField) {
-                // Area name of the source field becomes the name of the target field
-                // Area label of the source field becomes the label of the target field
-                $sql = "SELECT `name`, `label` FROM `area` WHERE `area_id` =? AND `deleted`=0";
-                $this->db->query($sql, 'i', [$areaId]);
-                if ($this->db->num_rows < 1) {
-                    throw new \Exception("hookOnSave(): area with area_id=$areaId not found!");
-                }
-                $areaData = $this->db->fetch();
-                $areaLabel = $areaData['label'];
-                $areaName = $areaData['name'];
-                // Determine a free name with prefix "rel_{$areaName}" in the target area
-                $relFieldName = $this->generateUniqueFieldName('rel_' . $areaName, $relAreaId);
-
-                $sql = "SELECT COALESCE(MAX(`position`), 0) + 1 FROM `field` WHERE `area_id` =?";
-                $this->db->query($sql, 'i', [$relAreaId]);
-                $position = $this->db->fetchNum()[0];
-
-                // Fieldname-Eintrag erstellen
-                // (return value does not matter, because prefix 'rel_' is reserved for type 'relation')
-                $this->createFieldname($name, 'relation');
-
-                // Create data for the target field
-                $relFieldData = [
-                    'area_id' => $relAreaId,    // Zielbereich
-                    'rel_area_id' => $areaId,   // Quellbereich
-                    'rel_field_id' => $fieldId, // Quellfeld
-                    'position' => $position,
-                    'name' => $relFieldName,
-                    'label' => $areaLabel,
-                    'type' => 'relation',
-                    'display_type' => 'lookup',
-                    // visibility: 0,0,0
-                ];
-
-                // Build and send the query
-                $columns = implode("`,`", array_keys($relFieldData));
-                $placeholders = implode(',', array_fill(0, count($relFieldData), '?'));
-                $types = 'iiiissss';
-                $values = array_values($relFieldData);
-                $sql = "INSERT INTO `field` (`$columns`) VALUES ($placeholders)";
-                if (!$this->db->query($sql, $types, $values)) {
-                    throw new \Exception("hookOnSave(): destination field could not be created!");
-                }
-
-                // Enter / update the id of the target field in the source field
-                $relFieldId = (int)$this->db->insert_id;
-                $sql = "UPDATE `field` SET `rel_field_id`=? WHERE `field_id`=? ";
-                $this->db->query($sql, 'ii', [$relFieldId, $fieldId]
-                );
-
-                // Tabelle fieldname aktualisieren
-                $this->createFieldname($relFieldName, 'relation');
+                $this->createCounterField($fieldId, $areaId, $relAreaId);
             }
         }
 
@@ -2196,6 +2207,8 @@ class Field extends Dataset {
      *
      *     Text and number types      among each other (both groups)
      *     relation <-> relation1     pointer <-> pointer1
+     *     relation <-> pointer       relation1 <-> pointer1 (pointer -> relation only
+     *                                with exactly one target area: pointerRelationArea())
      *     single <-> multilingual    all types capable of multilingualism
      *                                (Cms::isMultilingualField()), Thumbnails erben
      *                                the flag from the upload field and are excluded
@@ -2222,7 +2235,14 @@ class Field extends Dataset {
         }
         elseif (in_array($type, $this->cms->relationTypes, true) && !in_array($type, $this->cms->dependentTypes, true)) {
             // (not 'link': there is no target type for it)
-            $typeTargets = [str_ends_with($type, '1') ? substr($type, 0, -1) : $type . '1'];
+            $single = str_ends_with($type, '1');
+            $kind = str_starts_with($type, 'relation') ? 'relation' : 'pointer';
+            $typeTargets = [$single ? $kind : $kind . '1'];
+            // relation <-> pointer, same cardinality - a relation needs exactly one
+            // target area (not the own one)
+            if ($kind === 'relation' || $this->pointerRelationArea($data) > 0) {
+                $typeTargets[] = ($kind === 'relation' ? 'pointer' : 'relation') . ($single ? '1' : '');
+            }
         }
         foreach ($typeTargets as $toType) {
             $targets[] = [
@@ -2251,12 +2271,14 @@ class Field extends Dataset {
      *  1. the target is listed under conversionTargets()
      *  2. on a type change: the name is bound system-wide to one type - no
      *     other field may carry it - and it must not have the prefix of another type
-     *     ($fieldPrefixes)
+     *     ($fieldPrefixes). With $newName the field gets a new name in the same step
+     *     (conversionNameAllowed()); the old name then may stay with other fields.
      *
-     * @param array $data  field data from load()
-     * @return bool        false: Meldung in Cms::errors
+     * @param array  $data     field data from load()
+     * @param string $newName  new field name on a type change, '' = keep the name
+     * @return bool            false: Meldung in Cms::errors
      */
-    public function conversionAllowed(array $data, string $toType, int $toMultilingual): bool
+    public function conversionAllowed(array $data, string $toType, int $toMultilingual, string $newName = ''): bool
     {
         $toMultilingual = (int)(bool)$toMultilingual;
         $allowed = false;
@@ -2272,6 +2294,9 @@ class Field extends Dataset {
         }
         if ($toType === (string)$data['type']) return true;
         $name = (string)$data['name'];
+        if ($newName !== '' && $newName !== $name) {
+            return $this->conversionNameAllowed($data, $newName, $toType);
+        }
         $this->db->pushResult();
         try {
             $this->db->query("SELECT COUNT(*) FROM `field` WHERE `name` = ? AND `field_id` != ?", 'si', [$name, (int)$data['field_id']]);
@@ -2284,13 +2309,137 @@ class Field extends Dataset {
             $this->cms->error($this->cms->snippet('area.error_field_convert_name_in_use'));
             return false;
         }
-        foreach ($this->fieldPrefixes as $long => $short) {
-            $prefix = $short . '_';
-            if (str_starts_with($name, $prefix) && $toType !== $long) {
-                $this->createFieldError('area.error_field_reserved_prefix', 'name', $this->schema['name']['label'] ?? '', $prefix);
-                return false;
-            }
+        $prefix = $this->reservedPrefix($name, $toType);
+        if ($prefix !== '') {
+            $this->createFieldError('area.error_field_reserved_prefix', 'name', $this->schema['name']['label'] ?? '', $prefix);
+            return false;
         }
+        return true;
+    }
+
+    /**
+     * Target area of a pointer field that can become a relation: exactly one target
+     * area, live and not the own area of the field. 0 otherwise.
+     *
+     * @param array $data  field data from load()
+     */
+    public function pointerRelationArea(array $data): int
+    {
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `r`.`area_id`, COALESCE(`a`.`deleted` + 0, 1) AS `deleted` FROM `rel_field_area` `r`"
+                . " LEFT JOIN `area` `a` ON `a`.`area_id` = `r`.`area_id` WHERE `r`.`field_id` = ?",
+                'i', [(int)($data['field_id'] ?? 0)]
+            );
+            $rows = $this->db->fetchAll();
+        }
+        finally {
+            $this->db->popResult();
+        }
+        if (count($rows) !== 1 || (int)$rows[0]['deleted'] !== 0) return 0;
+        $targetAreaId = (int)$rows[0]['area_id'];
+        return $targetAreaId === (int)($data['area_id'] ?? 0) ? 0 : $targetAreaId;
+    }
+
+    /**
+     * The counter field that a conversion relation -> pointer removes (field_id, name,
+     * area_id, area label), or null.
+     *
+     * @param array $data  field data from load()
+     */
+    public function conversionDropsCounterField(array $data, string $toType): ?array
+    {
+        if (!str_starts_with((string)($data['type'] ?? ''), 'relation') || !str_starts_with($toType, 'pointer')) return null;
+        $counterId = (int)($data['rel_field_id'] ?? 0);
+        if ($counterId < 1) return null;
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `f`.`field_id`, `f`.`name`, `f`.`area_id`, `a`.`label` AS `area_label` FROM `field` `f`"
+                . " LEFT JOIN `area` `a` ON `a`.`area_id` = `f`.`area_id` WHERE `f`.`field_id` = ?",
+                'i', [$counterId]
+            );
+            return $this->db->fetch() ?: null;
+        }
+        finally {
+            $this->db->popResult();
+        }
+    }
+
+    /**
+     * Suggested name for a type change:
+     *
+     *  - a reserved prefix that the target type may not use is replaced by the prefix
+     *    of the target type (`int_price` as text -> `txt_price`, `rel_topic` as
+     *    relation1 -> `rn1_topic`), or dropped if the target type has none;
+     *  - a name without such a prefix that other fields still carry (it stays bound to
+     *    the current type) gets the prefix of the target type (`price` -> `txt_price`,
+     *    at most 32 characters);
+     *  - otherwise the name stays.
+     *
+     * @param int $fieldId  the field itself (for the check "other fields carry the name")
+     */
+    public function conversionName(string $name, string $toType, int $fieldId = 0): string
+    {
+        $own = $this->typePrefix($toType);
+        $prefix = $this->reservedPrefix($name, $toType);
+        if ($prefix !== '') return $own . substr($name, strlen($prefix));
+        if ($own === '' || str_starts_with($name, $own) || $fieldId < 1) return $name;
+        $this->db->pushResult();
+        try {
+            $this->db->query("SELECT 1 FROM `field` WHERE `name` = ? AND `field_id` != ? LIMIT 1", 'si', [$name, $fieldId]);
+            $shared = $this->db->num_rows > 0;
+        }
+        finally {
+            $this->db->popResult();
+        }
+        if (!$shared) return $name;
+        $max = (int)($this->schema['name']['max'] ?? 32);
+        return rtrim(substr($own . $name, 0, $max), '_');
+    }
+
+    /**
+     * Checks a new name for convert() as hookOnSave() does on a rename: format,
+     * reserved names (full text, meta columns of `record`), system-wide binding to
+     * the TARGET type (`fieldname`), free in the area (also in the trash), prefix.
+     *
+     * @param array $data  field data from load()
+     * @return bool        false: message in Cms::errors (field 'name')
+     */
+    public function conversionNameAllowed(array $data, string $newName, string $toType): bool
+    {
+        $label = $this->schema['name']['label'] ?? '';
+        $error = function (string $snippet, string $value = '') use ($label): bool {
+            $this->createFieldError($snippet, 'name', $label, $value);
+            return false;
+        };
+        if (strlen($newName) < 2) return $error('error_name_length');
+        if (!preg_match('/^[a-z][a-z0-9_]+$/', $newName)) return $error('error_name_format');
+        $max = (int)($this->schema['name']['max'] ?? 32);
+        if (strlen($newName) > $max) return $error('error_max_le_length', (string)$max);
+        if ($newName === self::FULLTEXT || isset($this->cms->schema[$newName])) {
+            return $error('area.error_field_name_reserved', $newName);
+        }
+        if (isset($this->fieldPrefixes[$newName])) return $error('area.error_field_name_prefix_only', $newName);
+        $this->db->pushResult();
+        try {
+            $this->db->query("SELECT `type` FROM `fieldname` WHERE `name` = ?", 's', [$newName]);
+            $usedType = (string)($this->db->fetchNum()[0] ?? '');
+            $this->db->query(
+                "SELECT `deleted` FROM `field` WHERE `area_id` = ? AND `name` = ? AND `field_id` != ? ORDER BY `deleted` LIMIT 1",
+                'isi', [(int)$data['area_id'], $newName, (int)$data['field_id']]
+            );
+            $inArea = $this->db->num_rows > 0 ? (int)$this->db->fetchNum()[0] : null;
+        }
+        finally {
+            $this->db->popResult();
+        }
+        if ($usedType !== '' && $usedType !== $toType) return $error('area.error_field_name_wrong_type', $usedType);
+        if ($inArea === 0) return $error('error_unique_value');
+        if ($inArea === 1) return $error('area.error_field_name_in_trash', $newName);
+        $prefix = $this->reservedPrefix($newName, $toType);
+        if ($prefix !== '') return $error('area.error_field_reserved_prefix', $prefix);
         return true;
     }
 
@@ -2338,13 +2487,16 @@ class Field extends Dataset {
      *
      *  1. check the target against conversionTargets().
      *  2. On type change: the name is bound system-wide to one type
-     *     (`fieldname`). If another field uses the same name, it is not possible - first
-     *     rename it. Reserved prefixes apply as when creating.
+     *     (`fieldname`). If another field uses the same name, it is only possible with
+     *     a new name ($newName). Reserved prefixes apply as when creating.
      *  3. Copy the stock: row by row from the old into the new data_* table
      *     (convertRows(), values via convertValue()), for relation -> relation1 and
      *     pointer -> pointer1 instead, per record remove all links except the
-     *     first. The type of the name in `fieldname` is updated; a
-     *     field that is no longer a text field drops out of the full-text sources.
+     *     first. relation <-> pointer keeps the links (both in data_rel) and swaps
+     *     the counter field for the target area list (switchRelationKind()). The type of the name in `fieldname` is updated - with $newName
+     *     the rows move to the (new or existing) entry of the new name instead and
+     *     the old one is cleaned up; a field that is no longer a text field drops out
+     *     of the full-text sources.
      *  4. On language change: applyMultilingualChange() - `empty` flags resp.
      *     Dateiablage umstellen.
      *  5. Felddefinition anpassen (conversionUpdate()): display_type, min/max,
@@ -2360,9 +2512,11 @@ class Field extends Dataset {
      * @param int    $fieldId
      * @param string $toType
      * @param int    $toMultilingual  0|1
+     * @param string $newName         new field name in the same step (only on a type
+     *                                change), '' = keep the name
      * @return bool  true if converted
      */
-    public function convert(int $fieldId, string $toType, int $toMultilingual): bool
+    public function convert(int $fieldId, string $toType, int $toMultilingual, string $newName = ''): bool
     {
         if (!$data = $this->load($fieldId)) return false;
         $fromType = (string)$data['type'];
@@ -2371,8 +2525,10 @@ class Field extends Dataset {
         $name = (string)$data['name'];
         $areaId = (int)$data['area_id'];
 
+        if ($toType === $fromType || $newName === $name) $newName = '';
+
         // 1. and 2.: target allowed, name fits the target type (conversionAllowed())
-        if (!$this->conversionAllowed($data, $toType, $toMultilingual)) return false;
+        if (!$this->conversionAllowed($data, $toType, $toMultilingual, $newName)) return false;
         $typeChanged = ($toType !== $fromType);
         $multilingualChanged = ($toMultilingual !== $fromMultilingual);
 
@@ -2399,10 +2555,32 @@ class Field extends Dataset {
                 if ($fromSuffix !== $toSuffix) {
                     $this->convertRows($fieldId, $fromType, $toType);
                 }
-                elseif (in_array($toType, $this->cms->singleRelationTypes, true)) {
-                    $this->reduceRelations($fieldId, (int)($data['rel_field_id'] ?? 0), str_starts_with($toType, 'relation'));
+                else {
+                    if (in_array($toType, $this->cms->singleRelationTypes, true)
+                        && !in_array($fromType, $this->cms->singleRelationTypes, true)
+                    ) {
+                        $this->reduceRelations($fieldId, (int)($data['rel_field_id'] ?? 0), str_starts_with($toType, 'relation'));
+                    }
+                    if (str_starts_with($fromType, 'relation') !== str_starts_with($toType, 'relation')
+                        && in_array($fromType, $this->cms->relationTypes, true)
+                    ) {
+                        $this->switchRelationKind($data, $toType);
+                    }
                 }
-                $this->db->query("UPDATE `fieldname` SET `type` = ? WHERE `name` = ?", 'ss', [$toType, $name]);
+                if ($newName !== '') {
+                    // New name: the rows (now in the target table) move to its entry
+                    if ($wrongType = $this->createFieldname($newName, $toType)) {
+                        $this->createFieldError('area.error_field_name_wrong_type', 'name', $this->schema['name']['label'] ?? '', $wrongType);
+                        throw new \Exception('#' . $this->cms->errorMsgLast());
+                    }
+                    $this->db->query("SELECT `fieldname_id` FROM `fieldname` WHERE `name` = ?", 's', [$newName]);
+                    $fieldnameId = (int)($this->db->fetchNum()[0] ?? 0);
+                    if ($fieldnameId < 1) throw new \Exception("Internal error: fieldname '$newName' not found.");
+                    $this->db->query("UPDATE `data_{$toSuffix}` SET `fieldname_id` = ? WHERE `field_id` = ?", 'ii', [$fieldnameId, $fieldId]);
+                }
+                else {
+                    $this->db->query("UPDATE `fieldname` SET `type` = ? WHERE `name` = ?", 'ss', [$toType, $name]);
+                }
                 $this->cms->clearFieldCaches();
 
                 // Full-text sources: text fields only
@@ -2422,6 +2600,15 @@ class Field extends Dataset {
             $update = $this->conversionUpdate($data, $toType);
             $update['type'] = $toType;
             $update['multilingual'] = $toMultilingual;
+            if ($newName !== '') {
+                $update['name'] = $newName;
+                // as in hookOnSave(): the slug is unique across the areas
+                if ($newName === 'slug') {
+                    $flags = array_diff(json_decode((string)($update['flags'] ?? '[]'), true) ?: [], ['unique', 'unique_in_area']);
+                    $flags[] = 'unique';
+                    $update['flags'] = json_encode(array_values($flags), JSON_UNESCAPED_UNICODE);
+                }
+            }
             $set = [];
             $bindTypes = '';
             $values = [];
@@ -2433,6 +2620,8 @@ class Field extends Dataset {
             $bindTypes .= 'i';
             $values[] = $fieldId;
             $this->db->query("UPDATE `field` SET " . implode(', ', $set) . " WHERE `field_id` = ?", $bindTypes, $values);
+            // the old name drops out of `fieldname` unless other fields still carry it
+            if ($newName !== '') $this->cleanupFieldname($name);
 
             // Full text: the field is added as a source, drops out or yields in
             // the other languages different values (language change)
@@ -2491,6 +2680,11 @@ class Field extends Dataset {
                     $areaId, $name, $toType,
                     fn(string $value) => $typeChanged ? $this->convertValue($fromType, $toType, $value) : $value
                 );
+            }
+            // record_cache is keyed by field name: rename the key in the working states
+            if ($newName !== '') {
+                $this->recordDataset()->renameInWorkingCopies($areaId, $name, $newName);
+                $this->cms->clearFieldCaches();
             }
 
             $this->db->commit();
@@ -2745,6 +2939,78 @@ class Field extends Dataset {
     }
 
     /**
+     * relation <-> pointer in convert(), same cardinality. Both keep their links in
+     * `data_rel` (src_id = record of the field), so the field's own rows stay:
+     *
+     *     -> pointer    the counter field in the target area is deleted together with
+     *                   its mirror rows (and the snapshot rows of working copies); the
+     *                   target area becomes the only entry in `rel_field_area`.
+     *                   The own reference is released first - fk_field_rel_field is
+     *                   ON DELETE CASCADE and would take this field along.
+     *     -> relation   only with exactly one target area (pointerRelationArea()):
+     *                   links to records outside it are removed, the counter field is
+     *                   created (createCounterField()) and receives the mirror rows,
+     *                   positioned per target record by source record.
+     *
+     * The live content cache of the target area is discarded.
+     *
+     * @param array $data  field data from load() (before the conversion)
+     */
+    private function switchRelationKind(array $data, string $toType): void
+    {
+        $fieldId = (int)$data['field_id'];
+        $areaId = (int)$data['area_id'];
+        if (str_starts_with($toType, 'pointer')) {
+            $targetAreaId = (int)($data['rel_area_id'] ?? 0);
+            $counter = $this->conversionDropsCounterField($data, $toType);
+            $this->db->query("UPDATE `field` SET `rel_field_id` = NULL, `rel_area_id` = NULL WHERE `field_id` = ?", 'i', [$fieldId]);
+            if ($counter !== null) {
+                $counterId = (int)$counter['field_id'];
+                $this->db->query("DELETE FROM `data_rel_checkout` WHERE `field_id` = ?", 'i', [$counterId]);
+                $this->db->query("UPDATE `area` SET `sort_field_id` = NULL WHERE `sort_field_id` = ?", 'i', [$counterId]);
+                // its data_rel rows go along (fk_data_rel_field)
+                $this->db->query("DELETE FROM `field` WHERE `field_id` = ?", 'i', [$counterId]);
+                $this->cleanupFieldname((string)$counter['name']);
+            }
+            if ($targetAreaId > 0) {
+                $this->db->query("INSERT IGNORE INTO `rel_field_area` (`field_id`, `area_id`) VALUES (?, ?)", 'ii', [$fieldId, $targetAreaId]);
+            }
+        }
+        else {
+            $targetAreaId = $this->pointerRelationArea($data);
+            if ($targetAreaId < 1) throw new \Exception("switchRelationKind(): field $fieldId has no single target area");
+            $this->db->query(
+                "DELETE `d` FROM `data_rel` `d` INNER JOIN `record` `r` ON `r`.`record_id` = `d`.`dest_id`"
+                . " WHERE `d`.`field_id` = ? AND `r`.`area_id` != ?",
+                'ii', [$fieldId, $targetAreaId]
+            );
+            $this->db->query("DELETE FROM `rel_field_area` WHERE `field_id` = ?", 'i', [$fieldId]);
+            $this->db->query("UPDATE `field` SET `rel_area_id` = ? WHERE `field_id` = ?", 'ii', [$targetAreaId, $fieldId]);
+            $counterId = $this->createCounterField($fieldId, $areaId, $targetAreaId);
+            $this->db->query(
+                "SELECT `n`.`fieldname_id` FROM `field` `f` INNER JOIN `fieldname` `n` ON `n`.`name` = `f`.`name` WHERE `f`.`field_id` = ?",
+                'i', [$counterId]
+            );
+            $counterFieldnameId = (int)($this->db->fetchNum()[0] ?? 0);
+            if ($counterFieldnameId < 1) throw new \Exception("switchRelationKind(): fieldname of the counter field not found");
+            $this->db->query(
+                "INSERT INTO `data_rel` (`field_id`, `fieldname_id`, `src_id`, `dest_id`, `position`)"
+                . " SELECT ?, ?, `d`.`dest_id`, `d`.`src_id`,"
+                . "        ROW_NUMBER() OVER (PARTITION BY `d`.`dest_id` ORDER BY `d`.`src_id`) - 1"
+                . " FROM `data_rel` `d` WHERE `d`.`field_id` = ?",
+                'iii', [$counterId, $counterFieldnameId, $fieldId]
+            );
+        }
+        if ($targetAreaId > 0) {
+            $this->db->query(
+                "DELETE `c` FROM `record_cache` `c` INNER JOIN `record` `r` ON `r`.`record_id` = `c`.`record_id`"
+                . " WHERE `r`.`area_id` = ? AND `r`.`tmp` = 0",
+                'i', [$targetAreaId]
+            );
+        }
+    }
+
+    /**
      * relation -> relation1 resp. pointer -> pointer1: per source record only the
      * first link remains (smallest position, on a tie the smallest dest_id);
      * for links the counter row of the counter field is dropped as well.
@@ -2859,6 +3125,53 @@ class Field extends Dataset {
     // ====================
 
     /**
+     * Creates the counter field of a relation in the target area and enters its id in
+     * the source field (`rel_field_id`). Name `rel_{source area name}` (made unique,
+     * not bound to another type in `fieldname`), label = label of the source area.
+     *
+     * The counter field makes the link visible from the other side. It is
+     * deliberately created with a direct INSERT and not via save(): that would
+     * recurse into hookOnSaved() and create a counter field for the counter field.
+     * It stays invisible (visibility_* stay 0, because they do not occur in the
+     * INSERT at all and the column defaults apply).
+     *
+     * @return int  field_id of the counter field
+     */
+    private function createCounterField(int $fieldId, int $areaId, int $relAreaId): int
+    {
+        $this->db->query("SELECT `name`, `label` FROM `area` WHERE `area_id` = ? AND `deleted` = 0", 'i', [$areaId]);
+        if ($this->db->num_rows < 1) {
+            throw new \Exception("createCounterField(): area with area_id=$areaId not found!");
+        }
+        $areaData = $this->db->fetch();
+        $relFieldName = $this->generateUniqueFieldName('rel_' . $areaData['name'], $relAreaId, 'relation');
+
+        $this->db->query("SELECT COALESCE(MAX(`position`), 0) + 1 FROM `field` WHERE `area_id` = ?", 'i', [$relAreaId]);
+        $position = (int)$this->db->fetchNum()[0];
+
+        $relFieldData = [
+            'area_id' => $relAreaId,    // target area
+            'rel_area_id' => $areaId,   // source area
+            'rel_field_id' => $fieldId, // source field
+            'position' => $position,
+            'name' => $relFieldName,
+            'label' => (string)$areaData['label'],
+            'type' => 'relation',
+            'display_type' => 'lookup',
+            // visibility: 0,0,0
+        ];
+        $columns = implode("`,`", array_keys($relFieldData));
+        $placeholders = implode(',', array_fill(0, count($relFieldData), '?'));
+        if (!$this->db->query("INSERT INTO `field` (`$columns`) VALUES ($placeholders)", 'iiiissss', array_values($relFieldData))) {
+            throw new \Exception("createCounterField(): destination field could not be created!");
+        }
+        $relFieldId = (int)$this->db->insert_id;
+        $this->db->query("UPDATE `field` SET `rel_field_id` = ? WHERE `field_id` = ?", 'ii', [$relFieldId, $fieldId]);
+        $this->createFieldname($relFieldName, 'relation');
+        return $relFieldId;
+    }
+
+    /**
      * Delete the entry in `fieldname` if no field uses it anymore.
      *
      * Public, because Area::hookOnDelete() calls the method from outside when finally deleting
@@ -2932,13 +3245,17 @@ class Field extends Dataset {
      * @param int $areaId     Bereichs-ID
      * @return string         Garantiert eindeutiger Name (max 32 Zeichen).
      */
-    public function generateUniqueFieldName(string $prefix, int $areaId): string 
+    public function generateUniqueFieldName(string $prefix, int $areaId, string $type = ''): string
     {
         $suffixNumber = 0;
         $isUnique = false;
         $finalName = '';
 
         $sql = "SELECT 1 FROM `field` WHERE `area_id`=? AND `name` = ? LIMIT 1 FOR UPDATE";
+        // with $type: also skip names bound to another type in `fieldname`
+        // (`rel_` is reserved for relation - but names from before the prefixes were
+        //  reserved may still be bound to another type)
+        $sqlType = "SELECT 1 FROM `fieldname` WHERE `name` = ? AND `type` != ? LIMIT 1 FOR UPDATE";
 
         while (!$isUnique) {
             // Build counter string
@@ -2952,8 +3269,13 @@ class Field extends Dataset {
 
             // Query with prepared statement
             $this->db->query($sql, 'is', [$areaId, $finalName]);
-            
-            if ($this->db->num_rows === 0) {
+            $taken = $this->db->num_rows > 0;
+            if (!$taken && $type !== '') {
+                $this->db->query($sqlType, 'ss', [$finalName, $type]);
+                $taken = $this->db->num_rows > 0;
+            }
+
+            if (!$taken) {
                 $isUnique = true;
             } else {
                 $suffixNumber++;

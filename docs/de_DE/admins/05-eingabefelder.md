@@ -187,6 +187,12 @@ können nach Feldern des verknüpften Datensatzes besonders schnell sortieren un
 filtern. Wählen Sie diesen Verknüpfungs-Typ dort, wo inhaltlich nur ein Ziel sinnvoll ist,
 z. B. eine Rubrik zum Artikel.
 
+Das Gegenfeld einer Verknüpfung „n:1“ ist vom Typ „n:m“, die Infoseite des Feldes
+zeigt es als ***„Verknüpfung (bidirektional, 1:n)“***: Ein Datensatz des Zielbereichs
+kann viele Datensätze verknüpfen, jeder davon aber nur ihn. Verknüpfen Sie im Gegenfeld
+einen Datensatz, der bereits mit einem anderen Datensatz verknüpft ist, löst camindo CMS
+diese bisherige Verknüpfung.
+
 ### Fest verknüpfte und eingebettete Inhalte
 
 Fest verknüpfte Inhalte bilden einen ***Seitenbaukasten***: Eine Seite besteht aus
@@ -349,13 +355,30 @@ camindo CMS wandelt dabei alle vorhandenen Inhalte um:
 
 - zwischen Text- und Zahltypen, etwa „Kurzer Text“ ↔ „Ganzzahl“ oder „Währungsbetrag“,
 - zwischen „n:m“ und „n:1“ bei Verknüpfungen und Verweisen,
+- zwischen Verknüpfung und Verweis bei gleicher Anzahl („n:m“ ↔ „n:m“, „n:1“ ↔ „n:1“),
 - zwischen einsprachig und mehrsprachig.
+
+Ein ***Verweis wird zur Verknüpfung***, wenn er genau einen Zielbereich hat und dieser
+nicht der eigene Bereich ist. camindo CMS legt dann im Zielbereich das Gegenfeld an; die
+bestehenden Verweise sind dort ab sofort als Verknüpfungen sichtbar. Umgekehrt löscht der
+Wechsel von der ***Verknüpfung zum Verweis*** das Gegenfeld im Zielbereich – die
+Bestätigung nennt es. Die Verknüpfungen selbst bleiben erhalten, sind aber nur noch vom
+eigenen Bereich aus sichtbar; Templates, die das Gegenfeld verwenden, müssen Sie
+anpassen.
 
 Kann eine Umwandlung Inhalte verlieren (ein Text, der keine Zahl ist; beim Wechsel
 auf „n:1“ alle Verknüpfungen außer der ersten; beim Wechsel auf einsprachig alle
-Übersetzungen), warnt die Maske vorher. Wird der Feldname auch in anderen Bereichen
-verwendet – auch von einem Feld im Papierkorb –, muss das Feld vorher umbenannt werden;
-der Typ ist an den Namen gebunden.
+Übersetzungen), warnt die Maske vorher.
+
+Beim Typwechsel können Sie im selben Schritt den ***Namen*** des Feldes ändern. Die
+Bestätigung schlägt einen Namen vor, dessen [Präfix](#reservierte-namens-präfixe) zum
+neuen Typ passt – aus `int_preis` wird beim Wechsel auf „Langer Text“ `txt_preis`, aus
+`rel_rubrik` beim Wechsel auf „n:1“ `rn1_rubrik`. Wird der Feldname auch in anderen
+Bereichen verwendet – auch von einem Feld im Papierkorb –, braucht das Feld für den
+Typwechsel einen anderen Namen, denn der Typ ist an den Namen gebunden; ein Name ohne
+Präfix bekommt dann im Vorschlag den Präfix des neuen Typs (`preis` → `txt_preis`), die
+übrigen Felder behalten Name und Typ. Andere Namen ohne Präfix bleiben unverändert. Passen Sie Templates, die das Feld beim alten Namen nennen,
+anschließend an.
 
 Bei der Umwandlung in ***„Verschlüsselter Text“*** fällt das Feld aus allen
 Volltextfeldern und dem Standard-Volltext; camindo CMS baut diese für alle Datensätze
@@ -439,10 +462,24 @@ die Namen in der fremden Datenbank nicht schon für andere Typen vergeben sind.
 | integer | int_ |
 | json | jsn_ |
 | password | pwd_ |
-| pointer, relation, link | rel_ |
+| link | lnk_ |
+| pointer | ptr_ |
+| pointer1 | pn1_ |
+| relation | rel_ |
+| relation1 | rn1_ |
 | text | txt_ |
 | time | tim_ |
 | timestampl | tsl_ |
+
+Jeder Präfix gehört zu genau einem Typ – auch „n:m“ und „n:1“ haben eigene, weil
+Templates sie unterschiedlich abfragen. Das automatisch angelegte Gegenfeld einer
+Verknüpfung heißt deshalb immer `rel_` plus Name des Quellbereichs (bei Bedarf mit
+angehängter Nummer). Beim [Typwechsel](#typ-ändern) tauscht der Namensvorschlag den
+Präfix aus.
+
+Legen Sie eine Verknüpfung, einen Verweis oder fest verknüpfte bzw. eingebettete Inhalte
+an, steht der passende Präfix bereits im Feld ***Name***; ergänzen Sie den Namen dahinter.
+Der Präfix allein wird nicht gespeichert.
 
 ## Extensions
 

@@ -186,6 +186,11 @@ A relation “n:1” is not merely a restriction to one record: templates can so
 very quickly by fields of the linked record. Choose this relation type where only one target
 makes sense in terms of content, for example a category for the article.
 
+The counter-field of a relation “n:1” is of type “n:m”; the field's info page shows it as
+***“Relation (bidirectional, 1:n)”***: a record of the target area can link many records,
+but each of them only this one. If you link a record in the counter-field that is already
+linked with another record, camindo CMS releases this previous link.
+
 ### Hard-linked and embedded content
 
 Hard-linked content forms a ***page construction kit***: a page consists of blocks – text
@@ -342,12 +347,29 @@ in the process:
 
 - between text and number types, for example “Short text” ↔ “Integer” or “Currency amount”,
 - between “n:m” and “n:1” for relations and pointers,
+- between relation and pointer with the same cardinality (“n:m” ↔ “n:m”, “n:1” ↔ “n:1”),
 - between single-language and multilingual.
+
+A ***pointer becomes a relation*** if it has exactly one target area and this is not its own
+area. camindo CMS then creates the counter-field in the target area; from then on, the
+existing pointers are visible there as relations. Conversely, switching from a ***relation to
+a pointer*** deletes the counter-field in the target area – the confirmation names it. The
+links themselves are kept, but are only visible from the field's own area; you have to
+adjust templates that use the counter-field.
 
 If a conversion can lose content (a text that is not a number; when switching to “n:1”, all
 relations except the first; when switching to single-language, all translations), the mask
-warns beforehand. If the field name is also used in other areas – also by a field in the
-trash –, the field must be renamed first; the type is bound to the name.
+warns beforehand.
+
+When changing the type, you can change the field's ***name*** in the same step. The
+confirmation suggests a name whose [prefix](#reserved-name-prefixes) fits the new type –
+`int_price` becomes `txt_price` when switching to “Long text”, `rel_category` becomes
+`rn1_category` when switching to “n:1”. If the field name is also used in other areas – also
+by a field in the trash –, the field needs a different name for the type change, because the
+type is bound to the name; a name without a prefix then gets the prefix of the new type in
+the suggestion (`price` → `txt_price`), and the other fields keep their name and type. Other
+names without a prefix stay unchanged. Afterwards, adjust templates
+that refer to the field by its old name.
 
 When converting to ***“Encrypted text”***, the field is removed from all full-text fields and
 the standard full text; camindo CMS rebuilds these for all records of the area (also for
@@ -424,10 +446,24 @@ already assigned to other types.
 | integer | int_ |
 | json | jsn_ |
 | password | pwd_ |
-| pointer, relation, link | rel_ |
+| link | lnk_ |
+| pointer | ptr_ |
+| pointer1 | pn1_ |
+| relation | rel_ |
+| relation1 | rn1_ |
 | text | txt_ |
 | time | tim_ |
 | timestampl | tsl_ |
+
+Each prefix belongs to exactly one type – “n:m” and “n:1” have their own as well, because
+templates query them differently. The automatically created counter-field of a relation
+is therefore always named `rel_` plus the name of the source area (with an appended number
+if needed). When [changing the type](#changing-the-type), the name suggestion swaps the
+prefix.
+
+When you create a relation, a pointer, or hard-linked or embedded content, the matching
+prefix is already entered in the field ***Name***; complete the name after it. The prefix
+alone is not saved.
 
 ## Extensions
 

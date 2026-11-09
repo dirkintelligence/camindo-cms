@@ -124,6 +124,12 @@ class FieldEditBackend extends FieldBackend {
         // area_id is needed to calculate position
         $this->data['area_id'] = $this->areaId;
         $this->data = $this->field->init($this->data);
+        // Link types: the name starts with the prefix of the type (rel_, rn1_, ptr_,
+        // pn1_, lnk_) - the prefix alone is refused when saving
+        $type = (string)($this->data['type'] ?? '');
+        if (($this->data['name'] ?? '') === '' && in_array($type, $this->cms->relationTypes, true)) {
+            $this->data['name'] = $this->field->typePrefix($type);
+        }
         // Combine the visibility fields into one
         $this->data['visibility'] = $this->_visibilitySerialize($this->data);
         $this->id   = 0;
@@ -326,7 +332,7 @@ class FieldEditBackend extends FieldBackend {
 
         // type
         // --------------------
-        $typeHtml = $type . ' (' . $this->cms->snippet('area.label_field_type_' . $type) . ')';
+        $typeHtml = $type . ' (' . $this->cms->snippet($this->field->typeLabelKey($this->data)) . ')';
         $this->backend->formStatic($this->field, 'type', $typeHtml);
         $this->backend->formHidden('data[type]', $type);
 

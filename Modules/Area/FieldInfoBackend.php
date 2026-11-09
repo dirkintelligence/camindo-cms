@@ -77,7 +77,7 @@ class FieldInfoBackend extends FieldBackend {
         $this->backend->infoAdd($this->field, 'name', $data['name'] ?? '', ['monospace']);
 
         // type + multilingual
-        $typeHtml = $type . ' (' . $this->cms->snippet('area.label_field_type_' . $type) .')';
+        $typeHtml = $type . ' (' . $this->cms->snippet($this->field->typeLabelKey($data)) . ')';
         if (!empty($data['multilingual'])) {
             $typeHtml .= ' ' . $this->backend->template('language.icon_multilingual_labeled');
         }

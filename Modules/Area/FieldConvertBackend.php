@@ -11,13 +11,15 @@ class FieldConvertBackend extends FieldBackend {
      *     ''         selection of the possible targets (Field::conversionTargets()) as
      *                cards as in create() - types on the left, language switch on the right.
      *                Targets where content may be lost carry the note.
-     *     confirm    confirmation: current and new type, on possible data loss
-     *                the warning, with open working copies of the area the note
-     *                about them, then the button "Change type" (POST, function=convert).
+     *     confirm    confirmation: current and new type, on a type change the field
+     *                name (suggestion: Field::conversionName(), so that the prefix fits
+     *                the new type resp. a name shared with other fields gets one), on possible data loss the warning, with open working
+     *                copies of the area the note about them, then the button "Change
+     *                type" (POST, function=convert).
      *     convert    Field::convert(); afterwards a balloon and back to the detail view.
-     *                On an error the message appears above the selection.
+     *                On an error the message appears above the confirmation.
      *
-     * Request: id, function, type, multilingual
+     * Request: id, function, type, multilingual, data[name]
      */
     public function convert(): void
     {
@@ -25,6 +27,8 @@ class FieldConvertBackend extends FieldBackend {
         $this->function = (string)($_REQUEST['function'] ?? '');
         $toType = preg_replace('![^a-z0-9_-]+!', '', (string)($_REQUEST['type'] ?? ''));
         $toMultilingual = (int)!empty($_REQUEST['multilingual']);
+        $newName = isset($_REQUEST['data']['name']) && is_string($_REQUEST['data']['name'])
+            ? trim($_REQUEST['data']['name']) : null;
 
         // Bread crum navi
         $this->backend->setNaviLabel('#area.button_change_type');
@@ -62,7 +66,7 @@ class FieldConvertBackend extends FieldBackend {
         // Umwandeln
         // --------------------
         if ($this->function === 'convert') {
-            if ($this->field->convert($this->id, $toType, $toMultilingual)) {
+            if ($this->field->convert($this->id, $toType, $toMultilingual, (string)$newName)) {
                 echo $this->backend->template('container_footer');
                 $this->backend->balloon('success', $this->cms->snippet('area.message_field_converted'));
                 $this->backend->script(
@@ -74,7 +78,7 @@ class FieldConvertBackend extends FieldBackend {
             echo $this->backend->template('alert_danger', [
                 '{text}' => $this->cms->errorMsg()
             ]);
-            $this->function = '';
+            $this->function = 'confirm';
         }
 
         // Confirmation
@@ -100,6 +104,7 @@ class FieldConvertBackend extends FieldBackend {
                         '{text}' => '{#area.warning_field_convert_lossy}'
                     ]);
                 }
+                $warning .= $this->_counterFieldNote($toType);
                 $warning .= $this->_workingCopiesWarning();
                 echo '<form action="Area/field_convert.php" method="post">';
                 $this->backend->formInit('area.field_convert_confirm_form', [
@@ -108,11 +113,19 @@ class FieldConvertBackend extends FieldBackend {
                     '{warning}' => $warning,
                     '{id}' => $this->id,
                 ]);
+                // Type change: the name can be corrected in the same step (prefix)
+                if ($toType !== $type) {
+                    $this->backend->formField($this->field, [
+                        'name' => 'name',
+                        'id' => $this->id,
+                        'value' => $newName ?? $this->field->conversionName((string)$this->data['name'], $toType, $this->id),
+                    ]);
+                }
                 $this->backend->formHidden('id', $this->id);
                 $this->backend->formHidden('type', $toType);
                 $this->backend->formHidden('multilingual', $toMultilingual);
                 $this->backend->formHidden('function', 'convert');
-                echo $this->backend->form();
+                echo $this->backend->form(removePlaceholders: true);
                 echo '</form>';
                 echo $this->backend->template('container_footer');
                 return;
@@ -169,6 +182,32 @@ class FieldConvertBackend extends FieldBackend {
         ]);
 
         echo $this->backend->template('container_footer');
+    }
+
+    /**
+     * Note for convert() relation <-> pointer: the counter field in the target area is
+     * deleted (-> pointer) or created (-> relation).
+     */
+    private function _counterFieldNote(string $toType): string
+    {
+        $type = (string)($this->data['type'] ?? '');
+        if (str_starts_with($type, 'relation') === str_starts_with($toType, 'relation')) return '';
+        $counter = $this->field->conversionDropsCounterField($this->data, $toType);
+        if ($counter !== null) {
+            return $this->backend->template('alert_warning', [
+                '{text}' => strtr($this->cms->snippet('area.warning_field_convert_counter_drop'), [
+                    '{name}' => htmlspecialchars((string)$counter['name']),
+                    '{area}' => htmlspecialchars($this->cms->textOrSnippet((string)$counter['area_label'])),
+                ])
+            ]);
+        }
+        $targetAreaId = str_starts_with($toType, 'relation') ? $this->field->pointerRelationArea($this->data) : 0;
+        if ($targetAreaId < 1) return '';
+        $this->db->query("SELECT `label` FROM `area` WHERE `area_id` = ?", 'i', [$targetAreaId]);
+        return $this->backend->template('alert_warning', [
+            '{text}' => str_replace('{area}', htmlspecialchars($this->cms->textOrSnippet((string)($this->db->fetchNum()[0] ?? ''))),
+                $this->cms->snippet('area.note_field_convert_counter_create'))
+        ]);
     }
 
     /**
