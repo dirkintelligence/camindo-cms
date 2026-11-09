@@ -6,7 +6,9 @@ Clicking a row in the record list opens the ***detail view*** of the record. It 
 tabs “Contents”, “Meta data” and “Changes”.
 
 ***“Contents” tab:*** here you find the values entered and uploaded files, including the
-automatically generated file versions (for example preview images). Linked records are
+automatically generated file versions (for example preview images). Preview images that are also
+visible in the record list appear as images at the top – several side by side, each scaled down
+to at most 150 × 150 pixels. Linked records are
 listed one below the other, each with its symbol and as a link to its detail view. If there are
 more than 20 links, clicking “more…” opens the list of all linked records.  
 Long texts appear shortened; ***“more…”*** after them shows the full text. If the field is edited

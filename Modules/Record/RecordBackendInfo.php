@@ -453,8 +453,45 @@ class RecordBackendInfo extends RecordBackend {
         if ($this->useLanguageCaches && $this->_languageTabs()) {
             $this->backend->infoStatic('', $this->_infoLanguageDropdown($languages, $tab), ['fullsize']);
         }
+        $thumbnails = $this->_infoThumbnails($schemaVirtual, $tab);
+        if ($thumbnails !== '') $this->backend->infoStatic('', $thumbnails);
         $this->_infoRows($schemaVirtual, $languages, $tab);
         echo $this->backend->infoTable();
+    }
+
+    /**
+     * The thumbnails visible in the record list (display_type 'thumbnail',
+     * visibility_list = 1) as images at the top of the "Contents" tab - one box the
+     * size of the thumbnail, several side by side in boxes of 150 x 150 px
+     * (scaled down, never up; CSS .c9-thumb-boxes). Multilingual fields show the file
+     * of the selected language (primary language with "All languages"); '' without
+     * a thumbnail.
+     *
+     * @param array      $schemaVirtual  schema of the area
+     * @param int|string $tab            'all' or language_id
+     */
+    private function _infoThumbnails(array $schemaVirtual, int|string $tab): string
+    {
+        $boxes = [];
+        $languageCache = null;
+        foreach ($schemaVirtual as $name => $colDef) {
+            if ((string)($colDef['type'] ?? '') !== 'file' || (string)($colDef['display_type'] ?? '') !== 'thumbnail') continue;
+            if ((int)($colDef['visibility_list'] ?? 0) !== 1) continue;
+            $value = $this->data[$name] ?? null;
+            if ($tab !== 'all' && $this->useLanguageCaches && $this->cms->isMultilingualField($colDef)) {
+                $languageCache ??= $this->cms->loadRecordCache($this->id, (int)$tab) ?? [];
+                $value = $languageCache[$name][1] ?? $value;
+            }
+            if (!is_array($value) || empty($value['size'])) continue;
+            $boxes[] = $this->backend->template('record.info_thumbnail_box', [
+                '{html}' => $this->backend->backendValue($value, $colDef, 'short', $this->id),
+            ]);
+        }
+        if (empty($boxes)) return '';
+        return $this->backend->template('record.info_thumbnails', [
+            '{class}' => count($boxes) > 1 ? ' c9-thumb-boxes-multi' : '',
+            '{boxes}' => implode('', $boxes),
+        ]);
     }
 
     /**

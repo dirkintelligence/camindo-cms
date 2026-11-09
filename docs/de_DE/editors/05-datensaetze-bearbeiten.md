@@ -7,6 +7,8 @@ Datensatzes. Sie zeigt die Reiter „Inhalte“, „Metadaten“ und „Änderun
 
 ***Reiter „Inhalte“***: Hier stehen die eingegebenen Werte und hochgeladene Dateien
 inkl. der automatisch erzeugten Dateiversionen (beispielsweise Vorschaubilder).
+Vorschaubilder, die auch in der Datensatzliste zu sehen sind, erscheinen ganz oben als
+Bilder – mehrere nebeneinander, jeweils auf höchstens 150 × 150 Pixel verkleinert.
 Verknüpfte Datensätze stehen untereinander, jeweils mit Symbol und als Link zu
 ihrer Detailansicht. Bei mehr als 20 Verknüpfungen öffnet ein Klick auf 
 „mehr…“ die Liste aller verknüpften Datensätze.  
