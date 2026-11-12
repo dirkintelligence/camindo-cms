@@ -43,7 +43,7 @@ Beim Anlegen wählen Sie, was das Feld speichern soll:
 | | Eingebettete Inhalte (1:n) | wie oben, bearbeitet in der Maske des Datensatzes |
 | ***Datei*** | Datei-Upload | Upload-Feld für Dateien |
 | | Dateiversion (Thumbnail) | automatisch erzeugte Version einer hochgeladenen Datei – generiertes Vorschaubild, verkleinertes Video … (siehe [Kapitel 8](./08-medien.md)) |
-| ***Metafelder*** | Veröffentlichungsdatum, Ablaufdatum, Gestaltungsvorlage, Status, Prüfung nötig, Eltern-Datensatz, Position | siehe [unten](#metafelder) |
+| ***Metafelder*** | Veröffentlichungsdatum, Ablaufdatum, Gestaltungsvorlage, Status, Prüfung nötig, Eltern-Datensatz, Position, Slug | siehe [unten](#metafelder) |
 
 Wählen Sie den Typ mit Bedacht – er bestimmt, wie Eingaben geprüft, sortiert und durchsucht werden.
 Zahlen in einem Textfeld sortieren alphabetisch (`10` vor `9`),
@@ -340,6 +340,10 @@ Bereich. Damit die Redaktion sie bearbeiten kann, fügen Sie sie der Maske als
 
 Ohne Metafeld „Status“ sind neue Datensätze sofort freigeschaltet, ohne
 Veröffentlichungs- und Ablaufdatum unbegrenzt sichtbar.
+
+Im selben Abschnitt der Auswahl finden Sie ***Slug***. Es ist kein Metafeld im engeren Sinn,
+sondern legt ein Feld „Kurzer Text“ mit dem Namen `slug` an – die Webadresse des
+Datensatzes (siehe [Besondere Feldnamen](#besondere-feldnamen)).
 
 ## Besondere Feldnamen
 

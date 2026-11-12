@@ -43,7 +43,7 @@ When creating, you choose what the field is to store:
 | | Embedded content (1:n) | as above, edited in the mask of the record |
 | ***File*** | File upload | upload field for files |
 | | File version (thumbnail) | automatically generated version of an uploaded file – generated preview image, reduced video … (see [chapter 8](./08-media.md)) |
-| ***Meta fields*** | Publication date, expiry date, design template, status, review required, parent record, position | see [below](#meta-fields) |
+| ***Meta fields*** | Publication date, expiry date, design template, status, review required, parent record, position, slug | see [below](#meta-fields) |
 
 Choose the type with care – it determines how inputs are validated, sorted, and searched.
 Numbers in a text field sort alphabetically (`10` before `9`), and a date in a text field
@@ -332,6 +332,10 @@ editorial team can edit it, you add it to the mask as a ***meta field***:
 
 Without the meta field “Status”, new records are released immediately; without publication
 and expiry date, they are visible without limit.
+
+The same section of the selection also offers ***Slug***. It is not a meta field in the strict
+sense but creates a field “Short text” named `slug` – the web address of the record (see
+[Special field names](#special-field-names)).
 
 ## Special field names
 
