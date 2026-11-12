@@ -364,7 +364,7 @@ warns beforehand.
 When changing the type, you can change the field's ***name*** in the same step. The
 confirmation suggests a name whose [prefix](#reserved-name-prefixes) fits the new type –
 `int_price` becomes `txt_price` when switching to “Long text”, `rel_category` becomes
-`rn1_category` when switching to “n:1”. If the field name is also used in other areas – also
+`rel1_category` when switching to “n:1”. If the field name is also used in other areas – also
 by a field in the trash –, the field needs a different name for the type change, because the
 type is bound to the name; a name without a prefix then gets the prefix of the new type in
 the suggestion (`price` → `txt_price`), and the other fields keep their name and type. Other
@@ -458,9 +458,9 @@ already assigned to other types.
 | password | pwd_ |
 | link | lnk_ |
 | pointer | ptr_ |
-| pointer1 | pn1_ |
+| pointer1 | ptr1_ |
 | relation | rel_ |
-| relation1 | rn1_ |
+| relation1 | rel1_ |
 | text | txt_ |
 | time | tim_ |
 | timestampl | tsl_ |

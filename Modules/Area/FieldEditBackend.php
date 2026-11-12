@@ -124,8 +124,8 @@ class FieldEditBackend extends FieldBackend {
         // area_id is needed to calculate position
         $this->data['area_id'] = $this->areaId;
         $this->data = $this->field->init($this->data);
-        // Link types: the name starts with the prefix of the type (rel_, rn1_, ptr_,
-        // pn1_, lnk_) - the prefix alone is refused when saving
+        // Link types: the name starts with the prefix of the type (rel_, rel1_, ptr_,
+        // ptr1_, lnk_) - the prefix alone is refused when saving
         $type = (string)($this->data['type'] ?? '');
         if (($this->data['name'] ?? '') === '' && in_array($type, $this->cms->relationTypes, true)) {
             $this->data['name'] = $this->field->typePrefix($type);

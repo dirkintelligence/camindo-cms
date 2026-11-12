@@ -19,7 +19,7 @@
  *  5. Counter name `rel_{area}` bound to another type in `fieldname` (a name from
  *     before the reserved prefixes): the new counter field takes the next free name.
  *  6. The prefixes are exclusive: a relation1 field cannot be called `rel_…`, and a
- *     prefix alone (`rn1_`, as the form prefills it) is no name.
+ *     prefix alone (`rel1_`, as the form prefills it) is no name.
  *
  * Exit code 1 on deviations.
  */
@@ -203,12 +203,12 @@ try {
     $check('filter B by counter', $ids($areaB, [(string)$counter['name'] => (string)$a2]), [$b1]);
 
     echo "-- 4. relation1 -> pointer1 -> relation1\n";
-    $one = "rn1_one_$suffix";
+    $one = "rel1_one_$suffix";
     $oneId = $newField($areaA, $one, 'relation1', 'lookup', ['rel_area_id' => $areaB]);
     $link($oneId, [[$a1, $b2], [$a2, $b2]]);
     $check('relation1 -> relation, pointer1', $targets($oneId), ['relation', 'pointer1']);
-    $check('keeping rn1_ refused', $convert($oneId, 'pointer1') !== true, true);
-    $check('to pointer1', $convert($oneId, 'pointer1', "pn1_one_$suffix"), true);
+    $check('keeping rel1_ refused', $convert($oneId, 'pointer1') !== true, true);
+    $check('to pointer1', $convert($oneId, 'pointer1', "ptr1_one_$suffix"), true);
     $check('links kept', (int)$value("SELECT COUNT(*) FROM `data_rel` WHERE `field_id` = ?", 'i', [$oneId]), 2);
     $check('back to relation1', $convert($oneId, 'relation1', $one), true);
     $oneCounter = (int)$fieldRow($oneId)['rel_field_id'];
@@ -233,12 +233,12 @@ try {
     $check('relation1 named rel_ refused', (int)$field->save([], $bad), 0);
     $check('message names the prefix', str_contains($cms->errorMsgLast(), 'rel_'), true);
     $check('prefixes per type', array_map([$field, 'typePrefix'], ['relation', 'relation1', 'pointer', 'pointer1', 'link']),
-        ['rel_', 'rn1_', 'ptr_', 'pn1_', 'lnk_']);
+        ['rel_', 'rel1_', 'ptr_', 'ptr1_', 'lnk_']);
     $cms->errorsReset();
-    $onlyPrefix = ['area_id' => $areaA, 'name' => 'rn1_', 'label' => 'bad', 'type' => 'relation1',
+    $onlyPrefix = ['area_id' => $areaA, 'name' => 'rel1_', 'label' => 'bad', 'type' => 'relation1',
                    'display_type' => 'lookup', 'visibility_input' => 1, 'rel_area_id' => $areaB];
     $check('prefix alone refused', (int)$field->save([], $onlyPrefix), 0);
-    $check('message names the prefix alone', str_contains($cms->errorMsgLast(), 'rn1_'), true);
+    $check('message names the prefix alone', str_contains($cms->errorMsgLast(), 'rel1_'), true);
 }
 catch (\Throwable $e) {
     $failures++;

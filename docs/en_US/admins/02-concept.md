@@ -96,9 +96,9 @@ camindo CMS suggests a new name with the prefix of the target type (see
 | pwd_ | password |
 | lnk_ | link |
 | ptr_ | pointer |
-| pn1_ | pointer1 |
+| ptr1_ | pointer1 |
 | rel_ | relation |
-| rn1_ | relation1 |
+| rel1_ | relation1 |
 | txt_ | text |
 | tim_ | time |
 | tsl_ | timestampl |

@@ -25,7 +25,7 @@
  * --------------------
  * $fieldPrefixes (prefix => allowed types) is built from Cms::$dataSuffix (txt_, int_,
  * fil_, …) plus the link types, which share the table suffix 'rel': `rel_` relation,
- * `rn1_` relation1, `ptr_` pointer, `pn1_` pointer1, `lnk_` link. A name must not
+ * `rel1_` relation1, `ptr_` pointer, `ptr1_` pointer1, `lnk_` link. A name must not
  * begin with the prefix of another type - `txt_x` as an integer field is rejected.
  * The point: the name alone reveals the type (relation and relation1 are queried
  * differently), without having to look in `fieldname`; and the automatic counter
@@ -564,9 +564,9 @@ class Field extends Dataset {
         // The link types share the table suffix 'rel' and get their own prefixes
         $linkPrefixes = [
             'rel_' => ['relation'],
-            'rn1_' => ['relation1'],
+            'rel1_' => ['relation1'],
             'ptr_' => ['pointer'],
-            'pn1_' => ['pointer1'],
+            'ptr1_' => ['pointer1'],
             'lnk_' => ['link'],
         ];
         $this->fieldPrefixes = [];
@@ -578,7 +578,7 @@ class Field extends Dataset {
     }
 
     /**
-     * Own name prefix of a type (`rn1_` for relation1, `txt_` for text …), or ''.
+     * Own name prefix of a type (`rel1_` for relation1, `txt_` for text …), or ''.
      */
     public function typePrefix(string $type): string
     {
@@ -2402,7 +2402,7 @@ class Field extends Dataset {
      *
      *  - a reserved prefix that the target type may not use is replaced by the prefix
      *    of the target type (`int_price` as text -> `txt_price`, `rel_topic` as
-     *    relation1 -> `rn1_topic`), or dropped if the target type has none;
+     *    relation1 -> `rel1_topic`), or dropped if the target type has none;
      *  - a name without such a prefix that other fields still carry (it stays bound to
      *    the current type) gets the prefix of the target type (`price` -> `txt_price`,
      *    at most 32 characters);

@@ -8,10 +8,10 @@
  * Creates two test areas A and B in the first instance and removes them again
  * (Area::purge()):
  *
- *  1. Reserved prefixes: one per type - `rel_` relation, `rn1_` relation1, `ptr_`
- *     pointer, `pn1_` pointer1.
+ *  1. Reserved prefixes: one per type - `rel_` relation, `rel1_` relation1, `ptr_`
+ *     pointer, `ptr1_` pointer1.
  *  2. The suggested name swaps a prefix the target type may not use
- *     (int_ -> txt_, rel_ -> rn1_), adds one to a name other fields still carry,
+ *     (int_ -> txt_, rel_ -> rel1_), adds one to a name other fields still carry,
  *     other names stay.
  *  3. integer -> text keeping `int_…` is refused; with the new name `txt_…` the
  *     field is converted and renamed in one step: `fieldname` holds only the new
@@ -128,17 +128,17 @@ try {
     echo "-- 1. reserved prefixes\n";
     $check('rel_ for relation', $prefixOf('rel_x', 'relation'), '');
     $check('rel_ not for relation1', $prefixOf('rel_x', 'relation1'), 'rel_');
-    $check('rn1_ for relation1', $prefixOf('rn1_x', 'relation1'), '');
-    $check('rn1_ not for relation', $prefixOf('rn1_x', 'relation'), 'rn1_');
+    $check('rel1_ for relation1', $prefixOf('rel1_x', 'relation1'), '');
+    $check('rel1_ not for relation', $prefixOf('rel1_x', 'relation'), 'rel1_');
     $check('ptr_ not for pointer1', $prefixOf('ptr_x', 'pointer1'), 'ptr_');
-    $check('pn1_ for pointer1', $prefixOf('pn1_x', 'pointer1'), '');
+    $check('ptr1_ for pointer1', $prefixOf('ptr1_x', 'pointer1'), '');
     $check('rel_ not for link', $prefixOf('rel_x', 'link'), 'rel_');
 
     echo "-- 2. suggested name\n";
     $check('int_ -> txt_', $field->conversionName('int_price', 'text'), 'txt_price');
-    $check('rn1_ -> rel_', $field->conversionName('rn1_topic', 'relation'), 'rel_topic');
-    $check('rel_ -> rn1_', $field->conversionName('rel_topic', 'relation1'), 'rn1_topic');
-    $check('ptr_ -> pn1_', $field->conversionName('ptr_topic', 'pointer1'), 'pn1_topic');
+    $check('rel1_ -> rel_', $field->conversionName('rel1_topic', 'relation'), 'rel_topic');
+    $check('rel_ -> rel1_', $field->conversionName('rel_topic', 'relation1'), 'rel1_topic');
+    $check('ptr_ -> ptr1_', $field->conversionName('ptr_topic', 'pointer1'), 'ptr1_topic');
     $check('no prefix stays', $field->conversionName('price', 'text'), 'price');
 
     echo "-- 3. rename with the type change\n";

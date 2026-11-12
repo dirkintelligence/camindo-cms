@@ -373,7 +373,7 @@ auf „n:1“ alle Verknüpfungen außer der ersten; beim Wechsel auf einsprachi
 Beim Typwechsel können Sie im selben Schritt den ***Namen*** des Feldes ändern. Die
 Bestätigung schlägt einen Namen vor, dessen [Präfix](#reservierte-namens-präfixe) zum
 neuen Typ passt – aus `int_preis` wird beim Wechsel auf „Langer Text“ `txt_preis`, aus
-`rel_rubrik` beim Wechsel auf „n:1“ `rn1_rubrik`. Wird der Feldname auch in anderen
+`rel_rubrik` beim Wechsel auf „n:1“ `rel1_rubrik`. Wird der Feldname auch in anderen
 Bereichen verwendet – auch von einem Feld im Papierkorb –, braucht das Feld für den
 Typwechsel einen anderen Namen, denn der Typ ist an den Namen gebunden; ein Name ohne
 Präfix bekommt dann im Vorschlag den Präfix des neuen Typs (`preis` → `txt_preis`), die
@@ -476,9 +476,9 @@ die Namen in der fremden Datenbank nicht schon für andere Typen vergeben sind.
 | password | pwd_ |
 | link | lnk_ |
 | pointer | ptr_ |
-| pointer1 | pn1_ |
+| pointer1 | ptr1_ |
 | relation | rel_ |
-| relation1 | rn1_ |
+| relation1 | rel1_ |
 | text | txt_ |
 | time | tim_ |
 | timestampl | tsl_ |
