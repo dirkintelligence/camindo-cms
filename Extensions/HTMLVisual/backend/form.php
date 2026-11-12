@@ -10,7 +10,8 @@
  *
  * Options: toolbar (full|basic|custom), toolbar_custom (buttons for custom),
  * min_height, max_height (px), stylesheet (file from var/extensions/htmlvisual/),
- * css_class (empty = c9-htmlvisual-{feldname}).
+ * css_class (empty = c9-htmlvisual-{feldname}), block_classes, text_classes (class names
+ * separated by comma for the menus "Paragraph classes" and "Text classes").
  */
 $note = fn(string $key, array $params = []) => $backend->template('form-text', [
     '{text}' => $backend->escape(str_replace(array_keys($params), array_values($params), $cms->snippet('ext.htmlvisual.' . $key))),
@@ -67,6 +68,22 @@ echo $backend->template('edit_form_block', [
         '{note}' => $note('note_max_height'),
     ]),
 ]);
+
+// Own classes: block classes (paragraph …) and text classes (<span>), comma-separated
+foreach (['block_classes', 'text_classes'] as $key) {
+    $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
+    echo $backend->template('edit_form_block', [
+        '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.htmlvisual.option_' . $key), '{class}' => '']),
+        '{class}' => '',
+        '{field}' => $backend->template('ext.htmlvisual.field_classes', [
+            '{id}' => $fieldId,
+            '{name}' => $name,
+            '{key}' => $key,
+            '{value}' => $backend->escape((string)($options[$key] ?? '')),
+            '{note}' => $note('note_' . $key),
+        ]),
+    ]);
+}
 
 // Stylesheet from var/extensions/htmlvisual/
 $dir = $backend->extensionVarDir('HTMLVisual');

@@ -15,8 +15,10 @@ Absatzformat (Absatz, Überschrift 1–6), Aufzählung und nummerierte Liste mit
 Unterpunkten, Zitat, Codeblock, Link, horizontale Linie, Zeilenumbruch, Sonderzeichen,
 Ausrichtung links, zentriert, rechts, ***Schreibrichtung*** für markierte Abschnitte und
 Tabellen mit Kopfzeile. Nur im HTML-Editor: ***Abstand oben*** für Absätze, Überschriften,
-Codeblöcke, Listen und Tabellen (Klassen `mt-1` … `mt-8`, siehe unten). Bilder, Klassen und
-Stile lassen sich im Quelltext angeben (siehe unten).
+Codeblöcke, Listen und Tabellen (Klassen `mt-1` … `mt-8`, siehe unten) sowie ***eigene Klassen***
+für Absätze und Text aus zwei Menüs, wenn Sie Klassen in den Einstellungen des Feldes
+vorgeben (siehe „Eigene Klassen“ unten). Bilder, Klassen und Stile lassen sich außerdem im
+Quelltext angeben (siehe unten).
 
 Zwischen zwei Tabellen, Codeblöcken oder Linien, wo der Cursor sonst keinen Platz hat,
 fügen Redakteure einen Absatz mit den Pfeiltasten, über ein **+** am Rand des Blocks oder
@@ -46,13 +48,55 @@ Wie Redakteure damit arbeiten, beschreibt das [Handbuch für Anwender](../../edi
 | Einstellung | Bedeutung |
 |---|---|
 | Werkzeugleiste | *alle Schaltflächen*, *einfach* (Fett, Kursiv, Absatzformat, Listen, Link), *eigene Auswahl* |
-| Eigene Schaltflächen | nur bei *eigene Auswahl*: Namen durch Komma oder Leerzeichen getrennt, `\|` als Trennstrich – `bold italic underline code heading margin ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
+| Eigene Schaltflächen | nur bei *eigene Auswahl*: Namen durch Komma oder Leerzeichen getrennt, `\|` als Trennstrich – `bold italic underline code heading margin block_class text_class ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
 | Mindesthöhe / Maximale Höhe | in Pixeln; ohne Maximum wächst der Editor mit dem Inhalt |
 | Stylesheet | eine `.css`-Datei aus `var/extensions/htmlvisual/` |
 | CSS-Klasse | Klasse am Editor-Container; leer = `c9-htmlvisual-{feldname}` |
+| Absatz-Klassen | Klassennamen durch Komma getrennt, z. B. `wide, lead` – Menü ***Absatz-Klassen*** (`block_class`) |
+| Text-Klassen | Klassennamen durch Komma getrennt, z. B. `red, marker` – Menü ***Text-Klassen*** (`text_class`) |
 
 Die Schaltfläche **<>** (Quelltext) ist immer da. Tastenkürzel (etwa Strg+B) und das
-Einfügen wirken unabhängig davon, welche Schaltflächen Sie auswählen.
+Einfügen wirken unabhängig davon, welche Schaltflächen Sie auswählen. Die beiden
+Klassen-Menüs erscheinen nur, wenn dafür Klassen eingetragen sind – auch ohne Nennung in
+*Eigene Schaltflächen*: Text-Klassen stehen dann hinter den Textformaten, Absatz-Klassen
+hinter **Abstand oben**.
+
+### Eigene Klassen
+
+Mit ***Absatz-Klassen*** und ***Text-Klassen*** geben Sie Redakteuren CSS-Klassen Ihrer
+Website an die Hand, ohne dass sie den Quelltext öffnen müssen. Jede Klasse hat im Menü
+ein Kästchen; mehrere Klassen lassen sich kombinieren, das Menü bleibt dafür offen. Ein
+halb gefülltes Kästchen zeigt, dass nur ein Teil der Auswahl die Klasse trägt – ein Klick
+setzt sie dann überall. Erlaubt sind Namen aus Buchstaben, Ziffern, `_` und `-`
+(nicht mit einer Ziffer beginnend); `mt-1` … `mt-8` bleiben dem Abstand oben vorbehalten.
+
+***Absatz-Klassen*** gelten für den Absatz bzw. die Überschrift am Cursor oder alle
+markierten Absätze, im Codeblock für den Block, in Listen und Tabellen für die ganze Liste
+bzw. Tabelle – dieselben Elemente wie beim Abstand oben, mit dem sie sich kombinieren:
+
+```html
+<p class="wide mt-4">…</p>
+```
+
+***Text-Klassen*** wirken auf Text:
+
+- ***Markierter Text*** erhält ein `<span class="…">`. Überschneidet sich die Markierung
+  mit anderen Elementen, teilt der Editor den Bereich in mehrere `<span>` auf – aus
+  `Hier beginnt ein <strong>neuer Text, teilweise in rot</strong>.` wird bei Markierung von
+  „beginnt“ bis „Text“ und der Klasse `red`:
+
+  ```html
+  Hier <span class="red">beginnt ein </span><strong><span class="red">neuer Text</span>, teilweise in rot</strong>.
+  ```
+
+  Wird die Klasse von einem Teil der Markierung wieder entfernt, behält der Rest sie.
+- ***Cursor ohne Markierung***: Eine neue Klasse erhält das umgebende Element, etwa ein
+  `<strong>` oder `<a>` – es entsteht kein `<span>`. Steht der Cursor in normalem Text,
+  bekommt das Wort am Cursor einen `<span>`. Entfernen Sie eine Klasse, verliert das
+  umgebende Element sie; ein `<span>` ohne weitere Attribute verschwindet ganz.
+
+Damit die Klassen im Editor sichtbar sind, definieren Sie sie im ***Stylesheet*** des Feldes
+(siehe unten); auf der Website wirken sie über deren Stylesheet.
 
 ## HTML im Feld
 
@@ -101,8 +145,8 @@ bleiben beim Text, ein leerer neuer Absatz bzw. Listenpunkt ist frei davon – e
 Absatz nach einer eingefügten Trennlinie oder Tabelle; teilen Sie einen
 Absatz mitten im Text, behalten beide Teile die Attribute, die `id` nur der erste. Wird eine
 Überschrift per Rücktaste am Anfang zum Absatz, entfallen ihre Attribute bis auf den Abstand oben.
-Ändern lassen sich Attribute nur im Quelltext – mit einer Ausnahme:
-Die Schaltfläche ***Abstand oben*** (`margin`) setzt an `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`,
+Ändern lassen sich Attribute nur im Quelltext – mit zwei Ausnahmen: die Menüs für eigene
+Klassen (siehe oben) und die Schaltfläche ***Abstand oben*** (`margin`) setzt an `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`,
 `<ol>` und `<table>` eine der Klassen `mt-1` … `mt-8` bzw. entfernt sie; andere Klassen des
 Elements bleiben erhalten. Die Klassen stammen aus Bootstrap, die Vorschau im Editor zeigt die
 Größen des Backends. Damit der Abstand auf der Website wirkt, muss deren Stylesheet `mt-1` …

@@ -10,9 +10,9 @@ class HtmlVisualOptions extends MarkdownVisualOptions {
 
     protected const PREFIX = 'ext.htmlvisual.ui_';
 
-    /** In addition: space above (mt-1 … mt-8) */
+    /** In addition: space above (mt-1 … mt-8), menus of the own classes */
     public const TEXT_KEYS = [
         ...parent::TEXT_KEYS,
-        'margin', 'margin_none', 'margin_n',
+        'margin', 'margin_none', 'margin_n', 'block_class', 'text_class',
     ];
 }

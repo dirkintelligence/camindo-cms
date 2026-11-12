@@ -4,7 +4,8 @@
 // <> button; toolbar, height and a stylesheet from
 // var/extensions/htmlvisual/ can be set per field. Same UI as
 // MarkdownVisual, but the field contains HTML (only the supported elements; from the
-// source also class/style/id/title and <img>).
+// source also class/style/id/title and <img>). Own classes for paragraphs and text
+// (options block_classes, text_classes) come from two menus in the toolbar.
 // Output in the template: (CMS:TEXT feld entitydecode=false lbrconvert=false).
 return [
     'version'          => '9.0.0',

@@ -37,17 +37,22 @@
  *     <img> with src, alt, title, width, height, loading, srcset, sizes, id, class,
  *     style, data-*, aria-*, lang, role
  *     class mt-1 … mt-8 (space above) also from the toolbar (button margin) on paragraph,
- *     heading, code block, list and table - other classes stay
+ *     heading, code block, list and table - other classes stay; the classes of the
+ *     options block_classes / text_classes from the menus block_class / text_class
  * Between two tables, code blocks or rules the editor offers a "gap" paragraph
  * (arrow keys, + buttons on the block edges, table menu), see insertGap().
  * Invisible special characters are entities in the HTML (&nbsp; &shy; &#8239; …); in the
  * editor they are marked, non-editable span.htv-ch. An &nbsp; set by the browser itself
  * (space at the end of a line), on the other hand, becomes a normal space.
  *
+ * Own classes from the options block_classes / text_classes (menus block_class,
+ * text_class with a checkbox per class): on the blocks of the space above resp. as
+ * <span class> around selected text, split at other elements - see setTextClass().
+ *
  * Options: toolbar (full|basic|custom), toolbar_custom, min_height, max_height (px),
  * stylesheet (file from var/extensions/htmlvisual/, delivered by
  * backendExtensions/HTMLVisual/css.php), css_class (default
- * c9-htmlvisual-{feldname}), texts (Camindo\Core\HtmlVisualOptions, snippets
+ * c9-htmlvisual-{feldname}), block_classes, text_classes (comma-separated), texts (Camindo\Core\HtmlVisualOptions, snippets
  * ext.htmlvisual.ui_*; missing texts in English).
  *
  * Without the backend: C9HtmlVisual.attach(textarea, options) - window.C9HtmlVisual also
@@ -841,9 +846,9 @@
                 collectRuns(Array.from(n.childNodes), m, runs);
                 return;
             }
-            if (tag === 'STRONG' || tag === 'B') m.strong = true;
-            else if (tag === 'EM' || tag === 'I') m.em = true;
-            else if (tag === 'U' || tag === 'INS') m.u = true;
+            if (tag === 'STRONG' || tag === 'B') setFormat(m, 'strong');
+            else if (tag === 'EM' || tag === 'I') setFormat(m, 'em');
+            else if (tag === 'U' || tag === 'INS') setFormat(m, 'u');
             else if (/^(CODE|KBD|SAMP|TT)$/.test(tag)) m.code = true;
             else if (tag === 'BDI') {
                 const d = (n.getAttribute('dir') || '').toLowerCase();
@@ -856,15 +861,23 @@
             const st = n.style;
             if (st) {
                 const w = st.fontWeight;
-                if (/^(bold|bolder|[6-9]00)$/.test(w)) m.strong = true;
+                if (/^(bold|bolder|[6-9]00)$/.test(w)) setFormat(m, 'strong');
                 else if (/^(normal|lighter|[1-5]00)$/.test(w)) m.strong = false;
-                if (st.fontStyle === 'italic' || st.fontStyle === 'oblique') m.em = true;
+                if (st.fontStyle === 'italic' || st.fontStyle === 'oblique') setFormat(m, 'em');
                 else if (st.fontStyle === 'normal') m.em = false;
                 // Underlined links of foreign pages are only a link, not an underline
-                if (!m.inLink && /underline/.test(st.textDecorationLine || st.textDecoration || '')) m.u = true;
+                if (!m.inLink && /underline/.test(st.textDecorationLine || st.textDecoration || '')) setFormat(m, 'u');
             }
             collectRuns(Array.from(n.childNodes), m, runs);
         });
+    }
+
+    // Switch on a format and remember where it starts among the elements with own
+    // attributes (marks.at) - <strong><span class="x">…</span></strong> stays nested that way
+    function setFormat(m, key) {
+        if (m[key]) return;
+        m[key] = true;
+        m.at = Object.assign({}, m.at, { [key]: (m.els || []).length });
     }
 
     function normalizeRuns(runs) {
@@ -910,7 +923,8 @@
     }
 
     // The writing direction encloses everything else, then elements with own
-    // attributes and the link in their order (marks.els, 'h' = the link), then the formats
+    // attributes, the link and the formats in the order of the DOM (marks.els, 'h' = the
+    // link; marks.at = position of a format among them, without one innermost)
     const MARK_ORDER = ['strong', 'em', 'u'];
     const MARK_TEXT = { strong: '**', em: '*', u: '++' };
     const markOpen = (mk) => mk.key === 'href' ? '[' : (mk.key === 'dir' ? (mk.value === 'rtl' ? RLI : LRI)
@@ -918,11 +932,18 @@
 
     function wantedMarks(m) {
         const want = m.dir ? [{ key: 'dir', value: m.dir }] : [];
-        (m.els || []).forEach((x) => {
+        const els = m.els || [];
+        const formats = (k) => MARK_ORDER.forEach((f) => {
+            const at = m.at && m.at[f] !== undefined ? Math.min(m.at[f], els.length) : els.length;
+            if (m[f] && at === k) want.push({ key: f, value: m[f] });
+        });
+        els.forEach((x, k) => {
+            formats(k);
             if (x !== 'h') want.push({ key: 'el', value: x });
             else if (m.href) want.push({ key: 'href', value: m.href });
         });
-        return want.concat(MARK_ORDER.filter((k) => m[k]).map((k) => ({ key: k, value: m[k] })));
+        formats(els.length);
+        return want;
     }
 
     function sameMarks(a, b) {
@@ -947,7 +968,8 @@
         const closeTo = (n) => {
             while (stack.length > n) {
                 const top = stack.pop();
-                const sp = out.match(/ +$/);
+                // spaces before a Markdown marker go outside, an element keeps them
+                const sp = top.key === 'el' ? null : out.match(/ +$/);
                 if (sp) out = out.slice(0, -sp[0].length);
                 out += top.key === 'href' ? '](' + linkDest(top.value) + ')'
                     : (top.key === 'dir' ? PDI : (top.key === 'el' ? EL_CLOSE : MARK_TEXT[top.key]));
@@ -967,12 +989,15 @@
             closeTo(keep);
             let text = r.img ? '' : r.text;
             if (keep < want.length) {
-                const lead = text.match(/^ +/);
-                if (lead) { out += lead[0]; text = text.slice(lead[0].length); }
+                // spaces go before a Markdown marker, into an element
+                let lead = (text.match(/^ +/) || [''])[0];
+                text = text.slice(lead.length);
                 for (let k = keep; k < want.length; k++) {
+                    if (lead && want[k].key !== 'el') { out += lead; lead = ''; }
                     out += markOpen(want[k]);
                     stack.push(want[k]);
                 }
+                out += lead;
             }
             if (r.img) out += EL_IMG + r.img + EL_MID;
             else if (r.marks.code) out += codeSpan(text, ctx);
@@ -1328,6 +1353,126 @@
         else el.removeAttribute('data-htv-a');
     }
 
+    // ---- Own classes from the options block_classes / text_classes ----
+    //
+    // Like the space above part of the own attributes (data-htv-a) and as a real class
+    // on the element; mt-1 … mt-8 stay at the end of the list.
+
+    const CLASS_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+    // Class names of an option: separated by comma or space, without the editor's own
+    // (htv-…) and, for blocks, without the space above
+    function classNames(value, block) {
+        const out = [];
+        String(value || '').split(/[\s,]+/).forEach((c) => {
+            if (CLASS_NAME.test(c) && !/^(c9-)?htv-/.test(c) && !(block && MARGIN_RE.test(c)) && !out.includes(c)) out.push(c);
+        });
+        return out;
+    }
+
+    function hasOwnClass(el, cls) {
+        return String(blockAttrs(el).class || '').split(/\s+/).includes(cls);
+    }
+
+    function setOwnClass(el, cls, on) {
+        const at = blockAttrs(el);
+        const list = String(at.class || '').split(/\s+/).filter((c) => c && c !== cls);
+        if (on) list.push(cls);
+        const sorted = list.filter((c) => !MARGIN_RE.test(c)).concat(list.filter((c) => MARGIN_RE.test(c)));
+        if (sorted.length) {
+            at.class = sorted.join(' ');
+            el.setAttribute('class', at.class);
+        }
+        else {
+            delete at.class;
+            el.removeAttribute('class');
+        }
+        if (Object.keys(at).length) el.setAttribute('data-htv-a', JSON.stringify(at));
+        else el.removeAttribute('data-htv-a');
+    }
+
+    // Inline elements that can carry a text class (own attributes, see ATTR_INLINE)
+    function classable(n) {
+        return !!(n && n.nodeType === 1 && ATTR_INLINE[tagOf(n)] && !n.classList.contains('htv-ch'));
+    }
+
+    // Nearest inline element above n (n itself not included) with the class, up to the text block
+    function classAncestor(n, cls) {
+        for (let el = n.parentNode; el && el.nodeType === 1 && !TEXTBLOCK.test(el.nodeName); el = el.parentNode) {
+            if (classable(el) && hasOwnClass(el, cls)) return el;
+        }
+        return null;
+    }
+
+    // Remove a text class; a <span> without own attributes disappears
+    function dropClass(el, cls) {
+        setOwnClass(el, cls, false);
+        if (tagOf(el) === 'SPAN' && !el.hasAttribute('data-htv-a')) unwrapEl(el);
+    }
+
+    // Text pieces: text nodes, marked special characters, images
+    function textLeaves(root, accept) {
+        const out = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+            acceptNode: (n) => {
+                if (n.nodeType === 3) {
+                    if (n.parentNode.classList && n.parentNode.classList.contains('htv-ch')) return NodeFilter.FILTER_REJECT;
+                    return n.data.replace(ZW_RE, '') !== '' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+                }
+                if (n.classList.contains('htv-ch') || n.nodeName === 'IMG') return NodeFilter.FILTER_ACCEPT;
+                return NodeFilter.FILTER_SKIP;
+            }
+        });
+        while (walker.nextNode()) {
+            if (!accept || accept(walker.currentNode)) out.push(walker.currentNode);
+        }
+        return out;
+    }
+
+    // Is a text piece (partly) selected? Text nodes: at least one character
+    function leafSelected(r, n) {
+        if (n.nodeType === 3) {
+            const before = r.comparePoint(n, 0) < 0;
+            const after = r.comparePoint(n, n.length) > 0;
+            const s = before ? (r.startContainer === n ? r.startOffset : n.length) : 0;
+            const e = after ? (r.endContainer === n ? r.endOffset : 0) : n.length;
+            return e > s;
+        }
+        const p = n.parentNode;
+        const k = Array.prototype.indexOf.call(p.childNodes, n);
+        return r.comparePoint(p, k) === 0 && r.comparePoint(p, k + 1) === 0;
+    }
+
+    // Split the text nodes at the edges of the range: afterwards every text piece is
+    // either selected completely or not at all
+    function splitRangeEdges(r) {
+        const ec = r.endContainer;
+        const eo = r.endOffset;
+        if (ec.nodeType === 3 && eo > 0 && eo < ec.length) ec.splitText(eo);
+        const sc = r.startContainer;
+        const so = r.startOffset;
+        if (sc.nodeType === 3 && so > 0 && so < sc.length) {
+            const rest = sc.splitText(so);
+            // a live range moves its end along when it was in the same node
+            if (ec === sc) r.setEnd(rest, eo - so);
+            r.setStart(rest, 0);
+        }
+    }
+
+    // Join neighboring <span> with the same own attributes
+    function mergeSpans(root) {
+        root.querySelectorAll('span[data-htv-a]').forEach((sp) => {
+            if (!sp.isConnected) return;
+            let nx = sp.nextSibling;
+            while (nx && nx.nodeType === 1 && nx.nodeName === 'SPAN' && !nx.classList.contains('htv-ch')
+                && nx.getAttribute('data-htv-a') === sp.getAttribute('data-htv-a')) {
+                while (nx.firstChild) sp.appendChild(nx.firstChild);
+                nx.remove();
+                nx = sp.nextSibling;
+            }
+        });
+    }
+
     function unwrapEl(el) {
         const parent = el.parentNode;
         while (el.firstChild) parent.insertBefore(el.firstChild, el);
@@ -1436,6 +1581,8 @@
         code:         { icon: 'data_object' },
         heading:      { icon: 'title', menu: true },
         margin:       { icon: 'height', menu: true },
+        block_class:  { icon: 'format_paragraph', menu: true },
+        text_class:   { icon: 'style', menu: true },
         ul:           { icon: 'format_list_bulleted' },
         ol:           { icon: 'format_list_numbered' },
         outdent:      { icon: 'format_indent_decrease', key: 'Shift+Tab' },
@@ -1486,6 +1633,7 @@
         col_delete: 'Delete column', row_above: 'Insert row above', row_below: 'Insert row below',
         row_delete: 'Delete row', table_delete: 'Delete table',
         margin: 'Space above', margin_none: 'Default', margin_n: 'Space {n}',
+        block_class: 'Paragraph classes', text_class: 'Text classes',
         para_before: 'Insert paragraph before', para_after: 'Insert paragraph after',
         group_currency: 'Currency', group_symbols: 'Symbols', group_quotes: 'Quotation marks', group_dashes: 'Dashes',
         group_spaces: 'Spaces and hyphenation', ch_ndash: 'En dash', ch_mdash: 'Em dash', ch_nbhy: 'Non-breaking hyphen',
@@ -1501,6 +1649,18 @@
             if (!items.some((n) => n !== '|')) items = PRESETS.full;
         }
         else items = PRESETS[preset] || PRESETS.full;
+        // Class menus only with classes; without a place of their own next to the
+        // inline formats resp. the space above
+        const want = {
+            text_class: classNames(options.text_classes, false).length > 0,
+            block_class: classNames(options.block_classes, true).length > 0
+        };
+        items = items.filter((n) => !(n in want) || want[n]);
+        [['text_class', ['code', 'underline', 'italic', 'bold']], ['block_class', ['margin', 'heading']]].forEach(([name, after]) => {
+            if (!want[name] || items.includes(name)) return;
+            const anchor = after.find((a) => items.includes(a));
+            items.splice(anchor ? items.indexOf(anchor) + 1 : 0, 0, name);
+        });
         return items.filter((n, k, a) => n !== '|' || (k > 0 && k < a.length - 1 && a[k - 1] !== '|'));
     }
 
@@ -1547,6 +1707,8 @@
             const cssClass = String(o.css_class || '').trim() || 'c9-htmlvisual-' + field;
             this.minHeight = Math.max(50, parseInt(o.min_height || '200', 10) || 200);
             this.maxHeight = parseInt(o.max_height || '0', 10) || 0;
+            this.blockClasses = classNames(o.block_classes, true);
+            this.textClasses = classNames(o.text_classes, false);
 
             const wrap = this.wrap = document.createElement('div');
             wrap.className = 'c9-htv ' + cssClass;
@@ -1831,6 +1993,8 @@
                 code: !!(node && closestIn(root, node, 'code')),
                 heading: !!(tb && /^H[1-6]$/.test(tb.nodeName)),
                 margin: !!(this.buttons.margin && r && this.marginUnits().some(marginOf)),
+                block_class: !!(this.buttons.block_class && r && this.marginUnits().some((u) => this.blockClasses.some((c) => hasOwnClass(u, c)))),
+                text_class: !!(this.buttons.text_class && r && !inPre && this.textClasses.some((c) => this.textClassState(c) > 0)),
                 ul: !!(li && li.parentNode.nodeName === 'UL'),
                 ol: !!(li && li.parentNode.nodeName === 'OL'),
                 quote: !!(node && closestIn(root, node, 'blockquote')),
@@ -1843,7 +2007,7 @@
                 source: this.sourceMode
             };
             const disabled = {
-                bold: inPre, italic: inPre, underline: inPre, code: inPre, link: inPre,
+                bold: inPre, italic: inPre, underline: inPre, code: inPre, link: inPre, text_class: inPre,
                 heading: inPre || !!cell || !!li,
                 ul: inPre || !!cell, ol: inPre || !!cell,
                 quote: !!cell, codeblock: !!cell || !!li,
@@ -1884,6 +2048,8 @@
                 case 'code': this.exec(() => this.toggleCode()); break;
                 case 'heading': this.menuHeading(btn); break;
                 case 'margin': this.menuMargin(btn); break;
+                case 'block_class': this.menuClasses(btn, true); break;
+                case 'text_class': this.menuClasses(btn, false); break;
                 case 'ul': this.exec(() => this.toggleList('UL')); break;
                 case 'ol': this.exec(() => this.toggleList('OL')); break;
                 case 'indent': this.exec(() => this.indent(false)); break;
@@ -2560,6 +2726,160 @@
                 setMargin(last, n);
             });
             restoreSel(this.content, s, last);
+        }
+
+        // ---- Own classes (options block_classes, text_classes) ----
+
+        // Block class: on the same blocks as the space above. 0 = none, 1 = some, 2 = all
+        blockClassState(cls) {
+            const units = this.marginUnits();
+            const n = units.filter((u) => hasOwnClass(u, cls)).length;
+            return n === 0 ? 0 : (n === units.length ? 2 : 1);
+        }
+
+        setBlockClass(cls, on) {
+            const s = saveSel(this.content);
+            let last = null;
+            this.marginUnits().forEach((u) => {
+                last = u.nodeName === 'DIV' ? renameEl(u, 'P') : u;
+                setOwnClass(last, cls, on);
+            });
+            restoreSel(this.content, s, last);
+        }
+
+        // Text pieces of the range - in text blocks, not in code blocks
+        rangeLeaves(r) {
+            const root = this.content;
+            return textLeaves(root, (n) => {
+                const tb = textBlockOf(root, n);
+                return !!tb && tb.nodeName !== 'PRE' && leafSelected(r, n);
+            });
+        }
+
+        // Text class at the caret / in the selection. 0 = none, 1 = partly, 2 = everywhere
+        textClassState(cls) {
+            const root = this.content;
+            const r = getRange(root);
+            if (!r) return 0;
+            if (r.collapsed) {
+                const n = r.startContainer;
+                return (classable(n) && hasOwnClass(n, cls)) || classAncestor(n, cls) ? 2 : 0;
+            }
+            const leaves = this.rangeLeaves(r);
+            const n = leaves.filter((x) => classAncestor(x, cls)).length;
+            return n === 0 ? 0 : (n === leaves.length ? 2 : 1);
+        }
+
+        // Selected text: <span class> around the selected pieces (split at other
+        // elements); removing takes the class only from the selected part.
+        // Caret: the class goes to the enclosing element (strong, a, span …) or is
+        // removed from it - without one a <span> around the word at the caret
+        setTextClass(cls, on) {
+            const root = this.content;
+            const sel = getRange(root);
+            if (!sel) return;
+            if (sel.collapsed) { this.caretTextClass(sel, cls, on); return; }
+            const r = sel.cloneRange();
+            splitRangeEdges(r);
+            const leaves = this.rangeLeaves(r);
+            if (!leaves.length) return;
+            if (on) this.wrapLeaves(leaves.filter((n) => !classAncestor(n, cls)), cls);
+            else {
+                const targets = [];
+                leaves.forEach((n) => {
+                    for (let a = classAncestor(n, cls); a; a = classAncestor(a, cls)) if (!targets.includes(a)) targets.push(a);
+                });
+                // what of these elements is not selected keeps the class
+                const keep = [];
+                targets.forEach((t) => textLeaves(t).forEach((n) => { if (!leaves.includes(n) && !keep.includes(n)) keep.push(n); }));
+                keep.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+                targets.forEach((t) => dropClass(t, cls));
+                this.wrapLeaves(keep.filter((n) => !classAncestor(n, cls)), cls);
+            }
+            mergeSpans(root);
+            const first = leaves[0];
+            const last = leaves[leaves.length - 1];
+            const nr = document.createRange();
+            if (first.nodeType === 3) nr.setStart(first, 0);
+            else nr.setStartBefore(first);
+            if (last.nodeType === 3) nr.setEnd(last, last.length);
+            else nr.setEndAfter(last);
+            setRange(nr);
+        }
+
+        caretTextClass(r, cls, on) {
+            const root = this.content;
+            const node = r.startContainer;
+            const s = saveSel(root);
+            const tb = textBlockOf(root, node);
+            if (!tb || tb.nodeName === 'PRE') return;
+            if (!on) {
+                if (classable(node) && hasOwnClass(node, cls)) dropClass(node, cls);
+                let a;
+                while ((a = classAncestor(node, cls))) dropClass(a, cls);
+                restoreSel(root, s, tb);
+                return;
+            }
+            for (let el = node.nodeType === 1 ? node : node.parentNode; el && el !== tb; el = el.parentNode) {
+                if (classable(el)) {
+                    setOwnClass(el, cls, true);
+                    restoreSel(root, s, tb);
+                    return;
+                }
+            }
+            // no enclosing element: the word at the caret
+            if (node.nodeType !== 3) return;
+            const text = node.data;
+            const word = /[\p{L}\p{N}\p{M}_-]/u;
+            let a = r.startOffset;
+            let b = r.startOffset;
+            while (a > 0 && word.test(text[a - 1])) a--;
+            while (b < text.length && word.test(text[b])) b++;
+            if (a === b) return;
+            const offset = r.startOffset - a;
+            if (b < text.length) node.splitText(b);
+            const mid = a > 0 ? node.splitText(a) : node;
+            this.wrapLeaves([mid], cls);
+            caretAt(mid, offset);
+        }
+
+        // Wrap text pieces with <span class>: pieces that make up a whole inline element
+        // take it along (<span class="x">a <em>b</em></span>), neighbors share one span,
+        // a single <span> only gets the class
+        wrapLeaves(leaves, cls) {
+            if (!leaves.length) return;
+            const set = new Set(leaves);
+            let units = leaves.slice();
+            let changed = true;
+            while (changed) {
+                changed = false;
+                const next = [];
+                units.forEach((n) => {
+                    const p = n.parentNode;
+                    if (next.includes(p)) return;
+                    if (p && p.nodeType === 1 && p !== this.content && !TEXTBLOCK.test(p.nodeName) && !BLOCK_TAGS.test(p.nodeName)
+                        && !p.classList.contains('htv-ch') && textLeaves(p).every((x) => set.has(x))) {
+                        next.push(p);
+                        changed = true;
+                    }
+                    else next.push(n);
+                });
+                // an element taken along replaces its pieces
+                units = next.filter((n) => !next.some((m) => m !== n && m.contains(n)));
+            }
+            const groups = [];
+            units.forEach((n) => {
+                const g = groups[groups.length - 1];
+                if (g && g[g.length - 1].nextSibling === n) g.push(n);
+                else groups.push([n]);
+            });
+            groups.forEach((g) => {
+                if (g.length === 1 && classable(g[0]) && tagOf(g[0]) === 'SPAN') { setOwnClass(g[0], cls, true); return; }
+                const span = document.createElement('span');
+                setOwnClass(span, cls, true);
+                g[0].before(span);
+                g.forEach((n) => span.appendChild(n));
+            });
         }
 
         // ---- Paragraph between blocks ----
@@ -3337,6 +3657,50 @@
                 }
             });
             probe.remove();
+        }
+
+        // Classes with a checkbox each - the menu stays open to combine several
+        menuClasses(btn, block) {
+            const list = block ? this.blockClasses : this.textClasses;
+            this.openPop(btn, (pop) => {
+                pop.classList.add('c9-htv-menu', 'c9-htv-classes');
+                const items = list.map((cls) => {
+                    const id = 'c9htv' + (++Editor.uid);
+                    const row = document.createElement('div');
+                    row.className = 'c9-htv-item c9-htv-check';
+                    const box = document.createElement('input');
+                    box.type = 'checkbox';
+                    box.className = 'form-check-input';
+                    box.setAttribute('aria-labelledby', id);
+                    const label = document.createElement('span');
+                    label.id = id;
+                    label.textContent = cls;
+                    row.appendChild(box);
+                    row.appendChild(label);
+                    // keep the selection in the text; the whole row switches the checkbox
+                    row.addEventListener('mousedown', (e) => e.preventDefault());
+                    row.addEventListener('click', (e) => {
+                        if (e.target !== box) {
+                            e.preventDefault();
+                            box.checked = !box.checked;
+                        }
+                        const on = box.checked;
+                        this.restoreRange();
+                        this.exec(() => (block ? this.setBlockClass(cls, on) : this.setTextClass(cls, on)));
+                        const r = getRange(this.content);
+                        this.savedRange = r ? r.cloneRange() : null;
+                        refresh();
+                    });
+                    pop.appendChild(row);
+                    return [cls, box];
+                });
+                const refresh = () => items.forEach(([cls, box]) => {
+                    const st = block ? this.blockClassState(cls) : this.textClassState(cls);
+                    box.checked = st === 2;
+                    box.indeterminate = st === 1;
+                });
+                refresh();
+            });
         }
 
         menuSpecial(btn) {

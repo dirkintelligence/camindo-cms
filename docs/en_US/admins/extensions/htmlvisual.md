@@ -15,8 +15,9 @@ paragraph format (paragraph, heading 1–6), bulleted and numbered lists with
 sub-items, quote, code block, link, horizontal line, line break, special characters,
 align left, center, right, ***text direction*** for selected sections, and
 tables with a header row. HTML editor only: ***space above*** for paragraphs, headings,
-code blocks, lists and tables (classes `mt-1` … `mt-8`, see below). Images, classes and
-styles can be specified in the source (see below).
+code blocks, lists and tables (classes `mt-1` … `mt-8`, see below) as well as ***own classes***
+for paragraphs and text from two menus if you specify classes in the field settings (see
+“Own classes” below). Images, classes and styles can also be specified in the source (see below).
 
 Between two tables, code blocks or lines, where the cursor otherwise has no place,
 editors insert a paragraph with the arrow keys, with a **+** at the edge of the block or
@@ -46,13 +47,54 @@ How editors work with it is described in the [Manual for editors](../../editors/
 | Setting | Meaning |
 |---|---|
 | Toolbar | *all buttons*, *basic* (bold, italic, paragraph format, lists, link), *custom* |
-| Custom buttons | only with *custom*: names separated by comma or space, `\|` as separator – `bold italic underline code heading margin ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
+| Custom buttons | only with *custom*: names separated by comma or space, `\|` as separator – `bold italic underline code heading margin block_class text_class ul ol outdent indent quote codeblock link hr br special align_left align_center align_right dir table undo redo` |
 | Minimum height / Maximum height | in pixels; without a maximum, the editor grows with the content |
 | Stylesheet | a `.css` file from `var/extensions/htmlvisual/` |
 | CSS class | class on the editor container; empty = `c9-htmlvisual-{fieldname}` |
+| Paragraph classes | class names separated by commas, e.g. `wide, lead` – menu ***Paragraph classes*** (`block_class`) |
+| Text classes | class names separated by commas, e.g. `red, marker` – menu ***Text classes*** (`text_class`) |
 
 The button **<>** (source) is always there. Keyboard shortcuts (such as Ctrl+B) and
-pasting work regardless of which buttons you select.
+pasting work regardless of which buttons you select. The two class menus only appear if
+classes are entered for them – even when they are not named in *Custom buttons*: text
+classes then follow the text formats, paragraph classes follow **Space above**.
+
+### Own classes
+
+With ***Paragraph classes*** and ***Text classes*** you give editors CSS classes of your
+website without them having to open the source. Each class has a checkbox in the menu;
+several classes can be combined, the menu stays open for that. A partly filled checkbox
+shows that only part of the selection has the class – a click then sets it everywhere.
+Names may consist of letters, digits, `_` and `-` (not starting with a digit); `mt-1` …
+`mt-8` are reserved for the space above.
+
+***Paragraph classes*** apply to the paragraph or heading at the cursor or all selected
+paragraphs, in a code block to the block, in lists and tables to the whole list or
+table – the same elements as the space above, which they combine with:
+
+```html
+<p class="wide mt-4">…</p>
+```
+
+***Text classes*** apply to text:
+
+- ***Selected text*** gets a `<span class="…">`. If the selection overlaps other
+  elements, the editor splits the range into several `<span>` – with the selection from
+  “begins” to “text” and the class `red`,
+  `Here begins a <strong>new text, partly in red</strong>.` becomes:
+
+  ```html
+  Here <span class="red">begins a </span><strong><span class="red">new text</span>, partly in red</strong>.
+  ```
+
+  If the class is removed from part of the selection again, the rest keeps it.
+- ***Cursor without a selection***: a new class goes to the enclosing element, such as a
+  `<strong>` or `<a>` – no `<span>` is created. If the cursor is in plain text, the word at
+  the cursor gets a `<span>`. If you remove a class, the enclosing element loses it; a
+  `<span>` without further attributes disappears completely.
+
+For the classes to be visible in the editor, define them in the field's ***stylesheet***
+(see below); on the website they take effect through its stylesheet.
 
 ## HTML in the field
 
@@ -101,8 +143,8 @@ they stay with the text, and an empty new paragraph or list item has none – no
 paragraph after an inserted horizontal line or table; if you split a
 paragraph within the text, both parts keep the attributes, the `id` only the first one. If
 Backspace at its start turns a heading into a paragraph, its attributes are dropped except for the space above.
-Attributes can only be changed in the source – with one exception:
-the ***space above*** button (`margin`) sets or removes one of the classes `mt-1` … `mt-8` on
+Attributes can only be changed in the source – with two exceptions: the menus for own
+classes (see above) and the ***space above*** button (`margin`) sets or removes one of the classes `mt-1` … `mt-8` on
 `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`, `<ol>` and `<table>`; other classes of the element are
 kept. The classes come from Bootstrap; the editor preview shows the sizes of the backend. For
 the space to take effect on the website, its stylesheet must define `mt-1` … `mt-8`

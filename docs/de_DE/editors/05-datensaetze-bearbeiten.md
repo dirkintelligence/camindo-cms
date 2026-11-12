@@ -115,6 +115,8 @@ einem Textprogramm.
 | ![link](../_/link.svg) | Strg+K (Mac: ⌘K) | Link; im HTML-Editor wird eine markierte Adresse als Ziel eingetragen |
 | ![title](../_/title.svg) | Strg+Alt+1 … 6, Strg+Alt+0 | Überschrift 1–6 bzw. Absatz |
 | ![height](../_/height.svg) | — | nur HTML-Editor: ***Abstand oben*** (Abstand 1–8 oder Standard) für Absatz, Überschrift, Codeblock, Liste oder Tabelle |
+| ![format_paragraph](../_/format_paragraph.svg) | — | nur HTML-Editor, wenn eingerichtet: ***Absatz-Klassen*** für Absatz, Überschrift, Codeblock, Liste oder Tabelle |
+| ![style](../_/style.svg) | — | nur HTML-Editor, wenn eingerichtet: ***Text-Klassen*** für markierten Text bzw. das Element am Cursor |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Strg+Z, Strg+Y (Mac: ⌘Z, ⌘⇧Z) | rückgängig, wiederholen |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | Horizontale Linie |
 | ![special_character](../_/special_character.svg) | — | Sonderzeichen |
@@ -165,6 +167,20 @@ Liste oder die ganze Tabelle einen zusätzlichen Abstand nach oben – **Abstand
 **Abstand 8** oder **Standard (ohne)**. Neben jeder Stufe steht ihre Größe im Backend; wie
 groß der Abstand auf der Website ist, legt deren Stylesheet fest. Ein neuer Absatz per
 `Return` übernimmt den Abstand nicht.
+
+***Absatz- und Text-Klassen*** (nur HTML-Editor, wenn Ihr Administrator Klassen eingerichtet
+hat): Die Auswahl ![format_paragraph](../_/format_paragraph.svg) **Absatz-Klassen** und
+![style](../_/style.svg) **Text-Klassen** listet Gestaltungsklassen der Website mit je einem
+Kästchen. Setzen oder entfernen Sie den Haken, um eine Klasse zuzuweisen oder zu entfernen;
+das Menü bleibt offen, sodass Sie mehrere Klassen kombinieren können. Ein halb gefülltes
+Kästchen bedeutet: Nur ein Teil der Auswahl hat die Klasse.
+
+- ***Absatz-Klassen*** gelten für den Absatz am Cursor bzw. alle markierten Absätze (wie
+  der Abstand oben auch für Überschrift, Codeblock, ganze Liste oder Tabelle).
+- ***Text-Klassen*** gelten für den markierten Text – auch wenn er teilweise fett, kursiv
+  oder verlinkt ist. Ohne Markierung erhält das Element am Cursor die Klasse, etwa ein
+  fetter Abschnitt oder ein Link; in normalem Text das Wort am Cursor. Entfernen Sie die
+  Klasse bei Cursor ohne Markierung, verliert sie der ganze Abschnitt.
 
 ***Sonderzeichen*** wie geschützte oder schmale Leerzeichen und das weiche
 Trennzeichen sind im Editor grau hinterlegt, damit Sie sie sehen.

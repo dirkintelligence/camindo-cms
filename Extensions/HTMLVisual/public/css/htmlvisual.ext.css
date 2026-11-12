@@ -283,6 +283,17 @@
     color: var(--bs-secondary-color, #6c757d);
 }
 
+/* Own classes (block_classes, text_classes): checkbox per class */
+.c9-htv-item.c9-htv-check { padding-block: .2rem; cursor: pointer; }
+.c9-htv-check .form-check-input { flex: none; margin: 0; cursor: pointer; }
+.c9-htv-check span {
+    flex: 1;
+    padding: .1rem 0;
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: .85rem;
+    cursor: pointer;
+}
+
 /* + buttons: paragraph before / after a table, code block or rule */
 .c9-htv-gapbtn {
     position: absolute;

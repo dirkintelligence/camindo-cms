@@ -103,6 +103,8 @@ for headings, emphasis, lists and links. They work like a word processor.
 | ![link](../_/link.svg) | Ctrl+K (Mac: ⌘K) | link; in the HTML editor, a selected address is entered as the target |
 | ![title](../_/title.svg) | Ctrl+Alt+1 … 6, Ctrl+Alt+0 | heading 1–6 or paragraph |
 | ![height](../_/height.svg) | — | HTML editor only: ***space above*** (space 1–8 or default) for a paragraph, heading, code block, list or table |
+| ![format_paragraph](../_/format_paragraph.svg) | — | HTML editor only, if set up: ***paragraph classes*** for a paragraph, heading, code block, list or table |
+| ![style](../_/style.svg) | — | HTML editor only, if set up: ***text classes*** for selected text or the element at the cursor |
 | ![undo](../_/undo.svg) ![redo](../_/redo.svg) | Ctrl+Z, Ctrl+Y (Mac: ⌘Z, ⌘⇧Z) | undo, redo |
 | ![horizontal_rule](../_/horizontal_rule.svg) | — | horizontal line |
 | ![special_character](../_/special_character.svg) | — | special character |
@@ -149,6 +151,19 @@ the paragraph or heading at the cursor (or the selected paragraphs), the code bl
 the whole table – **Space 1** to **Space 8** or **Default (none)**. Next to each level you see its size in
 the backend; how large the space is on the website depends on its stylesheet. A new paragraph created
 with `Return` does not take over the space.
+
+***Paragraph and text classes*** (HTML editor only, if your administrator has set up classes): the
+buttons ![format_paragraph](../_/format_paragraph.svg) **Paragraph classes** and
+![style](../_/style.svg) **Text classes** list design classes of the website, each with a checkbox.
+Check or uncheck it to assign or remove a class; the menu stays open, so you can combine several
+classes. A partly filled checkbox means that only part of the selection has the class.
+
+- ***Paragraph classes*** apply to the paragraph at the cursor or all selected paragraphs (like the
+  space above also to a heading, code block, whole list or table).
+- ***Text classes*** apply to the selected text – even if parts of it are bold, italic or linked.
+  Without a selection, the element at the cursor gets the class, such as a bold section or a link;
+  in plain text, the word at the cursor. If you remove the class with the cursor and no selection,
+  the whole section loses it.
 
 ***Special characters*** such as non-breaking or narrow spaces and the soft hyphen are highlighted in gray
 in the editor, so that you can see them.
