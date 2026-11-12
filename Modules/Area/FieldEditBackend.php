@@ -457,6 +457,11 @@ class FieldEditBackend extends FieldBackend {
             foreach ($displayTypes as $key) {
                 $options[$key] = $this->cms->snippet('area.label_display_type_' . $key);
             }
+            // new field (no display_type yet): the select shows the first option,
+            // and the dependent blocks below must start in the same state
+            if ($displayTypes && !in_array((string)$displayType, $displayTypes, true)) {
+                $displayType = reset($displayTypes);
+            }
             $this->backend->formField($this->field, [
                 'name' => 'display_type',
                 'value' => $displayType ?? '',
