@@ -78,16 +78,17 @@ aus, sobald Templates Inhalte zusammenführen.
 
 ## Reservierte Namens-Präfixe
 
-Folgende Präfixe sind für einen Feldtyp reserviert. Die Verwendung kann
-helfen, Typenkonflikte zu vermeiden, erschwert aber das nachträgliche Ändern
-eines Feldtyps (Feld muss dann erst umbenannt werden):
+Folgende Präfixe sind für genau einen Feldtyp reserviert. Ihre Verwendung hilft,
+Typkonflikte zu vermeiden. Beim [Typwechsel](./05-eingabefelder.md#typ-ändern) schlägt
+camindo CMS einen neuen Namen mit dem Präfix des Zieltyps vor (siehe
+[Reservierte Namens-Präfixe](./05-eingabefelder.md#reservierte-namens-präfixe)):
 
 | Präfix | Typ |
 | --- | --- |
 | bit_ | bit |
 | chr_ | chars |
-| chr_ | currency | chr_ |
-| chr_ | datetime | chr_ |
+| cur_ | currency |
+| dat_ | datetime |
 | dec_ | decimal |
 | enc_ | encrypted |
 | fil_ | file |
@@ -98,7 +99,11 @@ eines Feldtyps (Feld muss dann erst umbenannt werden):
 | int_ | integer |
 | jsn_ | json |
 | pwd_ | password |
-| rel_ | pointer, relation, link |
+| lnk_ | link |
+| ptr_ | pointer |
+| pn1_ | pointer1 |
+| rel_ | relation |
+| rn1_ | relation1 |
 | txt_ | text |
 | tim_ | time |
 | tsl_ | timestampl |

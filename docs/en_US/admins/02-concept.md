@@ -73,9 +73,10 @@ names. This naming convention pays off as soon as templates combine content.
 
 ## Reserved name prefixes
 
-The following prefixes are reserved for a field type. Using them can help avoid type
-conflicts, but makes it harder to change the type of a field later (the field must then
-be renamed first):
+The following prefixes are reserved for exactly one field type. Using them helps avoid
+type conflicts. When you [change the type](./05-input-fields.md#changing-the-type),
+camindo CMS suggests a new name with the prefix of the target type (see
+[Reserved name prefixes](./05-input-fields.md#reserved-name-prefixes)):
 
 | Prefix | Type |
 | --- | --- |
@@ -93,7 +94,11 @@ be renamed first):
 | int_ | integer |
 | jsn_ | json |
 | pwd_ | password |
-| rel_ | pointer, relation, link |
+| lnk_ | link |
+| ptr_ | pointer |
+| pn1_ | pointer1 |
+| rel_ | relation |
+| rn1_ | relation1 |
 | txt_ | text |
 | tim_ | time |
 | tsl_ | timestampl |
