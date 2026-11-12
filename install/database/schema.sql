@@ -1,4 +1,4 @@
--- camindo 9.1.0 - Struktur. Generiert von `camindo.php schema export`.
+-- camindo 9.1.8 - Struktur. Generiert von `camindo.php schema export`.
 
 /*M!999999\- enable the sandbox mode */ 
 
