@@ -332,11 +332,24 @@ class Instance extends Dataset {
                     );
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
+                // The domains end up in media/{instance}/.htaccess (MediaAccess): no
+                // quotation marks, spaces or control characters, a plain domain only
+                // host characters, a regular expression must compile
+                $isRegex = !empty($regex[$key]);
+                $valid = !preg_match('/["\s\x00-\x1f\x7f]/u', $domain)
+                    && ($isRegex
+                        ? @preg_match('~^(?:' . $domain . ')$~i', '') !== false
+                        : (bool)preg_match('/^[\p{L}\p{N}._\-]+(?::[0-9]+)?$/u', $domain));
+                if (!$valid) {
+                    $this->createFieldError('error_invalid_format', 'additional_domains',
+                        $this->schema['additional_domains']['label'] ?? '');
+                    throw new \Exception('#' . $this->cms->errorMsgLast());
+                }
                 // The main domain must not appear in the list again
                 if ($domain === $primaryDomain) continue;
                 if (in_array($domain, $cleanDomains, true)) continue;
                 $cleanDomains[] = $domain;
-                $cleanRegex[]   = !empty($regex[$key]) ? 1 : 0;
+                $cleanRegex[]   = $isRegex ? 1 : 0;
             }
             $data['domain'] = $cleanDomains;
             $data['regex']  = $cleanRegex;

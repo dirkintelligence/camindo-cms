@@ -8,6 +8,8 @@ return [
 'description' => '#converter.module_description',
 'icon' => 'manufacturing',
 'listed' => true,
+// Only superusers: installs code, runs processes resp. scripts (Access::module())
+'superuser' => true,
 // API: read and create/change (ConverterApi)
 'api' => ['ConverterApi'],
 // Additional module rights:

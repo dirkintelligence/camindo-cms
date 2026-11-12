@@ -120,10 +120,14 @@ class MediaAccess {
             $instance = $this->instanceCache->instance($id);
             if ($instance === null) continue;
             $primary = trim((string)($instance['primary_domain'] ?? ''));
-            if ($primary !== '') $patterns[] = preg_quote($primary, '~');
+            if ($primary !== '' && !preg_match('/["\s\x00-\x1f\x7f]/u', $primary)) $patterns[] = preg_quote($primary, '~');
             foreach ((array)($instance['additional_domains'] ?? []) as $row) {
                 $domain = trim((string)($row['domain'] ?? ''));
                 if ($domain === '') continue;
+                // second line of defense (Instance::hookOnSave() checks on saving):
+                // nothing that could end the quoted pattern or the line
+                if (preg_match('/["\s\x00-\x1f\x7f]/u', $domain)) continue;
+                if (!empty($row['regex']) && @preg_match('~^(?:' . $domain . ')$~i', '') === false) continue;
                 $patterns[] = !empty($row['regex']) ? $domain : preg_quote($domain, '~');
             }
         }

@@ -108,7 +108,7 @@ The sets are stored under `var/custom/snippets/{instance_id}/lang/{language}.ini
 
 ## Scheduler
 
-The ***scheduler*** runs tasks on a time schedule. It requires the cron job `cron.php`, which runs every minute (see [Cron jobs](./12-operation.md#cron-jobs)). The maintenance tasks – backup, trash, temporary files, deadlines, logs, checks – are set up by the installation (see [operation](./12-operation.md#scheduler)). You can adjust the time of execution.
+The ***scheduler*** (superusers only) runs tasks on a time schedule. It requires the cron job `cron.php`, which runs every minute (see [Cron jobs](./12-operation.md#cron-jobs)). The maintenance tasks – backup, trash, temporary files, deadlines, logs, checks – are set up by the installation (see [operation](./12-operation.md#scheduler)). You can adjust the time of execution.
 
 | Task | Effect |
 |---|---|
@@ -220,7 +220,7 @@ Everyone with access to the module may read the policies. Only a superuser chang
 
 ## Components
 
-The module “Components” shows all modules, media processors and extensions with origin (core or add-on), version and state:
+The module “Components” (superusers only) shows all modules, media processors and extensions with origin (core or add-on), version and state:
 
 | State | Meaning |
 |---|---|

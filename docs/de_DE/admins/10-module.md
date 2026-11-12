@@ -179,7 +179,7 @@ gelöscht werden, sobald die Snippets wieder stimmen.
 
 ## Zeitplaner
 
-Der ***Zeitplaner*** führt Aufgaben zeitgesteuert aus. Er setzt den minütlichen
+Der ***Zeitplaner*** (nur Superuser) führt Aufgaben zeitgesteuert aus. Er setzt den minütlichen
 [Cronjob](./12-betrieb.md#cronjobs) voraus. Die Wartungsaufgaben – Backup, Papierkorb,
 temporäre Dateien, Fristen, Logs, Prüfungen – legt die Installation an (siehe
 [Betrieb](./12-betrieb.md#scheduler)). Den Ausführungszeitpunkt können Sie anpassen.
@@ -371,7 +371,7 @@ Standard-Policies und Policies für alle Instanzen ändert nur ein Superuser. Au
 
 ## Komponenten
 
-Das Modul „Komponenten“ zeigt alle Module, Medien-Prozessoren und Extensions mit
+Das Modul „Komponenten“ (nur Superuser) zeigt alle Module, Medien-Prozessoren und Extensions mit
 Herkunft (Core oder Zusatz), Version und Zustand:
 
 | Zustand | Bedeutung |

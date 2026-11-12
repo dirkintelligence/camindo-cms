@@ -185,6 +185,12 @@ class StartBgproc {
 
         $rawToken = (string)($_REQUEST['token'] ?? '');
         $token = preg_replace('/[^a-z0-9_\\-]/i', '', $rawToken ?? '');
+        // only own processes (superusers: all) - as SystemApi::ownProcess()
+        $row = $token !== '' ? $this->bgproc->getByToken($token) : null;
+        if ($row === null || ((int)$row['admin_id'] !== (int)$this->session->get('admin_id') && !$this->backend->isSuperuser())) {
+            $this->backend->balloon('danger', $msgError);
+            return;
+        }
         // stopProcess waits until the process has ended or 3 sec timeout has elapsed
         if ($this->bgproc->abort($token)) {
             // Process was stopped

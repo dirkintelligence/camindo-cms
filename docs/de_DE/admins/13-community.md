@@ -137,7 +137,8 @@ eines anderen einträgt, blockiert sie so nur kurz.
 ## Prüfen und Owner
 
 Alles, was ein Frontend-User anlegt oder ändert, wird mit ***„Prüfung nötig“*** markiert und
-erscheint im Widget „Ungeprüfte Inhalte von Frontend-Usern“ der Redaktion (siehe
+erscheint im Widget „Ungeprüfte Inhalte von Frontend-Usern“ der Redaktion – für Benutzergruppen
+mit dem Modul „Community“ und nur aus Bereichen, die sie lesen dürfen (siehe
 [Handbuch für Anwender](../editors/10-community.md)). Legen Sie das Metafeld „Prüfung
 nötig“ in den Profil- und Beitrags-Bereichen an, damit die Redaktion die Markierung
 nach der Prüfung entfernen kann.

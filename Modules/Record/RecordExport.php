@@ -509,7 +509,11 @@ class RecordExport {
                 'docx' => $this->_exportDocx($job),
             };
             $areaName = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string)($areaData['name'] ?? 'area')));
-            $zipName = $dirName . '_' . ($areaName !== '' ? $areaName : 'area') . '_' . $type . '.zip';
+            // Owner and a random part in the name: record_download.php delivers only
+            // the session admin's own files (RecordBackendExport::download())
+            $ownerId = (int)($job['admin_id'] ?? 0) ?: $this->_adminId();
+            $zipName = $dirName . '_' . ($areaName !== '' ? $areaName : 'area') . '_' . $type
+                . '_a' . $ownerId . '-' . bin2hex(random_bytes(8)) . '.zip';
             $this->_zipDir($dir, "$varDir/export/$zipName");
         }
         catch (\Throwable $e) {
@@ -1360,12 +1364,18 @@ class RecordExport {
     /**
      * A CSV line: enclosed is whatever contains a separator, enclosure character or
      * line break; the enclosure character is doubled.
+     *
+     * Formula injection: a value beginning with = + - @ (or tab/CR) would be executed
+     * as a formula by a spreadsheet when opening the file - such values get a leading
+     * apostrophe (numbers such as -5 excepted). The CSV import removes it again
+     * (RecordImport::_csvRows()).
      */
     private function _csvLine(array $values, string $separator, string $enclosure, string $eol): string
     {
         $cells = [];
         foreach ($values as $value) {
             $value = (string)$value;
+            if (preg_match('/^[=+\-@\t\r]/', $value) && !is_numeric($value)) $value = "'" . $value;
             if ($value !== '' && ($enclosure !== '' && (strpbrk($value, $separator . $enclosure . "\r\n") !== false))) {
                 $value = $enclosure . str_replace($enclosure, $enclosure . $enclosure, $value) . $enclosure;
             }

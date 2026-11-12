@@ -7,7 +7,7 @@ return [
 'label' => '#user.module_label',
 'description' => '#user.module_description',
 'icon' => 'person',
-'listed' => false,
+'listed' => true,
 /*
    The module only shows up as a widget
    'listed' stays set so that it remains subject to permission management

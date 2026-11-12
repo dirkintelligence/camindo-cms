@@ -1263,6 +1263,15 @@ class TemplateBackend {
 
         $this->data = (array) ($_REQUEST['data'] ?? []);
 
+        // Saving an existing template: it stays in its area (changing the area is
+        // a move, move() checks both areas) - the area from the request would let
+        // the rights check below run against a different area than the one saved
+        if ($this->function === 'save' && (int)$this->id > 0) {
+            $this->db->query("SELECT `area_id` FROM `template` WHERE `template_id` = ?", 'i', [(int)$this->id]);
+            $storedAreaId = (int)($this->db->fetchNum()[0] ?? 0);
+            if ($storedAreaId > 0) $this->data['area_id'] = $storedAreaId;
+        }
+
         // Breadcrumb navigation
         $this->backend->setNaviLabel('#button_' . $this->function);
 

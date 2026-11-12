@@ -121,6 +121,92 @@ class Execute {
     }
 
     /**
+     * Options of the free parameters that write or read further files, run scripts or
+     * open network sources - not allowed in the expert mode of the converters
+     * (developer docs, chapter 14 (Security: web)). Compared without leading -/+ and in
+     * lowercase; for ffmpeg also with a stream specifier (-dump_attachment:t).
+     */
+    private const UNSAFE_OPTIONS = [
+        'magick' => ['write', 'script', 'read', 'profile', 'process', 'write-mask', 'read-mask'],
+        'ffmpeg' => ['i', 'dump_attachment', 'attach', 'filter_script', 'filter_complex_script',
+                     'progress', 'report', 'vstats', 'vstats_file', 'passlogfile', 'sdp_file',
+                     'protocol_whitelist', 'protocol_blacklist', 'stats_enc_pre', 'stats_enc_post',
+                     'stats_mux_pre', 'init_hw_device', 'fpre'],
+    ];
+
+    /**
+     * ffmpeg flags without a value - a word after them would be another
+     * output file. All other options take one value.
+     */
+    private const FFMPEG_FLAGS = ['an', 'vn', 'sn', 'dn', 'y', 'n', 'shortest', 'nostdin', 'nostats',
+                                  'hide_banner', 'copyts', 'start_at_zero', 'accurate_seek', 'noaccurate_seek',
+                                  're', 'ignore_unknown', 'copy_unknown', 'benchmark', 'debug_ts', 'stats'];
+
+    /**
+     * Filters of ffmpeg that read files or open sources.
+     */
+    private const FFMPEG_UNSAFE_FILTERS = ['movie', 'amovie', 'subtitles', 'ass', 'sendcmd', 'asendcmd',
+                                           'lut3d', 'haldclut', 'frei0r', 'ladspa', 'lv2', 'textfile',
+                                           'fontfile', 'filename', 'tee', 'zmq', 'azmq', 'ocr', 'dnn'];
+
+    /**
+     * Checks the tokens of the free converter parameters (tokenizeParameters()).
+     * The arguments go to the program without a shell, but the program itself
+     * would follow a path, a URL or an option like `-write` - this would write
+     * files to any place (e.g. PHP into var/php) or read local files.
+     *
+     * Blocked: options from UNSAFE_OPTIONS; values with a path (/ \ ..), a URL or
+     * a coder/protocol prefix (`text:`, `file:`, `https:`), `@file` and `|`;
+     * for ffmpeg additionally filters that read files and words that would be
+     * an additional output (a value after a flag).
+     *
+     * @param string[] $tokens
+     * @param string   $tool  'magick' | 'ffmpeg'
+     * @return string|null    the first rejected token, null = all allowed
+     */
+    public function unsafeParameter(array $tokens, string $tool): ?string
+    {
+        $unsafe = self::UNSAFE_OPTIONS[$tool] ?? [];
+        $previousOption = '';
+        foreach ($tokens as $token) {
+            $token = (string)$token;
+            if (preg_match('/[\x00-\x1f\x7f]/', $token)) return $token;
+            $isOption = $token !== '' && ($token[0] === '-' || ($tool === 'magick' && $token[0] === '+'))
+                && !is_numeric($token);
+            if ($isOption) {
+                $name = strtolower(ltrim($token, '-+'));
+                if ($tool === 'ffmpeg') $name = explode(':', $name)[0];
+                if (in_array($name, $unsafe, true)) return $token;
+                $previousOption = $name;
+                continue;
+            }
+            // values: no paths, URLs, coder or protocol prefixes, file references
+            $lower = strtolower($token);
+            if (str_contains($token, '/') || str_contains($token, '\\') || str_contains($token, '..')
+                || str_starts_with($token, '@') || str_contains($token, '|')
+                || str_contains($lower, '://')) {
+                return $token;
+            }
+            // `text:/etc/passwd`, `file:x`, `msl:…` - except the value of -define (jpeg:extent=…)
+            if (preg_match('/^[a-z][a-z0-9+._-]*:/i', $token) && !($tool === 'magick' && $previousOption === 'define')) {
+                return $token;
+            }
+            if ($tool === 'ffmpeg') {
+                // a word without an option before it (or after a flag) is another output file
+                if ($previousOption === '' || in_array($previousOption, self::FFMPEG_FLAGS, true)) return $token;
+                foreach (self::FFMPEG_UNSAFE_FILTERS as $filter) {
+                    if (preg_match('/(^|[^a-z0-9_])' . preg_quote($filter, '/') . '\s*=/i', $token)
+                        || preg_match('/(^|[,;\[\]])\s*' . preg_quote($filter, '/') . '($|[,;\[\]=@])/i', $token)) {
+                        return $token;
+                    }
+                }
+            }
+            $previousOption = '';
+        }
+        return null;
+    }
+
+    /**
      * Runs a command without a shell (proc_open with an argument array),
      * so special characters in file and parameter values are harmless.
      *

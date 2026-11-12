@@ -2244,8 +2244,14 @@ class AdminBackend {
             // Requested record not found
             $this->function = 'skip';
         }
-        // If data is to be copied, reset the id now
+        // If data is to be copied, reset the id now - the form shows the source,
+        // so it must be readable for the admin (as on the info page)
         if ($this->function == 'copy') {
+            if ($this->data && !$this->_canRead((int)$this->data['group_id'], (int)$this->id)) {
+                $this->cms->error($this->cms->snippet('error_access_denied'));
+                $this->data = [];
+                $this->function = 'skip';
+            }
             $this->id = 0;
         }
     }

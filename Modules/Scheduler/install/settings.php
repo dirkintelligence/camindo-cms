@@ -8,6 +8,8 @@ return [
 'description' => '#scheduler.module_description',
 'icon' => 'schedule',
 'listed' => true,
+// Only superusers: installs code, runs processes resp. scripts (Access::module())
+'superuser' => true,
  // API: read and create/change (SchedulerApi)
 'api' => ['SchedulerApi'],
  // Additional module rights:

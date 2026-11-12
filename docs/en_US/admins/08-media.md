@@ -27,7 +27,7 @@ Whether ImageMagick and ffmpeg are found is shown by the module “Tools” on t
 
 ## Setting up converters
 
-You create converters in the module “Media converters”. The installation already sets up
+You create converters in the module “Media converters”; the module is reserved for superusers. The installation already sets up
 the converter ***“Internal Image Preview (GD)”***: it converts every image format the
 GD library reads into JPEG images of at most 200 px width and 300 px height.
 
@@ -40,6 +40,10 @@ GD library reads into JPEG images of at most 200 px width and 300 px height.
 | Excluded media types | exceptions, for example `image/gif`, so that animated GIFs remain unchanged |
 | File extension | format of the generated file, e.g. `.jpg` or `.mp4`; empty = keep the format |
 | Conversion options | depending on the processor: width and height, fit or crop, only reduce or only enlarge the size, quality, background color, codec, data rate, excerpt, remove metadata, conversion in the background … |
+
+***Own parameters (expert mode):*** With ImageMagick and FFmpeg you can add parameters of
+your own. Paths, URLs and options that write or read further files (such as `-write` or `-i`)
+are blocked; camindo CMS then does not save the converter and names the rejected parameter.
 
 ***Size with ImageMagick and the GD library:*** In addition to “Target width” and
 “Target height”, four settings determine how the image is brought to this size:

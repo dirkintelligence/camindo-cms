@@ -171,6 +171,12 @@ class Admin extends Dataset {
     // settings do not belong in the log (password: only "changed")
     protected array $auditIgnore = ['uid', 'uid_date', 'code', 'login_date', 'settings'];
 
+    // Stages of the login dialog a uid is issued for (_uidHash()): code form
+    // (loginByName() -> loginByCode()), renew password, set up TOTP
+    private const UID_FACTOR = 'factor';
+    private const UID_PASSWORD = 'password';
+    private const UID_TOTP_SETUP = 'totp_setup';
+
     // changePassword(): the admin sets their own password (also in the login dialog,
     // where there is no session yet) - no renewed obligation to change
     private bool $passwordChangedBySelf = false;
@@ -212,15 +218,21 @@ class Admin extends Dataset {
             'uid' => [
                 'type'  => 'chars',
                 'label' => '#admin.field_admin_uid',
+                // login state: never filtered or sorted from a request (Cms::requestParams())
+                'unsearchable' => true,
                 'max'   => 43
             ],
             'uid_date'  => [
                 'type'  => 'timestampl',
                 'label' => '#admin.field_admin_uid_date',
+                // login state: never filtered or sorted from a request (Cms::requestParams())
+                'unsearchable' => true,
             ],
             'code' => [
                 'type'  => 'chars',
                 'label' => '#admin.field_admin_code',
+                // login state: never filtered or sorted from a request (Cms::requestParams())
+                'unsearchable' => true,
                 'max'   => 5
             ],
             'primename' => [
@@ -485,16 +497,18 @@ class Admin extends Dataset {
         //
         // Create uid; the code (email) comes from the factor. Save first, then
         // send: if saving fails, the code in the email would be worthless.
+        // The table only holds the hash of stage and uid (_uidHash()), the form the uid.
+        $uid = $this->crypt->randomKey(32);
         $updateData = [
             'admin_id' => $adminId,
-            'uid' => $this->crypt->randomKey(32),
+            'uid' => $this->_uidHash(self::UID_FACTOR, $uid),
             'code' => '',
             'uid_date' => 'UTC_TIMESTAMP()'
         ];
         if (!$this->save(array_keys($updateData), $updateData)) {
             return null;
         }
-        $data = array_replace($data, $updateData, ['uid_date' => '']);
+        $data = array_replace($data, $updateData, ['uid' => $uid, 'uid_date' => '']);
         if (!$factor->start($data)) {
             return null;
         }
@@ -633,13 +647,13 @@ class Admin extends Dataset {
         // Renew password (initial password, expired): before anything else
         $reason = $this->passwordChangeReason($adminId);
         if ($reason !== '') {
-            $data['uid'] = $this->_newUid($adminId);
+            $data['uid'] = $this->_newUid($adminId, self::UID_PASSWORD);
             $data['password_renew'] = $reason;
             return $data;
         }
 
         if ($this->totpSetupRequired($data)) {
-            $data['uid'] = $this->_newUid($adminId);
+            $data['uid'] = $this->_newUid($adminId, self::UID_TOTP_SETUP);
             $data['totp_setup'] = $this->totpFactor->newSetup($data);
             return $data;
         }
@@ -683,14 +697,26 @@ class Admin extends Dataset {
      * Fresh uid for a further step in the login dialog (renew password,
      * set up TOTP) - valid for admin.2_factor_expiration seconds, one attempt.
      */
-    private function _newUid(int $adminId): string
+    private function _newUid(int $adminId, string $stage): string
     {
         $uid = $this->crypt->randomKey(32);
         $this->db->query(
             "UPDATE `admin` SET `uid` = ?, `code` = '', `uid_date` = UTC_TIMESTAMP() WHERE `admin_id` = ?",
-            'si', [$uid, $adminId]
+            'si', [$this->_uidHash($stage, $uid), $adminId]
         );
         return $uid;
+    }
+
+    /**
+     * Stored form of a login uid: SHA-256 of stage and uid, base64url (43 characters,
+     * the width of the column). The stage binds the uid to the step that issued it -
+     * a uid from the code form (UID_FACTOR) is not accepted for the password change
+     * and vice versa. The hash keeps the value useless outside the login form, even
+     * if someone gets to read the column.
+     */
+    private function _uidHash(string $stage, string $uid): string
+    {
+        return rtrim(strtr(base64_encode(hash('sha256', $stage . '|' . trim($uid), true)), '+/', '-_'), '=');
     }
 
     /**
@@ -708,7 +734,7 @@ class Admin extends Dataset {
      */
     public function loginByPasswordChange(string $uid, string $password, string $repeat): ?array
     {
-        if (!($row = $this->_claimUid($uid))) {
+        if (!($row = $this->_claimUid($uid, self::UID_PASSWORD))) {
             $this->cms->error($this->cms->snippet('admin.error_login_code_failed'));
             return null;
         }
@@ -724,7 +750,7 @@ class Admin extends Dataset {
         if ($this->changePassword($adminId, $password, $repeat)) {
             return $this->_loginComplete($data);
         }
-        return ['retry' => true, 'uid' => $this->_newUid($adminId), 'password_renew' => $reason];
+        return ['retry' => true, 'uid' => $this->_newUid($adminId, self::UID_PASSWORD), 'password_renew' => $reason];
     }
 
     /**
@@ -854,7 +880,7 @@ class Admin extends Dataset {
         $trimmedCode = trim($code);
 
         // Redeem uid: valid, within the time window and exactly once (see _claimUid())
-        if ($trimmedCode === '' || !($row = $this->_claimUid($uid))) {
+        if ($trimmedCode === '' || !($row = $this->_claimUid($uid, self::UID_FACTOR))) {
             $this->cms->error($this->cms->snippet('admin.error_login_code_failed'));
             return null;
         }
@@ -888,7 +914,7 @@ class Admin extends Dataset {
      */
     public function loginByTotpSetup(string $uid, string $token, string $code): ?array
     {
-        if (!($row = $this->_claimUid($uid))) {
+        if (!($row = $this->_claimUid($uid, self::UID_TOTP_SETUP))) {
             $this->cms->error($this->cms->snippet('admin.error_login_code_failed'));
             return null;
         }
@@ -906,12 +932,7 @@ class Admin extends Dataset {
             // "Wrong code" without "please log in again" - it continues in the same form
             $this->cms->error($this->_codeFailedMessage($this->_rowGuardKey($row), 'admin.error_totp_code'));
             if ($this->loginGuard->blockedFor($this->_rowGuardKey($row))) return null;
-            $newUid = $this->crypt->randomKey(32);
-            $this->db->query(
-                "UPDATE `admin` SET `uid` = ?, `uid_date` = UTC_TIMESTAMP() WHERE `admin_id` = ?",
-                'si', [$newUid, $adminId]
-            );
-            return ['retry' => true, 'uid' => $newUid, 'totp_setup' => $setup];
+            return ['retry' => true, 'uid' => $this->_newUid($adminId, self::UID_TOTP_SETUP), 'totp_setup' => $setup];
         }
         $this->loginGuard->clear($this->_rowGuardKey($row));
 
@@ -927,18 +948,19 @@ class Admin extends Dataset {
      *
      * @return array|null  admin_id, name, code (state before invalidation)
      */
-    private function _claimUid(string $uid): ?array
+    private function _claimUid(string $uid, string $stage): ?array
     {
         $uid = trim($uid);
         // Do not search at all without a uid: an empty value matches nothing sensible
         if ($uid === '') return null;
+        $uid = $this->_uidHash($stage, $uid);
 
         // Seconds that may pass at most between login and confirmation of the code.
         // The default is set in Config; without it the time window would be 0 seconds
         // and no login could ever succeed.
         $seconds = (int)$this->config->get('admin.2_factor_expiration');
         $this->db->query(
-            "SELECT `admin_id`, `name`, `code` FROM `admin` WHERE `uid` = ?"
+            "SELECT `admin_id`, `name`, `code` FROM `admin` WHERE BINARY `uid` = ?"
             . " AND `uid_date` >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND)"
             . " AND `status_id` = 0 AND `deleted` = 0",
             'si',
@@ -1011,7 +1033,7 @@ class Admin extends Dataset {
     private function invalidateLoginCode(string $uid): void
     {
         $this->db->query(
-            "UPDATE `admin` SET `uid` = ?, `code` = '' WHERE `uid` = ?",
+            "UPDATE `admin` SET `uid` = ?, `code` = '' WHERE BINARY `uid` = ?",
             'ss',
             [$this->crypt->randomKey(32), $uid]
         );
@@ -1153,7 +1175,9 @@ class Admin extends Dataset {
         // Fill missing values with the schema defaults (an admin from the time before
         // the settings does not have any yet)
         $defaults = (array)($this->init()['settings'] ?? []);
-        $merged = array_replace($defaults, $current, $settings);
+        // Only keys of the schema: the request must not plant arbitrary keys
+        // (and stale keys of former versions are dropped on the next save)
+        $merged = array_intersect_key(array_replace($defaults, $current, $settings), $defaults);
         $data = [
             'admin_id' => $adminId,
             'settings' => $merged,

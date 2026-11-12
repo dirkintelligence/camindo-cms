@@ -58,6 +58,9 @@ Exportieren Sie `bilder.record_id` mit – beim Re-Import ordnet camindo CMS die
 darüber den vorhandenen Inhalten zu, in der angegebenen Reihenfolge.
 
 Beachten Sie: Verschlüsselte Felder erscheinen in der CSV-Datei ***im Klartext***.
+Werte, die mit `=`, `+`, `-` oder `@` beginnen (außer Zahlen), stehen mit einem
+vorangestellten Apostroph in der Datei – sonst führte eine Tabellenkalkulation sie beim
+Öffnen als Formel aus. Der CSV-Import entfernt den Apostroph wieder.
 Zeitpunkte stehen so in der Datei, wie sie gespeichert sind (Weltzeit). Ein Datumsfeld ohne
 Wert – etwa ein Ablaufdatum ohne Ende – bleibt leer; eine leere Zelle setzt beim Import
 wieder den Standardwert des Feldes.

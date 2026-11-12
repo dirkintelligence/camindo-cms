@@ -513,6 +513,13 @@ class FFmpegVideo extends MediaProcessor {
             $value = trim((string)($details[$key] ?? ''));
             $details[$key] = (string)preg_replace('/\s+/', ' ', $value);
         }
+        // no paths, URLs or options that write/read further files (Execute::unsafeParameter())
+        foreach (['parameter1', 'parameter2'] as $key) {
+            $bad = $this->execute->unsafeParameter($this->execute->tokenizeParameters($details[$key]), 'ffmpeg');
+            if ($bad !== null) {
+                throw new \Exception(strtr($this->cms->snippet('error_parameter_unsafe'), ['{token}' => htmlspecialchars($bad)]));
+            }
+        }
 
         $data['details'] = $details;
 
@@ -602,6 +609,9 @@ class FFmpegVideo extends MediaProcessor {
         // Expert mode: split and evaluate free parameters
         $params1 = $this->execute->tokenizeParameters((string)($details['parameter1'] ?? ''));
         $params2 = $this->execute->tokenizeParameters((string)($details['parameter2'] ?? ''));
+        if ($this->execute->unsafeParameter(array_merge($params1, $params2), 'ffmpeg') !== null) {
+            return $fileData + ['errors' => 'error_parameter_unsafe'];
+        }
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
         // Not only WHETHER the codec itself was set, but also WHICH one:
         // the quality level, preset and filter chain depend on it.

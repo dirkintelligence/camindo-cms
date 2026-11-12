@@ -28,7 +28,6 @@ return [
     'index_server.php' => 'server',
     'tool_db_info.php' => 'server',
     'tool_phpinfo.php' => 'server',
-    'phpinfo.php' => 'server',
     'index_database.php' => 'database',
     'tool_delete.php' => 'database',
     'tool_tmp_delete.php' => 'database',

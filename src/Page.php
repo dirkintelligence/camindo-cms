@@ -319,6 +319,16 @@ class Page {
             die('CMS error: preview link expired - please open the preview from the backend again.');
         }
         $this->mode = self::MODE_BACKEND;
+        // Rights of the admin who issued the token - as with the session preview,
+        // where Session::load() loads them: read right on the area of the record
+        // (resolve()) and Cms::select() only on readable areas
+        $this->db->query("SELECT `group_id` FROM `admin` WHERE `admin_id` = ? AND `status_id` = 0 AND `deleted` = 0",
+            'i', [(int)$preview['admin_id']]);
+        $groupId = (int)($this->db->fetchNum()[0] ?? 0);
+        if ($groupId < 1 || !$this->container->get(Access::class)->load($groupId, (int)$preview['admin_id'])) {
+            if (!headers_sent()) http_response_code(403);
+            die('CMS error: access denied!');
+        }
         $this->previewInstanceId = $preview['instance'];
         $_REQUEST['request'] = $preview['request'];
         $_REQUEST['lang'] = $preview['lang'];
@@ -631,6 +641,10 @@ class Page {
                 $this->id = (int)$cms['record_id'];
                 $this->areaId = (int)$cms['area_id'];
                 $this->slug = (string)($cms['slug'] ?? $slug);
+                // Preview: shows unpublished records too - but only of readable areas
+                if ($this->mode === self::MODE_BACKEND && !$this->container->get(Access::class)->areaRead($this->areaId)) {
+                    $this->notFound('CMS error: record not found!');
+                }
             }
             else {
                 $this->notFound('CMS error: record not found!');

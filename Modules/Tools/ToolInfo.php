@@ -41,20 +41,22 @@ class ToolInfo {
     public function debugSessionData(): void {
         // Additional right "developer" (backend user groups; without session - cache bootstrap, CLI - everything applies)
         $this->accessGuard('developer');
+        // only the beginning: the full id is the session cookie (HttpOnly) - a script
+        // in the browser could otherwise read it via this page
         echo "<strong>session_id:</strong><br>";
-        echo $this->session->get('session_id');
+        echo htmlspecialchars(substr((string)$this->session->get('session_id'), 0, 6)) . '…';
         echo "<br><br>";
 
         echo "<strong>admin_id:</strong><br>";
-        echo $this->session->get('admin_id');
+        echo (int)$this->session->get('admin_id');
         echo "<br><br>";
         
         echo "<strong>access_date:</strong><br>";
-        echo $this->session->get('access_date');
+        echo htmlspecialchars((string)$this->session->get('access_date'));
         echo "<br><br>";
 
         echo "<strong>details:</strong><br><pre>";
-        var_dump($this->session->get('details'));
+        echo htmlspecialchars(print_r($this->session->get('details'), true));
         echo "</pre>";
     }
     /**

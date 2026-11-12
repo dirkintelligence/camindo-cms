@@ -56,27 +56,27 @@ class ToolDeveloper {
 
         // Snippets refresh
         $labelSnippets = $this->cms->snippet('Renew snippet cache');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_snippets.php', 500);", $iconCached . ' ' . $labelSnippets);
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_snippets.php', 500);", $iconCached . ' ' . $labelSnippets);
 
         // Backend-Templates refresh
         $labelHtml = $this->cms->snippet('Renew backend-template cache');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_html.php', 500);", $iconCached . ' ' . $labelHtml);        
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_html.php', 500);", $iconCached . ' ' . $labelHtml);        
 
         // Instance cache refresh (var/cache/instances.php, instance-{id}.php)
         $labelHtml = $this->cms->snippet('Renew instance cache');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_instances.php', 500);", $iconCached . ' ' . $labelHtml);        
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_instances.php', 500);", $iconCached . ' ' . $labelHtml);        
 
         // Compiled frontend templates (var/php/{area_id}/{name}.php)
         $labelHtml = $this->cms->snippet('Rebuild template files');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_templates.php', 500);", $iconCached . ' ' . $labelHtml);
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_templates.php', 500);", $iconCached . ' ' . $labelHtml);
 
         // Media locks (.htaccess per instance directory and per field with user_auth)
         $labelHtml = $this->cms->snippet('Renew media htaccess');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_media.php', 500);", $iconCached . ' ' . $labelHtml);
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_media.php', 500);", $iconCached . ' ' . $labelHtml);
 
         // Manuals: rebuild search and keyword index from Core/docs
         $labelHtml = $this->cms->snippet('Index manuals');
-        $this->backend->buttonAdd('button_secondary', "cApp.aside.open('Tools/tool_docs.php', 500);", $iconCached . ' ' . $labelHtml);
+        $this->backend->buttonAdd('button_secondary', "cApp.aside.openPost('Tools/tool_docs.php', 500);", $iconCached . ' ' . $labelHtml);
 
         // Debug Session data
         $labelHtml = $this->cms->snippet('Debug session data');

@@ -715,7 +715,9 @@ class RecordBackendExport extends RecordBackend {
      * Deliver the zip file from var/export (backend/record_download.php).
      *
      * The session has already checked Backend::backendPath(). Only a file name
-     * (no path) with the extension .zip that lies in var/export is allowed. After
+     * (no path) with the extension .zip that lies in var/export is allowed, and only
+     * an export of the session admin (`…_a{admin_id}-{random}.zip`, RecordExport) -
+     * not the files of others and not the personal data exports (module Privacy). After
      * sending, the file is deleted - the link is valid exactly once.
      *
      * Request: file
@@ -723,7 +725,8 @@ class RecordBackendExport extends RecordBackend {
     public function download(): void
     {
         $file = basename((string)($_REQUEST['file'] ?? ''));
-        if (!preg_match('/^[A-Za-z0-9_\-]+\.zip$/', $file)) {
+        $adminId = (int)$this->session->get('admin_id');
+        if (!preg_match('/^[A-Za-z0-9_\-]+_a' . $adminId . '-[0-9a-f]{16}\.zip$/', $file) || $adminId < 1) {
             $this->system->error404();
             return;
         }

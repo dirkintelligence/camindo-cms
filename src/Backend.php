@@ -69,6 +69,21 @@ class Backend {
     // Lazily loadable services - filled in the constructor, see there.
     // --------------------
     use LazyServicesTrait;
+
+    /**
+     * Values of the request parameter `function` that change state. backendPath()
+     * accepts them only via POST (and therefore only with CSRF token and Origin
+     * check) - developer docs, chapter 14 (Security: web). Reading states such as
+     * '', create, edit, copy, delete (confirmation form), update (form state) or
+     * link/unlink of the search lookup preview stay reachable via GET.
+     */
+    public const WRITE_FUNCTIONS = [
+        'save', 'copy_save', 'delete_confirm', 'run', 'prepare', 'convert', 'tab',
+        'swap', 'insert', 'empty', 'restore', 'reset', 'remove', 'remove_all', 'end_others',
+        'enable', 'disable', 'recovery', 'messages_delete', 'passkey_add', 'passkey_remove',
+        'email_on', 'email_off', 'email_switch', 'password_change',
+    ];
+
     /**
      * Allowed display_type values per field type.
      * formField() rejects everything not listed here - see class comment.
@@ -260,6 +275,13 @@ class Backend {
     public function backendPath(string $path, string $kind = 'modules'):string
     {
         $path = $this->sanitizePath($path);
+        // Exactly {Component}/{script}.php, script name in lowercase: on file systems
+        // without case distinction (macOS, Windows, Docker Desktop) `INDEX_X.PHP`
+        // would find the file but miss its entry in script_access, and subdirectories
+        // (html/, lang/) hold no entry points
+        if (!preg_match('#^[A-Za-z0-9_]+/[a-z0-9_]+\.php$#', $path)) {
+            die($this->template('alert_danger', ['{text}' => 'File not found: ' . $this->escape($path)]));
+        }
 
         // Insert "backend" after the component name:
         $parts = explode('/', $path);
@@ -301,6 +323,13 @@ class Backend {
         // and closes the dialog, so it changes nothing.
         if (!($exempt && $hasSession) && !$this->session->verifyCsrfRequest()) {
             die('##accessdenied##');
+        }
+        // Method binding for all writing states of the parameter `function`, centrally:
+        // GET/HEAD bring neither a token nor an Origin check, and the session cookie
+        // (SameSite=Lax) goes along with a top-level navigation from a foreign page.
+        // The scripts themselves additionally call requirePost() where they write.
+        if (in_array((string)($_REQUEST['function'] ?? ''), self::WRITE_FUNCTIONS, true) && !$this->requirePost()) {
+            $this->access()->denied();
         }
         // Module access of the user group (Access::script(): module allowed and, if applicable,
         // additional right of the script, or a 'shared' script in the lookup call).
@@ -1725,6 +1754,8 @@ class Backend {
 
                 // Determine the default field, sorting and icon of the area
                 $areaId = (int)$data['area_id'];
+                // the id may come from a request: nothing of records without read right
+                if (!$this->access()->areaRead($areaId)) return '';
                 $areaData = $this->areaData($areaId);
                 $defaultFieldName = (string)$areaData['default_field_name'];
                 $defaultFieldType = (string)$areaData['default_field_type'];
@@ -2701,12 +2732,13 @@ class Backend {
         if (!empty($filterText) || $sortingChanged) {
             if (!empty($filterText)) {
                 $prefixSearchFor = $this->template('prefix_search_for');
-                $textParts[] = $prefixSearchFor . ' ' . $filterText;
+                // plain text from Cms::select() - contains the filter values from the request
+                $textParts[] = $prefixSearchFor . ' ' . htmlspecialchars($filterText, ENT_QUOTES | ENT_SUBSTITUTE);
             }
             if ($sortingChanged) {
                 $sortText = (string) $f['sort_text'] ?? '';
                 $prefixSortBy = $this->template('prefix_sort_by');
-                $textParts[] = $prefixSortBy . ' ' . $sortText;
+                $textParts[] = $prefixSortBy . ' ' . htmlspecialchars($sortText, ENT_QUOTES | ENT_SUBSTITUTE);
             }
         }
         if (!empty($textParts)) {

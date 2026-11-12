@@ -1818,7 +1818,7 @@ class Cms {
         // 'sql', 'src_id', 'relation' ... cannot be added via request.
         // Values from $param override the request values.
         $p = array_replace_recursive(
-            $this->requestParams((string)($param['request'] ?? ''), $param, $useVirtual),
+            $this->requestParams((string)($param['request'] ?? ''), $param, $useVirtual, $schema),
             $param
         );
         // Type safeguard against manipulated request parameters.
@@ -2489,6 +2489,10 @@ class Cms {
      *     counts ('author.name' belongs to 'author'), 'area' and 'area_id' are the same.
      *   - password fields are never searchable (see $unsearchableTypes), encrypted
      *     ones only by exact value (buildEncryptedCondition())
+     *   - schema fields with 'unsearchable' => true (internal values such as the
+     *     login uid and code of `admin`) are neither filtered nor sorted from the
+     *     request - a prefix filter or the row order would reveal them
+     *     character by character
      *   - limit only as positive number (no "unlimited" from the URL)
      *
      * @param string $requestKeys  value of the 'request' parameter
@@ -2496,10 +2500,23 @@ class Cms {
      * @param bool   $useVirtual   table 'record' (virtual fields)
      * @return array               request values, unchecked types (see select())
      */
-    private function requestParams(string $requestKeys, array $param, bool $useVirtual): array
+    private function requestParams(string $requestKeys, array $param, bool $useVirtual, array $schema = []): array
     {
         $requestKeys = trim($requestKeys);
         if ($requestKeys === '' || $requestKeys === 'false') return [];
+
+        // fields that the request may neither filter nor sort
+        $hidden = [];
+        foreach ($schema as $name => $def) {
+            if (is_array($def) && !empty($def['unsearchable'])) $hidden[strtolower((string)$name)] = true;
+        }
+        $mentionsHidden = function ($value) use ($hidden): bool {
+            if (!$hidden) return false;
+            $text = is_array($value) ? implode(',', array_map(fn($v) => is_scalar($v) ? (string)$v : '', $value)) : (is_scalar($value) ? (string)$value : '');
+            preg_match_all('/[a-z0-9_]+/i', $text, $m);
+            foreach ($m[0] as $word) if (isset($hidden[strtolower($word)])) return true;
+            return false;
+        };
 
         // [mainKey => true (whole) | [subKey => true, ...]]
         $allowed = [];
@@ -2535,6 +2552,7 @@ class Cms {
                 // skip, limit, sort, order: the caller's value wins completely
                 if (isset($param[$mainKey]) || $subKeys !== true) continue;
                 if ($mainKey === 'limit' && (!is_scalar($value) || (int)$value < 1)) continue;
+                if ($mainKey === 'sort' && $mentionsHidden($value)) continue;
                 $p[$mainKey] = $value;
                 continue;
             }
@@ -2547,6 +2565,7 @@ class Cms {
                 $key = (string)$key;
                 if ($subKeys !== true && !isset($subKeys[$key])) continue;
                 if (isset($fixed[$mainOf($key)])) continue;
+                if (isset($hidden[strtolower($mainOf($key))])) continue;
                 $p[$mainKey][$key] = $v;
             }
         }

@@ -3650,7 +3650,16 @@ class RecordImport {
             $rows[] = $row;
         }
         // skip empty lines (only one empty cell)
-        return array_values(array_filter($rows, fn($r) => count($r) > 1 || trim((string)($r[0] ?? '')) !== ''));
+        $rows = array_values(array_filter($rows, fn($r) => count($r) > 1 || trim((string)($r[0] ?? '')) !== ''));
+        // the apostrophe the CSV export puts before formula-like values (RecordExport::_csvLine())
+        foreach ($rows as &$r) {
+            foreach ($r as &$c) {
+                if (preg_match("/^'[=+\-@\t\r]/", $c) && !is_numeric(substr($c, 1))) $c = substr($c, 1);
+            }
+            unset($c);
+        }
+        unset($r);
+        return $rows;
     }
 
     public function csvChar(string $input, string $default): string

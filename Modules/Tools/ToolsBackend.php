@@ -197,7 +197,7 @@ class ToolsBackend {
 
         $days   = max(0, (int)($_REQUEST['days'] ?? $this->toolDatabase->trashRetentionDays()));
         $report = '';
-        if ((string)($_REQUEST['function'] ?? '') === 'run') {
+        if ((string)($_REQUEST['function'] ?? '') === 'run' && $this->backend->requirePost()) {
             $result = $this->toolDatabase->purgeTrash($days);
             $report = $this->_purgeAlert(
                 $this->cms->snippet('tools.trash_summary', ['records' => $result['record'], 'fields' => $result['field'], 'areas' => $result['area']]),
@@ -272,7 +272,7 @@ class ToolsBackend {
 
         $hours  = max(0, (int)($_REQUEST['hours'] ?? self::TMP_DEFAULT_HOURS));
         $report = '';
-        if ((string)($_REQUEST['function'] ?? '') === 'run') {
+        if ((string)($_REQUEST['function'] ?? '') === 'run' && $this->backend->requirePost()) {
             $result = $this->toolDatabase->purgeTmp($hours);
             $report = $this->_purgeAlert(
                 $this->cms->snippet('tools.tmp_summary', ['records' => $result['record']]),
@@ -396,7 +396,7 @@ class ToolsBackend {
 
         $areaId = (int)($_REQUEST['area_id'] ?? 0);
         $background = !empty($_REQUEST['background']);
-        if ((string)($_REQUEST['function'] ?? '') === 'run' && $areaId > 0) {
+        if ((string)($_REQUEST['function'] ?? '') === 'run' && $areaId > 0 && $this->backend->requirePost()) {
             if ($background) {
                 $error = '';
                 if ($this->toolThumbnails->start($areaId, $error) !== null) {
@@ -469,7 +469,7 @@ class ToolsBackend {
         $function = (string)($_REQUEST['function'] ?? '');
         $report   = null;
         $before   = null;
-        if ($areaId > 0 && $function === 'run') {
+        if ($areaId > 0 && $function === 'run' && $this->backend->requirePost()) {
             $result = $this->toolTree->normalize($areaId);
             $before = $result['before'];
             $report = $result['after'];

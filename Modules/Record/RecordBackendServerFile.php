@@ -180,6 +180,11 @@ class RecordBackendServerFile {
             }
         }
         $fileLanguageId = $this->cms->fileLanguageId($fileData);
+        // read right on the language of the file (multilingual fields; 0 = without language)
+        if ($fileLanguageId > 0 && !$this->backend->access()->languageRead($fileLanguageId)) {
+            $this->system->error404();
+            return;
+        }
         $isTemporary = (bool)($fileData['temporary'] ?? false);
         $isDeleted = (bool)($fileData['deleted'] ?? false);
         if ($isDeleted) {

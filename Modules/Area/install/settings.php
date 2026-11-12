@@ -8,6 +8,8 @@ return [
 'description' => '#area.module_description',
 'icon' => 'transition_dissolve',
 'listed' => true,
+// Only superusers: structure of the whole system (Access::module())
+'superuser' => true,
 // Additional module rights:
 // none (superuser-only module)
 // API classes (Camindo\Core\Api\Api, relative to the module namespace)

@@ -89,6 +89,13 @@ class System {
         $file = $date . '_' . $logName . '.log';
         $relativePath = 'log/' . $file;
 
+        // One entry = one line: line breaks and control characters from request values
+        // (login name, URL, Origin) would otherwise forge further entries in the log
+        // module and the start page widget. Only the debug logs keep several lines.
+        if (!in_array($logName, ['sql', 'mail-debug'], true)) {
+            $logText = (string)preg_replace(['/\r\n|\r|\n/', '/[\x00-\x08\x0b-\x1f\x7f]/'], ['⏎', '?'], $logText);
+        }
+
         // Build the line
         $time = date('H:i:s');
         $logEntry = "[$time] " . $logText . PHP_EOL;

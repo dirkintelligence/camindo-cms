@@ -8,6 +8,8 @@ return [
 'description' => '#component.module_description',
 'icon' => 'box',
 'listed' => true,
+// Only superusers: installs code, runs processes resp. scripts (Access::module())
+'superuser' => true,
 // Additional module permissions:
 // none (purely superuser module)
 'access' => [

@@ -29,7 +29,7 @@ nachinstallieren. Ob ImageMagick und ffmpeg gefunden werden, zeigt das Modul
 
 ## Konverter einrichten
 
-Konverter legen Sie im Modul „Medienkonverter“ an. Die Installation richtet bereits den
+Konverter legen Sie im Modul „Medienkonverter“ an; das Modul ist Superusern vorbehalten. Die Installation richtet bereits den
 Konverter ***„Interne Bildvorschau (GD)“*** ein: Er wandelt alle Bildformate, die die
 GD Bibliothek liest, in JPEG-Bilder von höchstens 200 px Breite und 300 px Höhe um.
 
@@ -42,6 +42,11 @@ GD Bibliothek liest, in JPEG-Bilder von höchstens 200 px Breite und 300 px Höh
 | Ausgeschlossene Medientypen | Ausnahmen, etwa `image/gif`, damit animierte GIFs unverändert bleiben |
 | Dateiendung | Format der erzeugten Datei, z. B. `.jpg` oder `.mp4`; leer = Format beibehalten |
 | Konvertierungsoptionen | je nach Prozessor: Breite und Höhe, Einpassen oder Zuschneiden, Größe nur verkleinern bzw. vergrößern, Qualität, Hintergrundfarbe, Codec, Datenrate, Ausschnitt, Metadaten entfernen, Umwandlung im Hintergrund … |
+
+***Eigene Parameter (Expertenmodus):*** Bei ImageMagick und FFmpeg können Sie zusätzliche
+Parameter angeben. Gesperrt sind Pfade, URLs und Optionen, die weitere Dateien schreiben oder
+lesen (etwa `-write` oder `-i`); camindo CMS speichert den Konverter dann nicht und nennt den
+beanstandeten Parameter.
 
 ***Größe bei ImageMagick und der GD Bibliothek:*** Neben „Zielbreite“ und
 „Zielhöhe“ legen vier Einstellungen fest, wie das Bild auf diese Größe kommt:

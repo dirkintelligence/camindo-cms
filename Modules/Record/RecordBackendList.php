@@ -720,12 +720,13 @@ class RecordBackendList extends RecordBackend {
         if (!empty($filterText) || $sortingChanged) {
             if (!empty($filterText)) {
                 $prefixSearchFor = $this->backend->template('prefix_search_for');
-                $textParts[] = $prefixSearchFor . ' ' . $filterText;
+                // plain text from Cms::select() - contains the filter values from the request
+                $textParts[] = $prefixSearchFor . ' ' . htmlspecialchars($filterText, ENT_QUOTES | ENT_SUBSTITUTE);
             }
             if ($sortingChanged) {
                 $sortText = (string) $f['sort_text'] ?? '';
                 $prefixSortBy = $this->backend->template('prefix_sort_by');
-                $textParts[] = $prefixSortBy . ' ' . $sortText;
+                $textParts[] = $prefixSortBy . ' ' . htmlspecialchars($sortText, ENT_QUOTES | ENT_SUBSTITUTE);
             }
         }
         if (!empty($textParts)) {

@@ -8,6 +8,9 @@
 use Camindo\Core\Modules\Template\Template;
 use Camindo\Core\Modules\Template\TemplateFiles;
 
+// Rebuilds files - POST only (developer docs, chapter 14 (Security: web))
+if (!$app->get(Camindo\Core\Backend::class)->requirePost()) $app->get(Camindo\Core\Access::class)->denied();
+
 $varDir = $app->get(Camindo\Core\Config::class)->get('paths.var_dir');
 $count = $app->get(Template::class)->rebuildFiles();
 echo "<strong>{$varDir}/php</strong><br>\n";

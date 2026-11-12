@@ -451,6 +451,14 @@ abstract class Dataset {
                 if (!$this->accessCheck($accessAction, $areaId, isset($previousData['owner_id']) ? (int)$previousData['owner_id'] : null)) {
                     throw new \Exception('#' . $this->cms->errorMsgLast());
                 }
+                // Area changes: the row must also be writable in its previous area -
+                // otherwise a request with the id of a foreign row and its own
+                // area_id would take it over (as with moving, both areas count)
+                $previousAreaId = (int)($previousData['area_id'] ?? 0);
+                if (!$isNewInTree && $previousAreaId > 0 && $previousAreaId !== $areaId
+                    && !$this->accessCheck('write', $previousAreaId, isset($previousData['owner_id']) ? (int)$previousData['owner_id'] : null)) {
+                    throw new \Exception('#' . $this->cms->errorMsgLast());
+                }
             }
 
             // schema, allFields

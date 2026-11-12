@@ -8,6 +8,8 @@ return [
 'description' => '#status.module_description',
 'icon' => 'check',
 'listed' => true,
+// Only superusers: structure of the whole system (Access::module())
+'superuser' => true,
 // API: read and create/change (StatusApi)
 'api' => ['StatusApi'],
 // Additional module permissions:

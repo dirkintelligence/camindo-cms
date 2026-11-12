@@ -411,6 +411,11 @@ class Magick extends MediaProcessor {
         foreach (['parameters1', 'parameters2'] as $key) {
             $value = trim((string) ($data['details'][$key] ?? ''));
             $data['details'][$key] = (string) preg_replace('/\s+/', ' ', $value);
+            // no paths, URLs or options that write/read further files (Execute::unsafeParameter())
+            $bad = $this->execute->unsafeParameter($this->execute->tokenizeParameters($data['details'][$key]), 'magick');
+            if ($bad !== null) {
+                throw new \Exception(strtr($this->cms->snippet('error_parameter_unsafe'), ['{token}' => htmlspecialchars($bad)]));
+            }
         }
 
         // Is there an ImageMagick running under paths.magick at all? Otherwise the converter
@@ -526,6 +531,9 @@ class Magick extends MediaProcessor {
             $this->execute->tokenizeParameters((string) ($details['parameters1'] ?? ''))
         );
         $params2 = $this->execute->tokenizeParameters((string) ($details['parameters2'] ?? ''));
+        if ($this->execute->unsafeParameter(array_merge($params1, $params2), 'magick') !== null) {
+            return $fileData + ['errors' => 'error_parameter_unsafe'];
+        }
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
 
         // Source: by default only process the first single image

@@ -132,6 +132,8 @@ class UserBackend {
             ." FROM `record` `r` LEFT JOIN `area` `a`"
             ." ON `r`.`area_id` = `a`.`area_id`"
             ." WHERE `r`.`needs_review`=1"
+            // only readable areas (rights of the group, developer docs, chapter 11 (Permissions))
+            . $this->backend->areaAccessSql(false, '`r`.`area_id`')
             ." GROUP BY `a`.`area_id`"
             ." ORDER BY `a`.`position` ASC";
         $this->db->query($query);

@@ -967,9 +967,14 @@ class RecordBackendInfo extends RecordBackend {
         if (empty($id)) die('error');
         if (empty($name)) die('error');
 
-        // access check via record->load()
+        // Dataset::load() checks no rights - as on the info page (info()): read right
+        // on the area; a working copy only for the admin who has it in work
         if (!$data = $this->record->load($id)) die('error');
         $areaId = (int)$data['area_id'];
+        if (!$this->backend->access()->areaRead($areaId)
+            || (!empty($data['tmp']) && (int)($data['changed_by'] ?? 0) !== (int)$this->session->get('admin_id'))) {
+            die('error');
+        }
         $schemaVirtual = $this->record->virtualSchema($areaId, false);
         $ownerId = isset($data['owner_id']) ? (int)$data['owner_id'] : null;
         if ($this->backend->access()->areaWrite($areaId, $ownerId)) {

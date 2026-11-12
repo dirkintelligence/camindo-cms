@@ -153,7 +153,29 @@ class RecordBackendEdit extends RecordBackend {
         $this->embedData = (array)($_REQUEST['embed'] ?? []);
         
         $this->_resolveParams();
-        
+
+        // Saving: only the fields of the mask (RecordService::saveFields()) plus the
+        // position choice. Meta columns such as deleted, user_id, needs_review or
+        // template_id are not set from the request, and the area is that of the
+        // working copy (_resolveParams()), never the one from the request.
+        if (in_array($this->function, ['save', 'tab'], true) && $this->id > 0) {
+            if ($this->areaId > 0) $this->data['area_id'] = $this->areaId;
+            $allowed = array_flip($this->service->saveFields($this->areaId, $this->data));
+            $allowed['previous_id'] = true;
+            $this->data = array_intersect_key($this->data, $allowed);
+            // 'importfile' (a file under paths.tmp_dir) is meant for the import and the
+            // API - from the mask it would attach files of other admins' imports
+            foreach ($this->data as &$value) {
+                if (!is_array($value)) continue;
+                unset($value['importfile']);
+                foreach ($value as &$perLanguage) {
+                    if (is_array($perLanguage)) unset($perLanguage['importfile']);
+                }
+                unset($perLanguage);
+            }
+            unset($value);
+        }
+
         $this->data['record_id'] = $this->id;
 
         // Bread crum navi
@@ -2167,6 +2189,10 @@ class RecordBackendEdit extends RecordBackend {
      */
     private function _editDeleteConfirm(): void
     {
+        if (!$this->backend->requirePost()) {
+            echo $this->backend->access()->deniedHtml();
+            return;
+        }
         $withChilds = ((string)($_REQUEST['deletechilds'] ?? 'false') === 'true');
 
         // large subtrees go to the background (RecordService::delete());

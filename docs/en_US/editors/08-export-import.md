@@ -50,7 +50,10 @@ preview images, which then also go into the zip file. Each embedded content has 
 separated by ` | `, in the order of the input form (`bilder.titel` = `Front | Side`). Export `bilder.record_id`
 as well – on re-import, camindo CMS uses these values to match the existing content, in the order given.
 
-Please note: encrypted fields appear in the CSV file ***in plain text***. Times are in the file as they are
+Please note: encrypted fields appear in the CSV file ***in plain text***.
+Values beginning with `=`, `+`, `-` or `@` (except numbers) get a leading apostrophe in
+the file – otherwise a spreadsheet would run them as a formula when opening it. The CSV
+import removes the apostrophe again. Times are in the file as they are
 stored (UTC). A date field without a value – such as an expiration date with no end – stays empty; on import,
 an empty cell sets the default value of the field again.
 

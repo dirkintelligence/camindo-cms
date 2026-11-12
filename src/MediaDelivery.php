@@ -30,7 +30,11 @@
  *     Cms::select() in the frontend; the template checks status and online period
  *  3. Field of type file, belongs to the area of the record
  *  4. for user_auth: frontend session logged in, and the profile area of the user
- *     is listed in field.details.profile_area_ids
+ *     is listed in field.details.profile_area_ids; the record is published
+ *     (status, online_at - like Cms::publishedSql() with archive) or it is the
+ *     user's own (profile record, or record.user_id). This is the only barrier for
+ *     such files - their directory is locked by .htaccess. Public files are also
+ *     reachable by their static path, there the template decides.
  * Every failure ends with 404 - including missing access, so that the response
  * does not reveal whether the file exists.
  *
@@ -165,6 +169,16 @@ class MediaDelivery {
             if (!$this->userSession->isLoggedIn()) return null;
             $allowedAreas = array_map('intval', (array)($details['profile_area_ids'] ?? []));
             if (!in_array($this->userSession->areaId(), $allowedAreas, true)) return null;
+            $own = $this->userSession->recordId();
+            $isOwn = $own > 0 && ($recordId === $own || (int)($record['user_id'] ?? 0) === $own);
+            if (!$isOwn) {
+                $this->db->pushResult();
+                $this->db->query("SELECT 1 FROM `record` WHERE `record_id` = ? AND "
+                    . $this->cms->publishedSql(['archive' => true]), 'i', [$recordId]);
+                $published = $this->db->num_rows > 0;
+                $this->db->popResult();
+                if (!$published) return null;
+            }
         }
 
         // File entry of the language

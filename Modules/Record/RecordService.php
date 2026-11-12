@@ -766,7 +766,9 @@ class RecordService
      * policy: to the trash, overwrite fields, delete permanently … - also for
      * the children deleted along ($withChilds) and firmly linked contents.
      *
-     * The caller checks rights and lock (loadForAction() / loadForChange()).
+     * The caller checks the lock (loadForChange()); the right to delete the
+     * original is checked here once more (loadForAction(), 'delete') - the id comes
+     * from the request and may be any productive record.
      *
      * If the working copy of the session admin is passed (delete dialog of the mask),
      * the original is meant; the working copy is discarded beforehand - otherwise it would
@@ -784,6 +786,7 @@ class RecordService
         $prodData = $this->record->getProdData($id);
         $tmpId = ($prodData !== null && $prodData[0] > 0) ? $id : 0;
         $prodId = $tmpId > 0 ? (int)$prodData[0] : $id;
+        if (!$this->loadForAction($prodId, 'delete')) return null;
         if ($tmpId > 0) $this->cancelKeepErrors($tmpId);
         return $this->privacyJobs->delete($prodId, 'record', fn(int $recordId) => $this->softDelete($recordId, $withChilds), $withChilds);
     }

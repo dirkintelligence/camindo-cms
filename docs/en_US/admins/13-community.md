@@ -74,7 +74,7 @@ The templates for this ([CMS:USER_LOGIN_CODE](../templateprogrammers/user-login-
 
 ## Review and owner
 
-Everything that a frontend user creates or changes is marked with ***“Needs review”*** and appears in the widget “Unreviewed content of frontend users” of the editorial team (see the [manual for editors](../editors/10-visitor-contributions.md)). Create the meta field “Needs review” in the profile and contribution areas, so that the editorial team can remove the marking after the review.
+Everything that a frontend user creates or changes is marked with ***“Needs review”*** and appears in the widget “Unreviewed content of frontend users” of the editorial team – for user groups with the module “Community”, and only from areas they may read (see the [manual for editors](../editors/10-visitor-contributions.md)). Create the meta field “Needs review” in the profile and contribution areas, so that the editorial team can remove the marking after the review.
 
 Each record needs an ***owner*** in the backend (see [chapter 7](./07-users-and-rights.md#the-owner-principle)). For records of frontend users, the template names it (parameter `owner`) or the configuration (`user.default_owner_id`). If neither exists, the command cannot save. Via the user group of this owner you control which editorial team is responsible for the contents of the frontend users.
 
