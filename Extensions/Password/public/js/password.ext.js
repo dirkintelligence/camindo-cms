@@ -24,7 +24,7 @@
 (function (window, document) {
     'use strict';
 
-    const RULES = { min_length: 12, min_special: 2, min_upper: 1, upper_not_first: true, min_lower: 1, min_digit: 0 };
+    const RULES = { min_length: 12, min_special: 1, min_upper: 1, upper_not_first: true, min_lower: 1, min_digit: 0 };
     const TEXTS = {
         title: 'Your password needs:',
         rules: {

@@ -13,7 +13,7 @@ automatically.
 The display is only an aid. What matters is that camindo CMS checks the same rules
 when saving – and it does so for a field exactly when the field has this extension.
 A password that is too weak is rejected with a message naming the missing
-requirements (“at least 2 special characters, …”).
+requirements (“at least 1 special character, …”).
 
 ## Settings per field
 

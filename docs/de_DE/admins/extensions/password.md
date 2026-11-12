@@ -13,7 +13,7 @@ sie automatisch.
 Die Anzeige ist nur eine Hilfe. Entscheidend ist, dass camindo CMS beim Speichern
 dieselben Regeln prüft – und das tut es für ein Feld genau dann, wenn es diese Extension
 trägt. Ein zu schwaches Passwort wird mit einer Meldung abgewiesen, die die fehlenden
-Anforderungen nennt („mindestens 2 Sonderzeichen, …“).
+Anforderungen nennt („mindestens 1 Sonderzeichen, …“).
 
 ## Einstellungen je Feld
 

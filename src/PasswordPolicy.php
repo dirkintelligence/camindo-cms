@@ -149,7 +149,7 @@ class PasswordPolicy {
     }
 
     /**
-     * Error message for unmet rules: "at least 2 special characters, …".
+     * Error message for unmet rules: "at least 1 special character, …".
      */
     public function message(array $failed, array $rules): string
     {

@@ -118,8 +118,9 @@ accept it.
 | Time zone `[Europe/Berlin]` | your time zone |
 | Locale `[de_DE]` | country/language for date and number formats |
 | Will the site be served over HTTPS? `[y]` | `Enter` if the site runs on `https://`. **`n` only for a local test without SSL** – see [Test locally without HTTPS](#test-locally-without-https) |
+| Backend domain … `(empty = /backend/ under every domain)` | `Enter`: the back end is reachable at `/backend/` under every domain of the installation. Or a separate address for the back end only, ideally a subdomain nobody guesses – see [Fixed backend domain](./12-operation.md#fixed-backend-domain). It is also required for signing in with passkeys and can be added to `.camindo.php` later |
 | Admin name `[admin]` | your sign-in name in the back end (lowercase letters, digits, `_`, `-`) |
-| Admin password | according to the password policy (by default at least 12 characters with uppercase and lowercase letters and a special character), enter it twice |
+| Admin password | according to the password policy (by default at least 12 characters with a special character, a lowercase letter and an uppercase letter that is not the first character), enter it twice |
 | Admin e-mail | your e-mail address (may be left empty, but it is required for the sign-in code) |
 | Backend language (ar_SA\|bn_BD\|de_DE\|en_US\|…) `[en_US]` | `de_DE` for a German back end. The available options are `ar_SA`, `bn_BD`, `de_DE`, `en_US`, `es_ES`, `fr_FR`, `hi_IN`, `ja_JP`, `ko_KR`, `pt_BR`, `ur_PK`, `zh_CN`; the language can be changed later in the personal settings |
 
@@ -130,7 +131,18 @@ At the end, you see:
 ```
 finish
   var/install.lock written
+
+camindo 9.x.y installed.
+  document root:  /var/www/mysite/public
+  backend:        https://{host}/backend/
+  cron job:       * * * * *  php /var/www/mysite/Core/cron/cron.php   (the only one)
+  next:           php /var/www/mysite/Core/cron/camindo.php status
 ```
+
+The summary names the ***document root*** for [step 4](#step-4--set-up-the-web-server) and the
+line for the [cron job](#step-5--cron-jobs). If `php` is not in the cron job's search path on your
+server or several PHP versions are installed, replace `php` with the full path, such as
+`/usr/bin/php` or `/usr/bin/php8.4` (`which php` shows it).
 
 The installer runs only once. A repeated call reports “already installed” and does
 nothing.

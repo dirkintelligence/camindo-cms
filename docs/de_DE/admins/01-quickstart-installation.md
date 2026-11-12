@@ -117,8 +117,9 @@ Dann stellt er Fragen. In eckigen Klammern steht die Vorgabe – `Enter` überni
 | Time zone `[Europe/Berlin]` | Ihre Zeitzone |
 | Locale `[de_DE]` | Land/Sprache für Datums- und Zahlenformate |
 | Will the site be served over HTTPS? `[y]` | `Enter`, wenn die Seite über `https://` läuft. **`n` nur für einen lokalen Test ohne SSL** – siehe [Lokal ohne HTTPS testen](#lokal-ohne-https-testen) |
+| Backend domain … `(empty = /backend/ under every domain)` | `Enter`: Das Backend ist unter `/backend/` jeder Domain der Installation erreichbar. Oder eine eigene Adresse nur für das Backend, am besten eine Subdomain, die niemand errät – siehe [Feste Backend-Domain](./12-betrieb.md#feste-backend-domain). Sie ist auch Voraussetzung für die Anmeldung mit Passkeys und lässt sich später in `.camindo.php` eintragen |
 | Admin name `[admin]` | Ihr Anmeldename im Backend (Kleinbuchstaben, Ziffern, `_`, `-`) |
-| Admin password | nach der Passwort-Richtlinie (standardmäßig mindestens 12 Zeichen mit Groß- und Kleinbuchstaben und einem Sonderzeichen), zweimal eingeben |
+| Admin password | nach der Passwort-Richtlinie (standardmäßig mindestens 12 Zeichen mit einem Sonderzeichen, einem Kleinbuchstaben und einem Großbuchstaben, der nicht am Anfang steht), zweimal eingeben |
 | Admin e-mail | Ihre E-Mail-Adresse (darf leer bleiben, wird aber für den Anmelde-Code benötigt) |
 | Backend language (ar_SA\|bn_BD\|de_DE\|en_US\|…) `[en_US]` | `de_DE` für ein deutsches Backend. Zur Wahl stehen `ar_SA`, `bn_BD`, `de_DE`, `en_US`, `es_ES`, `fr_FR`, `hi_IN`, `ja_JP`, `ko_KR`, `pt_BR`, `ur_PK`, `zh_CN`; die Sprache lässt sich später in den persönlichen Einstellungen ändern |
 
@@ -129,7 +130,18 @@ Am Ende steht:
 ```
 finish
   var/install.lock written
+
+camindo 9.x.y installed.
+  document root:  /var/www/mysite/public
+  backend:        https://{host}/backend/
+  cron job:       * * * * *  php /var/www/mysite/Core/cron/cron.php   (the only one)
+  next:           php /var/www/mysite/Core/cron/camindo.php status
 ```
+
+Die Zusammenfassung nennt das ***Document Root*** für [Schritt 4](#schritt-4--webserver-einrichten)
+und die Zeile für den [Cronjob](#schritt-5--cronjobs). Steht `php` auf Ihrem Server nicht im
+Suchpfad des Cronjobs oder gibt es mehrere PHP-Versionen, ersetzen Sie `php` durch den vollen
+Pfad, etwa `/usr/bin/php` oder `/usr/bin/php8.4` (`which php` zeigt ihn).
 
 Der Installer läuft nur einmal. Ein erneuter Aufruf meldet „already installed“ und
 tut nichts.

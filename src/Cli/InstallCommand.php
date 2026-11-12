@@ -321,12 +321,13 @@ class InstallCommand extends Command {
         // Password policy as when saving (security.password_policy; the
         // .camindo.php of the new installation names none of its own, the defaults apply)
         $rules = PasswordPolicy::DEFAULTS;
+        $n = fn(int $count, string $noun) => $count ? $count . ' ' . $noun . ($count === 1 ? '' : 's') : '';
         $hint = 'at least ' . implode(', ', array_filter([
-            $rules['min_length'] ? $rules['min_length'] . ' characters' : '',
-            $rules['min_special'] ? $rules['min_special'] . ' special characters' : '',
-            $rules['min_upper'] ? $rules['min_upper'] . ' uppercase letters' . ($rules['upper_not_first'] ? ' (not counting the first character)' : '') : '',
-            $rules['min_lower'] ? $rules['min_lower'] . ' lowercase letters' : '',
-            $rules['min_digit'] ? $rules['min_digit'] . ' digits' : '',
+            $n($rules['min_length'], 'character'),
+            $n($rules['min_special'], 'special character'),
+            $rules['min_upper'] ? $n($rules['min_upper'], 'uppercase letter') . ($rules['upper_not_first'] ? ' (not counting the first character)' : '') : '',
+            $n($rules['min_lower'], 'lowercase letter'),
+            $n($rules['min_digit'], 'digit'),
         ]));
         while (true) {
             $pass = $this->secret('admin-pass-file', 'CAMINDO_ADMIN_PASS', 'Admin password (' . $hint . ')', true);
