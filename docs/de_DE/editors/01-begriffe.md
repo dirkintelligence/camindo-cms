@@ -62,8 +62,8 @@ wem er gehört (***Owner***) und welche Nummer er hat (**record_id**).
 
 ## Inhaltsbereich
 
-Datensätze werden in ***Inhaltsbereichen*** gespeichert (im Backend auch
-„Content-Bereich“ genannt). Jeder Inhaltsbereich hat seine eigene Feldstruktur, zum
+Datensätze werden in ***Inhaltsbereichen*** gespeichert.
+Jeder Inhaltsbereich hat seine eigene Feldstruktur, zum
 Beispiel:
 
 | Inhaltsbereich | Eingabefelder |
