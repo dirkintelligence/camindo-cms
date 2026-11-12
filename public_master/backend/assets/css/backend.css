@@ -728,7 +728,18 @@ article.c9-layers-sliding {
 .btn.btn-card.disabled {
     background: var(--c9-brick-bg);
     color: inherit;
+    opacity: 1;
+}
+.btn.btn-card.disabled > strong,
+.btn.btn-card.disabled > .card-note {
     opacity: .45;
+}
+/* ... because a field of that name is in the trash */
+.btn-card .card-trash {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: 1rem;
 }
 /* Links ohne Unterstrich und in Standard-Textfarbe */
 .btn-card {

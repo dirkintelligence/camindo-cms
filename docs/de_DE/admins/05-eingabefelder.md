@@ -346,7 +346,9 @@ sondern legt ein Feld „Kurzer Text“ mit dem Namen `slug` an – die Webadres
 Datensatzes (siehe [Besondere Feldnamen](#besondere-feldnamen)).
 
 Verwendet der Bereich ein Metafeld oder den Slug bereits – auch mit einem Feld im
-Papierkorb –, ist die Karte in der Auswahl ausgegraut und lässt sich nicht anklicken.
+Papierkorb –, ist die Karte in der Auswahl ausgegraut und lässt sich nicht anklicken. Liegt
+das Feld im Papierkorb, steht auf der Karte ![delete](../_/delete.svg) „Liegt im Papierkorb“ –
+stellen Sie es dort wieder her oder löschen Sie es endgültig.
 
 ## Besondere Feldnamen
 

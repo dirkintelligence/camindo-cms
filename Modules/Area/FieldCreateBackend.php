@@ -19,7 +19,8 @@ class FieldCreateBackend extends FieldBackend {
      *
      * The cards of the section "Meta fields" (fixed names such as online_at or slug) are
      * grayed out and not clickable if the area already uses the name - also by a field
-     * in the trash, which keeps its name (Field::hookOnSave()). They stay visible.
+     * in the trash, which keeps its name (Field::hookOnSave()); then a trash symbol with
+     * "In the trash" explains why. They stay visible.
      *
      * Request: area_id
      */
@@ -61,12 +62,19 @@ class FieldCreateBackend extends FieldBackend {
             '{link_prefix}' => $linkPrefix,
             '{link_suffix}' => $linkSuffix
         ];
-        $this->db->query("SELECT `name` FROM `field` WHERE `area_id` = ?", 'i', [$this->areaId]);
-        $used = array_flip(array_map('strval', (array)$this->db->fetchAll()));
+        // name => true if only a field in the trash carries it
+        $used = [];
+        $this->db->query("SELECT `name`, MIN(`deleted`) AS `trash` FROM `field` WHERE `area_id` = ? GROUP BY `name`", 'i', [$this->areaId]);
+        foreach ($this->db->fetchAll() as $row) {
+            $used[(string)$row['name']] = (bool)(int)$row['trash'];
+        }
+        $trashHint = '<div class="card-trash mt-1"><span class="icon" aria-hidden="true">delete</span> '
+            . htmlspecialchars($this->cms->snippet('area.note_field_meta_in_trash')) . '</div>';
         foreach (self::META_CARDS as $name) {
             $replace['{card_' . $name . '}'] = isset($used[$name])
                 ? 'class="btn btn-card disabled" aria-disabled="true" tabindex="-1"'
                 : 'class="btn btn-card"';
+            $replace['{trash_' . $name . '}'] = ($used[$name] ?? false) ? $trashHint : '';
         }
         $this->backend->formInit('area.field_create_form', $replace);
         $this->backend->formHidden('area_id', $this->areaId);
