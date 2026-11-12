@@ -343,10 +343,9 @@ class Cms {
     // not assembled by hand.
     //
     // IMPORTANT: the expression goes LITERALLY into the query (no bind parameters) and is
-    // deliberately NOT table-qualified - `area`, `record` and `template` have the
-    // column, the data_* tables added by select() do not, so the name stays
-    // unambiguous. Queries that run directly via Database::query() must append it
-    // themselves.
+    // NOT table-qualified - every user prefixes the table or alias itself
+    // (select(): "`record`." etc., since JOINs may add a second `record`), and
+    // queries that run directly via Database::query() must append it themselves.
     public string $sqlAccess = '';
     // the same ids as a list (empty = no restriction), see accessInstanceIds()
     private array $accessInstanceIds = [];
@@ -1900,8 +1899,11 @@ class Cms {
         // Applies to EVERY query on the three content tables - also to those of the
         // backend. Whoever has no access to a website finds its contents
         // nowhere, without the individual query having to do anything for it.
+        // Table-qualified: a filter on a meta field of a linked record joins
+        // `record` a second time (registerRelationRecordJoin()), which also
+        // carries an `instance_id`.
         if ($this->sqlAccess !== '' && in_array($tableName, self::ACCESS_TABLES, true)) {
-            $where .= " AND (" . $this->sqlAccess . ")";
+            $where .= " AND (`$tableName`." . $this->sqlAccess . ")";
         }
         // Access restriction to areas (see $sqlAreaAccess) - backend: the
         // readable areas of the user group. Table-qualified: `record` is
