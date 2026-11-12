@@ -76,7 +76,7 @@ class FieldConvertBackend extends FieldBackend {
                 return;
             }
             echo $this->backend->template('alert_danger', [
-                '{text}' => $this->cms->errorMsg()
+                '{text}' => $this->errorMsgHtml()
             ]);
             $this->function = 'confirm';
         }

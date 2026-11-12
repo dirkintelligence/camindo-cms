@@ -149,4 +149,19 @@ abstract class FieldBackend {
         $file = $dir . '/backend/' . $script;
         return is_file($file) ? $file : null;
     }
+
+    /**
+     * Messages of Cms::errorMsg() for the alert of the field masks: the message "an input
+     * field of this name is in the trash" (area.error_field_name_in_trash) gets the trash
+     * symbol in front, like the grayed-out cards of the field type selection. Only here
+     * in the display - the snippet itself stays plain text (API messages).
+     */
+    protected function errorMsgHtml(): string
+    {
+        $html = $this->cms->errorMsg();
+        $parts = array_map(fn(string $part) => preg_quote($part, '~'),
+            explode('{value}', $this->cms->snippet('area.error_field_name_in_trash')));
+        return (string)preg_replace('~' . implode('.*?', $parts) . '~s',
+            '<span class="icon" aria-hidden="true">delete</span> $0', $html);
+    }
 }

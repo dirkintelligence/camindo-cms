@@ -1146,7 +1146,7 @@ class FieldEditBackend extends FieldBackend {
     private function _editErrors(): void
     {
         echo $this->backend->template('alert_danger',[
-            '{text}' => $this->cms->errorMsg()
+            '{text}' => $this->errorMsgHtml()
         ]);
     }
 
