@@ -108,6 +108,7 @@ class ComponentManager {
         private SnippetCache $snippetCache,
         private HtmlCache $htmlCache,
         private InstanceCache $instanceCache,
+        private ContainerInterface $container,
     )
     {
     }
@@ -389,7 +390,7 @@ class ComponentManager {
         // search index. If the table is still missing (early installation), the installer
         // builds it later anyway.
         try {
-            (new Modules\Docs\Docs($this->config, $this->db))->rebuildIndex();
+            $this->container->get(Modules\Docs\Docs::class)->rebuildIndex();
         }
         catch (\Throwable) {
         }
