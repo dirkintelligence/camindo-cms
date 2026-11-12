@@ -338,8 +338,9 @@ sense but creates a field “Short text” named `slug` – the web address of t
 [Special field names](#special-field-names)).
 
 If the area already uses a meta field or the slug – also with a field in the trash – its card
-in the selection is grayed out and cannot be clicked. If the field is in the trash, the card shows
-![delete](../_/delete.svg) “In the trash” – restore it there or delete it permanently.
+in the selection is grayed out and cannot be clicked. The card names the reason:
+![check](../_/check.svg) “Already present” or ![delete](../_/delete.svg) “In the trash” – then
+restore the field in the trash or delete it permanently.
 
 ## Special field names
 

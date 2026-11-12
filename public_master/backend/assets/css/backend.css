@@ -727,6 +727,7 @@ article.c9-layers-sliding {
 /* Card not available (field type selection: meta field already in the area) */
 .btn.btn-card.disabled {
     background: var(--c9-brick-bg);
+    border-color: transparent;
     color: inherit;
     opacity: 1;
 }
@@ -734,8 +735,8 @@ article.c9-layers-sliding {
 .btn.btn-card.disabled > .card-note {
     opacity: .45;
 }
-/* ... because a field of that name is in the trash */
-.btn-card .card-trash {
+/* ... and why: already present / in the trash */
+.btn-card .card-state {
     display: flex;
     align-items: center;
     gap: .25rem;

@@ -19,8 +19,9 @@ class FieldCreateBackend extends FieldBackend {
      *
      * The cards of the section "Meta fields" (fixed names such as online_at or slug) are
      * grayed out and not clickable if the area already uses the name - also by a field
-     * in the trash, which keeps its name (Field::hookOnSave()); then a trash symbol with
-     * "In the trash" explains why. They stay visible.
+     * in the trash, which keeps its name (Field::hookOnSave()). The card names the reason
+     * in words: "Already present" or, with the trash symbol, "In the trash". They stay
+     * visible.
      *
      * Request: area_id
      */
@@ -68,13 +69,15 @@ class FieldCreateBackend extends FieldBackend {
         foreach ($this->db->fetchAll() as $row) {
             $used[(string)$row['name']] = (bool)(int)$row['trash'];
         }
-        $trashHint = '<div class="card-trash mt-1"><span class="icon" aria-hidden="true">delete</span> '
-            . htmlspecialchars($this->cms->snippet('area.note_field_meta_in_trash')) . '</div>';
+        // The reason is always written out, the symbol alone would not explain it
+        $hint = fn(string $icon, string $snippet) => '<div class="card-state mt-1"><span class="icon" aria-hidden="true">'
+            . $icon . '</span> ' . htmlspecialchars($this->cms->snippet($snippet)) . '</div>';
+        $hints = [false => $hint('check', 'area.note_field_meta_in_use'), true => $hint('delete', 'area.note_field_meta_in_trash')];
         foreach (self::META_CARDS as $name) {
             $replace['{card_' . $name . '}'] = isset($used[$name])
                 ? 'class="btn btn-card disabled" aria-disabled="true" tabindex="-1"'
                 : 'class="btn btn-card"';
-            $replace['{trash_' . $name . '}'] = ($used[$name] ?? false) ? $trashHint : '';
+            $replace['{state_' . $name . '}'] = isset($used[$name]) ? $hints[$used[$name]] : '';
         }
         $this->backend->formInit('area.field_create_form', $replace);
         $this->backend->formHidden('area_id', $this->areaId);
