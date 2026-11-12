@@ -724,6 +724,12 @@ article.c9-layers-sliding {
     box-shadow: 0 .15rem .5rem rgba(0,0,0,.25)!important;
     border-color:var(--c9-grey-30);
 }
+/* Card not available (field type selection: meta field already in the area) */
+.btn.btn-card.disabled {
+    background: var(--c9-brick-bg);
+    color: inherit;
+    opacity: .45;
+}
 /* Links ohne Unterstrich und in Standard-Textfarbe */
 .btn-card {
     text-decoration: none;

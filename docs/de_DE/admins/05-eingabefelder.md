@@ -345,6 +345,9 @@ Im selben Abschnitt der Auswahl finden Sie ***Slug***. Es ist kein Metafeld im e
 sondern legt ein Feld „Kurzer Text“ mit dem Namen `slug` an – die Webadresse des
 Datensatzes (siehe [Besondere Feldnamen](#besondere-feldnamen)).
 
+Verwendet der Bereich ein Metafeld oder den Slug bereits – auch mit einem Feld im
+Papierkorb –, ist die Karte in der Auswahl ausgegraut und lässt sich nicht anklicken.
+
 ## Besondere Feldnamen
 
 | Name | Wirkung |

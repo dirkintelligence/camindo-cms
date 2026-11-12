@@ -337,6 +337,9 @@ The same section of the selection also offers ***Slug***. It is not a meta field
 sense but creates a field “Short text” named `slug` – the web address of the record (see
 [Special field names](#special-field-names)).
 
+If the area already uses a meta field or the slug – also with a field in the trash – its card
+in the selection is grayed out and cannot be clicked.
+
 ## Special field names
 
 | Name | Effect |

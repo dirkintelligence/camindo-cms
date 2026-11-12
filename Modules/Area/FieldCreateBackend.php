@@ -3,6 +3,9 @@ namespace Camindo\Core\Modules\Area;
 
 class FieldCreateBackend extends FieldBackend {
 
+    /** Cards with a fixed field name (section "Meta fields" of field_create_form.html) */
+    private const META_CARDS = ['online_at', 'offline_at', 'template_id', 'slug', 'status_id', 'needs_review', 'parent_id', 'position'];
+
     /**
      * Step 1 when creating: select field type (backend/field_create.php).
      *
@@ -13,6 +16,10 @@ class FieldCreateBackend extends FieldBackend {
      * If the area is still empty, the link additionally appends data[default_field]=1 -
      * the first field of an area becomes the title field without asking. Otherwise the
      * area would initially have none, and the record list would only show record_ids.
+     *
+     * The cards of the section "Meta fields" (fixed names such as online_at or slug) are
+     * grayed out and not clickable if the area already uses the name - also by a field
+     * in the trash, which keeps its name (Field::hookOnSave()). They stay visible.
      *
      * Request: area_id
      */
@@ -50,10 +57,18 @@ class FieldCreateBackend extends FieldBackend {
         if ($this->area->fieldsNumber($this->areaId) < 1) {
             $linkPrefix .= '&data[default_field]=1';
         }
-        $this->backend->formInit('area.field_create_form', [
+        $replace = [
             '{link_prefix}' => $linkPrefix,
             '{link_suffix}' => $linkSuffix
-        ]);
+        ];
+        $this->db->query("SELECT `name` FROM `field` WHERE `area_id` = ?", 'i', [$this->areaId]);
+        $used = array_flip(array_map('strval', (array)$this->db->fetchAll()));
+        foreach (self::META_CARDS as $name) {
+            $replace['{card_' . $name . '}'] = isset($used[$name])
+                ? 'class="btn btn-card disabled" aria-disabled="true" tabindex="-1"'
+                : 'class="btn btn-card"';
+        }
+        $this->backend->formInit('area.field_create_form', $replace);
         $this->backend->formHidden('area_id', $this->areaId);
         echo $this->backend->form();
 
