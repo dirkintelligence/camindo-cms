@@ -2000,7 +2000,15 @@
             }
             if (/^H[1-6]$/.test(tag)) {
                 e.preventDefault();
-                this.exec(() => caretInto(renameEl(tb, 'P'), false));
+                // the heading becomes a plain paragraph: its own attributes (class,
+                // style, id …) belong to the heading, only the space above stays
+                this.exec(() => {
+                    const m = marginOf(tb);
+                    const p = renameEl(tb, 'P');
+                    ['data-htv-a', 'class', 'style', 'title'].forEach((k) => p.removeAttribute(k));
+                    if (m) setMargin(p, m);
+                    caretInto(p, false);
+                });
                 return;
             }
             const parent = tb.parentNode;
@@ -2360,8 +2368,12 @@
                 if (unit === tb && /^(P|DIV|H[1-6])$/.test(tb.nodeName)) {
                     if (isEmptyBlock(tb)) tb.before(node);
                     else {
-                        this.splitAtCaret(tb);
+                        const n = this.splitAtCaret(tb);
                         tb.after(node);
+                        // caret at the end: a plain new paragraph follows (no copy of the
+                        // block with its attributes); split within the text: id only in front
+                        if (isEmptyBlock(n)) n.replaceWith(newP());
+                        else this.freshBlock(tb, n);
                         if (isEmptyBlock(tb)) tb.remove();
                     }
                 }
@@ -2397,6 +2409,23 @@
             return n;
         }
 
+        // Enter: the new, empty block does not take over the own attributes (class,
+        // style, title, id …) - they stay with the text; the alignment (data-align)
+        // continues. Split within the text: the id stays with the first part only.
+        freshBlock(tb, n) {
+            const clear = (el) => ['data-htv-a', 'class', 'style', 'title'].forEach((k) => el.removeAttribute(k));
+            if (isEmptyBlock(tb) && !isEmptyBlock(n)) clear(tb);
+            else if (isEmptyBlock(n)) clear(n);
+            else {
+                const at = blockAttrs(n);
+                if ('id' in at) {
+                    delete at.id;
+                    if (Object.keys(at).length) n.setAttribute('data-htv-a', JSON.stringify(at));
+                    else n.removeAttribute('data-htv-a');
+                }
+            }
+        }
+
         enter(shift) {
             const root = this.content;
             let r = getRange(root);
@@ -2429,7 +2458,9 @@
                     else caretInto(this.liftItem(tb), false);
                     return;
                 }
-                caretInto(this.splitAtCaret(tb), false);
+                const li = this.splitAtCaret(tb);
+                this.freshBlock(tb, li);
+                caretInto(li, false);
                 return;
             }
             // Enter in an empty aligned paragraph ends the alignment (as with lists)
@@ -2444,6 +2475,7 @@
                 return;
             }
             let n = this.splitAtCaret(tb);
+            this.freshBlock(tb, n);
             if (/^H[1-6]$/.test(tag)) {
                 if (isEmptyBlock(n)) n = renameEl(n, 'P');
                 if (isEmptyBlock(tb)) renameEl(tb, 'P');

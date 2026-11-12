@@ -96,7 +96,12 @@ In der formatierten Ansicht wirken Klassen und Stile sofort (zusammen mit dem
 Stylesheet des Feldes); Bilder erscheinen an ihrer Stelle und lassen sich wie ein
 Zeichen löschen oder verschieben. Attribute wie `data-…`, `aria-…`, `target` oder `id`
 wirken im Backend nicht, sie erscheinen nur im gespeicherten HTML – etwa für Skripte
-Ihrer Website. Ändern lassen sich Attribute nur im Quelltext – mit einer Ausnahme:
+Ihrer Website. Ein neuer Absatz per Eingabetaste übernimmt die Attribute nicht: Sie
+bleiben beim Text, ein leerer neuer Absatz bzw. Listenpunkt ist frei davon – ebenso der
+Absatz nach einer eingefügten Trennlinie oder Tabelle; teilen Sie einen
+Absatz mitten im Text, behalten beide Teile die Attribute, die `id` nur der erste. Wird eine
+Überschrift per Rücktaste am Anfang zum Absatz, entfallen ihre Attribute bis auf den Abstand oben.
+Ändern lassen sich Attribute nur im Quelltext – mit einer Ausnahme:
 Die Schaltfläche ***Abstand oben*** (`margin`) setzt an `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`,
 `<ol>` und `<table>` eine der Klassen `mt-1` … `mt-8` bzw. entfernt sie; andere Klassen des
 Elements bleiben erhalten. Die Klassen stammen aus Bootstrap, die Vorschau im Editor zeigt die

@@ -96,7 +96,12 @@ In the formatted view, classes and styles take effect immediately (together with
 field's stylesheet); images appear in place and can be deleted or moved like a
 character. Attributes such as `data-…`, `aria-…`, `target` or `id` have
 no effect in the backend; they only appear in the saved HTML – for scripts of your
-website, for example. Attributes can only be changed in the source – with one exception:
+website, for example. A new paragraph created with Enter does not take over the attributes:
+they stay with the text, and an empty new paragraph or list item has none – nor does the
+paragraph after an inserted horizontal line or table; if you split a
+paragraph within the text, both parts keep the attributes, the `id` only the first one. If
+Backspace at its start turns a heading into a paragraph, its attributes are dropped except for the space above.
+Attributes can only be changed in the source – with one exception:
 the ***space above*** button (`margin`) sets or removes one of the classes `mt-1` … `mt-8` on
 `<p>`, `<h1>` … `<h6>`, `<pre>`, `<ul>`, `<ol>` and `<table>`; other classes of the element are
 kept. The classes come from Bootstrap; the editor preview shows the sizes of the backend. For
