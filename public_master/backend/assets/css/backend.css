@@ -1559,3 +1559,9 @@ table.c9-card-rows > tbody > tr > td {
     font-size: 0.7rem;
     line-height: 1.2;
 }
+
+/* Long words without spaces (URLs, paths) wrap anywhere, also inside flex items */
+.c9-break-anywhere {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
