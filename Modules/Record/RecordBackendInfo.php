@@ -130,6 +130,8 @@ class RecordBackendInfo extends RecordBackend {
 
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         echo $this->backend->template('container_header');
 
         $this->function = 'info';

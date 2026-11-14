@@ -432,7 +432,8 @@
             const $container = $(event.currentTarget).closest('.c9-lookup-field');
             const createUrl = $container.data('create-url');
             if (createUrl) {
-                cApp.layers.add(createUrl);
+                // into the input mask of another area: slides in like the record list
+                cApp.layers.add(createUrl, false, false, true);
             }
         },
 
@@ -484,6 +485,21 @@
             const $referrerLayer = $('.c9-layer').eq(-2);
             const $container = this._fieldContainer($referrerLayer, '.c9-lookup-field', srcField, srcId);
             cApp.ui._lookupUpdate($container, srcField, func, destId, swapId, preventClosing);
+        },
+
+        /**
+         * Reload the preview of a lookup field wherever it is open - in every layer,
+         * without linking or closing anything. After the linked record was changed or
+         * deleted elsewhere (RecordBackendEdit: save / delete with src_field).
+         * With src_id the field of exactly this working copy (embedded contents).
+         */
+        lookupRefresh(srcField, srcId = 0) {
+            let $containers = $('article .c9-layer .c9-lookup-field[data-src-field="' + srcField + '"]');
+            if (srcId > 0) {
+                const $exact = $containers.filter('[data-src-id="' + srcId + '"]');
+                if ($exact.length) $containers = $exact;
+            }
+            $containers.each((i, el) => this._lookupUpdate($(el), srcField, '', 0, 0, true));
         },
 
         /**

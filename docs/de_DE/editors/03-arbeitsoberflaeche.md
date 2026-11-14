@@ -245,7 +245,7 @@ Das Zahnrad ![settings](../_/settings.svg) öffnet Ihre persönlichen Einstellun
 | Bevorzugte Sprachversion | Bei mehrsprachigen Inhalten öffnet die Eingabemaske zuerst diese Sprache (siehe [Kapitel 6](./06-mehrsprachigkeit.md)) |
 | Frontend-Editing | Bearbeiten-Verweise direkt auf der Website einblenden (siehe [Kapitel 9](./09-frontend-editing.md)) |
 | Dunkelmodus | Schalter für das ***dunkle Farbschema*** der Oberfläche; ausgeschaltet (Vorgabe) gilt das helle. Die Anmeldeseite übernimmt das zuletzt in diesem Browser verwendete Farbschema |
-| Animation | „ein“ (Vorgabe): Öffnet ein Lookup-Feld die Liste des verknüpften Bereichs, gleitet sie von der Seite herein. „aus“: Die Liste erscheint sofort |
+| Animation | „ein“ (Vorgabe): Öffnet ein Lookup-Feld die Liste des verknüpften Bereichs, die Eingabemaske für einen neuen Datensatz (Plus) oder einen verknüpften Datensatz (Klick in die Vorschau), gleitet die Seite von der Seite herein. „aus“: Sie erscheint sofort |
 | Widgets der Startseite | siehe unten |
 | Bericht abonnieren | Berichte, die der Administrator für Ihre Benutzergruppe freigegeben hat – nach jedem Lauf kommt das Ergebnis als Nachricht in Ihren Posteingang. Der Punkt erscheint nur, wenn es solche Berichte gibt |
 | Nachrichten per E-Mail zusammenfassen | „täglich“: eine E-Mail mit den ungelesenen Nachrichten je Absender und den neuen mit Betreff, nur wenn neue eingegangen sind (siehe [Nachrichten per E-Mail zusammenfassen](#nachrichten-per-e-mail-zusammenfassen)) |

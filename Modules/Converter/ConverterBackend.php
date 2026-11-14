@@ -69,6 +69,8 @@ class ConverterBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         // Page elements
@@ -176,6 +178,8 @@ class ConverterBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
         $tab = (string)($_REQUEST['tab'] ?? '');
 

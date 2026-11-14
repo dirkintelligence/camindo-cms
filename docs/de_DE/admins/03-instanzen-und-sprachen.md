@@ -45,7 +45,7 @@ Auswahlen des Backends ***immer an letzter Stelle*** – unabhängig von ihrer P
 | Lesbare andere Instanzen | Inhalte der ausgewählten Instanzen sind im Frontend dieser Instanz abrufbar – etwa ein gemeinsamer Produktkatalog für mehrere Websites |
 | ***Startseite*** | |
 | Start-Datensatz | Datensatz, dessen Inhalte auf der Startseite zur Verfügung stehen |
-| Start-Template | Template, mit dem die Startseite ausgegeben wird |
+| Start-Template | Template, mit dem die Startseite ausgegeben wird. Es muss nicht als „Standalone“ markiert sein |
 | ***Script-Policy (CSP)*** | |
 | Script-Policy | „Vorgabe“ (Einstellung `security.frontend_csp`, sonst aus), „Aus“, „Nur melden“ oder „Durchsetzen“. Details siehe unten |
 | Weitere Script-Quellen | Adressen fremder Scripts, die laufen dürfen, je Zeile eine, z. B. `https://www.googletagmanager.com` oder `*.example.com` |

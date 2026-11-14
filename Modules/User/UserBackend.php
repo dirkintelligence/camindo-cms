@@ -55,6 +55,8 @@ class UserBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Breadcrumb navigation
         $this->backend->setNaviLabel('#headline_unreviewed');
 

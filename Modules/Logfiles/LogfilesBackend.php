@@ -54,6 +54,8 @@ class LogfilesBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#logfiles.module_label');
         echo $this->backend->template('container_header');
 

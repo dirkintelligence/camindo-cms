@@ -109,6 +109,8 @@ class GroupBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#admin.headline_group_list');
         echo $this->backend->template('container_header');
         if (!$this->_allowed()) {
@@ -185,6 +187,8 @@ class GroupBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         $this->backend->setNaviLabel('#button_info');

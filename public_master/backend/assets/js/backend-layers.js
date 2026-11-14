@@ -12,12 +12,20 @@
  * openPost() decides whether an input mask with check-out is loaded immediately or
  * only at the push of a button (developer docs, chapter 14 (Security: web), RecordBackendEdit::_editOpenStub()).
  *
- * After a change that affects the layer below (save, delete, import,
- * batch processing …), the pattern is always the same:
+ * REFRESHABLE LAYERS
+ * Pages that only show data - lists, info pages, overviews - carry the marker
+ * data-c9-refresh (Backend::refreshable()). After a change (save, delete,
+ * import, batch processing …) all marked layers below the current one are
+ * reloaded as soon as they are on top again; input masks carry no marker and are
+ * never reloaded (their working copy and the entries would be lost).
  *
- *     cApp.layers.invalidate();   // mark the referer as outdated
- *     cApp.layers.close();        // or replace(): the referer reloads as soon as
- *                                 // it is on top again
+ * Two ways lead there:
+ *   - automatically: every successful POST from a layer (cLoadContent, backend.js) -
+ *     changing actions run via POST only (developer docs, chapter 14 (Security: web))
+ *   - explicitly, for a callback after the reload:
+ *
+ *     cApp.layers.invalidate(callback);  // mark the refreshable layers below
+ *     cApp.layers.close();               // or replace()
  *
  */
 (function (cApp) {
@@ -531,37 +539,46 @@
         },
 
         /**
-         * Marks the layer below the topmost one (the referer) as outdated: it is
-         * reloaded as soon as it is on top again (_showLast()) - no matter whether the
-         * topmost layer is closed via a button, the breadcrumb navigation or the browser's
-         * "Back", or replaced with replace(). Replaces the former
-         * refreshReferer() and the pair close() + refresh().
+         * Marks all refreshable layers below the topmost one as outdated (see header
+         * comment): each is reloaded as soon as it is on top again (_showLast()) - no
+         * matter whether the topmost layer is closed via a button, the breadcrumb
+         * navigation or the browser's "Back", or replaced with replace().
          *
-         * By default only the referer: deeper layers can be input masks with a
-         * working copy that cannot tolerate a reload. levels > 1 additionally marks
-         * the layers below - only for masks below which there is certainly no
-         * input mask (e.g. editing an area via the info page and list).
-         *
-         * The start page (base layer '') is always marked as well: it holds no input
-         * mask, and its widgets (trash, log files …) may show what just changed -
-         * the home icon of the breadcrumb only shows it again (_showLast()).
-         *
-         * @param {function} [callback]  execute after the referer has been reloaded
-         *                               (e.g. fill a lookup field of the mask below)
-         * @param {number}   [levels=1]  Number of layers below the topmost one
+         * @param {function} [callback]  execute after the referer (the layer directly
+         *                               below) has been reloaded - only if it is
+         *                               refreshable (e.g. link a record in the lookup
+         *                               field of the mask below the record list)
          */
-        invalidate(callback, levels = 1) {
+        invalidate(callback) {
             const $layers = $('article .c9-layer');
-            for (let i = 2; i <= levels + 1 && i <= $layers.length; i++) {
-                $layers.eq(-i).attr('data-stale', '1');
+            if ($layers.length < 2) return;
+            this.markStale($layers.slice(0, -1));
+            const $referer = $layers.eq(-2);
+            if (typeof callback === 'function' && $referer.attr('data-stale') === '1') {
+                $referer.data('stale-callback', callback);
             }
-            const $base = $layers.first();
-            if ($layers.length >= 2 && $base.attr('data-url') === '') {
-                $base.attr('data-stale', '1');
-            }
-            if ($layers.length >= 2 && typeof callback === 'function') {
-                $layers.eq(-2).data('stale-callback', callback);
-            }
+        },
+
+        /**
+         * Does the layer only show data and may be reloaded? The start page (base
+         * layer '') always, otherwise pages with the marker data-c9-refresh
+         * (Backend::refreshable()). Input masks never.
+         * @param {jQuery} $layer
+         * @returns {boolean}
+         */
+        isRefreshable($layer) {
+            return $layer.attr('data-url') === '' || $layer.find('[data-c9-refresh]').length > 0;
+        },
+
+        /**
+         * Mark the refreshable layers among $layers as outdated.
+         * @param {jQuery} $layers
+         */
+        markStale($layers) {
+            $layers.each((i, el) => {
+                const $layer = $(el);
+                if (this.isRefreshable($layer)) $layer.attr('data-stale', '1');
+            });
         },
 
         /**

@@ -236,7 +236,7 @@ The gear ![settings](../_/settings.svg) opens your personal settings.
 | Preferred language version | For multilingual content, the input form opens this language first (see [chapter 6](./06-multilingual-content.md)) |
 | Frontend editing | Shows edit links directly on the website (see [chapter 9](./09-frontend-editing.md)) |
 | Dark mode | Switch for the ***dark color scheme*** of the user interface; switched off (default), the light one applies. The sign-in page uses the color scheme last used in this browser |
-| Animation | “on” (default): when a lookup field opens the list of the linked area, it slides in from the side. “off”: the list appears immediately |
+| Animation | “on” (default): when a lookup field opens the list of the linked area, the input form for a new record (plus) or a linked record (click in the preview), the page slides in from the side. “off”: it appears immediately |
 | Dashboard widgets | see below |
 | Subscribe to reports | Reports that your administrator has released for your user group – after every run, the result arrives as a message in your inbox. This entry only appears if such reports exist |
 | Summarize messages by email | “daily”: an email with the unread messages per sender and the new ones with their subject, only if new messages have arrived (see [Summarize messages by email](#summarize-messages-by-email)) |

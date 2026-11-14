@@ -85,6 +85,8 @@ class PrivacyBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#privacy.module_label');
         echo $this->backend->template('container_header');
         echo $this->backend->headline('#privacy.headline_policies');
@@ -126,6 +128,8 @@ class PrivacyBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
         $this->backend->setNaviLabel('#button_info');
         echo $this->backend->template('container_header');
@@ -858,6 +862,8 @@ class PrivacyBackend {
      */
     public function deletedAdmins(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#privacy.module_label');
         echo $this->backend->template('container_header');
         echo $this->backend->headline('#privacy.headline_deleted_admins');
@@ -955,6 +961,8 @@ class PrivacyBackend {
      */
     public function templateList(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#privacy.module_label');
         echo $this->backend->template('container_header');
         echo $this->backend->headline('#privacy.headline_templates');

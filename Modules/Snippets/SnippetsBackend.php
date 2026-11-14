@@ -58,6 +58,8 @@ class SnippetsBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#snippets.module_label');
         echo $this->backend->template('container_header');
         echo $this->backend->headline('#snippets.headline_list');

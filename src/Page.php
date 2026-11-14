@@ -139,7 +139,8 @@
  * --------------------
  * A template forced via the URL must not be arbitrary, otherwise every
  * record could be rendered through every template. It is only allowed if
- *   - no record is involved AND template.standalone = 1, or
+ *   - no record is involved AND template.standalone = 1 (not needed for the start
+ *     template of the instance, `instance`.`template_id`), or
  *   - it is the template already chosen on the record, or
  *   - rel_area_template.override = 1 releases it for the area, or
  *   - the record has no template of its own and the given one is the default template
@@ -550,6 +551,7 @@ class Page {
         // and checked further below.
         $templateFile = '';
         $isStartPage = ($slug === '' && $templateName === '');
+        $isStartTemplate = false;
         if ($isStartPage) {
             $startRecordId = (int)($this->instance['record_id'] ?? 0);
             if ($startRecordId > 0) $slug = (string)$startRecordId;
@@ -558,8 +560,10 @@ class Page {
                 $templateName = $this->getTemplateRef($startTemplateId);
                 // Treat it like a template from the URL: the permission is checked,
                 // so that a template chosen in the backend that has since become unsuitable
-                // does not run unchecked
+                // does not run unchecked - except for the standalone flag: the
+                // administrator has chosen it explicitly for the start page
                 $this->urlTemplate = ($templateName !== '');
+                $isStartTemplate = $this->urlTemplate;
             }
         }
 
@@ -739,8 +743,9 @@ class Page {
                     // 1. Template without record contents
                     // --------------------
                     // Only allowed if the template is explicitly marked as standalone
-                    // (e.g. start page, search form, sitemap).
-                    if ((int)$standalone === 0) {
+                    // (e.g. search form, sitemap) - or it is the start template of the
+                    // instance (chosen in the backend, not from the address)
+                    if ((int)$standalone === 0 && !$isStartTemplate) {
                         $this->notFound('Error: Invalid template request.');
                     }
                 }

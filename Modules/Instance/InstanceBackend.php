@@ -80,6 +80,8 @@ class InstanceBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Page elements
         // --------------------
 
@@ -168,6 +170,8 @@ class InstanceBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->function = 'info';
 

@@ -67,6 +67,8 @@ class AuditBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Search form submitted: reload with the filters in the URL - like the
         // search of the other modules (AdminBackend::_search()); afterwards the
         // pagination works via the URL without losing the filters
@@ -126,6 +128,8 @@ class AuditBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#button_info');
         echo $this->backend->template('container_header');
 

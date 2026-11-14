@@ -2022,11 +2022,15 @@ class RecordBackendEdit extends RecordBackend {
                     ");
                 }
                 else {
-                    // referrer is link list -> update the list
-                    // and then link the record (closes the list if applicable)
+                    // referrer is the record list of the lookup field -> update the list
+                    // and then link the record (closes the list if applicable). Opened from
+                    // the preview of the field (info page -> Edit) the input mask lies
+                    // directly below: it is not refreshable (invalidate() leaves it and
+                    // the callback alone), only its preview shows the changed record.
                     $this->backend->script("
                         cApp.layers.invalidate(function(){cApp.ui.lookupRUpdate({$this->srcField},'link',$newId,0,false,{$this->srcId});});
                         cApp.layers.close();
+                        cApp.ui.lookupRefresh({$this->srcField},{$this->srcId});
                     ");
                 }
             }
@@ -2219,10 +2223,12 @@ class RecordBackendEdit extends RecordBackend {
             $this->backend->balloon('success', $msg);
             
             if ($this->srcField > 0) {
-                // referrer is lookup field -> update the preview container
+                // opened from a lookup field (its record list or its preview): update the
+                // list below and the preview of the field in the input mask
                 $this->backend->script("
-                    cApp.ui.lookupRUpdate({$this->srcField},'',0,0,false,{$this->srcId});
+                    cApp.layers.invalidate();
                     cApp.layers.close();
+                    cApp.ui.lookupRefresh({$this->srcField},{$this->srcId});
                 ");
             }
             else {

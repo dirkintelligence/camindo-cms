@@ -206,6 +206,8 @@ class AreaBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // If there are several instances, show this
         $this->db->query("SELECT `instance_id`,`label` FROM `instance` ORDER BY " . Instance::orderSql());
         $instances = $this->db->fetchPairs();
@@ -336,6 +338,8 @@ class AreaBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         // Seitenelemente
@@ -386,7 +390,7 @@ class AreaBackend {
         // Buttons
         $this->backend->buttonBarReset();
         // Edit/copy as a separate layer above the info page: Cancel and
-        // Save (invalidate(null, 2) + close()) return to it
+        // Save (invalidate() + close()) return to it
         $this->backend->buttonAdd('button_edit_primary', "cApp.layers.add('Area/area_edit.php?id={$id}')");
         $this->backend->buttonAdd('button_copy', "cApp.layers.add('Area/area_edit.php?id={$id}&function=copy')");
         $this->backend->buttonAdd('button_delete', "cApp.layers.replace('Area/area_edit.php?id={$id}&function=delete')");
@@ -609,6 +613,8 @@ class AreaBackend {
      */
     public function infoAccess(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
         $function = (string)($_REQUEST['function'] ?? '');
 
@@ -1162,7 +1168,7 @@ class AreaBackend {
             ]);
             $this->cms->errorsReset();
             $this->backend->buttonBarReset();
-            $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(null, 2); cApp.layers.close();");
+            $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(); cApp.layers.close();");
             echo $this->backend->buttonBar();
             return;
         }
@@ -1175,7 +1181,7 @@ class AreaBackend {
         $this->backend->script("
             const \$referer = $('article .c9-layer').eq(-2);
             if (\$referer.length && (\$referer.attr('data-url') || '').startsWith('Area/area_info.php')) cApp.layers.removeReferer();
-            cApp.layers.invalidate(null, 1);
+            cApp.layers.invalidate();
             cApp.layers.replace('Area/area_info.php?id={$areaId}', true);
         ");
     }
@@ -1240,15 +1246,16 @@ class AreaBackend {
                 ]);
                 $this->cms->errorsReset();
                 $this->backend->buttonBarReset();
-                $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(null, 2); cApp.layers.close();");
+                $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(); cApp.layers.close();");
                 echo $this->backend->buttonBar();
                 return;
             }
 
             // Refresh referer and close window - when editing via the
-            // info page also the list below it (new label, position)
+            // info page also the list below it (new label, position; invalidate() marks all
+            // refreshable layers below)
             $this->backend->script("
-                cApp.layers.invalidate(null, 2);
+                cApp.layers.invalidate();
                 cApp.layers.close();
             ");
         }

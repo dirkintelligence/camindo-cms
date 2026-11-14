@@ -243,6 +243,8 @@ class AdminBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Lookup-Aufruf?
         $srcField = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_REQUEST['src_field'] ?? '')));
         $checkedIds = $this->system->sanitizeIds(
@@ -498,6 +500,8 @@ class AdminBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         // Seitenelemente
@@ -599,6 +603,8 @@ class AdminBackend {
      */
     public function audit(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
         $this->backend->setNaviLabel('#admin.headline_audit');
         echo $this->backend->template('container_header');
@@ -1358,6 +1364,8 @@ class AdminBackend {
      */
     public function devices(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $sessionAdminId = (int)$this->session->get('admin_id');
         $id = (int)($_REQUEST['id'] ?? 0);
         $isOwn = ($id < 1 || $id === $sessionAdminId);

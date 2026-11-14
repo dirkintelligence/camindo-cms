@@ -1560,6 +1560,18 @@ class Backend {
     }
 
     /**
+     * Mark the current page as refreshable: it only shows data (list, info page,
+     * overview) and is reloaded when something changed in a layer above it
+     * (cApp.layers.invalidate(), every successful POST from a layer above). Input
+     * masks never call this - a reload would discard their working copy and entries.
+     * Output anywhere in the page; once is enough.
+     */
+    public function refreshable(): void
+    {
+        echo '<span hidden data-c9-refresh></span>';
+    }
+
+    /**
      * Create a balloon message
      * @string $type    Bootstrap alert class 'success', 'danger', ...
      * @string $msg     message text

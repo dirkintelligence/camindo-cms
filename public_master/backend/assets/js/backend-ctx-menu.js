@@ -61,7 +61,8 @@
                 const event  = $table.data('event');
 
                 if (event) $(document).trigger(String(event), [id]);
-                else cApp.layers.add(path.replace('#', id));
+                // in the preview of a lookup field: slides in like its record list
+                else cApp.layers.add(path.replace('#', id), false, false, $table.closest('.c9-lookup-field').length > 0);
             });
         },
 

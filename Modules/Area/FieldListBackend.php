@@ -14,6 +14,8 @@ class FieldListBackend extends FieldBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // $this->id = (int)($_REQUEST['id'] ?? 0);
         $this->areaId = (int)($_REQUEST['area_id'] ?? 0);
 

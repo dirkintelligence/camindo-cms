@@ -143,6 +143,13 @@ window.cApp = window.cApp || {};
                         cApp.extensions.destroyAll($this);
                     }
                     $this.html(response);
+                    // A POST changes data (developer docs, chapter 14 (Security: web)): the
+                    // refreshable layers below this one reload when they are on top again
+                    // (cApp.layers.markStale(); input masks are not affected)
+                    if (settings.method !== 'GET' && !settings.background && cApp.layers) {
+                        const $layer = $this.closest('.c9-layer');
+                        if ($layer.length) cApp.layers.markStale($layer.prevAll('.c9-layer'));
+                    }
                     // Bind the event handlers of the new content immediately (backend-handlers.js;
                     // the MutationObserver would only come after this call)
                     if (cApp.handlers) cApp.handlers.scan($this[0]);

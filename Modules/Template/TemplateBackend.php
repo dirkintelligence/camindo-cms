@@ -216,6 +216,8 @@ class TemplateBackend {
      */
     public function folderList()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Get the ids of the open folders from the session
         $expandedFolderIds = $this->toggleExpanded('expanded_folder_ids', 'folder_id');
         // likewise for the tenant main folders
@@ -383,6 +385,8 @@ class TemplateBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // If no filter, no area_id and no lookup field is given,
         // close the layer - instead of listing ALL records
         if (empty($_REQUEST['area_id']) && empty($_REQUEST['filter']) && empty($_REQUEST['src_field'])) {
@@ -665,6 +669,8 @@ class TemplateBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         echo $this->backend->template('container_header');
 
         // Prefill and check afterwards: _resolveParams() sets 'errors' for an area that cannot be
@@ -858,6 +864,8 @@ class TemplateBackend {
      */
     public function infoAccess()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         echo $this->backend->template('container_header');
 
         $this->function = (string)($_REQUEST['function'] ?? '');

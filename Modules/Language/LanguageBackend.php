@@ -51,6 +51,8 @@ class LanguageBackend {
      */
     public function list()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Page elements
         // --------------------
 
@@ -130,6 +132,8 @@ class LanguageBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         // Page elements

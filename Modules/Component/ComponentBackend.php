@@ -59,6 +59,8 @@ class ComponentBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $type = (string)($_REQUEST['type'] ?? 'modules');
         if (!isset(ComponentManager::KINDS[$type])) $type = 'modules';
 
@@ -116,6 +118,8 @@ class ComponentBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#button_info');
         echo $this->backend->template('container_header');
 

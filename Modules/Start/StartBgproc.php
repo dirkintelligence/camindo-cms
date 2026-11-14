@@ -68,6 +68,8 @@ class StartBgproc {
      */
     public function bgprocList(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Load processes of the session admin - clear finished ones beforehand: the
         // list only shows what is running or failed (list() first reconciles the
         // state, the rest is deleted afterwards)

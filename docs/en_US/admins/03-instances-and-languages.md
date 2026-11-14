@@ -45,7 +45,7 @@ all lists and selections of the back end – regardless of its position.
 | Readable other instances | content of the selected instances can be retrieved in the frontend of this instance – for example a shared product catalog for several websites |
 | ***Start page*** | |
 | Start record | record whose content is available on the start page |
-| Start template | template with which the start page is output |
+| Start template | template with which the start page is output. It does not have to be marked as “Standalone” |
 | ***Script policy (CSP)*** | |
 | Script policy | “Default” (setting `security.frontend_csp`, otherwise off), “Off”, “Report only” or “Enforce”. Details see below |
 | Additional script sources | addresses of external scripts that may run, one per line, e.g. `https://www.googletagmanager.com` or `*.example.com` |

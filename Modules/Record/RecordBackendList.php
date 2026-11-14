@@ -88,6 +88,8 @@ class RecordBackendList extends RecordBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // If no filter and no area_id is given (filter was removed from the global search via the close button)
         // then close the layer - instead of listing ALL records
         if (empty($_REQUEST['area_id']) && empty($_REQUEST['filter']) && empty($_REQUEST['src_field'])

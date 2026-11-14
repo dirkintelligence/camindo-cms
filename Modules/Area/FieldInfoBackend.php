@@ -11,6 +11,8 @@ class FieldInfoBackend extends FieldBackend {
      */
     public function info()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
 
         // Seitenelemente

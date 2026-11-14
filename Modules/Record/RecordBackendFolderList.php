@@ -77,6 +77,8 @@ class RecordBackendFolderList extends RecordBackend {
      */
     public function folderList()
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         // Get the ids of the open folders from the session
         $expandedFolderIds = $this->toggleExpanded('expanded_folder_ids', 'folder_id');
         // ditto for the instance main folders

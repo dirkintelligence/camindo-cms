@@ -58,6 +58,8 @@ class SchedulerBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->backend->setNaviLabel('#scheduler.module_label');
         echo $this->backend->template('container_header');
         echo $this->backend->headline('#scheduler.headline_scheduler_list');
@@ -110,6 +112,8 @@ class SchedulerBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $id = (int)($_REQUEST['id'] ?? 0);
         $this->backend->setNaviLabel('#button_info');
         echo $this->backend->template('container_header');

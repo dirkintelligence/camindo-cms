@@ -101,6 +101,8 @@ class MessagingBackend {
      */
     public function list(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $isInbox = ((string)($_REQUEST['tab'] ?? '') !== 'outbox');
 
         // Bread crum navi
@@ -207,6 +209,8 @@ class MessagingBackend {
      */
     public function info(): void
     {
+        // list/info page: reloaded after changes above it (cApp.layers)
+        $this->backend->refreshable();
         $this->id = (int)($_REQUEST['id'] ?? 0);
         // View: passed on from the list; noread=1 after "Mark as unread" - the
         // page appears again without reading the message right away
