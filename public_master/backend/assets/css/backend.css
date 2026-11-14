@@ -1542,6 +1542,18 @@ a.c9-navitem-link:focus-visible,
     .c9-qs-dialog { margin-top: 8px; max-height: calc(100% - 16px); }
 }
 
+/* Table whose rows stand as separate white blocks with a gap (e.g. "Recently changed") */
+table.c9-card-rows {
+    --bs-table-bg: var(--c9-brick-bg);
+    border-collapse: separate;
+    border-spacing: 0 6px;
+    margin-top: -6px;
+}
+table.c9-card-rows > tbody > tr > td {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+}
+
 /* Path of the area (instance : folder : area) above a record, e.g. "Last changed" */
 .c9-area-path {
     font-size: 0.7rem;
