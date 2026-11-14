@@ -105,7 +105,8 @@ unknown language, template not released – respond with the status ***404***.
   equivalent to `{$page['key']['subkey']}`. In single quotation marks
   (`'Text $page[key]'`) the text stays as it is – nothing is inserted there.
 
-Errors – an unknown command, an unknown parameter, a missing bracket – do not prevent saving.
+Errors – an unknown command, an unknown parameter, a missing bracket, a ***PHP syntax error***
+in the translated template – do not prevent saving.
 The detail view of the template shows them with the line number. They also appear on the start
 page in the widget “Template messages” – in case templates are edited through the file system.
 
@@ -125,6 +126,19 @@ protected content stays protected, and templates that [include themselves endles
 PHP blocks lead to errors! To use the contents of CMS commands in PHP blocks, use the
 parameter `set` (for example `set = myvar`) and read the content in the PHP block from `$set`
 (`$set['myvar']`).
+
+***CMS commands in PHP comments*** are not executed but stay unchanged. So you can refer to a
+command in a comment without any problem:
+
+```cms
+<?php
+  $page = $page ?? [];   // filled with (CMS:SAVEDATA page) in the page template
+?>
+```
+
+This applies to `//`, `#` and `/* … */` comments. Note: as in PHP, a `//` or `#` comment ends at
+the end of the line or at a `?>`. If a CMS command stands elsewhere in the PHP code or in a PHP
+string, the detail view of the template shows a note – it does not work there.
 
 ***$cms*** The contents of the requested record are in `$cms`; so are the contents of records
 found with `CMS:SELECT`.

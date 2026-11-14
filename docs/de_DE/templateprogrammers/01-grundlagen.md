@@ -108,8 +108,8 @@ Template –, antworten mit dem Status ***404***.
   gleichwertig mit `{$page['key']['subkey']}`. In einfachen Anführungszeichen
   (`'Text $page[key]'`) bleibt der Text, wie er ist – dort wird nichts eingesetzt.
 
-Fehler – ein unbekannter Befehl, ein unbekannter Parameter, eine fehlende Klammer –
-verhindern das Speichern nicht. Die Detailansicht des Templates zeigt sie mit
+Fehler – ein unbekannter Befehl, ein unbekannter Parameter, eine fehlende Klammer, ein
+***PHP-Syntaxfehler*** im übersetzten Template – verhindern das Speichern nicht. Die Detailansicht des Templates zeigt sie mit
 Zeilennummer an. Sie erscheinen auch auf der Startseite im Widget „Template-Meldungen“ – für den
 Fall, dass Templates über das Dateisystem bearbeitet werden.
 
@@ -129,6 +129,20 @@ geschützt bleibt, und Templates, die sich [endlos selbst einbinden](include.md)
 führen allerdings zu Fehlern! Um Inhalte aus CMS-Befehlen in PHP-Blöcken zu verwenden,
 nutzen Sie den Parameter `set` (etwa `set = myvar`) und greifen den Inhalt im PHP-Block aus `$set`
 (`$set['myvar']`) auf.
+
+***CMS-Befehle in PHP-Kommentaren*** werden nicht ausgeführt, sondern bleiben unverändert stehen.
+Sie können also in einem Kommentar ohne Weiteres auf einen Befehl verweisen:
+
+```cms
+<?php
+  $page = $page ?? [];   // gefüllt mit (CMS:SAVEDATA page) im Seiten-Template
+?>
+```
+
+Das gilt für `//`-, `#`- und `/* … */`-Kommentare. Beachten Sie: Ein `//`- oder `#`-Kommentar
+endet wie in PHP am Zeilenende oder an einem `?>`. Steht ein CMS-Befehl dagegen im übrigen
+PHP-Code oder in einem PHP-String, zeigt die Detailansicht des Templates einen Hinweis – dort
+funktioniert er nicht.
 
 ***$cms*** Inhalte aus dem aufgerufenen Datensatz stehen in `$cms`; ebenso Inhalte aus Datensätzen, die mittels
 `CMS:SELECT` ermittelt werden.

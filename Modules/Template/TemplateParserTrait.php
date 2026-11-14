@@ -43,6 +43,14 @@ namespace Camindo\Core\Modules\Template;
  * Therefore the scanner keeps a relative line count in $s['line'], and therefore
  * emitFragments() assembles the code line by line instead of simply concatenating it.
  *
+ * NOT IN PHP COMMENTS
+ * --------------------
+ * A "(cms:" inside a PHP comment is not a command and stays unchanged - the
+ * compiled <?php … ?> would end the comment. Inside other PHP code a command is
+ * compiled as before, with a note (it cannot work there). The PHP tokenizer
+ * decides what is a comment (phpZones()), so the parser sees it exactly as PHP does.
+ * After the run, parse() checks the PHP syntax of the result (phpSyntaxError()).
+ *
  * ERRORS DO NOT ABORT
  * --------------------
  * Unknown commands and invalid parameters are reported and skipped resp. taken over as
@@ -127,6 +135,12 @@ trait TemplateParserTrait
         [$php, $segments] = $this->scan($code, $errors, true);
         $styled = $this->renderStyledCode($code, $segments);
 
+        // PHP syntax of the compiled template - otherwise a syntax error only shows
+        // up when the page is called (line numbers match, see trait comment)
+        if ($syntaxError = $this->phpSyntaxError($php)) {
+            $errors[] = $syntaxError;
+        }
+
         // Script policy of the frontend (developer docs, chapter 14 (Security: web)): notes on scripts without
         // (CMS:NONCE) and inline handlers that it would block
         array_push($errors, ...$this->inlineHandlerWarnings($code));
@@ -176,6 +190,11 @@ trait TemplateParserTrait
         $len = strlen($code);
         $pos = 0;
 
+        // PHP tokens of the source code (comments, code) - a "(cms:" in there is not
+        // a command, see phpZoneAt()
+        $zones = stripos($code, '(cms:') === false ? [] : $this->phpZones($code);
+        $zoneIndex = 0;
+
         while ($pos < $len) {
             $hit = stripos($code, '(cms:', $pos);
 
@@ -192,7 +211,27 @@ trait TemplateParserTrait
                 $php .= substr($code, $pos, $hit - $pos);
             }
 
+            $zone = $this->phpZoneAt($zones, $zoneIndex, $hit);
+
+            // In a PHP comment: no command - the compiled PHP block would end the
+            // comment ("//" at its closing tag, "/* */" at the "*/" of the generated
+            // marker). The rest of the comment is taken over unchanged.
+            if ($zone !== null && $zone['kind'] === 'comment') {
+                $this->addTextSegment($segments, $hit, $zone['end']);
+                $php .= substr($code, $hit, $zone['end'] - $hit);
+                $pos  = $zone['end'];
+                continue;
+            }
+
             $cmd = $this->parseCmsCommand($code, $hit, $errors);
+
+            // In PHP code or a PHP string: compiled as before, but it cannot work
+            // there (an opening PHP tag inside PHP) - a note for the info page
+            if ($zone !== null && $cmd !== null && $cmd['known']) {
+                $errors[] = 'Line ' . ($cmd['baseLine'] + 1) . ": Note: Command 'CMS:"
+                    . strtoupper($cmd['name']) . "' stands inside PHP code - it only works in the"
+                    . " HTML part of the template (outside <?php … ?>).";
+            }
 
             if ($cmd === null) {
                 // structurally not a valid command: take over '(', keep searching after it
@@ -218,6 +257,63 @@ trait TemplateParserTrait
         }
 
         return [$php, $segments];
+    }
+
+    /**
+     * PHP parts of the source code in which a "(cms:" is not a command:
+     * comments ('comment': line comments with // or #, block and doc comments)
+     * and other PHP tokens ('code': code, strings, heredocs). The HTML part (T_INLINE_HTML) and the PHP tags
+     * themselves are left out.
+     *
+     * The tokenizer reads the source code with the commands in it - in the HTML
+     * part they are plain text for PHP, and a comment ends exactly where PHP ends
+     * it (a "//" comment also at "?>"). Without TOKEN_PARSE it never throws.
+     *
+     * @return array<int,array{start:int,end:int,kind:string}>  sorted by start
+     */
+    private function phpZones(string $code): array
+    {
+        $zones = [];
+        $skip  = [T_INLINE_HTML, T_OPEN_TAG, T_OPEN_TAG_WITH_ECHO, T_CLOSE_TAG, T_WHITESPACE];
+        foreach (\PhpToken::tokenize($code) as $token) {
+            if (in_array($token->id, $skip, true)) continue;
+            $kind = ($token->id === T_COMMENT || $token->id === T_DOC_COMMENT) ? 'comment' : 'code';
+            $zones[] = ['start' => $token->pos, 'end' => $token->pos + strlen($token->text), 'kind' => $kind];
+        }
+        return $zones;
+    }
+
+    /**
+     * The zone of phpZones() containing the offset $pos, or null (HTML part).
+     * $index runs along - scan() asks with increasing offsets.
+     */
+    private function phpZoneAt(array $zones, int &$index, int $pos): ?array
+    {
+        $count = count($zones);
+        while ($index < $count && $zones[$index]['end'] <= $pos) {
+            $index++;
+        }
+        if ($index < $count && $zones[$index]['start'] <= $pos) {
+            return $zones[$index];
+        }
+        return null;
+    }
+
+    /**
+     * Syntax check of the compiled PHP code (parser of PHP, nothing is executed).
+     * Compile-time errors beyond the syntax (e.g. "break" outside a loop) are not
+     * found - only what token_get_all() with TOKEN_PARSE reports.
+     *
+     * @return string|null  message "Line n: PHP syntax error: …" or null
+     */
+    private function phpSyntaxError(string $php): ?string
+    {
+        try {
+            token_get_all($php, TOKEN_PARSE);
+        } catch (\ParseError $e) {
+            return 'Line ' . $e->getLine() . ': PHP syntax error: ' . $e->getMessage();
+        }
+        return null;
     }
 
     /* =====================================================================
