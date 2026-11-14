@@ -12,8 +12,16 @@
  * min_height, max_height (px), stylesheet (file from var/extensions/markdownvisual/),
  * css_class (empty = c9-markdownvisual-{feldname}).
  */
-$note = fn(string $key, array $params = []) => $backend->template('form-text', [
-    '{text}' => $backend->escape(str_replace(array_keys($params), array_values($params), $cms->snippet('ext.markdownvisual.' . $key))),
+// Notes appear as tooltip on the label (input_label_tt with data-bs-html): escaped twice,
+// so that "<span>" in the snippet stays visible text
+$note = fn(string $key, array $params = []) => htmlspecialchars($backend->escape(
+    str_replace(array_keys($params), array_values($params), $cms->snippet('ext.markdownvisual.' . $key))
+), ENT_QUOTES);
+$label = fn(string $id, string $key, string $tooltip = '') => $backend->template($tooltip === '' ? 'input_label' : 'input_label_tt', [
+    '{id}' => $id,
+    '{label}' => $cms->snippet('ext.markdownvisual.' . $key),
+    '{tooltip}' => $tooltip,
+    '{class}' => '',
 ]);
 
 // Toolbar
@@ -24,7 +32,7 @@ foreach (['full', 'basic', 'custom'] as $value) {
 }
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_toolbar'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_toolbar'),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_toolbar', [
         '{id}' => $fieldId,
@@ -34,20 +42,19 @@ echo $backend->template('edit_form_block', [
 ]);
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_toolbar_custom_list'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_toolbar_custom_list', $note('note_toolbar_custom')),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_toolbar_custom', [
         '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $backend->escape((string)($options['toolbar_custom'] ?? '')),
-        '{note}' => $note('note_toolbar_custom'),
     ]),
 ]);
 
 // Height
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_min_height'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_min_height'),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_min_height', [
         '{id}' => $fieldId,
@@ -58,13 +65,12 @@ echo $backend->template('edit_form_block', [
 $maxHeight = (int)($options['max_height'] ?? 0);
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_max_height'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_max_height', $note('note_max_height')),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_max_height', [
         '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $maxHeight > 0 ? (string)$maxHeight : '',
-        '{note}' => $note('note_max_height'),
     ]),
 ]);
 
@@ -79,27 +85,26 @@ foreach ($files as $file) {
 }
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_stylesheet'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_stylesheet', $files
+        ? $note('note_stylesheet', ['{dir}' => $dirShort, '{class}' => 'c9-markdownvisual-feldname'])
+        : $note('note_stylesheet_empty', ['{dir}' => $dirShort])
+    ),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_stylesheet', [
         '{id}' => $fieldId,
         '{name}' => $name,
         '{options}' => $backend->options($fileOptions, $stylesheet),
-        '{note}' => $files
-            ? $note('note_stylesheet', ['{dir}' => $dirShort, '{class}' => 'c9-markdownvisual-feldname'])
-            : $note('note_stylesheet_empty', ['{dir}' => $dirShort]),
     ]),
 ]);
 
 // CSS class
 $fieldId = 'c9-ext-' . bin2hex(random_bytes(4));
 echo $backend->template('edit_form_block', [
-    '{label}' => $backend->template('input_label', ['{id}' => $fieldId, '{label}' => $cms->snippet('ext.markdownvisual.option_css_class'), '{class}' => '']),
+    '{label}' => $label($fieldId, 'option_css_class', $note('note_css_class')),
     '{class}' => '',
     '{field}' => $backend->template('ext.markdownvisual.field_css_class', [
         '{id}' => $fieldId,
         '{name}' => $name,
         '{value}' => $backend->escape((string)($options['css_class'] ?? '')),
-        '{note}' => $note('note_css_class'),
     ]),
 ]);
