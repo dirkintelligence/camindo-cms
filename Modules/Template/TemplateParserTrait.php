@@ -22,7 +22,7 @@ namespace Camindo\Core\Modules\Template;
  *     Parsing       parseCmsCommand(), readParam(), readToken(), readSub()
  *                   and the scanner helpers skipWs(), consumeQuoted(), consumeBraces()
  *     Validation    validateCmsCommand() - against the definition from commands.php
- *     Generation    generateCmsCommand(), paramPath(), normToken(), phpValueToken(),
+ *     Generation    generateCmsCommand(), paramPath(), normToken() (+ expandIndexChains()), phpValueToken(),
  *                   emitFragments()
  *     Display       renderStyledCode(), styleRawPhp(), styleCommandInner();
  *                   styleCode() only provides the display (code examples of the manuals)
@@ -761,12 +761,19 @@ trait TemplateParserTrait
                     $j++;
                 }
                 // einfache ->Zugriffe mitnehmen ($this->irgendwas)
+                $isProperty = false;
                 while ($j + 2 < $len && $text[$j] === '-' && $text[$j + 1] === '>'
                     && (ctype_alpha($text[$j + 2]) || $text[$j + 2] === '_')) {
+                    $isProperty = true;
                     $j += 2;
                     while ($j < $len && (ctype_alnum($text[$j]) || $text[$j] === '_')) {
                         $j++;
                     }
+                }
+                // index chain $page[title], $page[key][subkey] (normToken() makes the
+                // chain from the second level on into {$page['key']['subkey']})
+                if (!$isProperty) {
+                    $j += strlen($this->indexChain($text, $j));
                 }
                 $spans[] = [$abs + $i, $abs + $j];
                 $i = $j;
@@ -1132,10 +1139,87 @@ trait TemplateParserTrait
      */
     private function normToken(array $tok): string
     {
-        if ($tok['quote'] !== null) {
+        if ($tok['quote'] === "'") {
             return $tok['text'];
         }
-        return '"' . str_replace('"', '\"', $tok['text']) . '"';
+        $text = $this->expandIndexChains($tok['text']);
+        if ($tok['quote'] !== null) {
+            return $text;
+        }
+        return '"' . str_replace('"', '\"', $text) . '"';
+    }
+
+    /**
+     * Index chain of a simple variable at $offset - "[key]", "[0]", "[-1]", "[$i]" one
+     * after another, as the simple PHP interpolation knows them (unquoted keys).
+     *
+     * @return string  the chain ('' if none follows)
+     */
+    private function indexChain(string $text, int $offset): string
+    {
+        return preg_match('/\G(?:\[(?:-?\d+|[A-Za-z_]\w*|\$[A-Za-z_]\w*)\])+/', $text, $m, 0, $offset) ? $m[0] : '';
+    }
+
+    /**
+     * Interpolated text (bare or "…" token): $var[key][subkey] - more than one index -
+     * becomes {$var['key']['subkey']}. The simple PHP interpolation reads only the first
+     * index, the rest would be output as text; in the template the whole chain is meant
+     * (also colored like that, findPhpSpans()). {…} blocks and \$ stay unchanged.
+     */
+    private function expandIndexChains(string $text): string
+    {
+        if (!str_contains($text, '][')) return $text;
+        $out = '';
+        $len = strlen($text);
+        $i = 0;
+        while ($i < $len) {
+            $c = $text[$i];
+            if ($c === '\\') {
+                $out .= substr($text, $i, 2);
+                $i += 2;
+                continue;
+            }
+            if ($c === '{' && ($text[$i + 1] ?? '') === '$') {
+                // complex syntax: up to the matching brace
+                $depth = 0;
+                $j = $i;
+                while ($j < $len) {
+                    if ($text[$j] === '{') $depth++;
+                    elseif ($text[$j] === '}' && --$depth === 0) { $j++; break; }
+                    $j++;
+                }
+                $out .= substr($text, $i, $j - $i);
+                $i = $j;
+                continue;
+            }
+            if ($c === '$' && preg_match('/\G\$[A-Za-z_]\w*/', $text, $m, 0, $i)) {
+                $name = $m[0];
+                $j = $i + strlen($name);
+                if (($text[$j] ?? '') === '-' && ($text[$j + 1] ?? '') === '>') {
+                    // object access: unchanged
+                    $out .= $name;
+                    $i = $j;
+                    continue;
+                }
+                $chain = $this->indexChain($text, $j);
+                if (substr_count($chain, '[') > 1) {
+                    preg_match_all('/\[([^\]]*)\]/', $chain, $keys);
+                    $php = $name;
+                    foreach ($keys[1] as $key) {
+                        $php .= '[' . (preg_match('/^(-?\d+|\$\w+)$/', $key) ? $key : "'" . $key . "'") . ']';
+                    }
+                    $out .= '{' . $php . '}';
+                    $i = $j + strlen($chain);
+                    continue;
+                }
+                $out .= $name;
+                $i = $j;
+                continue;
+            }
+            $out .= $c;
+            $i++;
+        }
+        return $out;
     }
 
     /**

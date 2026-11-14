@@ -6101,7 +6101,8 @@ class Cms {
     }
 
     // CMS:RAW
-    // Without any processing - the content must be trustworthy (HTML fields).
+    // Without any processing - the content must be trustworthy (HTML fields, or
+    // useval="{$set[html]}" from a value of the template).
     // Only the output parameters (ifempty, instead, prefix, suffix, set) apply as everywhere.
     public function cmsRaw($p): void
     {

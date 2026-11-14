@@ -16,8 +16,11 @@ several areas, see [below](#cross-area-search)) and ![refresh](../_/refresh.svg)
 
 To the right of the area tree, ***“Recently changed”*** lists the ten records that you
 yourself last saved in the input form – the most recent one at the top. Each entry shows
-the fields that also appear in the record list of its area, one below the other (the main
-field in bold), followed by the time of your last save. Clicking opens the detail view.
+the ***path of its area*** in small letters at the top (folder : … : area, with several
+instances preceded by the instance), below it the fields that also appear in the record list
+of its area (the main field in bold) and the time of your last save. Clicking opens the detail
+view, a right click a context menu with ![edit](../_/edit.svg) “Edit” (if you may edit the
+record).
 
 The list is personal: changes made by other users do not appear here. Nor do records that
 were changed through an import or batch processing. Records in the trash and records to

@@ -100,6 +100,10 @@ unknown language, template not released – respond with the status ***404***.
 - The line break after a CMS command is swallowed, in the same way as after a `<?php … ?>` block.
 - Command parameters in double quotation marks may contain PHP variables: `attr[alt]="{$myvar}"`
   (parameters without quotation marks are handled internally like parameters in double quotation marks).
+  Array elements also work without curly braces, across ***several levels***:
+  `useval=$page[title]`, `useval=$page[key][subkey]` and `"Text $page[key][subkey]"` are
+  equivalent to `{$page['key']['subkey']}`. In single quotation marks
+  (`'Text $page[key]'`) the text stays as it is – nothing is inserted there.
 
 Errors – an unknown command, an unknown parameter, a missing bracket – do not prevent saving.
 The detail view of the template shows them with the line number. They also appear on the start

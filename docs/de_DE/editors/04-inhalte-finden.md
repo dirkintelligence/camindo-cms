@@ -18,9 +18,11 @@ Baum.
 
 Rechts neben dem Bereichsbaum listet ***„Zuletzt geändert“*** die zehn Datensätze, die
 Sie selbst zuletzt in der Eingabemaske gespeichert haben – der jüngste steht oben.
-Jeder Eintrag zeigt die Felder, die auch in der Datensatzliste seines Bereichs
-erscheinen, untereinander (das Hauptfeld fett), darunter den Zeitpunkt Ihres letzten
-Speicherns. Ein Klick öffnet die Detailansicht.
+Jeder Eintrag zeigt oben klein den ***Pfad seines Bereichs*** (Ordner : … : Bereich, bei
+mehreren Instanzen mit der Instanz davor), darunter die Felder, die auch in der
+Datensatzliste seines Bereichs erscheinen (das Hauptfeld fett), und den Zeitpunkt Ihres
+letzten Speicherns. Ein Klick öffnet die Detailansicht, ein Rechtsklick ein Kontextmenü
+mit ![edit](../_/edit.svg) „Bearbeiten“ (sofern Sie den Datensatz bearbeiten dürfen).
 
 Die Liste ist persönlich: Änderungen anderer Benutzer erscheinen hier nicht. Ebenso
 wenig Datensätze, die über Import oder Stapelverarbeitung geändert wurden.

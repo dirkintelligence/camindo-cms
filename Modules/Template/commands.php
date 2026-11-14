@@ -1288,14 +1288,14 @@ return [
         'include' => []
     ],
 
-    // RAW outputs the field content without any processing - no escaping, no
+    // RAW outputs the field content (or 'useval') without any processing - no escaping, no
     // line break conversion. Intended for fields that already contain HTML; accordingly
     // the content must be trusted.
     'raw' => [
         'method' => 'cms.cmsRaw',
         'note' => '#template.cmd_raw',
         'do' => 'field',
-        'oneof' => '',
+        'oneof' => 'field,useval',
         'params' => [
             'id' => [
                 'ref' => 'record',
@@ -1306,11 +1306,18 @@ return [
                 'description' => '#template.cmd_raw__id'
             ],
             'field' => [
-                'mandatory' => true,
+                'mandatory' => false,
                 'subparam' => 0,
                 'default' => '',
                 'value' => '#template.cmdval_field',
                 'description' => '#template.cmd_raw__field'
+            ],
+            'useval' => [
+                'mandatory' => false,
+                'subparam' => 0,
+                'default' => '',
+                'value' => '#template.cmdval_text',
+                'description' => '#template.cmd_raw__useval'
             ],
             'ifempty' => [
                 'mandatory' => false,

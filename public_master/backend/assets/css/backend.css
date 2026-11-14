@@ -1541,3 +1541,9 @@ a.c9-navitem-link:focus-visible,
 @media (max-width: 575.98px) {
     .c9-qs-dialog { margin-top: 8px; max-height: calc(100% - 16px); }
 }
+
+/* Path of the area (instance : folder : area) above a record, e.g. "Last changed" */
+.c9-area-path {
+    font-size: 0.7rem;
+    line-height: 1.2;
+}

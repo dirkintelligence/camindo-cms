@@ -267,11 +267,8 @@ class RecordBackendList extends RecordBackend {
                 // determine the default sorting of the area - the direction applies also
                 // without a sort field (then changed_at), otherwise filterText() would show the
                 // sorting as changed and would not let it be removed
-                if ($sortFieldId = (int)($this->areaData['sort_field_id'] ?? 0)) {
-                    if ($fieldData = $this->record->fieldData($sortFieldId)) {
-                        $sort = $fieldData['name'];
-                    }
-                }
+                // (Backend::areaData(): field name or a column of `record`, otherwise changed_at)
+                $sort = (string)($this->areaData['sort_field_name'] ?? '') ?: 'changed_at';
                 $order = strtoupper((string)($this->areaData['sort_order'] ?? '')) === 'ASC' ? 'ASC' : 'DESC';
             }
             $_REQUEST['sort'] = $sort;

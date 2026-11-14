@@ -86,7 +86,7 @@ Back up `var/area_blueprints/` together with the other project data
 | Parent folder, Preceding element | place in the area tree |
 | Note | appears above the record list – keep it as short as possible. A snippet reference (`#custom.key`) appears in the language of the user, as with the label |
 | Main field | field that represents the record in lists and relations (usually title or name) – selectable only after the fields have been created |
-| Default sort order, sort direction | order of the records in the record list and default for templates |
+| Default sort order, sort direction | order of the records in the record list and default for templates. The choice comprises the sortable input fields and always `changed_at` (default), `online_at` and `created_at` – `online_at` only once, even if an input field is based on it |
 | Multilingual input | “All languages on one page” or “One tab per language” – how the input mask displays multilingual fields. A new area starts with “One tab per language” |
 | Records per page | number of records the record list shows on one page; you page between the pages. `0` shows all records on one page. New areas start with the value of `admin.skiplist_default` (see [chapter 12](./12-operation.md)); an empty field uses this value as well |
 | Slug prefix | optional first part of the address of all records of the area, per language (see [below](#slug-prefix)) |

@@ -7,21 +7,24 @@ Gibt einen Inhalt unformatiert aus.
 ```
 
 ***Methode:*** `Cms::cmsRaw()`  
-***Ohne Schlüssel:*** der erste Wert ohne `=` gilt als `field`
+***Ohne Schlüssel:*** der erste Wert ohne `=` gilt als `field`  
+***Mindestens einer von:*** `field`, `useval`
 
 ## Parameter
 
 | Parameter | Wert | Standard | Pflicht | Beschreibung |
 |---|---|---|:-:|---|
 | `id` | `Datensatz-Id oder Slug` | `(aktueller Datensatz)` |  | Datensatz, aus dem gelesen wird. Reine Ziffernfolge = record_id, alles andere = Slug - dieselbe Regel wie in der URL. |
-| `field` ¹ | `Feld` | – | ja | Name des Feldes, dessen Inhalt ausgegeben wird. |
+| `field` ¹ | `Feld` | – | ² | Name des Feldes, dessen Inhalt ausgegeben wird. |
+| `useval` | `Text` | – | ² | Wert in Textform, der als Quelle genutzt wird. |
 | `ifempty` | `Text` | – |  | Text, der ausgegeben wird, falls das Feld leer ist. |
 | `instead` | `Text` | – |  | Text, der anstelle des Feldinhalts ausgegeben wird, sofern dieser nicht leer ist. |
 | `prefix` | `Text` | – |  | Text, der vorangestellt wird, sofern der Feldinhalt nicht leer ist. |
 | `suffix` | `Text` | – |  | Text, der angehängt wird, sofern der Feldinhalt nicht leer ist. |
 | `set` | `Array-Index von $set` | – |  | Der Inhalt wird nicht ausgegeben, sondern in der Variable $set gespeichert. |
 
-¹ kann ohne Schlüssel als erster Wert angegeben werden.
+¹ kann ohne Schlüssel als erster Wert angegeben werden.  
+² mindestens einer der mit ² markierten Parameter muss angegeben werden.
 
 ## Anwendung
 
@@ -62,6 +65,20 @@ genau wie in der URL:
 (CMS:RAW field=html_text)
 (CMS:RAW html_text)
 ```
+
+### `useval`
+
+`useval` nimmt statt eines Feldes einen Wert direkt aus dem Template - etwa fertiges
+HTML, das zuvor mit `set` abgelegt oder in PHP zusammengesetzt wurde:
+
+```cms
+(CMS:RAW useval=$set[html] prefix="<section>" suffix="</section>")
+(CMS:RAW useval="{$page['intro']}")
+```
+
+Auch hier gilt: Der Wert wird ***unverändert*** ausgegeben. Werte aus dem Request
+(`$_GET`, `$_POST`) gehören nie in `CMS:RAW`, sondern in `CMS:TEXT` mit
+`specialchars=true`.
 
 ### `ifempty`
 

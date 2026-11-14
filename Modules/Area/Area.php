@@ -135,6 +135,11 @@ class Area extends Dataset {
     /** Area types that contain records (`record`) - see class comment */
     public const CONTENT_TYPES = ['record', 'profile', 'ugc'];
 
+    /** Columns of `record` that are offered as default sorting besides the input
+     *  fields (stored in details.sort_field, `sort_field_id` then stays empty -
+     *  it is a foreign key on `field`). changed_at is the fallback without both. */
+    public const SORT_META_FIELDS = ['online_at', 'created_at'];
+
     /** Standard-Icon je Bereichstyp (hookOnSave()) */
     public const DEFAULT_ICONS = [
         'record'   => 'draft',
@@ -531,6 +536,27 @@ class Area extends Dataset {
                 $data['privacy_policy_id'] = null;
             }
             if (!in_array('privacy_policy_id', $fields, true) && $fields) $fields[] = 'privacy_policy_id';
+        }
+
+        // Default sorting by a column of `record` (SORT_META_FIELDS): the selection list
+        // sends its name instead of a field id - it goes into details.sort_field
+        if (array_key_exists('sort_field_id', $data)) {
+            $sortField = is_string($data['sort_field_id']) ? trim($data['sort_field_id']) : '';
+            $details = $data['details'] ?? $previousData['details'] ?? [];
+            if (is_string($details)) $details = json_decode($details, true);
+            if (!is_array($details)) $details = [];
+            $before = $details['sort_field'] ?? null;
+            if (in_array($sortField, self::SORT_META_FIELDS, true)) {
+                $data['sort_field_id'] = null;
+                $details['sort_field'] = $sortField;
+            }
+            else {
+                unset($details['sort_field']);
+            }
+            if (($details['sort_field'] ?? null) !== $before || isset($data['details'])) {
+                $data['details'] = $details;
+                if ($fields && !in_array('details', $fields, true)) $fields[] = 'details';
+            }
         }
 
         // Dependent area: only record areas; a switched-off switch is not

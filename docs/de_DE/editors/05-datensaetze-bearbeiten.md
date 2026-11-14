@@ -261,9 +261,13 @@ verkleinerte Bilder, Vorschaubilder oder web-taugliche Videos (***Thumbnails***)
 geschieht beim Speichern; aufwändige Umwandlungen wie Videos laufen im Hintergrund.
 Bis sie fertig sind, zeigt die Maske ein Platzhalterbild.
 
+In der Detailansicht steht bei einem Dateifeld zunächst nur der Link zur Datei. Die
+übrigen Angaben – ursprünglicher Dateiname, MIME-Typ, Dateierweiterung, Dateigröße,
+Breite × Höhe – klappen Sie mit ***„Dateiinformationen“*** darunter auf.
+
 Bitte beachten: Der ***ursprüngliche Dateiname*** erscheint auf der Website in der Adresse der Datei
 (etwa `/media/…/1977,strand-nord.jpg`). Sie ändern ihn in der Detailansicht über den
-Stift hinter „Original filename“ – ohne die Datei neu hochzuladen. Die Endung bleibt
+Stift hinter „Ursprünglicher Dateiname“ (unter „Dateiinformationen“) – ohne die Datei neu hochzuladen. Die Endung bleibt
 dabei unverändert. Solange der Datensatz in Bearbeitung ist, ist das nicht möglich.
 
 ### Verknüpfungen

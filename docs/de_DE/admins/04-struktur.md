@@ -90,7 +90,7 @@ Sichern Sie `var/area_blueprints/` zusammen mit den übrigen Projektdaten
 | Eltern-Ordner, Vorangehendes Element | Platz im Bereichsbaum |
 | Hinweis | erscheint über der Datensatzliste – möglichst kurz halten. Ein Snippet-Verweis (`#custom.schluessel`) erscheint wie bei der Bezeichnung in der Sprache des Benutzers |
 | Haupt-Feld | Feld, das den Datensatz in Listen und Verknüpfungen vertritt (meist Titel oder Name) – erst nach dem Anlegen der Felder wählbar |
-| Standard-Sortierung, Sortier-Richtung | Reihenfolge der Datensätze in der Datensatzliste und Vorgabe für Templates |
+| Standard-Sortierung, Sortier-Richtung | Reihenfolge der Datensätze in der Datensatzliste und Vorgabe für Templates. Zur Wahl stehen die sortierbaren Eingabefelder sowie immer `changed_at` (Vorgabe), `online_at` und `created_at` – `online_at` nur einmal, auch wenn ein Eingabefeld darauf beruht |
 | Mehrsprachige Eingabe | „Alle Sprachen auf einer Seite“ oder „Ein Reiter je Sprache“ – wie die Eingabemaske mehrsprachige Felder zeigt. Ein neuer Bereich startet mit „Ein Reiter je Sprache“ |
 | Datensätze je Seite | Anzahl der Datensätze, die die Datensatzliste auf einer Seite zeigt; zwischen den Seiten wird geblättert. `0` zeigt alle Datensätze auf einer Seite. Vorgabe für neue Bereiche ist der Wert aus `admin.skiplist_default` (siehe [Kapitel 12](./12-betrieb.md)); ein leeres Feld verwendet ebenfalls diesen Wert |
 | Slug-Prefix | optionaler erster Teil der Adresse aller Datensätze des Bereichs, je Sprache (siehe [unten](#slug-prefix)) |

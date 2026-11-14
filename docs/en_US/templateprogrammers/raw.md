@@ -7,21 +7,24 @@ Outputs the content unformatted.
 ```
 
 ***Method:*** `Cms::cmsRaw()`  
-***Without key:*** the first value without `=` is the `field`
+***Without key:*** the first value without `=` is the `field`  
+***At least one of:*** `field`, `useval`
 
 ## Parameters
 
 | Parameter | Value | Default | Required | Description |
 |---|---|---|:-:|---|
 | `id` | `record ID or slug` | `(current record)` |  | Record to read from. Pure digit sequence = record_id, anything else = slug – the same rule as in the URL. |
-| `field` ¹ | `field` | – | yes | Name of the field whose content is output. |
+| `field` ¹ | `field` | – | ² | Name of the field whose content is output. |
+| `useval` | `text` | – | ² | Value in text form that is used as the source. |
 | `ifempty` | `text` | – |  | Text that is output if the field is empty. |
 | `instead` | `text` | – |  | Text that is output instead of the field content, if it is not empty. |
 | `prefix` | `text` | – |  | Text that is placed before the field content, if it is not empty. |
 | `suffix` | `text` | – |  | Text that is appended if the field content is not empty. |
 | `set` | `array index of $set` | – |  | The content is not output, but stored in the variable $set. |
 
-¹ can be given without a key as the first value.
+¹ can be given without a key as the first value.  
+² at least one of the parameters marked with ² must be given.
 
 ## Usage
 
@@ -62,6 +65,19 @@ exactly as in the URL:
 (CMS:RAW field=html_text)
 (CMS:RAW html_text)
 ```
+
+### `useval`
+
+`useval` takes a value directly from the template instead of a field – for example
+finished HTML that was stored with `set` before or assembled in PHP:
+
+```cms
+(CMS:RAW useval=$set[html] prefix="<section>" suffix="</section>")
+(CMS:RAW useval="{$page['intro']}")
+```
+
+Here too, the value is output ***unchanged***. Values from the request (`$_GET`,
+`$_POST`) never belong in `CMS:RAW`, but in `CMS:TEXT` with `specialchars=true`.
 
 ### `ifempty`
 

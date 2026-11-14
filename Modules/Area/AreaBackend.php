@@ -430,15 +430,7 @@ class AreaBackend {
         // sort_order
         // --------------------
         if (Area::isContentType($type)) {
-            $sortFieldId = (int)$data['sort_field_id'];
-            if (!empty($sortFieldId)) {
-                // is FK, always returns a result
-                $this->db->query("SELECT `name` FROM `field` WHERE `field_id` = ?", 'i', [$sortFieldId]);
-                $sortFieldName = $this->db->fetchNum()[0];
-            }
-            else {
-                $sortFieldName = 'changed_at';            
-            }
+            $sortFieldName = (string)($this->backend->areaData($id)['sort_field_name'] ?? 'changed_at');
             $sortOrder = $data['sort_order'] ?: 'DESC';
             $this->backend->infoStatic($this->cms->snippet('area.default_sort'), $sortFieldName . ' ' . $sortOrder);
         }
@@ -1568,23 +1560,32 @@ class AreaBackend {
                 ], $this->field);
 
                 $sortFieldOptions = [];
-                $containsChangedAt = false;
+                $fieldNames = [];
                 while ($row = $this->db->fetch()) {
                     $label = strtr($this->cms->snippet('parenthetical_note'), [
                         '{text}' => $this->cms->textOrSnippet($row['label'] ?? '')
                     ]);
                     $name = $row['name'];
                     $sortFieldOptions[(int)$row['field_id']] = $name . ' ' . $label;
-                    if ($name === 'changed_at') $containsChangedAt = true;
+                    $fieldNames[$name] = true;
                 }
-                if (!$containsChangedAt) {
-                    $sortFieldOptions = ['' => 'changed_at'] + $sortFieldOptions;
+                // columns of `record` without an input field of their own (Area::SORT_META_FIELDS,
+                // value = name) - an input field on online_at (meta field) is already in the list
+                $metaOptions = isset($fieldNames['changed_at']) ? [] : ['' => 'changed_at'];
+                foreach (Area::SORT_META_FIELDS as $metaName) {
+                    if (!isset($fieldNames[$metaName])) $metaOptions[$metaName] = $metaName;
+                }
+                $sortFieldOptions = $metaOptions + $sortFieldOptions;
+                $sortValue = (string)($this->data['sort_field_id'] ?? '');
+                if ($sortValue === '' || $sortValue === '0') {
+                    $metaSort = (string)($this->data['details']['sort_field'] ?? '');
+                    $sortValue = isset($metaOptions[$metaSort]) ? $metaSort : '';
                 }
 
                 $this->backend->formField($this->area, [
                     'id' => $this->id,
                     'name' => 'sort_field_id',
-                    'value' => $this->data['sort_field_id'] ?? '',
+                    'value' => $sortValue,
                     'display_type' => 'select',
                     'options' => $sortFieldOptions,
                 ]);

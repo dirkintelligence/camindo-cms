@@ -2883,17 +2883,13 @@ class Backend {
                 else {
                     // File field on the info page
                     // --------------------
-                    $text = $this->template('a_blank', [
+                    // the link stays visible, the file attributes are folded away
+                    // (record.file_info_table: <details>, already in the page)
+                    $link = $this->template('a_blank', [
                         '{url}' => $filePath,
                         '{text}' => $filePath
                     ]);
-                    // first row
-                    $tableRow = $this->template('record.file_info_table_row', [
-                        '{label}' => $this->cms->snippet('record.file_path'),
-                        '{text}' => $text
-                    ]);
-                    $tableRows = [$tableRow];
-                    // next rows
+                    $tableRows = [];
                     $subFields = $this->cms->fileSortCols;
                     $subFields[] = 'dimensions';
                     foreach ($subFields as $subFieldName) {
@@ -2928,6 +2924,7 @@ class Backend {
                         ]);
                     }
                     $text = $this->template('record.file_info_table', [
+                        '{link}' => $link,
                         '{table_rows}' => implode("\n", $tableRows)
                     ]);
                 }
@@ -3337,6 +3334,14 @@ class Backend {
             . " WHERE `a`.`area_id` = ? AND `a`.`deleted` = 0";
         $this->db->query($sql, 'i', [$areaId]);
         if ($data = $this->db->fetch()) {
+            // default sorting by a column of `record` (Area::SORT_META_FIELDS): details.sort_field
+            if (empty($data['sort_field_id'])) {
+                $details = json_decode((string)($data['details'] ?? ''), true);
+                $metaSort = is_array($details) ? (string)($details['sort_field'] ?? '') : '';
+                if (in_array($metaSort, \Camindo\Core\Modules\Area\Area::SORT_META_FIELDS, true)) {
+                    $data['sort_field_name'] = $metaSort;
+                }
+            }
             $this->areaCache[(int)$data['area_id']] = $data;
         }
         $this->db->popResult();

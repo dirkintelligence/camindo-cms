@@ -202,11 +202,10 @@ class RecordApi
         if ($sort === '' || $sort === []) {
             $sort = 'changed_at';
             $order = 'DESC';
-            if ($areaData && ($sortFieldId = (int)($areaData['sort_field_id'] ?? 0))) {
-                if ($fieldData = $this->record->fieldData($sortFieldId)) {
-                    $sort = (string)$fieldData['name'];
-                    $order = (string)($areaData['sort_order'] ?? 'DESC');
-                }
+            // (Backend::areaData(): field name or a column of `record` such as online_at)
+            if ($areaData && ($areaData['sort_field_name'] ?? 'changed_at') !== 'changed_at') {
+                $sort = (string)$areaData['sort_field_name'];
+                $order = (string)($areaData['sort_order'] ?? 'DESC') ?: 'DESC';
             }
         }
         if ($sort === 'position' && $isTree) {

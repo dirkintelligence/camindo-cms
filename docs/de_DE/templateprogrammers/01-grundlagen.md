@@ -103,6 +103,10 @@ Template –, antworten mit dem Status ***404***.
 - Der Zeilenumbruch hinter einem CMS-Befehl wird geschluckt, analog zu einem `<?php … ?>`-Block.
 - Befehlsparameter in doppelten Anführungszeichen dürfen PHP-Variablen enthalten: `attr[alt]="{$myvar}"`
   (Parameter ohne Anführungszeichen werden intern wie Parameter mit doppelten Anführungszeichen behandelt).
+  Array-Elemente gehen auch ohne geschweifte Klammern, über ***mehrere Ebenen***:
+  `useval=$page[title]`, `useval=$page[key][subkey]` und `"Text $page[key][subkey]"` sind
+  gleichwertig mit `{$page['key']['subkey']}`. In einfachen Anführungszeichen
+  (`'Text $page[key]'`) bleibt der Text, wie er ist – dort wird nichts eingesetzt.
 
 Fehler – ein unbekannter Befehl, ein unbekannter Parameter, eine fehlende Klammer –
 verhindern das Speichern nicht. Die Detailansicht des Templates zeigt sie mit

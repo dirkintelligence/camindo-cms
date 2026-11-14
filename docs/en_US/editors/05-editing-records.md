@@ -233,9 +233,13 @@ camindo CMS automatically generates further versions from an uploaded file – f
 preview images or web-compatible videos (***thumbnails***). This happens when you save; time-consuming
 conversions such as videos run in the background. Until they are finished, the form shows a placeholder image.
 
+In the detail view a file field first shows only the link to the file. The remaining details –
+original filename, MIME type, file extension, file size, width × height – are unfolded with
+***“File details”*** below it.
+
 Please note: the ***original file name*** appears on the website in the address of the file (for example
 `/media/…/1977,beach-north.jpg`). You change it in the detail view via the pencil icon next to “Original
-filename” – without uploading the file again. The file extension remains unchanged. This is not possible while
+filename” (under “File details”) – without uploading the file again. The file extension remains unchanged. This is not possible while
 the record is being edited.
 
 ### Relations
