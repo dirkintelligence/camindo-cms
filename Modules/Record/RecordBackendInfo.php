@@ -101,9 +101,12 @@ class RecordBackendInfo extends RecordBackend {
         private RecordPersonalData $personalData,
         private RecordExport $export,
         private UserSecondFactor $userSecondFactor,
+        private RecordBackendImageEdit $imageEdit,
     )
     {
         parent::__construct($config, $backend, $crypt, $session, $db, $system, $cms, $massDeletion, $area, $record, $instanceCache, $service, $presenter);
+        // links "Image editing" / "Define section" below the file name (write right)
+        $this->backend->fileActionHook = $this->imageEdit->fileActions(...);
     }
 
     /**
@@ -1028,7 +1031,9 @@ class RecordBackendInfo extends RecordBackend {
         // the field must be a file field of this area
         $colDef = null;
         foreach ($this->record->virtualSchema($areaId, false) as $name => $def) {
-            if ((int)($def['field_id'] ?? 0) === $fieldId && ($def['type'] ?? '') === 'file') {
+            // only upload fields - thumbnails take over the name (Record::renameFile())
+            if ((int)($def['field_id'] ?? 0) === $fieldId && ($def['type'] ?? '') === 'file'
+                && ($def['display_type'] ?? '') !== 'thumbnail') {
                 $colDef = $def;
                 break;
             }

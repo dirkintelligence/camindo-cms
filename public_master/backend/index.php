@@ -268,6 +268,7 @@
     <script src="assets/js/backend-mail.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-smartrows.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-embedded.js<?php echo $nocache; ?>"></script>
+    <script src="assets/js/backend-image-edit.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-extensions.js<?php echo $nocache; ?>"></script>
     <script src="assets/js/backend-quicksearch.js<?php echo $nocache; ?>"></script>
 <?php foreach ($moduleAssets['js'] as $assetPath): ?>

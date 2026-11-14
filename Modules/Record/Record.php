@@ -799,6 +799,9 @@ class Record extends Dataset {
      * Change the original file name of a file (info page, pencil behind
      * "Original filename") - without a working copy, directly on the productive record.
      *
+     * Only for upload fields - the thumbnails derived from it (also over several
+     * levels) take over the new name, as they do when they are generated.
+     *
      * Only the name before the extension can be chosen; the extension remains that of the file
      * (`data_fil`.extension). All rows that describe the same physical
      * file are changed: for single-language fields the rows of all languages
@@ -822,8 +825,10 @@ class Record extends Dataset {
         $this->db->pushResult();
         try {
             $this->db->query(
-                'SELECT `extension` FROM `data_fil` WHERE `record_id` = ? AND `field_id` = ?'
-                . ' AND `file_language_id` <=> ? AND `size` > 0 LIMIT 1',
+                'SELECT `d`.`extension` FROM `data_fil` `d`'
+                . ' INNER JOIN `field` `f` ON `f`.`field_id` = `d`.`field_id` AND `f`.`display_type` != \'thumbnail\''
+                . ' WHERE `d`.`record_id` = ? AND `d`.`field_id` = ?'
+                . ' AND `d`.`file_language_id` <=> ? AND `d`.`size` > 0 LIMIT 1',
                 'iii', [$recordId, $fieldId, $fileLanguageId]
             );
             $row = $this->db->fetch();
@@ -834,12 +839,7 @@ class Record extends Dataset {
             $extension = (string)$row['extension'];
 
             // working copy present (not orphaned, see getLock())?
-            $outdatedAt = gmdate('Y-m-d H:i:s', time() - (int)$this->config->get('admin.edit_lock_sec'));
-            $this->db->query(
-                'SELECT 1 FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ? AND `changed_at` >= ?',
-                'is', [$recordId, $outdatedAt]
-            );
-            if ($this->db->num_rows > 0) {
+            if ($this->hasActiveWorkingCopy($recordId)) {
                 $this->cms->error($this->cms->snippet('record.error_file_rename_locked'));
                 return null;
             }
@@ -856,20 +856,50 @@ class Record extends Dataset {
             }
             $filename = DirectoryHelpers::sanitizeFilename($baseName . ($extension !== '' ? '.' . $extension : ''));
 
+            // the upload field and its thumbnails (field.parent_field_id, level by level)
+            $fieldIds = [$fieldId];
+            $parents = [$fieldId];
+            while ($parents) {
+                $this->db->query(
+                    "SELECT `field_id` FROM `field` WHERE `display_type` = 'thumbnail' AND `deleted` = 0"
+                    . ' AND `parent_field_id` IN (' . implode(',', array_map('intval', $parents)) . ')'
+                );
+                $parents = array_values(array_diff(array_map('intval', $this->db->fetchAll()), $fieldIds));
+                $fieldIds = array_merge($fieldIds, $parents);
+            }
             $this->db->query(
                 'UPDATE `data_fil` SET `filename` = ?'
-                . ' WHERE `record_id` = ? AND `field_id` = ? AND `file_language_id` <=> ?',
-                'siii', [$filename, $recordId, $fieldId, $fileLanguageId]
+                . ' WHERE `record_id` = ? AND `field_id` IN (' . implode(',', $fieldIds) . ') AND `file_language_id` <=> ?'
+                . " AND `extension` != ''",
+                'sii', [$filename, $recordId, $fileLanguageId]
             );
             // discard the content cache: Cms::fetch() rebuilds it from the data_* rows
             $this->db->query('DELETE FROM `record_cache` WHERE `record_id` = ?', 'i', [$recordId]);
             // full text: the file name is the source (upload fields)
-            $this->affectedTextFieldIds = [$fieldId];
+            $this->affectedTextFieldIds = $fieldIds;
             $this->refreshAffectedFulltext($recordId);
             return $filename;
         } finally {
             $this->db->popResult();
         }
+    }
+
+    /**
+     * Is a working copy of the record in work (not orphaned, see getLock())? Changes
+     * made directly on the productive record (file name, image editing) would be
+     * overwritten by its check-in.
+     */
+    public function hasActiveWorkingCopy(int $recordId): bool
+    {
+        $outdatedAt = gmdate('Y-m-d H:i:s', time() - (int)$this->config->get('admin.edit_lock_sec'));
+        $this->db->pushResult();
+        $this->db->query(
+            'SELECT 1 FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ? AND `changed_at` >= ?',
+            'is', [$recordId, $outdatedAt]
+        );
+        $found = $this->db->num_rows > 0;
+        $this->db->popResult();
+        return $found;
     }
 
     /**

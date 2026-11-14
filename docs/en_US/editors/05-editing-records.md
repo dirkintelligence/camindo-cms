@@ -239,8 +239,51 @@ original filename, MIME type, file extension, file size, width × height – are
 
 Please note: the ***original file name*** appears on the website in the address of the file (for example
 `/media/…/1977,beach-north.jpg`). You change it in the detail view via the pencil icon next to “Original
-filename” (under “File details”) – without uploading the file again. The file extension remains unchanged. This is not possible while
-the record is being edited.
+filename” (under “File details”) – without uploading the file again. The file extension remains unchanged. You change
+the name at the upload field; the thumbnails take it over automatically. This is not possible while the record is being edited.
+
+#### Editing images
+
+If ImageMagick is set up on the server, photos are rotated according to the ***orientation***
+in their metadata (EXIF) when they are uploaded, so they are stored upright.
+
+Under “File details” of an upload field with an image (JPEG, PNG, WebP, TIFF, BMP, AVIF) you find
+the link ***“![tune](../_/tune.svg) Image editing”*** below the file name. It opens a view of its own:
+
+| Tool | Effect |
+|---|---|
+| ![rotate_right](../_/rotate_right.svg) “Rotate clockwise” | rotates the image by 90° |
+| “Midtones” | slider: to the right brighter, to the left darker – highlights and shadows stay |
+| Box and “Target size” | choose a crop area, see below |
+| ![crop](../_/crop.svg) “Apply” | crops the box; the box disappears |
+| ![restart_alt](../_/restart_alt.svg) “Reset” | discards all steps – back to the original |
+
+Drag a ***crop area*** with the left mouse button held down. Afterwards you move the box with the
+mouse or the arrow keys and resize it at the corners. The ***target size*** works like the crop
+tool of an image editor:
+
+- empty: the box is free, the result has the size of the box.
+- only width or only height: the box is free, the result is brought to this width or height.
+- width and height: the box has this aspect ratio, the result exactly this size.
+
+The size of the result is shown below the image. Every step is calculated from the original; the
+file only changes with ***“Save”***, and the thumbnails are generated again. camindo CMS keeps
+the original: if you open the image editing again later, you see your settings and can change
+them, or restore the original with “Reset” and “Save”. If you upload a new file into the field,
+the settings are lost.
+
+For a thumbnail field whose converter works with ImageMagick and has a target width and height,
+“File details” offers ***“![crop](../_/crop.svg) Set crop area”***. There you decide which part of the
+image appears in the thumbnail – instead of the automatic center. The aspect ratio of the box
+follows from the target size of the converter; “![center_focus_strong](../_/center_focus_strong.svg)
+Automatic (centered)” returns to the center. The crop area is kept when the thumbnails are generated
+again – also after image editing at the upload field – until a new file is uploaded.
+
+Both require write permission for the area. While the view is open, the record is ***locked*** for
+others – as with the input form. Therefore always finish with “Save” or “Cancel”; otherwise the lock
+remains until you sign out or it expires. If someone else is editing the record, you see their name and
+can lift the lock – they can then no longer save their changes. If you still have the record open in an
+input form yourself, save or close it first.
 
 ### Relations
 

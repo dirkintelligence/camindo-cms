@@ -1,0 +1,17 @@
+<div class="c9-imgedit" data-mode="{mode}" data-lock="{lock}" data-id="{id}" data-field="{field_id}" data-lang="{lang}" data-state="{state}" data-ratio="{ratio}"
+    data-result-width="{result_width}" data-result-height="{result_height}"
+    data-msg-select="{#record.image_select_first}" data-msg-error="{#record.error_image_edit_failed}" data-label-selection="{#record.image_selection}">
+{toolbar}
+<p class="small c9-grey-50 mt-3 mb-2">{hint}</p>
+<div class="c9-imgedit-stage" dir="ltr">
+    <img src="{src}" alt="" draggable="false" onload="cApp.imageEdit.loaded(this)">
+    <div class="c9-imgedit-sel d-none" tabindex="0" role="group" aria-label="{#record.image_selection}" onkeydown="cApp.imageEdit.key(this, event)">
+        <span class="c9-imgedit-handle" data-h="nw"></span><span class="c9-imgedit-handle" data-h="ne"></span><span class="c9-imgedit-handle" data-h="sw"></span><span class="c9-imgedit-handle" data-h="se"></span>
+    </div>
+</div>
+<p class="small mt-2" aria-live="polite">{#record.image_result}: <span class="c9-imgedit-result">{result_width} × {result_height}</span> px<span class="c9-imgedit-selinfo"></span></p>
+<div class="mt-4 d-flex gap-2 flex-wrap">
+    <button type="button" class="btn btn-primary" onclick="cApp.imageEdit.save(this)">{#button_save}</button>
+    <button type="button" class="btn btn-light" onclick="cApp.imageEdit.cancel(this)">{#button_cancel}</button>
+</div>
+</div>

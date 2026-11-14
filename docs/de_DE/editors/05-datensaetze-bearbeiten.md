@@ -268,7 +268,56 @@ Breite × Höhe – klappen Sie mit ***„Dateiinformationen“*** darunter auf.
 Bitte beachten: Der ***ursprüngliche Dateiname*** erscheint auf der Website in der Adresse der Datei
 (etwa `/media/…/1977,strand-nord.jpg`). Sie ändern ihn in der Detailansicht über den
 Stift hinter „Ursprünglicher Dateiname“ (unter „Dateiinformationen“) – ohne die Datei neu hochzuladen. Die Endung bleibt
-dabei unverändert. Solange der Datensatz in Bearbeitung ist, ist das nicht möglich.
+dabei unverändert. Den Namen ändern Sie am Upload-Feld; die Thumbnails übernehmen ihn automatisch.
+Solange der Datensatz in Bearbeitung ist, ist das nicht möglich.
+
+#### Bilder bearbeiten
+
+Ist auf dem Server ImageMagick eingerichtet, werden Fotos beim Hochladen nach der
+***Ausrichtung*** aus ihren Metadaten (EXIF) gedreht, sodass sie aufrecht gespeichert werden.
+
+Unter „Dateiinformationen“ eines Upload-Felds mit einem Bild (JPEG, PNG, WebP, TIFF, BMP,
+AVIF) finden Sie unter dem Dateinamen den Link ***„![tune](../_/tune.svg) Bildbearbeitung“***.
+Er öffnet eine eigene Ansicht:
+
+| Werkzeug | Wirkung |
+|---|---|
+| ![rotate_right](../_/rotate_right.svg) „Im Uhrzeigersinn drehen“ | dreht das Bild um 90° |
+| „Mitteltöne“ | Schieberegler: nach rechts heller, nach links dunkler – Lichter und Schatten bleiben |
+| Rahmen und „Zielgröße“ | Ausschnitt wählen, siehe unten |
+| ![crop](../_/crop.svg) „Anwenden“ | schneidet den Rahmen aus; der Rahmen verschwindet |
+| ![restart_alt](../_/restart_alt.svg) „Zurücksetzen“ | verwirft alle Schritte – zurück zum Original |
+
+Einen ***Ausschnitt*** ziehen Sie mit gedrückter linker Maustaste auf. Danach verschieben Sie
+den Rahmen mit der Maus oder den Pfeiltasten und ändern seine Größe an den Ecken. Die
+***Zielgröße*** wirkt wie beim Freistellen in einer Bildbearbeitung:
+
+- leer: Der Rahmen ist frei, das Ergebnis hat die Größe des Rahmens.
+- nur Breite oder nur Höhe: Der Rahmen ist frei, das Ergebnis wird auf diese Breite bzw. Höhe gebracht.
+- Breite und Höhe: Der Rahmen hat dieses Seitenverhältnis, das Ergebnis genau diese Größe.
+
+Unter dem Bild steht die Größe des Ergebnisses. Jeder Schritt wird aus dem Original
+berechnet; die Datei ändert sich erst mit ***„Speichern“***. Dabei werden die Thumbnails neu
+erzeugt. camindo CMS hebt das Original auf: Öffnen Sie die Bildbearbeitung später erneut,
+sehen Sie Ihre Einstellungen und können sie ändern oder mit „Zurücksetzen“ und „Speichern“
+das Original wiederherstellen. Laden Sie in das Feld eine neue Datei hoch, gehen die
+Einstellungen verloren.
+
+Für ein Thumbnail-Feld, dessen Konverter mit ImageMagick arbeitet und eine Zielbreite und
+-höhe hat, steht unter „Dateiinformationen“ ***„![crop](../_/crop.svg) Ausschnitt festlegen“***.
+Dort bestimmen Sie, welcher Teil des Bildes im Thumbnail erscheint – statt der automatischen
+Mitte. Das Seitenverhältnis des Rahmens ergibt sich aus der Zielgröße des Konverters;
+„![center_focus_strong](../_/center_focus_strong.svg) Automatisch (mittig)“ kehrt zur Mitte zurück.
+Der Ausschnitt bleibt erhalten, wenn die Thumbnails neu erzeugt werden – auch nach einer
+Bildbearbeitung am Upload-Feld –, bis eine neue Datei hochgeladen wird.
+
+Beides setzt das Schreibrecht für den Bereich voraus. Solange die Ansicht geöffnet ist, ist
+der Datensatz für andere ***gesperrt*** – wie bei der Eingabemaske. Beenden Sie die
+Bearbeitung deshalb immer mit „Speichern“ oder „Abbrechen“; sonst bleibt die Sperre bis zur
+Abmeldung oder bis sie abläuft. Bearbeitet jemand anderes den Datensatz gerade, sehen Sie
+seinen Namen und können die Sperre aufheben – er kann seine Änderungen dann nicht mehr
+speichern. Haben Sie den Datensatz selbst noch in einer Eingabemaske geöffnet, speichern
+oder schließen Sie diese zuerst.
 
 ### Verknüpfungen
 

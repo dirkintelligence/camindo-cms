@@ -219,6 +219,12 @@ class Backend {
      * @var array<int, true>
      */
     public array $fileRenameIds = [];
+    /**
+     * Further actions below the file name of a file field on the info page (record ids
+     * with write right, see $fileRenameIds): fn(array $value, int $id, array $colDef,
+     * ?int $fileLanguageId): string (HTML). Set by RecordBackendInfo - image editing.
+     */
+    public ?\Closure $fileActionHook = null;
     private array $defaultFieldCache = [];
 
     private array $areaCache = [];
@@ -1068,11 +1074,13 @@ class Backend {
      * @param int      $id              record id
      * @param int      $fieldId         field_id of the file field
      * @param int|null $fileLanguageId  language of the file (null: single-language field)
+     * @param bool     $renamable       false: thumbnail field - it takes over the name of
+     *                                  its upload field (Record::renameFile())
      */
-    public function fileNameCell(array $value, int $id, int $fieldId, ?int $fileLanguageId): string
+    public function fileNameCell(array $value, int $id, int $fieldId, ?int $fileLanguageId, bool $renamable = true): string
     {
         $filename = (string)($value['filename'] ?? '');
-        if (!isset($this->fileRenameIds[$id])) return htmlspecialchars($filename);
+        if (!$renamable || !isset($this->fileRenameIds[$id])) return htmlspecialchars($filename);
 
         $extension = (string)($value['extension'] ?? '');
         $baseName = $filename;
@@ -2961,25 +2969,39 @@ class Backend {
                     $tableRows = [];
                     $subFields = $this->cms->fileSortCols;
                     $subFields[] = 'dimensions';
+                    $isThumbnail = $displayType === 'thumbnail';
                     foreach ($subFields as $subFieldName) {
                         if ($subFieldName === 'width' || $subFieldName === 'height') continue;
                         // File name: with write permission also empty, so that it can be entered
+                        // (upload fields only - thumbnails take over their name)
                         if (!empty($value[$subFieldName])
-                            || ($subFieldName === 'filename' && isset($this->fileRenameIds[(int)$id]))
+                            || ($subFieldName === 'filename' && !$isThumbnail && isset($this->fileRenameIds[(int)$id]))
                         ) {
-                            $text = htmlspecialchars((string)$value[$subFieldName]);
+                            $text = htmlspecialchars((string)($value[$subFieldName] ?? ''));
                             if ($subFieldName === 'filename') {
-                                $text = $this->fileNameCell($value, (int)$id, $fieldId, $fileLanguageId);
+                                $text = $this->fileNameCell($value, (int)$id, $fieldId, $fileLanguageId, !$isThumbnail);
                             }
                             $tableRows[] = $this->template('record.file_info_table_row', [
                                 '{label}' => $this->cms->snippet('record.file_' . $subFieldName),
                                 '{text}' => $text
                             ]);
+                            // below the file name: image editing etc. (write right)
+                            if ($subFieldName === 'filename' && $this->fileActionHook !== null
+                                && isset($this->fileRenameIds[(int)$id])
+                                && ($actions = ($this->fileActionHook)((array)$value, (int)$id, $colDef, $fileLanguageId)) !== ''
+                            ) {
+                                $tableRows[] = $this->template('record.file_info_table_row', [
+                                    '{label}' => '',
+                                    '{text}' => $actions
+                                ]);
+                            }
                         }
                     }
                     $fileData = (array)(json_decode($value['data'] ?? '{}', true) ?? []);
                     foreach ($fileData as $key => $val) {
                         if (in_array($key, $subFields)) continue;
+                        // settings of the image editing / section (RecordBackendImageEdit)
+                        if ($key === 'edit' || $key === 'crop' || is_array($val)) continue;
 
                         if ($format === 'medium') {
                             $text = $this->cms->_nl2br($this->cms->_strlimit(htmlspecialchars((string)($val ?? '')), '400s'));

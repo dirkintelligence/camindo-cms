@@ -37,6 +37,7 @@ namespace Camindo\Core;
 use Camindo\Core\DirectoryHelpers;
 use Camindo\Core\InstanceCache;
 use Camindo\Core\MediaAccess;
+use Camindo\Core\Processors\Magick\Magick;
 
 trait VirtualFieldsTrait {
 
@@ -49,6 +50,10 @@ trait VirtualFieldsTrait {
     // files have been moved to the live id (see saveVirtualFields() /
     // writeDeferredThumbnails())
     protected array $deferredThumbnails = [];
+    // Sections chosen by hand for thumbnails ("{field_id}:{file_language_id}" => {x, y, w, h}),
+    // set by regenerateThumbnails() from `data_fil`.data and applied by writeThumbnails()
+    // (Magick converters with target width and height, developer docs, chapter 05)
+    protected array $thumbnailCrops = [];
     // Ids of the changed text fields (sources for the full-text index):
     // collected in saveVirtualFields() and processed in refreshAffectedFulltext()
     // (AFTER checkIn(), since the copied-back relations are needed)
@@ -867,6 +872,12 @@ trait VirtualFieldsTrait {
             $this->createFieldError('error_file_move_uploaded', $name, $label);
             throw new \Exception('#' . $this->cms->errorMsgLast());
         }
+        // turn photos according to their EXIF orientation (ImageMagick, if installed)
+        if ($magick = $this->magickProcessor()) {
+            if ($magick->autoOrient("{$mediaDir}/{$filePath}", $fileMime, $fileExtension)) {
+                $fileSize = (int)filesize("{$mediaDir}/{$filePath}");
+            }
+        }
 
         // delete an existing old file with a different extension
         // (when replacing several times within the working copy the
@@ -1058,13 +1069,23 @@ trait VirtualFieldsTrait {
 
             // add the dimensions of the source file (determined by the converter)
             if (!empty($info) && $fieldNameId > 0) {
+                // `data` only if the converter supplies something - it holds the settings
+                // of the image editing (RecordImageEdit), which must survive new thumbnails
                 $data = (string)($info['data'] ?? '');
-                if ($data === '') $data = '{}';
-                $this->db->query(
-                    'UPDATE `data_fil` SET `width` = ?, `height` = ?, `data` = ?'
-                    . ' WHERE `record_id` = ? AND `fieldname_id` = ? AND `file_language_id` <=> ?',
-                    'iisiii', [(int)$info['width'], (int)$info['height'], $data, $recordId, $fieldNameId, $languageId]
-                );
+                if ($data === '' || $data === '{}' || $data === '[]') {
+                    $this->db->query(
+                        'UPDATE `data_fil` SET `width` = ?, `height` = ?'
+                        . ' WHERE `record_id` = ? AND `fieldname_id` = ? AND `file_language_id` <=> ?',
+                        'iiiii', [(int)$info['width'], (int)$info['height'], $recordId, $fieldNameId, $languageId]
+                    );
+                }
+                else {
+                    $this->db->query(
+                        'UPDATE `data_fil` SET `width` = ?, `height` = ?, `data` = ?'
+                        . ' WHERE `record_id` = ? AND `fieldname_id` = ? AND `file_language_id` <=> ?',
+                        'iisiii', [(int)$info['width'], (int)$info['height'], $data, $recordId, $fieldNameId, $languageId]
+                    );
+                }
                 $written = true;
             }
         }
@@ -1088,11 +1109,17 @@ trait VirtualFieldsTrait {
      * saving (writeDeferredThumbnails()): images immediately, videos in the
      * background as configured; the record_cache is discarded.
      *
+     * Sections chosen by hand for thumbnails (`data_fil`.data.crop) are kept and
+     * applied again (thumbnailCrops).
+     *
      * @param int   $recordId       live record
      * @param array $schemaVirtual  schema of the area
+     * @param int   $onlyFieldId    > 0: only this source field (image editing)
+     * @param int|null|false $onlyLanguageId  with $onlyFieldId: only this language
+     *                              version (null: single-language), false: all
      * @return int  number of source files for which thumbnails were generated
      */
-    public function regenerateThumbnails(int $recordId, array &$schemaVirtual): int
+    public function regenerateThumbnails(int $recordId, array &$schemaVirtual, int $onlyFieldId = 0, int|null|false $onlyLanguageId = false): int
     {
         if ($recordId < 1) return 0;
         // source fields: file fields to which a thumbnail field points
@@ -1108,10 +1135,13 @@ trait VirtualFieldsTrait {
             if ((string)($colDef['display_type'] ?? '') === 'thumbnail') continue;
             if (isset($parentIds[(int)($colDef['field_id'] ?? 0)])) $sources[(string)$name] = (int)$colDef['field_id'];
         }
+        if ($onlyFieldId > 0) $sources = array_filter($sources, fn($id) => $id === $onlyFieldId);
         if (empty($sources)) return 0;
 
         // files of the record in these fields (one per language version)
         $this->deferredThumbnails = [];
+        $this->processedParentFieldIds = [];
+        $this->thumbnailCrops = $this->storedThumbnailCrops($recordId);
         $this->db->pushResult();
         foreach ($sources as $name => $fieldId) {
             $this->db->query(
@@ -1119,13 +1149,57 @@ trait VirtualFieldsTrait {
                 'ii', [$recordId, $fieldId]
             );
             foreach ($this->db->fetchAll() as $languageId) {
-                $this->deferredThumbnails[] = [$name, ($languageId === null) ? null : (int)$languageId];
+                $languageId = ($languageId === null) ? null : (int)$languageId;
+                if ($onlyFieldId > 0 && $onlyLanguageId !== false && $languageId !== $onlyLanguageId) continue;
+                $this->deferredThumbnails[] = [$name, $languageId];
             }
         }
         $this->db->popResult();
         $count = count($this->deferredThumbnails);
-        if ($count > 0) $this->writeDeferredThumbnails($recordId, $schemaVirtual);
+        try {
+            if ($count > 0) $this->writeDeferredThumbnails($recordId, $schemaVirtual);
+        }
+        finally {
+            $this->thumbnailCrops = [];
+        }
         return $count;
+    }
+
+    /**
+     * Sections chosen by hand for the thumbnails of a record (`data_fil`.data.crop),
+     * keyed "{field_id}:{file_language_id}" like thumbnailCrops.
+     */
+    public function storedThumbnailCrops(int $recordId): array
+    {
+        $crops = [];
+        $this->db->pushResult();
+        $this->db->query(
+            "SELECT `field_id`, `file_language_id`, `data` FROM `data_fil` WHERE `record_id` = ?",
+            'i', [$recordId]
+        );
+        while ($row = $this->db->fetch()) {
+            $data = json_decode((string)($row['data'] ?? ''), true);
+            if (!is_array($data) || !is_array($data['crop'] ?? null)) continue;
+            $crop = Magick::normalizeCrop($data['crop']);
+            if ($crop !== null) $crops[(int)$row['field_id'] . ':' . ($row['file_language_id'] ?? '')] = $crop;
+        }
+        $this->db->popResult();
+        return $crops;
+    }
+
+    /**
+     * The ImageMagick processor, if it is installed and its program is configured -
+     * EXIF orientation of uploads, image editing on the info page. null otherwise.
+     */
+    public function magickProcessor(): ?Magick
+    {
+        try {
+            $processor = $this->factory->create('Magick');
+        }
+        catch (\Throwable) {
+            return null;
+        }
+        return ($processor instanceof Magick && $processor->available()) ? $processor : null;
     }
 
     /**
@@ -1355,6 +1429,7 @@ trait VirtualFieldsTrait {
                         if ((string)$prodExtension !== '') {
                             @unlink("{$mediaDir}/" . $this->cms->mediaPath((int)$prodFieldId, $recordId, $languageId, (string)$prodExtension));
                         }
+                        $this->deleteImageOriginals($recordId, (int)$prodFieldId, $languageId);
                         $sql = 'DELETE FROM `data_fil` WHERE `record_id` = ? AND `fieldname_id` = ? AND `file_language_id` <=> ?';
                         $this->db->query($sql, 'iii', [$recordId, $fieldNameId, $languageId]);
                         continue;
@@ -1376,6 +1451,8 @@ trait VirtualFieldsTrait {
                         if ($prodExtension !== '') {
                             @unlink("{$mediaDir}/{$fileFolder}/" . $this->cms->mediaFileName($recordId, $languageId, $prodExtension));
                         }
+                        // a new file: the original kept by the image editing is void
+                        $this->deleteImageOriginals($recordId, $fieldId, $languageId);
                         // rename the physical file to the live id
                         // (empty extension -> no file)
                         if ($extension !== '') {
@@ -1896,6 +1973,38 @@ trait VirtualFieldsTrait {
         $this->db->popResult();
         foreach ($tmpIds as $tmpId) {
             $this->deleteRecordFiles((int)$tmpId);
+        }
+        $this->deleteImageOriginals($recordId);
+    }
+
+    /**
+     * Unchanged original of an upload file edited on the info page
+     * (RecordBackendImageEdit) - outside the document root:
+     * {var_dir}/media_source/{field_id}/{record_id}[_{language_id}].{ext}
+     */
+    public function imageOriginalPath(int $fieldId, int $recordId, ?int $fileLanguageId, string $extension): string
+    {
+        return $this->config->get('paths.var_dir') . '/media_source/' . $fieldId . '/'
+            . $this->cms->mediaFileName($recordId, $fileLanguageId, $extension);
+    }
+
+    /**
+     * Remove kept originals of the image editing: of a field and language (new upload,
+     * file removed) or of all fields of the record (permanent deletion).
+     *
+     * @param int|null|false $fileLanguageId  with $fieldId: null = single-language,
+     *                                        false = all language versions
+     */
+    public function deleteImageOriginals(int $recordId, int $fieldId = 0, int|null|false $fileLanguageId = false): void
+    {
+        $dir = $this->config->get('paths.var_dir') . '/media_source';
+        if ($recordId < 1 || !is_dir($dir)) return;
+        $fields = $fieldId > 0 ? (string)$fieldId : '*';
+        $patterns = $fileLanguageId === false
+            ? ["{$recordId}.*", "{$recordId}_*.*"]
+            : [$this->cms->mediaBaseName($recordId, $fileLanguageId) . '.*'];
+        foreach ($patterns as $pattern) {
+            foreach (glob("{$dir}/{$fields}/{$pattern}") ?: [] as $file) @unlink($file);
         }
     }
 
@@ -2604,6 +2713,10 @@ trait VirtualFieldsTrait {
                 // convert the file
                 $converterDetails = json_decode((string)($converter['details'] ?? ''), true) ?? [];
                 $converterDetails['extension'] = $fileExtension;
+                // section chosen by hand (only ImageMagick evaluates it)
+                $manualCrop = $this->thumbnailCrops[$fieldId . ':' . ($languageId ?? '')] ?? null;
+                if ($manualCrop !== null && !($this->processor instanceof Magick)) $manualCrop = null;
+                if ($manualCrop !== null) $converterDetails['manual_crop'] = $manualCrop;
                 $fileData = $this->processor->convert(
                     $parentPath, $parentData, $filePath, $converterDetails, $forceBgproc
                 );
@@ -2614,6 +2727,13 @@ trait VirtualFieldsTrait {
                     continue;
                 }
                 $converterFound = true;
+                // keep the section in the metadata of the thumbnail
+                if ($manualCrop !== null) {
+                    $thumbData = json_decode((string)($fileData['data'] ?? ''), true);
+                    $thumbData = is_array($thumbData) ? $thumbData : [];
+                    $thumbData['crop'] = $manualCrop;
+                    $fileData['data'] = json_encode($thumbData, JSON_UNESCAPED_UNICODE);
+                }
                 /**
                  * On success the processor returns the following data:
                  *     'width',
@@ -2721,6 +2841,41 @@ trait VirtualFieldsTrait {
         }
         // return value
         return $srcInfo;
+    }
+
+    /**
+     * The converter of a thumbnail field that takes a source file of this type - the
+     * same choice as writeThumbnails() makes (order of `rel_field_converter`, media
+     * types, MediaProcessor::supports()), without converting.
+     *
+     * @return array|null  the `converter` row with 'details' decoded and 'instance'
+     *                     (the MediaProcessor), null if none matches
+     */
+    public function effectiveConverter(int $fieldId, string $mime, string $extension): ?array
+    {
+        $this->db->pushResult();
+        $converters = [];
+        foreach ($this->getConverterIds($fieldId) as $converterId) $converters[] = $this->loadConverter((int)$converterId);
+        $this->db->popResult();
+        foreach ($converters as $converter) {
+            if (!$converter) continue;
+            $incl = !empty($converter['media_types_incl']) ? explode("\n", (string)$converter['media_types_incl']) : [];
+            $excl = !empty($converter['media_types_excl']) ? explode("\n", (string)$converter['media_types_excl']) : [];
+            if (!empty($incl) && !$this->_matchMediaType($mime, $extension, $incl)) continue;
+            if (!empty($excl) && $this->_matchMediaType($mime, $extension, $excl)) continue;
+            try {
+                $processor = $this->factory->create((string)$converter['processor']);
+            }
+            catch (\Throwable) {
+                continue;
+            }
+            $destExtension = (string)($converter['extension'] ?: $extension);
+            if (!$processor->supports($mime, $extension, $destExtension)) continue;
+            $converter['details'] = json_decode((string)($converter['details'] ?? ''), true) ?: [];
+            $converter['instance'] = $processor;
+            return $converter;
+        }
+        return null;
     }
 
     /**

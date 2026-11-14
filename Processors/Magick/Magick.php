@@ -554,7 +554,8 @@ class Magick extends MediaProcessor {
         // Parameters generated from the form values - with the dimensions as
         // -auto-orient aligns them (EXIF rotation by 90°: width and height swap)
         $rotated = !$claimed['orient'] && in_array($srcInfo['orientation'], self::ORIENTATION_ROTATED, true);
-        $args = $this->buildArguments($details, $ext, $claimed, $rotated ? $srcH : $srcW, $rotated ? $srcW : $srcH);
+        if ($rotated) [$srcW, $srcH] = [$srcH, $srcW];
+        $args = $this->buildArguments($details, $ext, $claimed, $srcW, $srcH);
 
         // Target file: specify the format explicitly so that the extension is not
         // misinterpreted (e.g. ".jpg" with PNG content).
@@ -695,6 +696,22 @@ class Magick extends MediaProcessor {
         // corresponds to what the user sees in the image)
         if (!$claimed['orient']) {
             $args[] = '-auto-orient';
+        }
+
+        // Section chosen by hand on the info page ("Define section", stored in
+        // `data_fil`.data of the thumbnail and passed on by writeThumbnails() as
+        // details.manual_crop): cut it out first, then the size change applies to it.
+        // With target width AND height the box is adjusted to their aspect ratio - the
+        // source may have changed since the section was chosen.
+        if (!$claimed['geometry'] && $srcW > 0 && $srcH > 0 && is_array($details['manual_crop'] ?? null)) {
+            $reqW = (int)($details['width'] ?? 0);
+            $reqH = (int)($details['height'] ?? 0);
+            $ratio = ($reqW > 0 && $reqH > 0 && ($details['unit'] ?? 'px') !== 'percent') ? $reqW / $reqH : 0.0;
+            $box = self::cropBox($details['manual_crop'], $srcW, $srcH, $ratio);
+            if ($box !== null) {
+                array_push($args, '-crop', "{$box[2]}x{$box[3]}+{$box[0]}+{$box[1]}", '+repage');
+                [$srcW, $srcH] = [$box[2], $box[3]];
+            }
         }
 
         // Apply alpha channel (transparency) or background color
@@ -943,7 +960,8 @@ class Magick extends MediaProcessor {
      * @param string $magick  path to the program
      * @param string $file    absolute path to the file, WITHOUT coder prefix and "[0]"
      * @param string $coder   enforced coder (see coderFor()); empty = no prefix
-     * @return array|null ['width'=>int, 'height'=>int, 'orientation'=>string, 'mime_type'=>string] or null on error
+     * @return array|null ['width'=>int, 'height'=>int, 'orientation'=>string, 'quality'=>int,
+     *                    'mime_type'=>string] or null on error (width/height as stored, NOT aligned)
      */
     protected function identify(string $magick, string $file, string $coder = ''): ?array
     {
@@ -957,7 +975,7 @@ class Magick extends MediaProcessor {
         else $call = [$magickPath . DIRECTORY_SEPARATOR . 'identify'];
         
         $exitCode = $this->execute->execute(
-            [...$call, ...$this->limitArguments(), '-format', '%w %h %[orientation] %[mime]',
+            [...$call, ...$this->limitArguments(), '-format', '%w %h %[orientation] %Q %[mime]',
              $this->fileArgument($coder, $file)],
             $stdout,
             $stderr,
@@ -975,9 +993,277 @@ class Magick extends MediaProcessor {
             'height'      => (int) $parts[1],
             // EXIF orientation (TopLeft, RightTop ...; without specification: Undefined)
             'orientation' => (string)($parts[2] ?? ''),
-            // %[mime] is empty for some formats, then the fourth part is missing
-            'mime_type'   => (string)($parts[3] ?? '')
+            // estimated compression quality (JPEG, WebP; 0 = unknown)
+            'quality'     => (int)($parts[3] ?? 0),
+            // %[mime] is empty for some formats, then the fifth part is missing
+            'mime_type'   => (string)($parts[4] ?? '')
         ];
+    }
+
+    // Image editing (info page of a record)
+    // ====================
+
+    /**
+     * Coders whose files the image editing may write back in their own format.
+     * Not included: GIF (animation would be lost), HEIC (writing needs libheif with
+     * encoder), vector and document formats.
+     */
+    public const EDITABLE_CODERS = ['jpeg', 'png', 'webp', 'tiff', 'bmp', 'avif'];
+
+    /** EXIF orientations that need no turning */
+    protected const ORIENTATION_NONE = ['', 'Undefined', 'TopLeft'];
+
+    /** Is an ImageMagick configured and executable (paths.magick)? */
+    public function available(): bool
+    {
+        $magick = (string)($this->config->get('paths.magick') ?? '');
+        return $magick !== '' && is_executable($magick);
+    }
+
+    /**
+     * Can the image editing (rotate, midtones, crop) work on a file of this type -
+     * and write it back in its own format?
+     */
+    public function canEdit(string $mime, string $extension): bool
+    {
+        if (!$this->available()) return false;
+        return in_array($this->coderFor($mime, $extension), self::EDITABLE_CODERS, true);
+    }
+
+    /**
+     * Can a manually chosen section be applied to a file of this type when
+     * generating a thumbnail (info page "Define section")? Raster images that the
+     * processor reads, without SVG/PDF.
+     */
+    public function canCrop(string $mime, string $extension): bool
+    {
+        if (!$this->available()) return false;
+        $coder = $this->coderFor($mime, $extension);
+        return $coder !== '' && MagickPolicy::formatOfCoder($coder) === '';
+    }
+
+    /**
+     * Dimensions of an image AS SHOWN - after the EXIF orientation (-auto-orient).
+     *
+     * @param string $file  absolute path
+     * @return array|null   ['width', 'height', 'orientation', 'quality', 'mime_type']
+     */
+    public function imageInfo(string $file, string $mime, string $extension): ?array
+    {
+        $magick = (string)($this->config->get('paths.magick') ?? '');
+        $coder = $this->coderFor($mime, $extension);
+        if (!$this->available() || $coder === '' || !is_file($file)) return null;
+        $info = $this->identify($magick, $file, $coder);
+        if ($info === null || $info['width'] < 1 || $info['height'] < 1) return null;
+        if (in_array($info['orientation'], self::ORIENTATION_ROTATED, true)) {
+            [$info['width'], $info['height']] = [$info['height'], $info['width']];
+        }
+        return $info;
+    }
+
+    /**
+     * Turn an uploaded image according to its EXIF orientation (upload fields,
+     * VirtualFieldsTrait::_saveUploadField()). Afterwards the pixels stand upright and
+     * the orientation tag says TopLeft; the other metadata remain. JPEG and WebP
+     * are written again with the quality ImageMagick estimates for the source.
+     *
+     * Files without orientation, formats the image editing does not write
+     * (EDITABLE_CODERS) and every error leave the file untouched.
+     *
+     * @param string $file  absolute path, replaced in place
+     * @return bool         true if the file was turned
+     */
+    public function autoOrient(string $file, string $mime, string $extension): bool
+    {
+        if (!$this->canEdit($mime, $extension) || !is_file($file)) return false;
+        $info = $this->imageInfo($file, $mime, $extension);
+        if ($info === null || in_array($info['orientation'], self::ORIENTATION_NONE, true)) return false;
+
+        $coder = $this->coderFor($mime, $extension);
+        $tmpFile = dirname($file) . DIRECTORY_SEPARATOR . '.orient-' . $this->crypt->randomKey(8) . '.' . $extension;
+        $args = ['-auto-orient'];
+        if (in_array($coder, ['jpeg', 'webp'], true) && $info['quality'] > 0) {
+            array_push($args, '-quality', (string)min(100, $info['quality']));
+        }
+        if (!$this->runMagick($this->fileArgument($coder, $file), $args, $this->fileArgument($coder, $tmpFile, false))) {
+            @unlink($tmpFile);
+            return false;
+        }
+        @chmod($tmpFile, fileperms($file) & 0777);
+        if (!@rename($tmpFile, $file)) {
+            @unlink($tmpFile);
+            return false;
+        }
+        clearstatcache(true, $file);
+        return true;
+    }
+
+    /**
+     * Apply the image editing of the info page to a source file - always from the
+     * original, in this order:
+     *
+     *     -auto-orient                           EXIF orientation
+     *     -rotate 90|180|270                     turned clockwise
+     *     -crop WxH+X+Y +repage                  section (fractions of the turned image)
+     *     -resize W x H                          target size of the section (optional)
+     *     -gamma G                               midtones, G = 3^(gamma/100)
+     *
+     * @param string $srcFile    absolute path of the source (original)
+     * @param string $mime       its MIME type
+     * @param string $extension  its extension
+     * @param string $destFile   absolute path of the result
+     * @param string $destExt    format of the result ('jpg' | 'png' | own extension)
+     * @param array  $edit       normalized settings, see normalizeEdit()
+     * @param int    $maxSide    > 0: preview, at most this many pixels per side, without metadata
+     * @param int    $quality    > 0: JPEG/WebP quality of the result
+     * @param ?string $error     plain text message of ImageMagick
+     * @return array|null        ['width', 'height', 'size'] of the result, null on error
+     */
+    public function renderEdit(string $srcFile, string $mime, string $extension, string $destFile, string $destExt,
+        array $edit, int $maxSide = 0, int $quality = 0, ?string &$error = null): ?array
+    {
+        $error = '';
+        $srcCoder = $this->coderFor($mime, $extension);
+        $destCoder = self::CODER_BY_EXTENSION[strtolower($destExt)] ?? '';
+        if (!$this->available() || $srcCoder === '' || $destCoder === '') {
+            $error = 'unsupported';
+            return null;
+        }
+        $info = $this->imageInfo($srcFile, $mime, $extension);
+        if ($info === null) {
+            $error = 'identify';
+            return null;
+        }
+        $edit = self::normalizeEdit($edit);
+        $w = $info['width'];
+        $h = $info['height'];
+        $args = ['-auto-orient'];
+        if ($edit['rotate'] !== 0) {
+            array_push($args, '-rotate', (string)$edit['rotate']);
+            if ($edit['rotate'] !== 180) [$w, $h] = [$h, $w];
+        }
+        if ($edit['crop'] !== null) {
+            $box = self::cropBox($edit['crop'], $w, $h);
+            if ($box !== null) {
+                array_push($args, '-crop', "{$box[2]}x{$box[3]}+{$box[0]}+{$box[1]}", '+repage');
+                if ($edit['width'] > 0 || $edit['height'] > 0) {
+                    $geometry = ($edit['width'] > 0 ? $edit['width'] : '') . 'x' . ($edit['height'] > 0 ? $edit['height'] : '');
+                    array_push($args, '-resize', $geometry . ($edit['width'] > 0 && $edit['height'] > 0 ? '!' : ''));
+                }
+            }
+        }
+        if ($edit['gamma'] !== 0) {
+            array_push($args, '-gamma', sprintf('%.3F', 3 ** ($edit['gamma'] / 100)));
+        }
+        if ($maxSide > 0) {
+            array_push($args, '-resize', "{$maxSide}x{$maxSide}>", '-strip');
+        }
+        if ($quality > 0 && in_array($destCoder, ['jpeg', 'webp', 'avif'], true)) {
+            array_push($args, '-quality', (string)min(100, $quality));
+        }
+        if (!$this->runMagick($this->fileArgument($srcCoder, $srcFile), $args, $this->fileArgument($destCoder, $destFile, false), $error)) {
+            @unlink($destFile);
+            return null;
+        }
+        clearstatcache(true, $destFile);
+        $result = $this->identify((string)$this->config->get('paths.magick'), $destFile, $destCoder);
+        return [
+            'width'  => (int)($result['width'] ?? 0),
+            'height' => (int)($result['height'] ?? 0),
+            'size'   => (int)filesize($destFile),
+        ];
+    }
+
+    /**
+     * Settings of the image editing in a fixed form - everything else is discarded:
+     *
+     *     rotate  0 | 90 | 180 | 270     clockwise
+     *     gamma   -100 … 100             midtones darker / brighter, 0 = unchanged
+     *     crop    null | {x, y, w, h}    section as fractions (0…1) of the turned image
+     *     width   0 | px                 target size of the section; with height:
+     *     height  0 | px                 exactly this format
+     */
+    public static function normalizeEdit(array $edit): array
+    {
+        $rotate = ((int)($edit['rotate'] ?? 0) % 360 + 360) % 360;
+        if (!in_array($rotate, [0, 90, 180, 270], true)) $rotate = 0;
+        $crop = is_array($edit['crop'] ?? null) ? self::normalizeCrop($edit['crop']) : null;
+        return [
+            'rotate' => $rotate,
+            'gamma'  => max(-100, min(100, (int)($edit['gamma'] ?? 0))),
+            'crop'   => $crop,
+            'width'  => $crop === null ? 0 : max(0, min(20000, (int)($edit['width'] ?? 0))),
+            'height' => $crop === null ? 0 : max(0, min(20000, (int)($edit['height'] ?? 0))),
+        ];
+    }
+
+    /**
+     * A section {x, y, w, h} as fractions of the image, within 0…1; null if it is
+     * empty or covers the whole image.
+     */
+    public static function normalizeCrop(array $crop): ?array
+    {
+        $x = max(0.0, min(1.0, (float)($crop['x'] ?? 0)));
+        $y = max(0.0, min(1.0, (float)($crop['y'] ?? 0)));
+        $w = max(0.0, min(1.0 - $x, (float)($crop['w'] ?? 0)));
+        $h = max(0.0, min(1.0 - $y, (float)($crop['h'] ?? 0)));
+        if ($w <= 0.0001 || $h <= 0.0001) return null;
+        if ($x < 0.0001 && $y < 0.0001 && $w > 0.9999 && $h > 0.9999) return null;
+        return ['x' => round($x, 6), 'y' => round($y, 6), 'w' => round($w, 6), 'h' => round($h, 6)];
+    }
+
+    /**
+     * Section {x, y, w, h} (fractions) in pixels of an image of $srcW x $srcH.
+     * With $ratio (> 0, width / height) the box is brought to this aspect ratio:
+     * same area and center, then reduced into the image and pushed inside.
+     *
+     * @return array|null  [x, y, width, height] in pixels
+     */
+    public static function cropBox(array $crop, int $srcW, int $srcH, float $ratio = 0.0): ?array
+    {
+        $crop = self::normalizeCrop($crop);
+        if ($crop === null || $srcW < 1 || $srcH < 1) return null;
+        $px = $crop['x'] * $srcW;
+        $py = $crop['y'] * $srcH;
+        $pw = $crop['w'] * $srcW;
+        $ph = $crop['h'] * $srcH;
+        if ($ratio > 0) {
+            $cx = $px + $pw / 2;
+            $cy = $py + $ph / 2;
+            $pw = sqrt($pw * $ph * $ratio);
+            $ph = $pw / $ratio;
+            if ($pw > $srcW) { $pw = $srcW; $ph = $pw / $ratio; }
+            if ($ph > $srcH) { $ph = $srcH; $pw = $ph * $ratio; }
+            $px = max(0.0, min($srcW - $pw, $cx - $pw / 2));
+            $py = max(0.0, min($srcH - $ph, $cy - $ph / 2));
+        }
+        $w = max(1, min($srcW, (int)round($pw)));
+        $h = max(1, min($srcH, (int)round($ph)));
+        $x = max(0, min($srcW - $w, (int)round($px)));
+        $y = max(0, min($srcH - $h, (int)round($py)));
+        return [$x, $y, $w, $h];
+    }
+
+    /**
+     * One ImageMagick call: limits, source, arguments, target - with the policy.
+     */
+    protected function runMagick(string $srcArg, array $args, string $destArg, ?string &$error = null): bool
+    {
+        $error = '';
+        $magick = (string)($this->config->get('paths.magick') ?? '');
+        if ($magick === '' || !is_executable($magick) || !$this->policy->apply()) {
+            $error = 'magick';
+            return false;
+        }
+        $call = basename($magick) === 'magick' ? [$magick, 'convert'] : [$magick];
+        $exitCode = $this->execute->execute([...$call, ...$this->limitArguments(), $srcArg, ...$args, $destArg],
+            $stdout, $stderr, self::TIMEOUT_CONVERT);
+        $file = preg_replace('/^[a-z0-9]+:/', '', $destArg);
+        if ($exitCode !== 0 || !is_file($file) || filesize($file) === 0) {
+            $error = trim((string)$stderr);
+            return false;
+        }
+        return true;
     }
 
     /**

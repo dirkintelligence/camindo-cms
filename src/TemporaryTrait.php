@@ -176,31 +176,7 @@ trait TemporaryTrait
             $this->db->beginTransaction();
             if (!$copy) {
                 // Mark existing working copies of the original as invalid
-                // Their physical files are removed (based on the 'temporary'
-                // entries in their working state; working copies no longer have
-                // `data_fil` entries)
-                $oldTmpIds = [];
-                if ($tableName == 'record' && method_exists($this, 'deleteRecordFiles')) {
-                    $sql = "SELECT `record_id` FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
-                    $this->db->query($sql, 'i', [$id]);
-                    $oldTmpIds = array_map('intval', $this->db->fetchColumn());
-                    foreach ($oldTmpIds as $oldTmpId) {
-                        $this->deleteRecordFiles($oldTmpId);
-                    }
-                }
-                $sql = "UPDATE `$tableName` SET `deleted` = 1, `changed_by` = ?, `changed_at` = UTC_TIMESTAMP() WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
-                $this->db->query($sql, 'ii', [$sessionAdminId, $id]);
-                // Remove the links of the invalid copies. The rows stay
-                // (save() recognizes the lost edit lock from them), their edges do not:
-                // _copyRelations() also placed INCOMING edges onto the copy -
-                // for embedded content (link) e.g. original source -> copy. If they
-                // remained, the dead copy would reappear in the mask of the source at its
-                // next check-out, and saving would fail because of it.
-                if ($oldTmpIds) {
-                    $in = implode(',', $oldTmpIds);
-                    $this->db->query("DELETE FROM `data_rel` WHERE `src_id` IN ($in) OR `dest_id` IN ($in)");
-                    $this->db->query("DELETE FROM `data_rel_checkout` WHERE `tmp_id` IN ($in)");
-                }
+                $this->invalidateWorkingCopies($id);
             }
 
             // area_id - also store it in the temporary record, it can be useful for lookup fields
@@ -282,6 +258,114 @@ trait TemporaryTrait
             $this->db->rollback();
             return null;
         }
+    }
+
+    /**
+     * Mark the working copies of a live record as invalid (`deleted` = 1) - the edit
+     * lock passes to whoever calls this (checkOut(), lockOnly()). The rows stay: the
+     * former holder recognizes the lost lock from them when saving.
+     *
+     * @param int $id  `{tableName}_id` of the live record
+     */
+    protected function invalidateWorkingCopies(int $id): void
+    {
+        $tableName = $this->tableName;
+        $sessionAdminId = $this->adminIdForDb();
+        // Mark existing working copies of the original as invalid
+        // Their physical files are removed (based on the 'temporary'
+        // entries in their working state; working copies no longer have
+        // `data_fil` entries)
+        $oldTmpIds = [];
+        if ($tableName == 'record' && method_exists($this, 'deleteRecordFiles')) {
+            $sql = "SELECT `record_id` FROM `record` WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
+            $this->db->query($sql, 'i', [$id]);
+            $oldTmpIds = array_map('intval', $this->db->fetchColumn());
+            foreach ($oldTmpIds as $oldTmpId) {
+                $this->deleteRecordFiles($oldTmpId);
+            }
+        }
+        $sql = "UPDATE `$tableName` SET `deleted` = 1, `changed_by` = ?, `changed_at` = UTC_TIMESTAMP() WHERE `tmp` = 1 AND `deleted` = 0 AND `origin_id` = ?";
+        $this->db->query($sql, 'ii', [$sessionAdminId, $id]);
+        // Remove the links of the invalid copies. The rows stay
+        // (save() recognizes the lost edit lock from them), their edges do not:
+        // _copyRelations() also placed INCOMING edges onto the copy -
+        // for embedded content (link) e.g. original source -> copy. If they
+        // remained, the dead copy would reappear in the mask of the source at its
+        // next check-out, and saving would fail because of it.
+        if ($oldTmpIds) {
+            $in = implode(',', $oldTmpIds);
+            $this->db->query("DELETE FROM `data_rel` WHERE `src_id` IN ($in) OR `dest_id` IN ($in)");
+            $this->db->query("DELETE FROM `data_rel_checkout` WHERE `tmp_id` IN ($in)");
+        }
+    }
+
+    /**
+     * EDIT LOCK WITHOUT A WORKING COPY
+     * A row like a working copy (tmp = 1, origin_id, changed_by, changed_at) - but without
+     * working state, relations or files. It locks the record for the input mask
+     * of others exactly like a working copy (getLock()) and is released with cancel(),
+     * on sign-out or after admin.edit_lock_sec without activity. For changes that
+     * are made directly on the live record (image editing, RecordBackendImageEdit).
+     *
+     * Existing working copies become invalid as with checkOut() - the caller checks
+     * getLock() beforehand.
+     *
+     * @param array &$data  from the preceding Dataset::load()
+     * @return int|null     id of the lock row, or null on error
+     */
+    public function lockOnly(array &$data): ?int
+    {
+        $idField = $this->tableName . '_id';
+        $id = (int)($data[$idField] ?? 0);
+        if ($id < 1 || (int)($data['tmp'] ?? 0) !== 0 || (int)($data['deleted'] ?? 0) > 0) {
+            $this->cms->error($this->cms->snippet('error_create_temporary'));
+            return null;
+        }
+        if (!$this->accessCheck('write', (int)($data['area_id'] ?? 0), isset($data['owner_id']) ? (int)$data['owner_id'] : null)) {
+            return null;
+        }
+        try {
+            $this->db->beginTransaction();
+            $this->invalidateWorkingCopies($id);
+            $lockId = $this->insertTmpRecord($id, $this->hasAreaId ? (int)$data['area_id'] : null, $id);
+            if ($lockId < 1) throw new \Exception($this->cms->snippet('error_create_temporary'));
+            $this->db->commit();
+            return $lockId;
+        }
+        catch (\Exception $e) {
+            $this->db->rollback();
+            $this->cms->error(ltrim($e->getMessage(), '#'));
+            return null;
+        }
+    }
+
+    /**
+     * Does the session admin still hold this lock (lockOnly(), or a working copy) on
+     * the record - not invalidated by someone else, not outdated? With $touch the
+     * time of the last activity is renewed.
+     */
+    public function lockHeld(int $lockId, int $originId, bool $touch = true): bool
+    {
+        if ($lockId < 1 || $originId < 1) return false;
+        $tableName = $this->tableName;
+        $idField = $tableName . '_id';
+        $outdatedAt = gmdate('Y-m-d H:i:s', time() - (int)$this->config->get('admin.edit_lock_sec'));
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT 1 FROM `$tableName` WHERE `$idField` = ? AND `tmp` = 1 AND `deleted` = 0"
+                . " AND `origin_id` = ? AND `changed_by` = ? AND `changed_at` >= ?",
+                'iiis', [$lockId, $originId, (int)$this->session->get('admin_id'), $outdatedAt]
+            );
+            $held = $this->db->num_rows > 0;
+            if ($held && $touch) {
+                $this->db->query("UPDATE `$tableName` SET `changed_at` = UTC_TIMESTAMP() WHERE `$idField` = ?", 'i', [$lockId]);
+            }
+        }
+        finally {
+            $this->db->popResult();
+        }
+        return $held;
     }
 
     /**

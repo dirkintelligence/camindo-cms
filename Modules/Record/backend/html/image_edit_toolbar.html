@@ -1,0 +1,19 @@
+<div class="c9-imgedit-toolbar d-flex flex-wrap align-items-end gap-3">
+    <button type="button" class="btn btn-light" onclick="cApp.imageEdit.rotate(this)"><span class="icon" aria-hidden="true">rotate_right</span> {#record.image_rotate}</button>
+    <label class="small">
+        <span class="d-block">{#record.image_midtones}: <span class="c9-imgedit-gamma-value">{gamma}</span></span>
+        <input type="range" class="form-range c9-imgedit-gamma" min="-100" max="100" step="1" value="{gamma}" style="width:220px"
+            oninput="cApp.imageEdit.gammaInput(this)" onchange="cApp.imageEdit.gamma(this)">
+    </label>
+    <div class="small">
+        <span class="d-block">{#record.image_target_size}</span>
+        <div class="input-group input-group-sm" style="max-width:300px">
+            <input type="number" min="1" max="20000" class="form-control c9-imgedit-width" value="{width}" placeholder="{#record.image_width}" aria-label="{#record.image_width}" oninput="cApp.imageEdit.sizeInput(this)">
+            <span class="input-group-text">×</span>
+            <input type="number" min="1" max="20000" class="form-control c9-imgedit-height" value="{height}" placeholder="{#record.image_height}" aria-label="{#record.image_height}" oninput="cApp.imageEdit.sizeInput(this)">
+            <span class="input-group-text">px</span>
+        </div>
+    </div>
+    <button type="button" class="btn btn-light" onclick="cApp.imageEdit.apply(this)"><span class="icon" aria-hidden="true">crop</span> {#record.image_apply}</button>
+    <button type="button" class="btn btn-light" onclick="cApp.imageEdit.reset(this)"><span class="icon" aria-hidden="true">restart_alt</span> {#record.image_reset}</button>
+</div>
