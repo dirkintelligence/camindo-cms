@@ -1546,8 +1546,8 @@ a.c9-navitem-link:focus-visible,
 table.c9-card-rows {
     --bs-table-bg: var(--c9-brick-bg);
     border-collapse: separate;
-    border-spacing: 0 6px;
-    margin-top: -6px;
+    border-spacing: 0 4px;
+    margin-top: -4px;
 }
 table.c9-card-rows > tbody > tr > td {
     border: 1px solid var(--bs-border-color);
