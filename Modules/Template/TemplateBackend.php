@@ -2117,10 +2117,11 @@ class TemplateBackend {
      * folderList()).
      *
      * The ids come from `history` (Camindo\Core\History), newest first; per
-     * template name, label and area one below the other - the columns of the
-     * template list plus the area, because the entries come from different areas.
-     * Templates whose area the user group may no longer read
-     * are dropped. A click opens the detail view.
+     * template the path of its area in small gray letters (Backend::areaPaths(),
+     * as in the module Record), below it name and label - the columns of the
+     * template list. Templates whose area the user group may no longer read
+     * are dropped. A click opens the detail view, a right click offers "Edit"
+     * (hidden without the write right).
      */
     private function _lastChangedTemplates(): void
     {
@@ -2139,6 +2140,7 @@ class TemplateBackend {
         $this->db->popResult();
 
         $access = $this->backend->access();
+        $paths = $this->backend->areaPaths(array_map(fn($row) => (int)$row['area_id'], $templates));
         $rows = '';
         foreach ($entries as $templateId => $changedAt) {
             $row = $templates[$templateId] ?? null;
@@ -2147,8 +2149,6 @@ class TemplateBackend {
             $items = [$this->iconTemplate . ' <strong>' . $row['name'] . '</strong>'];
             $label = $this->cms->textOrSnippet((string)$row['label']);
             if ($label !== '') $items[] = $label;
-            $areaLabel = $this->cms->textOrSnippet((string)($this->backend->areaData((int)$row['area_id'])['label'] ?? ''));
-            if ($areaLabel !== '') $items[] = $areaLabel;
 
             $text = '';
             foreach ($items as $i => $item) {
@@ -2158,6 +2158,8 @@ class TemplateBackend {
             }
             $rows .= $this->backend->template('template.last_changed_row', [
                 '{data_id}'    => $templateId,
+                '{ctx_hide}'   => $access->templateWrite((int)$row['area_id']) ? '' : ' data-ctx-hide="edit"',
+                '{area_path}'  => htmlspecialchars($paths[(int)$row['area_id']] ?? '', ENT_QUOTES | ENT_SUBSTITUTE),
                 '{text}'       => $text,
                 '{changed_at}' => $this->cms->_formatDate($this->cms->utcToUserTZ($changedAt)),
             ]) . "\n";
@@ -2167,5 +2169,6 @@ class TemplateBackend {
         echo $this->backend->template('template.last_changed_table', [
             '{table_rows}' => $rows
         ]);
+        echo $this->backend->template('template.last_changed_context_menu');
     }
 }

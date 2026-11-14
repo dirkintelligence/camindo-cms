@@ -27,8 +27,8 @@ were changed through an import or batch processing. Records in the trash and rec
 which you no longer have access are hidden. If you have not saved anything yet, the area
 stays empty.
 
-The same list exists in the module “Templates” for the most recently saved templates: name,
-label and template area.
+The same list exists in the module “Templates” for the most recently saved templates: at the top
+the path of the template area, below it name and label; the right click also offers “Edit”.
 
 ## The record list
 

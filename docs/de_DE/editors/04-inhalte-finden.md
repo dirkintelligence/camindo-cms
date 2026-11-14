@@ -30,7 +30,8 @@ Datensätze im Papierkorb und solche, auf die Sie keinen Zugriff mehr haben, wer
 ausgeblendet. Haben Sie noch nichts gespeichert, bleibt der Bereich leer.
 
 Dieselbe Liste gibt es im Modul „Templates“ für die zuletzt gespeicherten
-Templates: Name, Beschriftung und Template-Bereich.
+Templates: oben der Pfad des Template-Bereichs, darunter Name und Beschriftung; der
+Rechtsklick bietet ebenfalls „Bearbeiten“.
 
 ## Die Datensatzliste
 

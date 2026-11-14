@@ -1560,6 +1560,63 @@ class Backend {
     }
 
     /**
+     * Path of each area, e.g. for the lists "Recently changed" (records, templates):
+     * instance (only if there are several, InstanceCache::hasMultipleInstances())
+     * : folder : … : area - labels resolved (snippets), as plain text.
+     *
+     * @param int[] $areaIds
+     * @return array  area_id => "Demo : Shop : Products"
+     */
+    public function areaPaths(array $areaIds): array
+    {
+        $areaIds = array_values(array_unique(array_filter($areaIds)));
+        if (empty($areaIds)) return [];
+        $separator = ' : ';
+
+        // the areas themselves, then all their parent folders in one query each
+        $this->db->pushResult();
+        $areas = [];
+        $placeholders = implode(',', array_fill(0, count($areaIds), '?'));
+        $this->db->query("SELECT `area_id`, `instance_id`, `parent_ids`, `label` FROM `area` WHERE `area_id` IN ($placeholders)",
+            str_repeat('i', count($areaIds)), $areaIds);
+        while ($row = $this->db->fetch()) {
+            $areas[(int)$row['area_id']] = $row;
+        }
+        $parentIds = [];
+        foreach ($areas as $area) {
+            foreach ((array)json_decode((string)$area['parent_ids'], true) as $parentId) {
+                $parentIds[(int)$parentId] = true;
+            }
+        }
+        $labels = [];
+        if ($parentIds) {
+            $ids = array_keys($parentIds);
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $this->db->query("SELECT `area_id`, `label` FROM `area` WHERE `area_id` IN ($placeholders)", str_repeat('i', count($ids)), $ids);
+            while ($row = $this->db->fetch()) {
+                $labels[(int)$row['area_id']] = $this->cms->textOrSnippet((string)$row['label']);
+            }
+        }
+        $this->db->popResult();
+
+        $instanceCache = $this->container->get(InstanceCache::class);
+        $instanceLabels = $instanceCache->hasMultipleInstances() ? $instanceCache->instanceLabels() : [];
+        $paths = [];
+        foreach ($areas as $areaId => $area) {
+            $parts = [];
+            if (isset($instanceLabels[(int)$area['instance_id']])) {
+                $parts[] = $this->cms->textOrSnippet($instanceLabels[(int)$area['instance_id']]);
+            }
+            foreach ((array)json_decode((string)$area['parent_ids'], true) as $parentId) {
+                if (isset($labels[(int)$parentId])) $parts[] = $labels[(int)$parentId];
+            }
+            $parts[] = $this->cms->textOrSnippet((string)$area['label']);
+            $paths[$areaId] = $this->cms->_strip_tags(implode($separator, $parts));
+        }
+        return $paths;
+    }
+
+    /**
      * Mark the current page as refreshable: it only shows data (list, info page,
      * overview) and is reloaded when something changed in a layer above it
      * (cApp.layers.invalidate(), every successful POST from a layer above). Input
