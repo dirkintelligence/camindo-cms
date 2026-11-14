@@ -1119,14 +1119,12 @@ td.c9-default-col * {
 }
 .c9-embed-handle {
     position: absolute;
-    top: 1px;
-    inset-inline-start: 1px;
+    top: 0;
+    inset-inline-start: 3px;
     z-index: 5;
-    display: none;
-}
-.c9-embed-cell:hover > .c9-embed-handle,
-.c9-embed-cell.c9-embed-active > .c9-embed-handle {
-    display: block;
+    height: 2rem; /* same row as .c9-embed-area-label, centered */
+    display: flex;
+    align-items: center;
 }
 .c9-embed-menu-btn {
     padding: 2px 6px 5px 6px;
@@ -1139,7 +1137,9 @@ td.c9-default-col * {
     font-size: 0.8rem;
     color: var(--c9-grey-50);
     text-align: end;
-    min-height: 0.5rem;
+    min-height: 2rem; /* row of the menu button, also without a label */
+    line-height: 2rem;
+    margin-top: -0.5rem; /* row starts at the top border (cell padding) */
 }
 .c9-embed-fields > .row:first-child {
     margin-top: 0 !important;
