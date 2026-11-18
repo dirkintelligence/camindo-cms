@@ -1609,3 +1609,19 @@ table.c9-card-rows > tbody > tr > td {
 .c9-imgedit-handle[data-h="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
 .c9-imgedit-handle[data-h="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
 .c9-imgedit-handle[data-h="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+/* Midtones slider: the track of .form-range would vanish on the gray page background */
+.c9-imgedit-gamma::-webkit-slider-runnable-track {
+    background-color: #fff;
+    border: 1px solid var(--bs-border-color);
+}
+.c9-imgedit-gamma::-moz-range-track {
+    background-color: #fff;
+    border: 1px solid var(--bs-border-color);
+}
+/* (separate rules: a selector list with an unknown pseudo-element is dropped as a whole) */
+[data-bs-theme="dark"] .c9-imgedit-gamma::-webkit-slider-runnable-track {
+    background-color: var(--bs-dark-bg-subtle);
+}
+[data-bs-theme="dark"] .c9-imgedit-gamma::-moz-range-track {
+    background-color: var(--bs-dark-bg-subtle);
+}
