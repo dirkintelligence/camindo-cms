@@ -54,7 +54,7 @@ $cases = [
     ['mehrzeiliger Befehl ab //',
         "<?php\n  // (CMS:SELECT nav\n  filter[area]=pages\n  )\n?>", 0, 0, 4],   // PHP notices the ")"
     ['PHP-Syntaxfehler ohne Befehl',
-        "<p>x</p>\n<?php\nif (\$a {\n?>", 0, 0, 4],   // reported at the closing tag
+        "<p>x</p>\n<?php\n\$x = 1 +;\n?>", 0, 0, 3],   // unexpected ";" - same line in PHP 8.3 and 8.4
     ['nur HTML',
         "<ul>\n(CMS:RESULT_START)<li>(CMS:TEXT title)</li>(CMS:RESULT_END)\n</ul>", 1, 0, 0],
 ];
