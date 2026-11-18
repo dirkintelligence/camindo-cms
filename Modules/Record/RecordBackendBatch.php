@@ -313,6 +313,12 @@ class RecordBackendBatch extends RecordBackendEdit {
             elseif ($name === 'status_id')   $options = $this->_statusOptions(settableOnly: true);
             elseif ($name === 'parent_id' && $displayType !== 'lookup') $options = $this->_parentOptions();
             elseif ($name === 'position')    $options = $this->_previousOptions($parentId);
+            elseif (in_array($displayType, $this->backend->optionDisplayTypes, true)
+                && !in_array($type, $this->cms->relationTypes, true)) {
+                // each line of the default value is one choice
+                $values = preg_split('/(\r\n|\r|\n)/', (string)($colDef['default'] ?? ''));
+                $options = array_combine($values, $values);
+            }
             if (in_array($name, RecordBatch::TREE_FIELDS, true)) {
                 $colDef['tooltip'] = '#record.note_batch_' . $name;
             }
