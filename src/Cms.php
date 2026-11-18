@@ -1886,8 +1886,6 @@ class Cms {
         // --------------------
         $skip  = abs((int)($p['skip']  ?? 0));
         $limit = (int)($p['limit'] ?? 0); // no abs() - anything < 1 means "unlimited"
-        // skip without limit is ignored (an OFFSET without LIMIT would be a syntax error)
-        if ($limit < 1) $skip = 0;
 
         $where = $f['where'];
 
@@ -2260,7 +2258,10 @@ class Cms {
             }
         }
 
+        // OFFSET needs a LIMIT - skip without limit uses the largest possible
+        // row count (MySQL/MariaDB idiom for "all remaining rows")
         if ($limit > 0) $where .= " LIMIT {$limit}";
+        elseif ($skip > 0) $where .= " LIMIT 18446744073709551615";
         if ($skip  > 0) $where .= " OFFSET {$skip}";
 
         // The actual select; JOINs (filter + sort) come before WHERE.

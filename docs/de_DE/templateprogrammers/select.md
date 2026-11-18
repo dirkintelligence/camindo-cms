@@ -21,7 +21,7 @@ Durchsucht die Datenbank anhand der angegebenen (Filter-)Kriterien und liefert d
 | `filter[…][…]` | `Wert oder EMPTY` | – | ² | Im Index: Name des zu durchsuchenden Feldes (relation_any für ein beliebiges Verweisfeld; area für den Namen des Inhaltsbereichs, eine Zahl gilt dort als area_id). Im Wert: der zu suchende Wert. |
 | `filter_mode[…]` | `AND / OR` | `OR` |  | Modus, mit dem mehrere Werte desselben Feldes verknüpft werden (filter_mode[feld]=AND). |
 | `filter_op[…][…]` | `=, ==, !=, !!, >, <, >>, <<, >=, <=` | `=` |  | Vergleichsoperator für das angegebene Feld (filter_op[feld]=">"). Alternativ steht der Operator zwischen Schlüssel und Wert (filter[preis] > 100) oder direkt vor dem Wert (filter[preis]=">100"). |
-| `skip` | `Zahl >=0` | `0` |  | Anzahl der übersprungenen Datensätze in der Ergebnismenge. Wirkt nur zusammen mit limit. |
+| `skip` | `Zahl >=0` | `0` |  | Anzahl der übersprungenen Datensätze in der Ergebnismenge. |
 | `limit` | `Zahl >0` | – |  | Maximale Anzahl der einbezogenen Datensätze in der Ergebnismenge - zugleich die Seitengröße für CMS:JUMP_LIST, CMS:JUMP_PREV und CMS:JUMP_NEXT. Ohne Angabe oder 0: unbegrenzt, keine Blätterleiste. |
 | `sort[…]` | `Feldname(n), kommasepariert` | `changed_at` |  | Feld, nach dem sortiert wird (vgl. order); mehrere kommasepariert oder als sort[]=…; area sortiert nach dem Namen des Inhaltsbereichs, verweisfeld.feld nach einem Feld des verknüpften Datensatzes. |
 | `order[…]` | `desc / asc` | `asc` |  | Reihenfolge, in der sortiert wird (vgl. sort). Ohne sort gilt changed_at desc. |
@@ -200,9 +200,8 @@ Operator zwischen Schlüssel und Wert:
 
 ### `skip`
 
-Offset für die Blätterfunktion; meist aus dem Request. `skip` wirkt nur zusammen mit
-`limit` – ohne `limit` wird es ignoriert, die Abfrage liefert dann alle Treffer ab dem
-ersten:
+Offset für die Blätterfunktion; meist aus dem Request. Ohne `limit` liefert die Abfrage
+alle Treffer ab dem Versatz – `skip=1` lässt z. B. nur den ersten Treffer weg:
 
 ```cms
 (CMS:SELECT liste filter[area]=artikel limit=20 skip="{$_REQUEST['skip']}" count=true)

@@ -21,7 +21,7 @@ Searches the database using the given (filter) criteria and returns the records 
 | `filter[…][…]` | `value or EMPTY` | – | ² | In the key: name of the field to search (relation_any for any link field; area for the name of the content area, a number there counts as area_id). In the value: the value to search for. |
 | `filter_mode[…]` | `AND / OR` | `OR` |  | Mode in which several values of the same field are combined (filter_mode[field]=AND). |
 | `filter_op[…][…]` | `=, ==, !=, !!, >, <, >>, <<, >=, <=` | `=` |  | Comparison operator for the given field (filter_op[field]=">"). Alternatively the operator stands between key and value (filter[price] > 100) or directly before the value (filter[price]=">100"). |
-| `skip` | `number >=0` | `0` |  | Number of records skipped in the result set. Only works together with limit. |
+| `skip` | `number >=0` | `0` |  | Number of records skipped in the result set. |
 | `limit` | `number >0` | – |  | Maximum number of records included in the result set – at the same time the page size for CMS:JUMP_LIST, CMS:JUMP_PREV and CMS:JUMP_NEXT. Without a value or 0: unlimited, no page navigation. |
 | `sort[…]` | `field name(s), comma-separated` | `changed_at` |  | Field to sort by (see order); several comma-separated or as sort[]=…; area sorts by the name of the content area, pointerfield.field by a field of the linked record. |
 | `order[…]` | `desc / asc` | `asc` |  | Order in which to sort (see sort). Without sort, changed_at desc applies. |
@@ -198,8 +198,8 @@ operator between key and value:
 
 ### `skip`
 
-Offset for paging; usually from the request. `skip` only works together with `limit` – without
-`limit` it is ignored, and the query then returns all hits from the first one on:
+Offset for paging; usually from the request. Without `limit` the query returns all hits from
+the offset on – `skip=1`, for example, only leaves out the first hit:
 
 ```cms
 (CMS:SELECT list filter[area]=articles limit=20 skip="{$_REQUEST['skip']}" count=true)
