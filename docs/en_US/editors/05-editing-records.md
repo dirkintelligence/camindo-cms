@@ -272,10 +272,14 @@ the original: if you open the image editing again later, you see your settings a
 them, or restore the original with “Reset” and “Save”. If you upload a new file into the field,
 the settings are lost.
 
-For a thumbnail field whose converter works with ImageMagick and has a target width and height,
-“File details” offers ***“![crop](../_/crop.svg) Set crop area”***. There you decide which part of the
-image appears in the thumbnail – instead of the automatic center. The aspect ratio of the box
-follows from the target size of the converter; “![center_focus_strong](../_/center_focus_strong.svg)
+For a thumbnail field whose converter works with ImageMagick and sets a target width, a target height
+or both, “File details” offers ***“![crop](../_/crop.svg) Set crop area”***. There you decide which part of the
+image appears in the thumbnail – instead of the automatic center or the whole image. The aspect ratio
+of the box follows from the target size of the converter; if it sets only the width or only the height,
+the box keeps the aspect ratio of the image – the thumbnail then shows an enlarged detail.
+Below the image you see the size of the image, the size of your selection and the size the thumbnail
+gets from it.
+“![center_focus_strong](../_/center_focus_strong.svg)
 Automatic (centered)” returns to the center. The crop area is kept when the thumbnails are generated
 again – also after image editing at the upload field – until a new file is uploaded.
 

@@ -303,10 +303,14 @@ sehen Sie Ihre Einstellungen und können sie ändern oder mit „Zurücksetzen�
 das Original wiederherstellen. Laden Sie in das Feld eine neue Datei hoch, gehen die
 Einstellungen verloren.
 
-Für ein Thumbnail-Feld, dessen Konverter mit ImageMagick arbeitet und eine Zielbreite und
--höhe hat, steht unter „Dateiinformationen“ ***„![crop](../_/crop.svg) Ausschnitt festlegen“***.
+Für ein Thumbnail-Feld, dessen Konverter mit ImageMagick arbeitet und eine Zielbreite, eine
+Zielhöhe oder beides vorgibt, steht unter „Dateiinformationen“ ***„![crop](../_/crop.svg) Ausschnitt festlegen“***.
 Dort bestimmen Sie, welcher Teil des Bildes im Thumbnail erscheint – statt der automatischen
-Mitte. Das Seitenverhältnis des Rahmens ergibt sich aus der Zielgröße des Konverters;
+Mitte bzw. des ganzen Bildes. Das Seitenverhältnis des Rahmens ergibt sich aus der Zielgröße
+des Konverters; gibt er nur die Breite oder nur die Höhe vor, behält der Rahmen das
+Seitenverhältnis des Bildes – das Thumbnail zeigt dann einen vergrößerten Ausschnitt.
+Unter dem Bild stehen die Größe des Bildes, die Größe Ihrer Auswahl und die Größe, die das
+Thumbnail daraus erhält.
 „![center_focus_strong](../_/center_focus_strong.svg) Automatisch (mittig)“ kehrt zur Mitte zurück.
 Der Ausschnitt bleibt erhalten, wenn die Thumbnails neu erzeugt werden – auch nach einer
 Bildbearbeitung am Upload-Feld –, bis eine neue Datei hochgeladen wird.

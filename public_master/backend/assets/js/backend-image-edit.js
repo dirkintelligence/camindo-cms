@@ -159,8 +159,34 @@
         // size of the box in pixels of the result shown
         const rw = parseInt(ed.root.dataset.resultWidth, 10) || 0;
         const rh = parseInt(ed.root.dataset.resultHeight, 10) || 0;
-        $info.text(' – ' + (ed.root.dataset.labelSelection || '') + ': '
-            + Math.round(s.w * rw) + ' × ' + Math.round(s.h * rh) + ' px');
+        const bw = Math.max(1, Math.round(s.w * rw)), bh = Math.max(1, Math.round(s.h * rh));
+        let text = ' – ' + (ed.root.dataset.labelSelection || '') + ': ' + bw + ' × ' + bh + ' px';
+        // crop: what the converter makes of the box
+        const thumb = ed.mode === 'crop' ? thumbnailSize(ed, bw, bh) : null;
+        if (thumb) text += ' – ' + (ed.root.dataset.labelThumbnail || '') + ': ' + thumb[0] + ' × ' + thumb[1] + ' px';
+        $info.text(text);
+    }
+
+    /**
+     * Size of the thumbnail from a box of bw x bh pixels - like the Magick converter
+     * scales it (data-target: "width height resize_when max_pixels"; the box already has
+     * the aspect ratio of the target size).
+     */
+    function thumbnailSize(ed, bw, bh) {
+        const [tw, th, when, maxPixels] = (ed.root.dataset.target || '').split(' ');
+        const w = parseInt(tw, 10) || 0, h = parseInt(th, 10) || 0, max = parseInt(maxPixels, 10) || 0;
+        if (!w && !h) return null;
+        const allowed = function (scale) {
+            return when === 'shrink' ? scale < 1 : (when === 'enlarge' ? scale > 1 : true);
+        };
+        let scale = w && h ? Math.min(w / bw, h / bh) : (w ? w / bw : h / bh);
+        if (!allowed(scale)) scale = 1;
+        let rw = bw * scale, rh = bh * scale;
+        if (max > 0) {
+            const s2 = Math.sqrt(max / (rw * rh));
+            if (allowed(s2)) { rw *= s2; rh *= s2; }
+        }
+        return [Math.max(1, Math.round(rw)), Math.max(1, Math.round(rh))];
     }
 
     // ---------------------------------------------------------------------------
@@ -179,7 +205,9 @@
                 const h = handle.dataset.h;
                 ed.drag = { type: 'new', ax: h.includes('w') ? s.x + s.w : s.x, ay: h.includes('n') ? s.y + s.h : s.y };
             }
-            else if (s && event.target.closest('.c9-imgedit-sel')) {
+            // inside the box: move it - unless it covers the whole image (nothing to
+            // move, e.g. the automatic box with the aspect ratio of the image): new box
+            else if (s && event.target.closest('.c9-imgedit-sel') && (s.w < 0.995 || s.h < 0.995)) {
                 ed.drag = { type: 'move', px: p.x, py: p.y, sx: s.x, sy: s.y };
             }
             else {

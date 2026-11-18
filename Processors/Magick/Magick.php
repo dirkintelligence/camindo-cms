@@ -701,12 +701,13 @@ class Magick extends MediaProcessor {
         // Section chosen by hand on the info page ("Define section", stored in
         // `data_fil`.data of the thumbnail and passed on by writeThumbnails() as
         // details.manual_crop): cut it out first, then the size change applies to it.
-        // With target width AND height the box is adjusted to their aspect ratio - the
-        // source may have changed since the section was chosen.
+        // The box is adjusted to the aspect ratio of target width AND height, with only one
+        // of them to that of the source - the source may have changed since the section
+        // was chosen.
         if (!$claimed['geometry'] && $srcW > 0 && $srcH > 0 && is_array($details['manual_crop'] ?? null)) {
             $reqW = (int)($details['width'] ?? 0);
             $reqH = (int)($details['height'] ?? 0);
-            $ratio = ($reqW > 0 && $reqH > 0 && ($details['unit'] ?? 'px') !== 'percent') ? $reqW / $reqH : 0.0;
+            $ratio = ($reqW > 0 && $reqH > 0 && ($details['unit'] ?? 'px') !== 'percent') ? $reqW / $reqH : $srcW / $srcH;
             $box = self::cropBox($details['manual_crop'], $srcW, $srcH, $ratio);
             if ($box !== null) {
                 array_push($args, '-crop', "{$box[2]}x{$box[3]}+{$box[0]}+{$box[1]}", '+repage');

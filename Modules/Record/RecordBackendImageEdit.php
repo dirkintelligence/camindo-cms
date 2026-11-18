@@ -37,8 +37,9 @@
  * THUMBNAIL FIELD: DEFINE SECTION
  * --------------------
  * Only if the converter that generates the thumbnail is an ImageMagick converter with
- * target width AND height (VirtualFieldsTrait::effectiveConverter()). The box has their
- * aspect ratio and lies on the source file of the thumbnail; it is stored as
+ * target width and/or height in pixels (VirtualFieldsTrait::effectiveConverter()). The box
+ * has their aspect ratio - with only one of them that of the source - and lies on the
+ * source file of the thumbnail; it is stored as
  * fractions in `data_fil`.data of the thumbnail as "crop" and applied by
  * writeThumbnails() (details.manual_crop) - also with every later regeneration, until
  * a new upload.
@@ -89,7 +90,7 @@ class RecordBackendImageEdit extends RecordBackend {
 
     /**
      * Which editing does a file allow: 'edit' (upload field), 'crop' (thumbnail field
-     * of an ImageMagick converter with target width and height), null = none.
+     * of an ImageMagick converter with target width and/or height), null = none.
      */
     private function _mode(array $colDef, array $value, int $id, ?int $fileLanguageId): ?string
     {
@@ -123,9 +124,12 @@ class RecordBackendImageEdit extends RecordBackend {
         $details = (array)$converter['details'];
         $width = (int)($details['width'] ?? 0);
         $height = (int)($details['height'] ?? 0);
-        if ($width < 1 || $height < 1 || ($details['unit'] ?? 'px') === 'percent') return null;
+        // target width and/or height in pixels (only one: the box keeps the aspect
+        // ratio of the source)
+        if (($width < 1 && $height < 1) || ($details['unit'] ?? 'px') === 'percent') return null;
         if (!$converter['instance']->canCrop($mime, $extension)) return null;
-        return ['parent' => $parent, 'parent_field_id' => $parentFieldId, 'width' => $width, 'height' => $height];
+        return ['parent' => $parent, 'parent_field_id' => $parentFieldId, 'width' => $width, 'height' => $height,
+            'resize_when' => (string)($details['resize_when'] ?? 'always'), 'max_pixels' => (int)($details['max_pixels'] ?? 0)];
     }
 
     // ====================
@@ -199,8 +203,7 @@ class RecordBackendImageEdit extends RecordBackend {
                 '{height}' => $edit['height'] > 0 ? (string)$edit['height'] : '',
             ])
             : $this->backend->template('record.image_crop_toolbar', [
-                '{width}' => (string)$target['crop']['width'],
-                '{height}' => (string)$target['crop']['height'],
+                '{size}' => $this->_targetSizeText((int)$target['crop']['width'], (int)$target['crop']['height']),
             ]);
         echo $this->backend->template('record.image_edit', [
             '{mode}' => $target['mode'],
@@ -209,14 +212,32 @@ class RecordBackendImageEdit extends RecordBackend {
             '{field_id}' => (string)$target['fieldId'],
             '{lang}' => $target['lang'] === null ? '' : (string)$target['lang'],
             '{state}' => $this->backend->escape(json_encode($isEdit ? $edit : ['crop' => $crop], JSON_THROW_ON_ERROR)),
-            '{ratio}' => $isEdit ? '' : (string)($target['crop']['width'] / $target['crop']['height']),
+            // crop: aspect ratio of the box - target size, with only width or height
+            // that of the source (the preview shows it whole)
+            '{ratio}' => $isEdit ? '' : (string)(($target['crop']['width'] > 0 && $target['crop']['height'] > 0)
+                ? $target['crop']['width'] / $target['crop']['height']
+                : $preview['width'] / max(1, $preview['height'])),
             '{src}' => $this->backend->escape($preview['url']),
+            // edit: size of the result; crop: size of the source, the thumbnail size
+            // follows from the box and the converter (backend-image-edit.js)
+            '{result_label}' => $isEdit ? '{#record.image_result}' : '{#record.image_source_size}',
+            '{target}' => $isEdit ? '' : (int)$target['crop']['width'] . ' ' . (int)$target['crop']['height'] . ' '
+                . preg_replace('/[^a-z]/', '', $target['crop']['resize_when']) . ' ' . (int)$target['crop']['max_pixels'],
             '{result_width}' => (string)$preview['width'],
             '{result_height}' => (string)$preview['height'],
             '{toolbar}' => $toolbar,
             '{hint}' => $isEdit ? '{#record.image_edit_hint}' : '{#record.image_crop_hint}',
         ]);
         echo $this->backend->template('container_footer');
+    }
+
+    /** Target size of the converter as text: "640 × 640 px", "Width: 640 px" … */
+    private function _targetSizeText(int $width, int $height): string
+    {
+        if ($width > 0 && $height > 0) return "{$width} × {$height} px";
+        return $width > 0
+            ? $this->cms->snippet('record.image_width') . ": {$width} px"
+            : $this->cms->snippet('record.image_height') . ": {$height} px";
     }
 
     /**
