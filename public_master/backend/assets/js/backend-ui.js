@@ -70,9 +70,15 @@
          * Remember the choice (an empty value leaves the previous entry in place).
          */
         loginPrefsStore(backendCode) {
+            if (!backendCode) return;
             try {
-                if (backendCode) localStorage.setItem('c9.backend_code', backendCode);
+                localStorage.setItem('c9.backend_code', backendCode);
             } catch (e) { /* see loginPrefs() */ }
+            // Also as a cookie: index.php loads a page without login in this language
+            // (Cms::guestBackendLang()), so that <html lang> fits the login dialog
+            const secure = location.protocol === 'https:' ? '; Secure' : '';
+            document.cookie = 'c9_backend_code=' + encodeURIComponent(backendCode)
+                + '; path=' + (cConfig.backend_path || '/') + '; max-age=31536000; SameSite=Lax' + secure;
         },
 
         /**
@@ -271,6 +277,11 @@
          * form has loaded (StartBackend::login()). Only values that exist as an option.
          */
         loginPrefsInit() {
+            // Page loaded without login (no CSRF token): <html lang> follows the language
+            // of the dialog - otherwise browsers offer to translate it
+            const dialogLang = $('#login-dialog .modal-content').attr('lang');
+            if (!cConfig.csrf_token && dialogLang) document.documentElement.lang = dialogLang;
+
             const prefs = this.loginPrefs();
             const setIfOption = ($select, value) => {
                 if (!value || !$select.length) return false;
@@ -300,13 +311,37 @@
 
         /**
          * Remember every change in the login form immediately.
+         *
+         * A different backend language reloads only the dialog in that language (the
+         * entered name stays) - never the page: after a session timeout unsaved
+         * input lies behind the dialog. Was the page itself loaded without login
+         * (no CSRF token), loginPrefsInit() lets <html lang> follow.
          */
         _bindLoginPrefs() {
+            // A choice remembered before the cookie existed: write the cookie, so that the
+            // next page load without login already comes in this language
+            const stored = this.loginPrefs().backend_code;
+            if (stored && !document.cookie.split('; ').includes('c9_backend_code=' + encodeURIComponent(stored))) {
+                this.loginPrefsStore(stored);
+            }
+
             $(document).on('change', 'select.c9-login-pref', (e) => {
                 const $el = $(e.currentTarget);
                 const pref = $el.data('pref');
                 const value = $el.val();
-                if (pref === 'backend_code') this.loginPrefsStore(value);
+                if (pref !== 'backend_code') return;
+                this.loginPrefsStore(value);
+
+                const $dialog = $el.closest('#login-dialog');
+                if (!$dialog.length || !value) return;
+                const name = String($('#login-name').val() || '');
+                $dialog.cLoadContent({
+                    url: 'Start/login.php?lang=' + encodeURIComponent(value),
+                    callback: () => {
+                        $('#login-name').val(name);
+                        this.focus('#login-lang');
+                    }
+                });
             });
         },
 

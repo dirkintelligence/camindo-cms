@@ -176,7 +176,10 @@ nicht selbst einstellen, gelten die Vorgaben Ihres Systemadministrators.
 ### Sprache
 
 Die Sprache der Backend-Oberfläche ist unabhängig von den Sprachen Ihrer Website. Das
-Anmeldeformular merkt sich Ihre letzte Wahl in diesem Browser.  
+Anmeldeformular merkt sich Ihre letzte Wahl in diesem Browser; ohne gespeicherte Wahl
+erscheint es in der Sprache Ihres Browsers. Wählen Sie eine andere Sprache, wechselt das
+Formular sofort – ein bereits eingegebener Benutzername bleibt stehen, und nach einer
+abgelaufenen Sitzung gehen auch nicht gespeicherte Eingaben im Hintergrund nicht verloren.  
 Bei der Installation von camindo CMS sind folgende Backend-Sprachen zur Auswahl (weitere
 können nachträglich installiert werden):
 

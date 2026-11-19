@@ -177,7 +177,10 @@ the defaults of your system administrator apply.
 ### Language
 
 The language of the backend user interface is independent of the languages of your
-website. The sign-in form remembers your last choice in this browser.  
+website. The sign-in form remembers your last choice in this browser; without a saved choice it appears
+in the language of your browser. If you choose another language, the form switches
+immediately – a username you already entered stays, and after an expired session unsaved
+input in the background is not lost either.  
 The following backend languages are available after installation (more can be installed
 later):
 

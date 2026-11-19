@@ -786,6 +786,43 @@ class Cms {
     }
 
     /**
+     * Backend language of a page without login (login dialog): the choice remembered
+     * in this browser (cookie c9_backend_code, written by cApp.ui.loginPrefsStore()),
+     * otherwise the first entry of the Accept-Language header that has a backend
+     * translation, otherwise 'en_US'. So <html lang> already fits the dialog when the
+     * page loads - browsers do not offer to translate a German form from "English".
+     *
+     * @param string $stored          remembered backend code (may be empty or invalid)
+     * @param string $acceptLanguage  header value, e.g. "de-DE,de;q=0.9,en;q=0.8"
+     */
+    public function guestBackendLang(string $stored, string $acceptLanguage): string
+    {
+        $available = $this->backendLanguages();
+        $match = self::matchLanguage($stored, $available);
+        if ($match !== null) return $match;
+
+        // Accept-Language: by quality, with the same quality in the given order
+        $ranked = [];
+        foreach (explode(',', $acceptLanguage) as $i => $part) {
+            $pieces = explode(';', trim($part));
+            $code = trim($pieces[0]);
+            if ($code === '' || $code === '*' || !preg_match('/^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/', $code)) continue;
+            $q = 1.0;
+            foreach (array_slice($pieces, 1) as $param) {
+                if (preg_match('/^\s*q\s*=\s*([0-9.]+)\s*$/i', $param, $m)) $q = (float)$m[1];
+            }
+            if ($q <= 0) continue;
+            $ranked[] = [$q, $i, $code];
+        }
+        usort($ranked, fn($a, $b) => [$b[0], $a[1]] <=> [$a[0], $b[1]]);
+        foreach ($ranked as [, , $code]) {
+            $match = self::matchLanguage($code, $available);
+            if ($match !== null) return $match;
+        }
+        return self::FALLBACK_LANG;
+    }
+
+    /**
      * Map a code or locale to one of the available languages (see
      * resolveBackendLang()): exact, otherwise via the language part; null without a match.
      *

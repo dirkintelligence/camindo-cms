@@ -24,9 +24,16 @@
     // Load the session, if logged in: sets the backend language and time zone of the
     // administrator (Session::load() -> Cms::applyAdminSettings()), so that the
     // static parts of the UI appear in their language. Without a session
-    // it stays at 'en_US' - the login dialog loads in the remembered language.
+    // the page takes the language remembered in this browser (cookie of the login
+    // dialog) or the browser language (Cms::guestBackendLang()) - <html lang> must fit
+    // the login dialog, otherwise mobile browsers offer to translate it.
     $session = $app->get(Session::class);
-    $session->load();
+    if (!$session->load()) {
+        $cms->setLang($cms->guestBackendLang(
+            (string)($_COOKIE['c9_backend_code'] ?? ''),
+            (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '')
+        ));
+    }
 
     // Maintenance mode / database not at the state of the files (SystemState):
     // superusers see a notice bar and can keep working, all others
