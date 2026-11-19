@@ -189,7 +189,8 @@ Good to know:
 
 You can check an image on the command line with
 `php Core/cron/camindo.php watermark detect image.jpg` – the output names the code and the
-instance – or with the checking website that comes with the program.
+instance –, in the back end with the add-on module “Watermark” (`camindo/module-watermark`) or with
+the checking website that comes with the program.
 
 The program, the checking website and the installation instructions are available at
 [github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)

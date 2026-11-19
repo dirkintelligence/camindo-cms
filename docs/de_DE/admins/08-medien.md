@@ -201,7 +201,8 @@ Gut zu wissen:
 
 Prüfen lässt sich ein Bild auf der Kommandozeile mit
 `php Core/cron/camindo.php watermark detect bild.jpg` – die Ausgabe nennt den Code und die
-Instanz – oder mit der Prüf-Website, die zum Programm gehört.
+Instanz –, im Backend mit dem Zusatzmodul „Wasserzeichen“ (`camindo/module-watermark`) oder mit der
+Prüf-Website, die zum Programm gehört.
 
 Das Programm, die Prüf-Website und die Anleitung zur Installation gibt es unter
 [github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)
