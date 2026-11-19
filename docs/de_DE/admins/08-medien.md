@@ -146,6 +146,7 @@ Bereichs neu – bei vielen Datensätzen im Hintergrund.
 | Erlaubte Dateitypen | MIME-Typen oder Endungen, eine Angabe je Zeile; leer = alle zulässigen |
 | Mehrsprachig | je Sprache eine eigene Datei, etwa ein Prospekt je Sprache |
 | Nur für angemeldete Frontend-User | Datei nur an angemeldete Frontend-User ausliefern (siehe [Kapitel 13](./13-community.md#geschützte-dateien)) |
+| Unsichtbares Wasserzeichen einbetten | Bilder erhalten den Wasserzeichen-Code der Instanz (siehe [unten](#unsichtbares-wasserzeichen)); gibt es auch bei Thumbnail-Feldern |
 
 Aus Sicherheitsgründen sind ausführbare Dateien (`.php`, `.phtml`, `.cgi`, `.sh`,
 `.htaccess` u. a.) immer verboten, und camindo CMS prüft, ob der Inhalt einer Datei zu
@@ -159,6 +160,52 @@ Sie per FTP oder SCP in das Verzeichnis `var/upload/`. In der Eingabemaske und b
 Import wählen Redakteure sie über ![folder_open](../_/folder_open.svg) „Datei auf dem Server auswählen“,
 die Schaltfläche rechts an jedem Upload-Feld.
 
+
+## Unsichtbares Wasserzeichen
+
+Bilder können ein ***unsichtbares Wasserzeichen*** tragen: einen Code aus ein bis sechs
+Zeichen, der im Bild selbst steckt – nicht in den Metadaten, die beim Weiterverarbeiten
+meist verloren gehen. Das Wasserzeichen übersteht Verkleinern, Vergrößern, JPEG-Kompression,
+Drehen um 90° und Spiegeln. So lässt sich später prüfen, von welcher Website ein Bild stammt.
+
+So richten Sie es ein:
+
+1. Der Systemadministrator installiert das Programm `camindo-watermark` auf dem Server,
+   trägt den Pfad als `paths.watermark` in die Konfiguration ein und erzeugt den geheimen
+   Schlüssel mit `php Core/cron/camindo.php watermark key` (siehe [Kapitel 12](./12-betrieb.md)).
+2. Im Modul „Instanzen“ erhält jede Instanz unter ***Wasserzeichen*** einen eigenen ***Code***,
+   z. B. `GS-NRD` – ein bis sechs Zeichen aus den Buchstaben A–Z und dem Bindestrich.
+   Kleinbuchstaben werden in Großbuchstaben umgewandelt.
+3. In den Upload- und Thumbnail-Feldern, deren Bilder das Wasserzeichen tragen sollen,
+   schalten Sie ***Unsichtbares Wasserzeichen einbetten*** ein.
+
+Ab dann erhält jedes neu gespeicherte Bild dieser Felder den Code seiner Instanz – beim
+Upload, bei jeder erzeugten Version und nach der Bildbearbeitung auf der Info-Seite. Für
+vorhandene Thumbnails genügt „Thumbnails neu erzeugen“; bereits hochgeladene Originale
+erhalten das Wasserzeichen erst mit dem nächsten Upload.
+
+Gut zu wissen:
+
+- Formate: JPEG und PNG, WebP nur mit ImageMagick. GIF, SVG und andere Formate bleiben
+  unverändert.
+- ***Zuschneiden*** zerstört das Wasserzeichen. Schalten Sie es deshalb im Thumbnail-Feld
+  ein, wenn das Thumbnail einen anderen Ausschnitt zeigt (etwa ein quadratisches Vorschaubild
+  aus einem Breitformat) – dann wird es nach dem Zuschneiden neu eingebettet.
+- Unter etwa 300 px Breite bzw. 200 px auf der kurzen Seite ist der Code nicht mehr
+  sicher lesbar. Für sehr kleine Vorschaubilder lohnt sich das Wasserzeichen nicht.
+- Auf Fotos ist es nicht zu sehen. Bei Grafiken und Screenshots mit großen einfarbigen
+  Flächen können an Text und Kanten leichte Schlieren entstehen.
+- Ist das Programm eingerichtet, aber nicht nutzbar (Programm oder Schlüssel fehlt), lässt
+  sich ein Bild in einem Feld mit Wasserzeichen nicht speichern. Die Instanz-Maske weist
+  darauf hin.
+
+Prüfen lässt sich ein Bild auf der Kommandozeile mit
+`php Core/cron/camindo.php watermark detect bild.jpg` – die Ausgabe nennt den Code und die
+Instanz – oder mit der Prüf-Website, die zum Programm gehört.
+
+Das Programm, die Prüf-Website und die Anleitung zur Installation gibt es unter
+[github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)
+(Downloads unter „Releases“).
 
 ## Ablage und Auslieferung
 

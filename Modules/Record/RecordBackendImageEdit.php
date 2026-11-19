@@ -611,6 +611,14 @@ class RecordBackendImageEdit extends RecordBackend {
                 return false;
             }
             $fileData['edit'] = $edit;
+            // the section destroys an invisible watermark: mark the result again
+            if ($this->record->applyWatermark($fieldId, $tmpFile, $target['mime'], $extension,
+                    (int)($info['quality'] ?? 0), $error) === null) {
+                @unlink($tmpFile);
+                $this->cms->error($this->cms->snippet('error_watermark'));
+                $this->system->log('error', 'Watermark (image editing, field ' . $fieldId . '): ' . $error);
+                return false;
+            }
         }
         @chmod($tmpFile, (int)($this->config->get('permissions.file') ?? 0664));
         if (!@rename($tmpFile, $mediaFile)) {

@@ -792,6 +792,12 @@ class FieldEditBackend extends FieldBackend {
             // readable instances). The checkbox list is only with set
             // Schalter sichtbar (Script unten).
             if (in_array($displayType, ['upload', 'thumbnail'], true)) {
+                // invisible watermark with the code of the instance
+                $this->backend->formField($this->field, [
+                    'id' => $this->id,
+                    'name' => 'details.watermark',
+                    'value' => (int)($this->data['details']['watermark'] ?? 0),
+                ]);
                 $this->backend->formField($this->field, [
                     'id' => $this->id,
                     'name' => 'details.user_auth',

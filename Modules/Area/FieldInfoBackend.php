@@ -257,6 +257,12 @@ class FieldInfoBackend extends FieldBackend {
                 $this->backend->infoAdd($this->field, 'converter_ids', implode('<br>', $converters), ['html']);
             }
 
+            // watermark (upload and thumbnail)
+            $this->backend->infoAdd($this->field, 'details.watermark',
+                !empty($details['watermark']) ? $this->backend->template('icon_checked') : $this->backend->emptyPlaceholder,
+                ['html']
+            );
+
             // user_auth / profile_area_ids (upload and thumbnail)
             $userAuth = !empty($details['user_auth']);
             $this->backend->infoAdd($this->field, 'details.user_auth',

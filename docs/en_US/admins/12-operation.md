@@ -75,6 +75,7 @@ A complete backup consists of:
 | Database | via the [scheduler](./10-modules.md#scheduler) (task “Database backup”) to `var/dbbackup/`, or with your own tools |
 | Configuration | `.camindo.php` |
 | ***Key file*** | `.camindo.key` (or the content of the environment variable `CAMINDO_KEY`, see [access data from environment variables](#access-data-from-environment-variables)) – without it, encrypted contents and passwords are useless. Keep it in a safe place, **separate** from the database backups |
+| ***Watermark key*** | `.camindo-watermark.key`, if you use the [invisible watermark](./08-media.md#invisible-watermark) – without it, no watermark can be read any more. Never replace it while marked images are in circulation |
 | Media files | `public/media/` |
 | Project data | `var/templates/` (template sources),<br>`var/custom/` (snippets, scripts and outputs of the scheduler),<br>`var/extensions/` (stylesheets),<br>`var/modules/` (for example PDF templates and fonts),<br>`var/area_blueprints/` (own blueprints),<br>`var/deleted/` (trash),<br>`var/translation/translated` if an own backend translation has been created. |
 | Composer state | `composer.json` and `composer.lock` – so that exactly the same versions can be installed again |
@@ -265,6 +266,13 @@ template commands --all --out=DIRECTORY
 ```
 Output the ***CMS commands*** (core and active modules) with their parameters and descriptions as JSON – for editor support such as the extension for Visual Studio Code. Without `--all` in one language to standard output, with `--all` one file `commands.{language}.json` per backend language in the directory
 
+```
+watermark status
+watermark key
+watermark detect FILE [--json]
+```
+***Invisible watermark*** ([chapter 8](./08-media.md#invisible-watermark)): `status` shows program, version, key, the codes of the instances and the fields with a watermark; `key` creates the secret key (an existing file stays untouched); `detect` checks an image and names code and instance (exit code 1 if none is found)
+
 
 ### Changing the key
 
@@ -363,6 +371,7 @@ The file contains access data: permissions `0600`, never in a version control sy
 | `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.composer` | – | paths to external programs; leave empty what does not exist (`composer`: [update check](#update-check)) |
 | `paths.document_root`,<br>`paths.media`,<br>`paths.backend` | `public/`,<br>`'/media'`,<br>`'/backend'` | directory to which the web server points; address paths of the media files and the backend relative to it |
 | `paths.key_file`,<br>`paths.sqlpwd_file` | `.camindo.key`,<br>`.sqlpwd` | key file and access file for `mysqldump` (absolute paths, default in the project directory) |
+| `paths.watermark`,<br>`paths.watermark_key_file` | `''`,<br>`.camindo-watermark.key` | program `camindo-watermark` for the [invisible watermark](./08-media.md#invisible-watermark) (empty = off) and its secret key, created with `watermark key` |
 | `paths.var_dir`,<br>`paths.tmp_dir`,<br>`paths.upload_dir` | `var/`,<br>`var/tmp/`,<br>`var/upload/` | writable main directory, temporary files and directory for large files transferred via FTP (selection via the file icon next to upload fields) |
 | `permissions.dir`,<br>`permissions.file` | `0775` / `0664` | Unix permissions for directories and files that camindo CMS creates |
 | `permissions.key_file` | `0600` | permissions of `.camindo.key` and `.camindo.key.retired` during a [key change](#changing-the-key), if there is no `.camindo.key` yet (key from `CAMINDO_KEY`) – otherwise the change keeps the permissions of the previous file |

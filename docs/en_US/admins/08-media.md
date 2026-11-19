@@ -137,6 +137,7 @@ recreates the versions of all records of an area – in the background for many 
 | Allowed file types | MIME types or extensions, one entry per line; empty = all permitted |
 | Multilingual | one file per language, for example a brochure in each language |
 | Signed-in frontend users only | deliver the file only to signed-in frontend users (see [chapter 13](./13-community.md#protected-files)) |
+| Embed invisible watermark | images get the watermark code of the instance (see [below](#invisible-watermark)); also available for thumbnail fields |
 
 For security reasons, executable files (`.php`, `.phtml`, `.cgi`, `.sh`, `.htaccess` and others)
 are always forbidden, and camindo CMS checks whether the content of a file matches its extension –
@@ -149,6 +150,50 @@ The size of an upload via the browser is limited by the PHP configuration of the
 directory `var/upload/` via FTP or SCP. In the input mask and during import, editors select them via
 ![folder_open](../_/folder_open.svg) “Select file on the server”, the button to the right of each
 upload field.
+
+## Invisible watermark
+
+Images can carry an ***invisible watermark***: a code of one to six characters that is part
+of the image itself – not of the metadata, which usually gets lost when an image is processed
+further. The watermark survives scaling down and up, JPEG compression, turning by 90° and
+mirroring. So you can check later which website an image comes from.
+
+How to set it up:
+
+1. The system administrator installs the program `camindo-watermark` on the server, enters its
+   path as `paths.watermark` in the configuration and creates the secret key with
+   `php Core/cron/camindo.php watermark key` (see [chapter 12](./12-operation.md)).
+2. In the module “Instances”, every instance gets its own ***code*** under ***Watermark***,
+   e.g. `GS-NRD` – one to six characters from the letters A–Z and the hyphen. Lower case is
+   converted to upper case.
+3. In the upload and thumbnail fields whose images should carry the watermark, switch on
+   ***Embed invisible watermark***.
+
+From then on, every newly saved image of these fields gets the code of its instance – on upload,
+in every version created from it and after image editing on the info page. For existing
+thumbnails, “Regenerate thumbnails” is enough; originals that were uploaded before only get the
+watermark with the next upload.
+
+Good to know:
+
+- Formats: JPEG and PNG, WebP only with ImageMagick. GIF, SVG and other formats stay unchanged.
+- ***Cropping*** destroys the watermark. Therefore switch it on in the thumbnail field if the
+  thumbnail shows a different section (for example a square preview image from a wide format) –
+  then it is embedded again after cropping.
+- Below about 300 px width or 200 px on the short side, the code can no longer be read reliably.
+  The watermark is not worth it for very small preview images.
+- It cannot be seen on photos. On graphics and screenshots with large areas of one color, slight
+  smudges can appear at text and edges.
+- If the program is configured but not usable (program or key missing), an image in a field with a
+  watermark cannot be saved. The instance form points this out.
+
+You can check an image on the command line with
+`php Core/cron/camindo.php watermark detect image.jpg` – the output names the code and the
+instance – or with the checking website that comes with the program.
+
+The program, the checking website and the installation instructions are available at
+[github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)
+(downloads under “Releases”).
 
 ## Storage and delivery
 

@@ -63,6 +63,7 @@ use Camindo\Core\Execute;
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\MediaProcessor;
 use Camindo\Core\ProcessorFactory;
+use Camindo\Core\Watermark;
 use Camindo\Core\Modules\Record\Record;
 
 abstract class TriggerMedia {
@@ -91,6 +92,7 @@ abstract class TriggerMedia {
         protected Record $record,
         protected ProcessorFactory $factory,
         protected Cms $cms,
+        protected Watermark $watermark,
     )
     {
     }
@@ -286,6 +288,23 @@ abstract class TriggerMedia {
             // File properties could not be determined
             $this->fail($token, (string)($srcInfo['error'] ?? 'error_file_conversion'));
             return;
+        }
+
+        // Invisible watermark - as writeThumbnails() does for files created right away
+        // (field switch details.watermark + code of the instance, Camindo\Core\Watermark)
+        $mime = (string)($fileData['mime_type'] ?? '');
+        $extension = (string)($fileData['extension'] ?? '');
+        if ($this->watermark->binary() !== ''
+            && ($code = $this->watermark->codeForField($fieldId)) !== null
+            && $this->watermark->supports($mime, $extension)
+        ) {
+            $marked = $this->watermark->apply($this->config->get('paths.media_dir') . '/' . $srcPath, $mime, $extension, $code, 0, $error);
+            if ($marked === null) {
+                error_log('Watermark (field ' . $fieldId . ', record ' . $recordId . '): ' . $error);
+                $this->fail($token, 'error_watermark');
+                return;
+            }
+            $srcInfo['size'] = $marked['size'];
         }
 
         // Enter file parameters in table `data_fil`.

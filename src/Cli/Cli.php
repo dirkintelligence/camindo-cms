@@ -39,6 +39,7 @@ class Cli {
         'scheduler'   => SchedulerCommand::class,
         'htaccess'    => HtaccessCommand::class,
         'template'    => TemplateCommand::class,
+        'watermark'   => WatermarkCommand::class,
     ];
 
     private bool $quiet = false;
@@ -136,6 +137,9 @@ class Cli {
                                                          (status: exit code 1 if outdated)
           template      commands [--lang=LANG | --all --out=DIR]
                                                          CMS command definitions as JSON (editor support)
+          watermark     status | key | detect FILE [--json]
+                                                         invisible image watermark: state, create the
+                                                         key, check an image (exit code 1 = none)
 
           --quiet   no output except errors
         TXT);

@@ -44,6 +44,7 @@ use Camindo\Core\Cms;
 use Camindo\Core\Config;
 use Camindo\Core\Crypt;
 use Camindo\Core\SecurityHeaders;
+use Camindo\Core\Watermark;
 use Camindo\Core\Modules\Instance\Instance;
 use Camindo\Core\Modules\Record\RecordBackendEdit;
 use Camindo\Core\Modules\Template\TemplateBackend;
@@ -66,6 +67,7 @@ class InstanceBackend {
         private TemplateBackend $templateBackend,
         private Config $config,
         private SecurityHeaders $securityHeaders,
+        private Watermark $watermark,
     )
     {}
 
@@ -283,6 +285,10 @@ class InstanceBackend {
         if (!empty($details['csp_form_action'])) {
             $this->backend->infoAdd($this->instance, 'details.csp_form_sources', "'self' " . str_replace("\n", ' ', (string)($details['csp_form_sources'] ?? '')));
         }
+
+        // Watermark
+        $section('instance.headline_watermark');
+        $this->backend->infoAdd($this->instance, 'details.watermark_code', (string)($details['watermark_code'] ?? ''));
 
         // Start page
         $section('instance.headline_start_page');
@@ -698,6 +704,19 @@ class InstanceBackend {
                 'value' => $details[$key] ?? '',
             ]);
         }
+
+        // Invisible watermark (Camindo\Core\Watermark)
+        // --------------------
+        $this->backend->formField($this->instance, [
+            'id' => $this->id,
+            'name' => 'details.watermark_code',
+            'value' => (string)($details['watermark_code'] ?? ''),
+        ]);
+        $watermarkNote = '';
+        if ($this->watermark->binary() === '') $watermarkNote = 'instance.note_watermark_off';
+        elseif (!$this->watermark->available()) $watermarkNote = 'instance.note_watermark_broken';
+        $this->backend->formReplace('{watermark_note}', $watermarkNote === ''
+            ? '' : $this->backend->template('alert_warning', ['{text}' => '{#' . $watermarkNote . '}']));
 
         // start page
         // --------------------

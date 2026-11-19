@@ -694,6 +694,17 @@ class Config {
                     '' = no check
                 */
                 'composer' => 'composer',
+                /*
+                    camindo-watermark executable (absolute path) - invisible watermark
+                    in images (Camindo\Core\Watermark). '' = function off
+                */
+                'watermark' => '',
+                /*
+                    Absolute path to the secret key of the watermark
+                    (created by "camindo.php watermark key"; never replace it while
+                    marked images are in circulation)
+                */
+                'watermark_key_file' => $corDir . '/.camindo-watermark.key',
             ],
             'permissions' => [
                 /*

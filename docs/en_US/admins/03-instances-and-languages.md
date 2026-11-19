@@ -51,6 +51,8 @@ all lists and selections of the back end – regardless of its position.
 | Additional script sources | addresses of external scripts that may run, one per line, e.g. `https://www.googletagmanager.com` or `*.example.com` |
 | Allow scripts loaded by allowed scripts | scripts that an allowed script loads (tag manager, widgets) also run |
 | Restrict form targets / Additional form targets | forms may only send to the own website and the stated addresses (e.g. the payment provider) |
+| ***Watermark*** | |
+| Code | 1 to 6 characters from A–Z and hyphen, e.g. `GS-NRD`: images in fields with the watermark switched on carry this code invisibly. Every instance needs its own code (see [chapter 8](./08-media.md#invisible-watermark)) |
 
 The start page can only be selected after the first save – before that, the instance has
 no content.

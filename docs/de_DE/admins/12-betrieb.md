@@ -131,6 +131,7 @@ Zu einer vollständigen Sicherung gehören:
 | Datenbank | per [Zeitplaner](./10-module.md#zeitplaner) (Aufgabe „Datenbank-Backup“) nach `var/dbbackup/` oder mit eigenen Werkzeugen |
 | Konfiguration | `.camindo.php` |
 | ***Schlüsseldatei*** | `.camindo.key` (oder der Inhalt der Umgebungsvariablen `CAMINDO_KEY`, siehe [Zugangsdaten aus Umgebungsvariablen](#zugangsdaten-aus-umgebungsvariablen)) – ohne sie sind verschlüsselte Inhalte und Passwörter unbrauchbar. An einem sicheren Ort **getrennt** von den Datenbanksicherungen aufbewahren |
+| ***Wasserzeichen-Schlüssel*** | `.camindo-watermark.key`, falls Sie das [unsichtbare Wasserzeichen](./08-medien.md#unsichtbares-wasserzeichen) nutzen – ohne ihn lässt sich kein Wasserzeichen mehr lesen. Nie ersetzen, solange markierte Bilder im Umlauf sind |
 | Mediendateien | `public/media/` |
 | Projektdaten | `var/templates/` (Template-Quelltexte),<br>`var/custom/` (Snippets, Scripte und Ausgaben des Zeitplaners),<br>`var/extensions/` (Stylesheets),<br>`var/modules/` (z. B. PDF-Vorlagen und Schriften),<br>`var/area_blueprints/` (eigene Baupläne),<br>`var/deleted/` (Papierkorb),<br>`var/translation/translated` sofern eine eigene Backend-Übersetzung angelegt wurde. |
 | Composer-Stand | `composer.json` und `composer.lock` – damit sich genau dieselben Versionen wieder installieren lassen |
@@ -347,6 +348,13 @@ template commands --all --out=VERZEICHNIS
 ```
 die ***CMS-Befehle*** (Kern und aktive Module) mit ihren Parametern und Beschreibungen als JSON ausgeben – für die Editor-Unterstützung, etwa die Erweiterung für Visual Studio Code. Ohne `--all` in einer Sprache auf die Standardausgabe, mit `--all` je Backend-Sprache eine Datei `commands.{sprache}.json` im Verzeichnis
 
+```
+watermark status
+watermark key
+watermark detect DATEI [--json]
+```
+***Unsichtbares Wasserzeichen*** ([Kapitel 8](./08-medien.md#unsichtbares-wasserzeichen)): `status` zeigt Programm, Version, Schlüssel, die Codes der Instanzen und die Felder mit Wasserzeichen; `key` legt den geheimen Schlüssel an (eine vorhandene Datei bleibt unangetastet); `detect` prüft ein Bild und nennt Code und Instanz (Exit-Code 1, wenn keines gefunden wird)
+
 
 ### Schlüssel wechseln
 
@@ -485,6 +493,7 @@ Die Datei enthält Zugangsdaten: Rechte `0600`, niemals in eine Versionsverwaltu
 | `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.composer` | – | Pfade zu externen Programmen; leer lassen, was es nicht gibt (`composer`: [Update-Prüfung](#update-prüfung)) |
 | `paths.document_root`,<br>`paths.media`,<br>`paths.backend` | `public/`,<br>`'/media'`,<br>`'/backend'` | Verzeichnis, auf das der Webserver zeigt; Adresspfade der Mediendateien und des Backends relativ dazu |
 | `paths.key_file`,<br>`paths.sqlpwd_file` | `.camindo.key`,<br>`.sqlpwd` | Schlüsseldatei und Zugangsdatei für `mysqldump` (absolute Pfade, Vorgabe im Projektverzeichnis) |
+| `paths.watermark`,<br>`paths.watermark_key_file` | `''`,<br>`.camindo-watermark.key` | Programm `camindo-watermark` für das [unsichtbare Wasserzeichen](./08-medien.md#unsichtbares-wasserzeichen) (leer = aus) und sein geheimer Schlüssel, angelegt mit `watermark key` |
 | `paths.var_dir`,<br>`paths.tmp_dir`,<br>`paths.upload_dir` | `var/`,<br>`var/tmp/`,<br>`var/upload/` | beschreibbares Hauptverzeichnis, temporäre Dateien und Verzeichnis für per FTP übertragene große Dateien (Auswahl über das Datei-Icon neben Upload-Feldern) |
 | `permissions.dir`,<br>`permissions.file` | `0775` / `0664` | Unix-Rechte für Verzeichnisse und Dateien, die camindo CMS anlegt |
 | `permissions.key_file` | `0600` | Rechte von `.camindo.key` und `.camindo.key.retired` beim [Schlüsselwechsel](#schlüssel-wechseln), wenn es noch keine `.camindo.key` gibt (Schlüssel aus `CAMINDO_KEY`) – sonst behält der Wechsel die Rechte der bisherigen Datei |

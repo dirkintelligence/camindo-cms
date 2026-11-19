@@ -878,6 +878,8 @@ trait VirtualFieldsTrait {
                 $fileSize = (int)filesize("{$mediaDir}/{$filePath}");
             }
         }
+        // invisible watermark (field switch details.watermark + code of the instance)
+        $fileSize = $this->watermarkFile($fieldId, $filePath, $fileMime, $fileExtension, 0, $name, $label) ?? $fileSize;
 
         // delete an existing old file with a different extension
         // (when replacing several times within the working copy the
@@ -1185,6 +1187,51 @@ trait VirtualFieldsTrait {
         }
         $this->db->popResult();
         return $crops;
+    }
+
+    /**
+     * Mark a stored file with the invisible watermark, if its field asks for it
+     * (details.watermark) and the instance of the area has a code
+     * (Camindo\Core\Watermark). Formats the watermark cannot handle (GIF, SVG …)
+     * stay unmarked, as do all files while paths.watermark is empty. If the program
+     * is configured but marking fails, saving fails.
+     *
+     * @param int    $fieldId    field of the file
+     * @param string $relPath    path from paths.media_dir
+     * @param string $mime       MIME type
+     * @param string $extension  extension
+     * @param int    $quality    JPEG/WebP quality, 0 = default
+     * @param string $name       field name (error message)
+     * @param string $label      field label (error message)
+     * @return ?int              new file size, null = not marked
+     */
+    protected function watermarkFile(int $fieldId, string $relPath, string $mime, string $extension, int $quality, string $name, string $label): ?int
+    {
+        $result = $this->applyWatermark($fieldId, $this->config->get('paths.media_dir') . '/' . $relPath, $mime, $extension, $quality, $error);
+        if ($result === null) {
+            $this->system->log('error', 'Watermark (field ' . $fieldId . '): ' . $error);
+            $this->createFieldError('error_watermark', $name, $label);
+            throw new \Exception('#' . $this->cms->errorMsgLast());
+        }
+        return $result['size'] ?? null;
+    }
+
+    /**
+     * Mark a file of a field (absolute path) if the field asks for it - also for
+     * files outside the media directory (image editing marks its result before
+     * it replaces the file).
+     *
+     * @return array|null  [] = not marked (no code, format or program not set up),
+     *                     result of Watermark::apply(), null = error ($error)
+     */
+    public function applyWatermark(int $fieldId, string $file, string $mime, string $extension, int $quality = 0, ?string &$error = null): ?array
+    {
+        $error = '';
+        $watermark = $this->container->get(Watermark::class);
+        if ($watermark->binary() === '') return [];
+        $code = $watermark->codeForField($fieldId);
+        if ($code === null || !$watermark->supports($mime, $extension)) return [];
+        return $watermark->apply($file, $mime, $extension, $code, $quality, $error);
     }
 
     /**
@@ -2727,6 +2774,13 @@ trait VirtualFieldsTrait {
                     continue;
                 }
                 $converterFound = true;
+                // invisible watermark on the finished thumbnail (background thumbnails:
+                // TriggerMedia::finalize())
+                if ((int)($fileData['size'] ?? 0) > 0 && empty($fileData['token'])) {
+                    $fileData['size'] = $this->watermarkFile($fieldId, $filePath,
+                        (string)($fileData['mime_type'] ?? ''), (string)($fileData['extension'] ?? $fileExtension),
+                        (int)($converterDetails['quality'] ?? 0), $name, $label) ?? $fileData['size'];
+                }
                 // keep the section in the metadata of the thumbnail
                 if ($manualCrop !== null) {
                     $thumbData = json_decode((string)($fileData['data'] ?? ''), true);

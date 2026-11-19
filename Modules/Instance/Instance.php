@@ -65,6 +65,7 @@ use Camindo\Core\InstanceCache;
 use Camindo\Core\LanguageData;
 use Camindo\Core\MediaAccess;
 use Camindo\Core\SecurityHeaders;
+use Camindo\Core\Watermark;
 use Camindo\Core\Modules\Area\Area;
 use Camindo\Core\Modules\Snippets\Snippets;
 
@@ -234,6 +235,15 @@ class Instance extends Dataset {
                 'tooltip' => '#instance.tooltip_csp_form_sources',
                 'max'   => 2000,
             ],
+            // Code of the invisible watermark (Camindo\Core\Watermark): 1-6 characters
+            // A-Z and "-", unique among the instances; '' = no watermark
+            'details.watermark_code' => [
+                'type'  => 'chars',
+                'label' => '#instance.field_watermark_code',
+                'tooltip' => '#instance.tooltip_watermark_code',
+                'max'   => Watermark::CODE_MAX_LENGTH,
+                'flags' => ['trim'],
+            ],
         ];
     }
 
@@ -375,6 +385,30 @@ class Instance extends Dataset {
             foreach (['csp_strict_dynamic', 'csp_form_action'] as $key) {
                 if (empty($details[$key])) unset($details[$key]);
                 else $details[$key] = 1;
+            }
+            // Watermark code: valid and not used by another instance (the code
+            // must point to exactly one instance when an image is checked)
+            if (array_key_exists('watermark_code', $details)) {
+                $raw = trim((string)$details['watermark_code']);
+                $code = Watermark::normalizeCode($raw);
+                $label = $this->schema['details.watermark_code']['label'];
+                if ($raw !== '' && $code === null) {
+                    $this->createFieldError('instance.error_watermark_code', 'details.watermark_code', $label);
+                    throw new \Exception('#' . $this->cms->errorMsgLast());
+                }
+                if ($code !== null) {
+                    $this->db->query('SELECT `instance_id`, `label`, `details` FROM `instance` WHERE `instance_id` <> ?', 'i', [$instanceId]);
+                    foreach ($this->db->fetchAll() as $row) {
+                        $other = json_decode((string)($row['details'] ?? ''), true);
+                        if (Watermark::normalizeCode((string)($other['watermark_code'] ?? '')) === $code) {
+                            $this->createFieldError('instance.error_watermark_code_taken', 'details.watermark_code', $label,
+                                $this->cms->textOrSnippet((string)$row['label']));
+                            throw new \Exception('#' . $this->cms->errorMsgLast());
+                        }
+                    }
+                    $details['watermark_code'] = $code;
+                }
+                else unset($details['watermark_code']);
             }
             $data['details'] = $details;
         }

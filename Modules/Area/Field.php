@@ -534,6 +534,14 @@ class Field extends Dataset {
                 'label' => '#area.field_field_user_auth',
                 'tooltip' => '#area.tooltip_field_user_auth',
             ],
+            // Upload/thumbnail: invisible watermark with the code of the instance
+            // (Camindo\Core\Watermark)
+            'details.watermark' => [
+                'type' => 'bit',
+                'display_type' => 'switch',
+                'label' => '#area.field_field_watermark',
+                'tooltip' => '#area.tooltip_field_watermark',
+            ],
             // Profile areas whose logged-in users may see the files
             // (only with user_auth = 1; empty = nobody)
             'details.profile_area_ids' => [
@@ -1243,6 +1251,7 @@ class Field extends Dataset {
             // existing areas of type 'profile'
             if (isset($data['details']) && is_array($data['details'])) {
                 $data['details']['user_auth'] = empty($data['details']['user_auth']) ? 0 : 1;
+                $data['details']['watermark'] = empty($data['details']['watermark']) ? 0 : 1;
                 $ids = $this->system->sanitizeIds((array)($data['details']['profile_area_ids'] ?? []), true);
                 if (!empty($ids) && $data['details']['user_auth'] === 1) {
                     $placeholders = implode(',', array_fill(0, count($ids), '?'));

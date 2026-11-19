@@ -1,6 +1,7 @@
 # camindo/project - was nicht ins Projekt-Git gehört
 /.camindo.php
 /.camindo.key
+/.camindo-watermark.key
 /.sqlpwd
 /vendor/
 /Core/
