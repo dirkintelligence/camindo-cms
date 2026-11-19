@@ -34,7 +34,7 @@ und Import – beschreibt das [Handbuch für Anwender](../editors/README.md).
 9. [Strukturen exportieren und importieren](./09-struktur-export-import.md) –
    Strukturbäume kopieren, Entwicklung übertragen, Template-Sätze weitergeben
 10. [Weitere Module](./10-module.md) – Status, Snippets (Frontend- und Backend-Snippets), Zeitplaner, Werkzeuge,
-    Logdateien, Audit-Log, Komponenten, Papierkorb, PDF, KI-Assistent
+    Logdateien, Audit-Log, Komponenten, Papierkorb, Wasserzeichen, PDF, KI-Assistent
 11. [Extensions](./11-extensions.md) – Editoren und Eingabehilfen für Felder
     - [Calendar](./extensions/calendar.md)
     - [Datepicker](./extensions/datepicker.md)

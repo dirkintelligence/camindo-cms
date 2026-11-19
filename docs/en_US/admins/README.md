@@ -17,7 +17,7 @@ The daily work with contents – searching, editing, batch processing, export an
 7. [Users and rights](./07-users-and-rights.md) – users, user groups, module, instance, language and area rights, owner
 8. [Media](./08-media.md) – processors, converters, thumbnail fields, uploads
 9. [Exporting and importing structures](./09-structure-export-import.md) – duplicating structure trees, transferring development, passing on template sets
-10. [Further modules](./10-modules.md) – status, snippets (frontend and backend snippets), scheduler, tools, log files, audit log, components, trash, PDF, AI assistant
+10. [Further modules](./10-modules.md) – status, snippets (frontend and backend snippets), scheduler, tools, log files, audit log, components, trash, watermark, PDF, AI assistant
 11. [Extensions](./11-extensions.md) – editors and input aids for fields
     - [Calendar](./extensions/calendar.md)
     - [Datepicker](./extensions/datepicker.md)

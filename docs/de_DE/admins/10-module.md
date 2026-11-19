@@ -438,6 +438,35 @@ nur wenn seit dem vorigen Lauf neue Nachrichten eingegangen sind. Voraussetzung 
 der [E-Mail-Versand](./12-betrieb.md#e-mail-versand) und eine E-Mail-Adresse im Konto
 des Benutzers. Bedenken Sie, dass Absender und Betreff damit das Haus verlassen.
 
+## Wasserzeichen
+
+Das Modul ***Wasserzeichen*** prüft, ob ein Bild das ***unsichtbare Wasserzeichen*** dieser
+camindo-Installation trägt, und zeigt dessen ***Code*** und die zugehörige ***Instanz***.
+So lässt sich etwa klären, ob ein Bild, das auf einer fremden Website auftaucht, von einer
+Ihrer Websites stammt. Wie Bilder das Wasserzeichen bekommen, beschreibt
+[Kapitel 8](./08-medien.md#unsichtbares-wasserzeichen).
+
+Wählen Sie unter „Bild“ eine Datei aus – JPEG, PNG, WebP oder GIF, höchstens 30 MB – und
+klicken Sie auf „Prüfen“. Das Bild wird nur für die Prüfung gelesen und nicht gespeichert.
+
+| Meldung | Bedeutung |
+|---|---|
+| Das Bild trägt ein Wasserzeichen dieser Installation. | Der Code wurde sicher gelesen; darunter stehen Code und Instanz |
+| Spuren eines Wasserzeichens, Code nicht sicher lesbar | Das Bild wurde stark bearbeitet; ein Wasserzeichen ist vorhanden, der Code aber nicht verlässlich |
+| Kein Wasserzeichen dieser Installation gefunden | Das Bild trägt keins, stammt aus einer anderen Installation oder wurde zu stark verändert |
+
+| Angabe | Bedeutung |
+|---|---|
+| Code | der eingebettete Code, z. B. `GS-NRD` |
+| Instanz | die Instanz mit diesem Code. Instanzen, auf die Sie keinen Zugriff haben, erscheinen nur als Hinweis ohne Namen. „Keine Instanz verwendet diesen Code (mehr)“: Der Code wurde inzwischen geändert |
+| Ausrichtung | erscheint, wenn das Bild gedreht oder gespiegelt wurde – das Wasserzeichen wird trotzdem gefunden |
+| Signalstärke | Maß für die Sicherheit des Ergebnisses: unmarkierte Bilder meist unter 3, markierte zwischen 5 und 10 |
+
+Jede camindo-Installation hat ihren eigenen ***Schlüssel***. Das Modul prüft nur mit dem
+Schlüssel dieser Installation; Wasserzeichen anderer Installationen findet es nicht. Ist
+das Programm für das Wasserzeichen nicht eingerichtet oder fehlt der Schlüssel, zeigt die
+Seite statt des Formulars einen Hinweis.
+
 ## Zusatzmodule
 
 ***Zusatzmodule*** sind eigene Pakete, die Sie per Composer holen und als Komponente

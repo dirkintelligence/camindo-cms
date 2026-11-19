@@ -254,6 +254,27 @@ The internal ***messages*** between users are reached via the envelope symbol in
 
 Each user can have a daily ***summary by email*** sent in their personal settings: unread messages per sender and the new ones with date, sender and subject – without message texts, without contents from records and without a link into the backend. It is sent by the scheduler task “Summarize messages by email” (default daily at 7:00), and only if new messages have arrived since the previous run. Prerequisites are the [email dispatch](./12-operation.md#email-dispatch) and an email address in the user’s account. Bear in mind that the sender and the subject thereby leave the house.
 
+## Watermark
+
+The module ***Watermark*** checks whether an image carries the ***invisible watermark*** of this camindo installation and shows its ***code*** and the matching ***instance***. This way you can find out, for example, whether an image that turns up on another website comes from one of your websites. How images get the watermark is described in [chapter 8](./08-media.md#invisible-watermark).
+
+Under “Image”, choose a file – JPEG, PNG, WebP or GIF, at most 30 MB – and click “Check”. The image is only read for the check and is not stored.
+
+| Message | Meaning |
+|---|---|
+| The image carries a watermark of this installation. | The code was read reliably; code and instance are shown below |
+| Traces of a watermark, code not reliably readable | The image was edited heavily; a watermark is present, but the code is not reliable |
+| No watermark of this installation found | The image carries none, comes from another installation or was changed too much |
+
+| Field | Meaning |
+|---|---|
+| Code | the embedded code, e.g. `GS-NRD` |
+| Instance | the instance with this code. Instances you have no access to only appear as a note without their name. “No instance uses this code (any more)”: the code has been changed in the meantime |
+| Orientation | appears if the image was turned or mirrored – the watermark is found anyway |
+| Signal strength | a measure of how reliable the result is: unmarked images usually below 3, marked ones between 5 and 10 |
+
+Every camindo installation has its own ***key***. The module only checks with the key of this installation; it does not find watermarks of other installations. If the watermark program is not set up or the key is missing, the page shows a note instead of the form.
+
 ## Add-on modules
 
 ***Add-on modules*** are separate packages that you fetch via Composer and install as a component (see [installing add-on components](./01-quick-start-installation.md#install-additional-components)). Each brings its own manual: after installation it appears in the overview of the manuals under “Manuals of add-on components” – with setup, settings and all details.
