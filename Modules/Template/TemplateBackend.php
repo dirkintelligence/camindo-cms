@@ -240,9 +240,17 @@ class TemplateBackend {
         // H1
         echo $this->backend->headline('#template.module_label');
 
+        // Tabs: template areas are created in the Structure module - the tab leads
+        // there (only if the group has access to it)
+        $this->backend->tabBarReset();
+        $this->backend->tabAdd('#template.tab_template_areas', '', true);
+        if ($this->backend->access()->module('Area')) {
+            $this->backend->tabAdd('#area.module_label', "cApp.layers.replace('Area/index.php')");
+        }
+        echo $this->backend->tabBar();
+
         // Buttons
         $this->backend->buttonBarReset();
-        $this->backend->buttonAdd('button_create_primary', "cApp.layers.add('Area/area_edit.php?function=create&data[type]=template&data[icon]=extension');");
         $this->backend->buttonAdd('button_search', "cApp.layers.add('Template/template_global_search.php');cApp.layers.add('Template/template_search.php?' + cApp.layers.queryString());");
         // Refresh: first reconcile var/templates (TemplateFiles::sync()), then reload
         $this->backend->buttonAdd('button_refresh', self::REFRESH_SCRIPT);

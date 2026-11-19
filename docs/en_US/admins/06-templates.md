@@ -12,7 +12,9 @@ grouped in folders. It has proven useful to have one template area per function 
 set – for example “Layout” for the page frame, header and footer, “News” for the templates of
 the news area.
 
-In the module “Templates”, you open a template area and edit its templates there.
+In the module “Templates”, you open a template area and edit its templates there. The start
+page of the module shows the template areas in the tab “Template areas”; the tab “Structure”
+leads to the module “Structure”, where you create a new template area.
 
 | Setting | Meaning |
 |---|---|

@@ -13,7 +13,9 @@ oder Template-Satz – etwa „Layout“ für Seitenrahmen, Kopf und Fuß, „Ne
 Templates des Nachrichtenbereichs.
 
 Im Modul „Templates“ öffnen Sie einen Template-Bereich und bearbeiten dort seine
-Templates.
+Templates. Die Startseite des Moduls zeigt die Template-Bereiche im Reiter
+„Template-Bereiche“; der Reiter „Struktur“ führt zum Modul „Struktur“, wo Sie einen neuen
+Template-Bereich anlegen.
 
 | Einstellung | Bedeutung |
 |---|---|
