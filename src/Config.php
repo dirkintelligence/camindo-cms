@@ -684,6 +684,11 @@ class Config {
                 */
                 'ffprobe' => 'ffprobe',
                 /*
+                    pdftoppm executable (absolute path) - processor Poppler (PDF
+                    thumbnails); pdfinfo is expected in the same directory
+                */
+                'pdftoppm' => 'pdftoppm',
+                /*
                     Composer executable (absolute path) - update check
                     (Camindo\Core\UpdateCheck: composer outdated / composer audit).
                     May be a whole command line, e.g. a composer.phar with its own PHP:

@@ -18,6 +18,7 @@ The following processors are delivered with the core:
 |---|---|---|
 | GD library | scale, crop, convert images – basic functions without additional software | PHP extension `gd` |
 | ImageMagick | images in very many formats (also HEIC, TIFF, PSD), expert mode with your own parameters, also in the background | ImageMagick on the server or PHP extension `imagick` |
+| Poppler (PDF) | image of a PDF page as PNG, JPEG or TIFF – without Ghostscript | pdftoppm (package poppler-utils) |
 | FFmpeg (video) | convert, scale, compress videos | ffmpeg |
 | FFmpeg (audio) | convert audio files, align loudness, excerpts | ffmpeg |
 | FFmpeg (preview image) | still image from a video | ffmpeg |
@@ -120,6 +121,28 @@ about this.
 > detail view of the converter under “Security policy”: the policy of the server can also block it.
 > PDF is blocked by many providers; camindo CMS cannot change this. More on this:
 > [Operation – securing ImageMagick](./12-operation.md#securing-imagemagick).
+
+### Preview images for PDF
+
+For PDF files, the processor ***Poppler (PDF)*** is recommended instead of ImageMagick:
+it uses the program `pdftoppm`, which only renders PDF and runs neither PostScript nor
+JavaScript – Ghostscript is not needed. Enter the path in `.camindo.php` under
+`paths.pdftoppm`; `pdfinfo` has to be in the same directory (both belong to the package
+poppler-utils).
+
+| Setting | Effect |
+|---|---|
+| Page | number of the page shown; if the file has fewer pages, the last one is used |
+| Target width, target height | the page is fitted with its aspect ratio; one value is enough |
+| Page area | “Visible area (CropBox)” as in a PDF viewer or “Whole page (MediaBox)” including bleed |
+| Annotations | include comments, stamps and form fields |
+| Quality | JPEG only |
+
+Possible file extensions are `png`, `jpg` and `tif`. If you need WebP, add another
+thumbnail field with this one as its source, with a converter of the GD library or of
+ImageMagick. Files that are only named `.pdf` but are not PDF files are passed on to the
+next converter of the field. There is deliberately no expert mode: the call parameters
+are fixed.
 
 ## Thumbnail fields
 

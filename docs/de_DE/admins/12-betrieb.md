@@ -490,7 +490,7 @@ Die Datei enthält Zugangsdaten: Rechte `0600`, niemals in eine Versionsverwaltu
 | `ai.*` | – | Zusatzmodul KI-Assistent: Anbieter, Zugangsschlüssel, Modell, siehe [KI-Assistent](./10-module.md#zusatzmodul-ki-assistent) |
 | `email.*` | – | E-Mail-Versand, siehe unten |
 | `user.*` | – | Frontend-Community, siehe [Kapitel 13](./13-community.md#konfiguration) |
-| `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.composer` | – | Pfade zu externen Programmen; leer lassen, was es nicht gibt (`composer`: [Update-Prüfung](#update-prüfung)) |
+| `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.pdftoppm`,<br>`paths.composer` | – | Pfade zu externen Programmen; leer lassen, was es nicht gibt (`composer`: [Update-Prüfung](#update-prüfung)) |
 | `paths.document_root`,<br>`paths.media`,<br>`paths.backend` | `public/`,<br>`'/media'`,<br>`'/backend'` | Verzeichnis, auf das der Webserver zeigt; Adresspfade der Mediendateien und des Backends relativ dazu |
 | `paths.key_file`,<br>`paths.sqlpwd_file` | `.camindo.key`,<br>`.sqlpwd` | Schlüsseldatei und Zugangsdatei für `mysqldump` (absolute Pfade, Vorgabe im Projektverzeichnis) |
 | `paths.watermark`,<br>`paths.watermark_key_file` | `''`,<br>`.camindo-watermark.key` | Programm `camindo-watermark` für das [unsichtbare Wasserzeichen](./08-medien.md#unsichtbares-wasserzeichen) (leer = aus) und sein geheimer Schlüssel, angelegt mit `watermark key` |
@@ -750,7 +750,11 @@ tatsächlich laufen.
 
 - Halten Sie ImageMagick aktuell (ab Version 7.1.1). Ältere Versionen funktionieren,
   enthalten aber bekannte Lücken.
-- Installieren Sie Ghostscript nicht, wenn Sie keine PDFs umwandeln.
+- Installieren Sie Ghostscript nicht, wenn Sie keine PDFs umwandeln. Für Vorschaubilder
+  von PDF-Dateien genügt der Prozessor Poppler (PDF), siehe
+  [Medien](./08-medien.md#vorschaubilder-für-pdf). Auch `pdftoppm` können Sie über ein
+  Wrapper-Script unter eigenem Benutzer und mit `ulimit` starten (`paths.pdftoppm`; das Script
+  muss `pdftoppm` heißen, `pdfinfo` daneben liegen).
 - Lassen Sie ImageMagick unter einem eigenen Benutzer oder in einem eigenen Container
   laufen, der nur das Medienverzeichnis und `var/tmp` lesen und schreiben darf. Tragen
   Sie dann unter `paths.magick` ein kleines Script ein, das den Aufruf weiterreicht und

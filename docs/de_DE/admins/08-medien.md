@@ -19,6 +19,7 @@ Mit dem Core werden ausgeliefert:
 |---|---|---|
 | GD Bibliothek | Bilder skalieren, zuschneiden, umwandeln – Basisfunktionen ohne Zusatzsoftware | PHP-Erweiterung `gd` |
 | ImageMagick | Bilder in sehr vielen Formaten (auch HEIC, TIFF, PSD), Expertenmodus mit eigenen Parametern, auch im Hintergrund | ImageMagick auf dem Server oder PHP-Erweiterung `imagick` |
+| Poppler (PDF) | Bild einer PDF-Seite als PNG, JPEG oder TIFF – ohne Ghostscript | pdftoppm (Paket poppler-utils) |
 | FFmpeg (Video) | Videos umwandeln, skalieren, komprimieren | ffmpeg |
 | FFmpeg (Audio) | Audiodateien umwandeln, Lautheit angleichen, Ausschnitte | ffmpeg |
 | FFmpeg (Vorschaubild) | Standbild aus einem Video | ffmpeg |
@@ -127,6 +128,28 @@ Felder keine Versionen mehr – die Rückfrage warnt davor.
 > Auch die Policy des Servers kann es sperren. PDF ist bei vielen Providern gesperrt,
 > das können Sie in camindo CMS nicht ändern. Mehr dazu:
 > [Betrieb – ImageMagick absichern](./12-betrieb.md#imagemagick-absichern).
+
+### Vorschaubilder für PDF
+
+Für PDF-Dateien empfiehlt sich der Prozessor ***Poppler (PDF)*** statt ImageMagick:
+Er nutzt das Programm `pdftoppm`, das nur PDF darstellt und weder PostScript noch
+JavaScript ausführt – Ghostscript wird dafür nicht gebraucht. Tragen Sie den Pfad in
+`.camindo.php` unter `paths.pdftoppm` ein; `pdfinfo` muss im selben Verzeichnis liegen
+(beides gehört zum Paket poppler-utils).
+
+| Einstellung | Wirkung |
+|---|---|
+| Seite | Nummer der abgebildeten Seite; hat die Datei weniger Seiten, gilt die letzte |
+| Zielbreite, Zielhöhe | die Seite wird mit ihrem Seitenverhältnis eingepasst; eine Angabe genügt |
+| Seitenbereich | „Sichtbarer Bereich (CropBox)“ wie in einem PDF-Betrachter oder „Ganze Seite (MediaBox)“ einschließlich Beschnitt |
+| Anmerkungen | Kommentare, Stempel und Formularfelder mit abbilden |
+| Qualität | nur für JPEG |
+
+Als Dateiendung sind `png`, `jpg` und `tif` möglich. Brauchen Sie WebP, legen Sie ein
+weiteres Thumbnail-Feld an, das dieses als Quelle nutzt, mit einem Konverter der GD
+Bibliothek oder von ImageMagick. Dateien, die nur `.pdf` heißen, aber keine PDF-Dateien
+sind, übergibt der Konverter an den nächsten Konverter des Felds. Ein eigener
+Expertenmodus fehlt bewusst: Die Aufrufparameter stehen fest.
 
 ## Thumbnail-Felder
 

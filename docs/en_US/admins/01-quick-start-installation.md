@@ -15,11 +15,13 @@ A server (or computer) with shell access (SSH or Terminal) and the following ins
 | Apache | 2.4 with `mod_rewrite` and `AllowOverride All` | `apachectl -M \| grep rewrite` |
 | Composer | 2.x | `composer --version` |
 | Git | any version | `git --version` |
-| optional: ImageMagick, ffmpeg, mysqldump | – | `which magick ffmpeg mysqldump` |
+| optional: ImageMagick, ffmpeg, pdftoppm, mysqldump | – | `which magick ffmpeg pdftoppm mysqldump` |
 
 - ***ImageMagick*** – Image versions can also be calculated with the GD library built into
   PHP. ImageMagick, however, supports many more formats (such as HEIC, TIFF, PSD) and
   settings.
+- ***pdftoppm*** (package poppler-utils) creates preview images of PDF files, without
+  Ghostscript.
 - **ffmpeg** is required to convert videos and audio files and to extract still images
   from videos.
 - **mysqldump** is required for database backups – before updates and through the

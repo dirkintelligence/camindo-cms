@@ -368,7 +368,7 @@ The file contains access data: permissions `0600`, never in a version control sy
 | `ai.*` | – | add-on AI assistant: provider, access key, model, see [AI assistant](./10-modules.md#add-on-ai-assistant) |
 | `email.*` | – | email dispatch, see below |
 | `user.*` | – | frontend community, see [chapter 13](./13-community.md#configuration) |
-| `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.composer` | – | paths to external programs; leave empty what does not exist (`composer`: [update check](#update-check)) |
+| `paths.php`,<br>`paths.mysqldump`,<br>`paths.magick`,<br>`paths.ffmpeg`,<br>`paths.ffprobe`,<br>`paths.pdftoppm`,<br>`paths.composer` | – | paths to external programs; leave empty what does not exist (`composer`: [update check](#update-check)) |
 | `paths.document_root`,<br>`paths.media`,<br>`paths.backend` | `public/`,<br>`'/media'`,<br>`'/backend'` | directory to which the web server points; address paths of the media files and the backend relative to it |
 | `paths.key_file`,<br>`paths.sqlpwd_file` | `.camindo.key`,<br>`.sqlpwd` | key file and access file for `mysqldump` (absolute paths, default in the project directory) |
 | `paths.watermark`,<br>`paths.watermark_key_file` | `''`,<br>`.camindo-watermark.key` | program `camindo-watermark` for the [invisible watermark](./08-media.md#invisible-watermark) (empty = off) and its secret key, created with `watermark key` |
@@ -533,7 +533,7 @@ You release SVG and PDF with `security.magick_allow` (see [media](./08-media.md#
 ***If you operate the server yourself***, you can further isolate ImageMagick:
 
 - Keep ImageMagick up to date (from version 7.1.1). Older versions work, but contain known vulnerabilities.
-- Do not install Ghostscript if you do not convert PDFs.
+- Do not install Ghostscript if you do not convert PDFs. For preview images of PDF files, the processor Poppler (PDF) is sufficient, see [media](./08-media.md#preview-images-for-pdf). You can also start `pdftoppm` through a wrapper script under its own user and with `ulimit` (`paths.pdftoppm`; the script must be called `pdftoppm`, with `pdfinfo` next to it).
 - Let ImageMagick run under its own user or in its own container, which may only read and write the media directory and `var/tmp`. Then enter in `paths.magick` a small script that passes on the call and sets limits. It must be called `magick` and lie in its own directory; this is how camindo CMS recognizes ImageMagick 7:
 
   ```sh

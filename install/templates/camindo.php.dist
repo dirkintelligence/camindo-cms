@@ -72,6 +72,7 @@ $_cfg = [
         'magick'    => {path_magick},
         'ffmpeg'    => {path_ffmpeg},
         'ffprobe'   => {path_ffprobe},
+        'pdftoppm'  => {path_pdftoppm},
     ],
     'db' => [
         'host' => {db_host},

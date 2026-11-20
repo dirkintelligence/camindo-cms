@@ -56,6 +56,23 @@ public function __construct(
     }
 
     /**
+     * Determine the installed pdftoppm version (Poppler)
+     *
+     * @return string|null  e.g. "22.12.0" or null, if pdftoppm does not run
+     */
+    public function getPdftoppmVersion(): ?string
+    {
+        $pdftoppm = (string)($this->config->get('paths.pdftoppm') ?? '');
+        if ($pdftoppm === '' || !is_executable($pdftoppm)) return null;
+
+        // pdftoppm -v writes to stderr
+        $this->execute->execute([$pdftoppm, '-v'], $stdout, $stderr, timeout:10);
+        if (!preg_match('/pdftoppm version\s+([0-9][0-9.]*)/i', $stdout . "\n" . $stderr, $match)) return null;
+
+        return $match[1];
+    }
+
+    /**
      * Determine the installed FFmpeg version
      *
      * @return string|null  e.g. "6.1.1" or null, if ffmpeg does not run

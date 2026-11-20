@@ -66,6 +66,7 @@ class Installer {
         'magick'    => ['magick', 'convert'],
         'ffmpeg'    => ['ffmpeg'],
         'ffprobe'   => ['ffprobe'],
+        'pdftoppm'  => ['pdftoppm'],
     ];
 
     private string $camindoDir;
@@ -301,7 +302,7 @@ class Installer {
      *
      * @param array $values  locale, timezone, development_version (bool), db (host,
      *                       port, name, user, pass), paths (php, mysqldump, magick,
-     *                       ffmpeg, ffprobe)
+     *                       ffmpeg, ffprobe, pdftoppm)
      */
     public function writeConfigFile(array $values): bool
     {

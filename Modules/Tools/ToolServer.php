@@ -124,9 +124,17 @@ class ToolServer {
             $ffmpegStatus = $this->backend->template('tools.status_not_installed');
         }
 
+        $pdftoppmVersion = $this->toolVersions->getPdftoppmVersion();
+        if ($pdftoppmVersion) {
+            $pdftoppmStatus = str_replace('{version}', $pdftoppmVersion, $this->backend->template('tools.status_installed'));
+        } else {
+            $pdftoppmStatus = $this->backend->template('tools.status_not_installed');
+        }
+
         echo $this->backend->template('tools.cli_tools', [
             '{magick_status}' => $magickStatus,
             '{ffmpeg_status}' => $ffmpegStatus,
+            '{pdftoppm_status}' => $pdftoppmStatus,
         ]);
 
         // .htaccess file
