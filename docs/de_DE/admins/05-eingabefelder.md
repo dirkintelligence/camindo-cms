@@ -61,7 +61,7 @@ Die folgende Liste der Eingabefelder variiert je nach Feldtyp:
 | Label | Beschriftung in Eingabe-, Suchmaske und Liste |
 | Anmerkung | erscheint unter dem Label |
 | Tooltip | erscheint beim Zeigen auf das Label |
-| Prefix, Suffix | erscheinen links bzw. rechts vom Eingabefeld, z. B. „€“ oder „cm“ |
+| Präfix, Suffix | erscheinen links bzw. rechts vom Eingabefeld, z. B. „€“ oder „cm“ |
 | Breite, Höhe | Größe des Eingabefelds |
 | Sichtbarkeit | Einstellung, ob das Feld in der Eingabemaske, Suchmaske und Datensatzliste erscheint. |
 | Hauptfeld | Das Feld vertritt den Datensatz in Listen und Verknüpfungen (eines je Bereich) |
@@ -395,7 +395,7 @@ neuen Typ passt – aus `int_preis` wird beim Wechsel auf „Langer Text“ `txt
 `rel_rubrik` beim Wechsel auf „n:1“ `rel1_rubrik`. Wird der Feldname auch in anderen
 Bereichen verwendet – auch von einem Feld im Papierkorb –, braucht das Feld für den
 Typwechsel einen anderen Namen, denn der Typ ist an den Namen gebunden; ein Name ohne
-Präfix bekommt dann im Vorschlag den Präfix des neuen Typs (`preis` → `txt_preis`), die
+Präfix bekommt dann im Vorschlag das Präfix des neuen Typs (`preis` → `txt_preis`), die
 übrigen Felder behalten Name und Typ. Andere Namen ohne Präfix bleiben unverändert. Passen Sie Templates, die das Feld beim alten Namen nennen,
 anschließend an.
 

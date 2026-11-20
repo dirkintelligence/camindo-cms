@@ -93,13 +93,13 @@ Sichern Sie `var/area_blueprints/` zusammen mit den übrigen Projektdaten
 | Standard-Sortierung, Sortier-Richtung | Reihenfolge der Datensätze in der Datensatzliste und Vorgabe für Templates. Zur Wahl stehen die sortierbaren Eingabefelder sowie immer `changed_at` (Vorgabe), `online_at` und `created_at` – `online_at` nur einmal, auch wenn ein Eingabefeld darauf beruht |
 | Mehrsprachige Eingabe | „Alle Sprachen auf einer Seite“ oder „Ein Reiter je Sprache“ – wie die Eingabemaske mehrsprachige Felder zeigt. Ein neuer Bereich startet mit „Ein Reiter je Sprache“ |
 | Datensätze je Seite | Anzahl der Datensätze, die die Datensatzliste auf einer Seite zeigt; zwischen den Seiten wird geblättert. `0` zeigt alle Datensätze auf einer Seite. Vorgabe für neue Bereiche ist der Wert aus `admin.skiplist_default` (siehe [Kapitel 12](./12-betrieb.md)); ein leeres Feld verwendet ebenfalls diesen Wert |
-| Slug-Prefix | optionaler erster Teil der Adresse aller Datensätze des Bereichs, je Sprache (siehe [unten](#slug-prefix)) |
+| Slug-Präfix | optionaler erster Teil der Adresse aller Datensätze des Bereichs, je Sprache (siehe [unten](#slug-präfix)) |
 | Lösch-Policy | Regel, nach der Datensätze und Audit-Logs dieses Bereichs behandelt werden; vgl. [Kapitel 15](./15-datenschutz.md#löschen-nach-lösch-policy). Die Policy gilt für jedes Löschen – im Backend, über die API und mit CMS:USER_DELETE im Frontend. Vorgewählt ist die Standard-Policy zum Bereichstyp („Datensatz löschen“, „Profil löschen“, „User-Generated-Content löschen“) |
 | Abhängiger Bereich | Die Datensätze gehören exklusiv je einem Datensatz eines anderen Bereichs (siehe [Fest verknüpfte Inhalte](./05-eingabefelder.md#fest-verknüpfte-und-eingebettete-inhalte)). Der Bereich erscheint dann nicht in der Bereichsliste des Moduls „Inhalte“ |
 | Standard-Template | Template, mit dem jeder Datensatz des Bereichs im Frontend ausgegeben wird, solange im Datensatz kein anderes gewählt ist |
 | Wählbare Templates | Templates, die Redakteure im Datensatz alternativ wählen dürfen (Metafeld „Gestaltungsvorlage“) |
 | URL-Override-Templates | Templates, die über die Adresse eines Datensatzes anstelle des zugewiesenen aufgerufen werden dürfen – etwa die Druckversion eines Inhalts oder die Ausgabe in einem anderen Format (`/meldungen,xml_rss`) |
-| Übersichts-Template | Template, das aufgerufen wird, wenn die Adresse nur aus dem Slug-Prefix besteht (`/de/termine`) – eine Übersicht des Bereichs ohne Datensatz, etwa die Liste aller Termine. Ohne Übersichts-Template ergibt diese Adresse „Seite nicht gefunden“. Mit Übersichts-Template und Slug-Prefix erhält der Bereich die Schaltfläche „Vorschau“ (siehe [Übersichts-Templates](./06-templates.md#übersichts-templates)) |
+| Übersichts-Template | Template, das aufgerufen wird, wenn die Adresse nur aus dem Slug-Präfix besteht (`/de/termine`) – eine Übersicht des Bereichs ohne Datensatz, etwa die Liste aller Termine. Ohne Übersichts-Template ergibt diese Adresse „Seite nicht gefunden“. Mit Übersichts-Template und Slug-Präfix erhält der Bereich die Schaltfläche „Vorschau“ (siehe [Übersichts-Templates](./06-templates.md#übersichts-templates)) |
 | Listen-Template (Backend) | nur für das Backend: formatiert je Datensatz eine zusätzliche letzte Spalte der Datensatzliste; etwa einen direkt angezeigten RGB-Farbwert |
 | Trigger-Templates | Templates, die bei Ereignissen der Datensätze aufgerufen werden und PHP-Code ausführen – beim Speichern, Löschen, Wiederherstellen und bei den Aktionen der Lösch-Policy (siehe [Handbuch für Template-Programmierer](../templateprogrammers/03-trigger-templates.md)). Sie können mehrere zuweisen; sie laufen nacheinander in der angezeigten Reihenfolge, die Sie mit den Pfeil-Schaltflächen ![arrow_upward](../_/arrow_upward.svg) ![arrow_downward](../_/arrow_downward.svg) ändern |
 | Zugriff für Benutzergruppen | Erscheint nur beim Anlegen eines neuen Bereichs: welche Benutzergruppen den neuen Bereich nutzen dürfen; später im Reiter „Zugriff“ änderbar. |
@@ -107,12 +107,12 @@ Sichern Sie `var/area_blueprints/` zusammen mit den übrigen Projektdaten
 PROFILE- und UGC-Bereiche haben zusätzliche Einstellungen für die Anmeldung auf der
 Website (siehe [Kapitel 13](./13-community.md)).
 
-### Slug-Prefix
+### Slug-Präfix
 
 Ein Inhaltsbereich kann den Adressen seiner Datensätze ein Präfix voranstellen. Damit
 dürfen gleichnamige Slugs in verschiedenen Bereichen einer Instanz vorkommen:
 
-| Bereich | Slug-Prefix | Slug | Adresse |
+| Bereich | Slug-Präfix | Slug | Adresse |
 |---|---|---|---|
 | Farben | `farben` | `blau` | `/farben/blau` |
 | Farben | `farben` | `andere/rot` | `/farben/andere/rot` |
@@ -134,7 +134,7 @@ Die Adresse als Ganzes muss eindeutig sein – innerhalb der Instanz und der Ins
 - Zwei Bereiche können nicht dasselbe Präfix führen.
 - Ein Datensatz eines Bereichs **ohne** Präfix darf nicht mit einem Präfix beginnen:
   der Slug `farben/gelb` im Bereich Orte wird beim Speichern abgelehnt
-  („'farben/' ist ein reservierter Slug-Prefix von Inhaltsbereich …“).
+  („„farben/“ ist ein reserviertes Slug-Präfix von Inhaltsbereich …“).
 - Ein Präfix setzen, ändern oder entfernen lehnt camindo CMS ab, wenn dadurch zwei
   Datensätze dieselbe Adresse hätten oder vorhandene Adressen mit dem neuen Präfix
   beginnen – die Meldung nennt den betroffenen Datensatz.
@@ -159,7 +159,7 @@ Die Detailansicht eines Bereichs hat die Reiter:
 
 „Kopieren“ legt einen neuen Bereich mit allen Einstellungen an – bei Inhaltsbereichen
 samt allen Eingabefeldern, Standard- und Sortierfeld und Template-Zuweisungen.
-Datensätze und Templates werden nicht kopiert, der Slug-Prefix ebenfalls nicht.
+Datensätze und Templates werden nicht kopiert, das Slug-Präfix ebenfalls nicht.
 Beschriftungen, die auf Snippets der Instanz verweisen, bleiben Verweise – bei einer Kopie
 in eine andere Instanz kommen die Snippets in deren Set. In der Eingabemaske vergeben Sie Label,
 Name, Instanz und Platz im Baum der Kopie. Nach dem Speichern zeigt camindo CMS die Detailansicht

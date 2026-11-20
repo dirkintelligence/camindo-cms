@@ -106,9 +106,9 @@ Die Adresse aus dem Sprachkürzel (ohne Slug oder record_id) führt auf die Star
 Datensatz, antwortet die Website mit dem Status 404. Datensätze haben nur einen Slug,
 wenn das Feld `slug` im Inhaltsbereich eingerichtet ist; siehe
 [Kapitel 5](./05-eingabefelder.md#besondere-feldnamen).
-Jeder Inhaltsbereich kann einen zusätzlichen ***Slug-Prefix*** bereitstellen. Dieser
+Jeder Inhaltsbereich kann ein zusätzliches ***Slug-Präfix*** bereitstellen. Dieses
 steht dann vor dem Slug seiner Datensätze (`/en/events/summer-party-2026`) und kann je
-Sprache unterschiedlich lauten. Mehr dazu in [Kapitel 4](./04-struktur.md#slug-prefix).
+Sprache unterschiedlich lauten. Mehr dazu in [Kapitel 4](./04-struktur.md#slug-präfix).
 
 ### Instanz kopieren und löschen
 

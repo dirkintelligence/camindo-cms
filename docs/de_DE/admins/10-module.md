@@ -74,7 +74,7 @@ braucht der Bereich nicht.
 ### Backend-Snippets
 
 ***Backend-Snippets*** sind die Texte der Benutzeroberfläche. Sie stammen aus drei
-Quellen und werden über einen Präfix angesprochen:
+Quellen und werden über ein Präfix angesprochen:
 
 | Quelle | Präfix | Beispiel |
 |---|---|---|

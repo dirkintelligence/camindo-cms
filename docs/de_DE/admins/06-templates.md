@@ -101,7 +101,7 @@ Umbenennen „Löschen und neu anlegen“, und die Zuweisungen gehen verloren.
 
 ## Übersichts-Templates
 
-Führt ein Inhaltsbereich ein Slug-Prefix (etwa `termine`), hat jeder Datensatz eine
+Führt ein Inhaltsbereich ein Slug-Präfix (etwa `termine`), hat jeder Datensatz eine
 Adresse wie `/de/termine/betriebsfeier`. Die Adresse aus dem Präfix allein – `/de/termine`
 – zeigt das ***Übersichts-Template*** des Bereichs: typischerweise die Liste seiner
 Datensätze. Es läuft ohne Datensatz und wird in den Einstellungen des Bereichs unter
@@ -110,16 +110,16 @@ Datensätze. Es läuft ohne Datensatz und wird in den Einstellungen des Bereichs
 Adresse „Seite nicht gefunden“.
 
 Statt eines Datensatzes stellt das Übersichts-Template die Angaben des Bereichs bereit –
-die Id (`area_id`), den Namen, die Beschriftung, die Instanz und das Slug-Prefix in der
+die Id (`area_id`), den Namen, die Beschriftung, die Instanz und das Slug-Präfix in der
 aufgerufenen Sprache. Damit fragt das Template die Datensätze seines Bereichs ab, ohne
 den Bereich fest einzutragen (siehe
 [Handbuch für Template-Programmierer](../templateprogrammers/01-grundlagen.md#übersichtsseite-eines-bereichs)).
 
-Haben Sie einem Bereich ein Übersichts-Template ***und*** ein Slug-Prefix zugewiesen,
+Haben Sie einem Bereich ein Übersichts-Template ***und*** ein Slug-Präfix zugewiesen,
 erscheint in den Einstellungen des Bereichs und über seiner Datensatzliste die
 Schaltfläche „Vorschau“. Sie zeigt die Übersicht so, wie sie im Frontend erscheint –
 bei mehreren Sprachen als Auswahl mit einem Eintrag je Sprache, jeweils unter dem
-Slug-Prefix dieser Sprache.
+Slug-Präfix dieser Sprache.
 
 ## Listen-Templates für das Backend
 

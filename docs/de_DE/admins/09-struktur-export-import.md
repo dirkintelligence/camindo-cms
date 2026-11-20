@@ -29,7 +29,7 @@ abwählen.
 
 | Option | Wirkung |
 |---|---|
-| Struktur exportieren | Ordner, Inhaltsbereiche und Eingabefelder mit allen Einstellungen (auch dem Slug-Prefix und der Lösch-Policy), Template-Zuweisungen (auch die Trigger-Templates in ihrer Reihenfolge), den Konvertern der Thumbnail-Felder und den Snippets der Instanz, auf die Beschriftungen verweisen (`#custom.…`) |
+| Struktur exportieren | Ordner, Inhaltsbereiche und Eingabefelder mit allen Einstellungen (auch dem Slug-Präfix und der Lösch-Policy), Template-Zuweisungen (auch die Trigger-Templates in ihrer Reihenfolge), den Konvertern der Thumbnail-Felder und den Snippets der Instanz, auf die Beschriftungen verweisen (`#custom.…`) |
 | Inhalte exportieren | die Datensätze der angehakten Inhaltsbereiche (alle Felder, alle Sprachen) und die Templates der angehakten Template-Bereiche – samt den Snippets der Instanz, die diese Templates verwenden (`custom.…`) |
 | Upload-Dateien mit exportieren | die Dateien der Datensätze kommen mit in die Zip-Datei |
 | Templates für Import in Fremddatenbank optimieren | markiert Verweise in den Templates, damit sie beim Import in eine andere Installation angepasst werden (siehe [unten](#template-sätze-weitergeben)) |
@@ -71,7 +71,7 @@ die Templates selbst bleiben unverändert (die Kurzform `custom.…` meint immer
 Instanz, in der die Seite läuft). Zusammengesetzte Schlüssel wie
 `"custom.status_{$cms['status']}"` bringen alle Snippets mit diesem Anfang mit.
 
-Das Slug-Prefix eines Bereichs wird über die Sprachkürzel den Sprachen der Zielinstanz
+Das Slug-Präfix eines Bereichs wird über die Sprachkürzel den Sprachen der Zielinstanz
 zugeordnet. Ist es dort nicht zulässig – etwa weil ein anderer Bereich dasselbe
 Präfix führt –, entfällt es mit einem Hinweis im Protokoll.
 
@@ -162,7 +162,7 @@ ersetzt sie durch die Namen und Nummern der importierten Elemente:
 
 - Ein Bereich, der beim Import umbenannt wird, heißt auch in den Templates so.
 - Ein Verweis auf einen Datensatz zeigt auf den importierten Datensatz; wurde er nicht
-  mit importiert, auf den Datensatz mit derselben Adresse (Slug-Prefix und Slug) in
+  mit importiert, auf den Datensatz mit derselben Adresse (Slug-Präfix und Slug) in
   der Instanz des Templates.
 - Was sich nicht zuordnen lässt, behält den Wert aus der Datei; das Protokoll zählt
   diese Fälle.

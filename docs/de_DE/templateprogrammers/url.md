@@ -19,7 +19,7 @@ Erzeugt die URL eines Datensatzes.
 | `lang` | `Sprachkürzel` | `(aktuelle Sprache)` |  | Sprachversion, auf die verwiesen werden soll (standardmäßig die des laufenden Aufrufs). Führt die Instanz mehr als eine Sprache, steht das Kürzel immer in der URL; bei nur einer Sprache nie. Ein mehrsprachiger Slug wird in der Zielsprache eingesetzt. Ein Kürzel, das die Website nicht führt, wird übergangen. |
 | `protocol` | `Übertragungsprotokoll` | `(Protokoll der Instanz)` |  | http oder https, nur mit absolute bzw. host. Ohne Angabe das Protokoll der Instanz, sonst das des Aufrufs. |
 | `host` | `Hostname` | – |  | z. B. example.com für den Wechsel der Domain, über die die Website aufgerufen wird. |
-| `absolute` | `true / false` | `false` |  | true: Der Pfad wird inkl. Protokoll und Domain erzeugt. false: Der Pfad ist serverrelativ und beginnt mit einem Slash. |
+| `absolute` | `true / false` | `false` |  | true: Der Pfad wird inkl. Protokoll und Domain erzeugt. false: Der Pfad ist serverrelativ und beginnt mit einem Schrägstrich. |
 | `set` | `Array-Index von $set` | – |  | Die URL wird nicht ausgegeben, sondern in $set eingetragen. |
 
 ¹ kann ohne Schlüssel als erster Wert angegeben werden.
@@ -41,12 +41,12 @@ Datensatz (`id`) oder in eine andere Sprache (`lang`):
 (CMS:URL template=print)                /de/hallo-welt,print
 (CMS:URL 1977)                          /de/1977   (Datensatz ohne Slug)
 (CMS:URL impressum lang=en)             /en/legal-notice   (Slug der Zielsprache)
-(CMS:URL farben/blau)                   /de/farben/blau   (Bereich mit Slug-Prefix)
+(CMS:URL farben/blau)                   /de/farben/blau   (Bereich mit Slug-Präfix)
 ```
 
-Führt der Inhaltsbereich des Datensatzes einen ***Slug-Prefix*** (Einstellung des
-Bereichs, z. B. `farben`), steht er vor dem Slug: `/de/farben/blau`. Der Präfix gilt
-je Sprache – mit `lang` also der Präfix der Zielsprache. Ein `id` mit Slug meint den
+Führt der Inhaltsbereich des Datensatzes ein ***Slug-Präfix*** (Einstellung des
+Bereichs, z. B. `farben`), steht es vor dem Slug: `/de/farben/blau`. Das Präfix gilt
+je Sprache – mit `lang` also das Präfix der Zielsprache. Ein `id` mit Slug meint den
 Pfad, wie er in der Adresse steht (`id=farben/blau`); `id=blau` findet nur einen
 Datensatz eines Bereichs **ohne** Präfix.
 
@@ -87,7 +87,7 @@ Slug-Präfix besteht, in der Sprache des Aufrufs bzw. aus `lang`. Sie zeigt das
 (CMS:URL area=termine lang=en)                         /en/events
 ```
 
-Hat der Bereich keinen Slug-Präfix, bleibt die Ausgabe leer. Im Übersichts-Template
+Hat der Bereich kein Slug-Präfix, bleibt die Ausgabe leer. Im Übersichts-Template
 selbst gibt es keinen laufenden Datensatz; `CMS:URL` ohne `id` verweist dort auf
 dieselbe Übersicht – ein Sprachumschalter mit `CMS:SELECT_LANGVERSION` funktioniert
 deshalb wie auf jeder Datensatzseite.

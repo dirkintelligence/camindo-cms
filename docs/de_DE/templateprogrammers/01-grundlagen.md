@@ -46,8 +46,8 @@ Datensätze in gleicher Weise im Ergebnis-Template zur Verfügung; siehe unten [
 |---|---|
 | `/` | Startseite der Instanz |
 | `/betriebsfeier-2026` | Datensatz mit diesem ***Slug***, Standard-Template |
-| `/termine/betriebsfeier-2026` | Datensatz mit dem Slug `betriebsfeier-2026` im Bereich mit dem ***Slug-Prefix*** `termine` |
-| `/termine` | Übersicht des Bereichs mit dem Slug-Prefix `termine` – sein Übersichts-Template, ohne Datensatz |
+| `/termine/betriebsfeier-2026` | Datensatz mit dem Slug `betriebsfeier-2026` im Bereich mit dem ***Slug-Präfix*** `termine` |
+| `/termine` | Übersicht des Bereichs mit dem Slug-Präfix `termine` – sein Übersichts-Template, ohne Datensatz |
 | `/1758` | Datensatz Nummer 1758 |
 | `/en/summer-party-2026` | englische Sprachversion |
 | `/betriebsfeier-2026,druck` | Datensatz mit dem Template `druck` – nur wenn es für den Bereich als URL-Override freigegeben ist |
@@ -61,7 +61,7 @@ bleiben erhalten. Sonst wird die Seite direkt unter dieser Adresse ausgeliefert.
 Template gelten dieselben Freigaben wie in der Adresse.
 
 Reine Ziffernfolgen sind immer Datensatznummern, alles andere ist ein Slug. Ist der
-erste Teil der Adresse der Slug-Prefix eines Inhaltsbereichs, wird der Rest nur in
+erste Teil der Adresse das Slug-Präfix eines Inhaltsbereichs, wird der Rest nur in
 diesem Bereich gesucht; sonst der ganze Pfad in den Bereichen ohne Präfix. Das
 Sprachkürzel steht in der Adresse, sobald die Instanz mehr als eine Sprache führt.
 Adressen erzeugen Sie mit [CMS:URL](url.md) – nie von Hand, dann stimmen Sprache,
@@ -297,7 +297,7 @@ Hauptfeld jedes Bereichs, egal wie es dort heißt.
 
 ### Übersichtsseite eines Bereichs
 
-Die Adresse aus dem Slug-Prefix allein (`/termine`) ruft das ***Übersichts-Template***
+Die Adresse aus dem Slug-Präfix allein (`/termine`) ruft das ***Übersichts-Template***
 des Bereichs auf – ohne Datensatz. An dessen Stelle stehen die Angaben des Bereichs:
 
 | Wert | Inhalt |
@@ -307,7 +307,7 @@ des Bereichs auf – ohne Datensatz. An dessen Stelle stehen die Angaben des Ber
 | `area_label` | Beschriftung des Bereichs (Snippets in der Sprache des Aufrufs) |
 | `area_type`, `area_icon` | Typ und Icon des Bereichs |
 | `instance_id`, `language_id` | Instanz des Bereichs und Sprache des Aufrufs |
-| `slug_prefix` | Slug-Prefix in der Sprache des Aufrufs |
+| `slug_prefix` | Slug-Präfix in der Sprache des Aufrufs |
 | `record_id` | immer `0` – es gibt keinen laufenden Datensatz |
 | `overview` | `true` |
 
@@ -361,7 +361,7 @@ Dafür braucht eine Website ***keine Parameter*** wie `?cat=12` oder `?tag=eiche
    Kategorie ebenso wie das Produkt.
 2. ***Standard-Template je Bereich:*** Jeder Inhaltsbereich bekommt ein
    Standard-Template – eine Kategorie-Seite, eine Schlagwort-Seite, eine
-   Produkt-Seite. Mit einem Slug-Prefix erhält jede Art von Seite ihren eigenen
+   Produkt-Seite. Mit einem Slug-Präfix erhält jede Art von Seite ihren eigenen
    Adressraum (`/de/kategorie/wohnen`, `/de/schlagwort/eiche`).
 3. ***Verknüpfte Inhalte listen:*** Auf der Seite steht der Datensatz in `$cms`; seine
    verknüpften Datensätze fragt das Template direkt über ihn ab.
