@@ -26,7 +26,9 @@
  * first - in the detailed display of the lookup preview
  * (RecordBackend::detailedText()), above it the path of the area (instance : folder : area,
  * the instance only with several instances) in small gray letters. A right click offers
- * "Edit" (hidden without the right for the record, as in the record list).
+ * "Edit" (hidden without the right for the record, as in the record list). Info page
+ * and input mask open on top of the record list of the area (data-layer-via,
+ * cApp.layers.addVia()) - the breadcrumb then shows the area, as when coming from the tree.
  * For this the class inherits from RecordBackend; the tree
  * itself is not affected by this, it knows neither records nor lookup calls.
  *
@@ -270,6 +272,7 @@ class RecordBackendFolderList extends RecordBackend {
             $canEdit = $access->recordWrite((int)$row['area_id'], $ownerId, (int)($row['status_id'] ?? 0));
             $rows .= $this->backend->template('record.last_changed_row', [
                 '{data_id}'    => $recordId,
+                '{area_id}'    => (int)$row['area_id'],
                 '{ctx_hide}'   => $canEdit ? '' : ' data-ctx-hide="edit"',
                 '{area_path}'  => htmlspecialchars($paths[(int)$row['area_id']] ?? '', ENT_QUOTES | ENT_SUBSTITUTE),
                 '{text}'       => $text,

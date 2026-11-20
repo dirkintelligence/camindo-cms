@@ -14,14 +14,15 @@
  * meta fields and user-defined ones together. From this come column headers,
  * sortability and the preparation of the values (RecordPresenter::listFields() /
  * listValue()). Without a unique area (global search) this does not exist; then
- * a single column with the default field remains. A list template of the area
+ * the default field and the content area remain as columns (sortable by the area
+ * name, sort=area). A list template of the area
  * (`area`.`list_template_id`) adds a last column without a heading.
  *
  * THREE OPERATING MODES
  * --------------------
  *     one area          columns by visibility_list, tree display if the area
  *                       has a parent_id field
- *     several areas     global search - only the default field column
+ *     several areas     global search - default field and content area
  *     lookup            src_field set: additional checkbox column with which
  *                       the link can be set in the calling form
  *
@@ -147,6 +148,27 @@ class RecordBackendList extends RecordBackend {
         $this->_linkImmediately((int)($destId ?? 0), (int)($count ?? 0), (bool)($isLinked ?? false));
 
         echo $this->backend->template('container_footer');
+    }
+
+    /**
+     * Cell "Content area" of the global search: above in small gray letters the path
+     * (instance only with several instances, then the parent folders - as in
+     * "Recently changed", Backend::areaPaths()), below it the label of the area.
+     *
+     * @param int   $areaId
+     * @param array $paths   cache area_id => path, filled here
+     */
+    private function _areaColumn(int $areaId, array &$paths): string
+    {
+        if (!array_key_exists($areaId, $paths)) {
+            $paths[$areaId] = $this->backend->areaPaths([$areaId], false)[$areaId] ?? '';
+        }
+        $area = $this->backend->areaData($areaId) ?? [];
+        $label = $this->cms->_strip_tags($this->cms->textOrSnippet((string)($area['label'] ?? $areaId)));
+        return $this->backend->template('record.table_column_area', [
+            '{area_path}'  => htmlspecialchars($paths[$areaId], ENT_QUOTES | ENT_SUBSTITUTE),
+            '{area_label}' => htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE),
+        ]);
     }
 
     /**
@@ -332,8 +354,12 @@ class RecordBackendList extends RecordBackend {
         $hasListTemplate = ($this->areaId > 0 && $listTemplateId > 0);
 
         if (empty($this->areaId)) {
-            // Mehrere Bereiche -> Default-Feld als Spalte
+            // several areas -> default field and content area as columns; the area
+            // column sorts by the area NAME (pseudo field 'area' of Cms::select())
             $headColumns .= '<th scope="col">' . $this->cms->snippet('record.field_default') . "</th>\n";
+            $headColumns .= '<th scope="col">'
+                . $this->backend->tableHeadColumn(['label' => $this->cms->schema['area_id']['label'], 'type' => 'chars'], $f, 'area')
+                . "</th>\n";
         }
         else {
             // one column per visible field - link fields only if the
@@ -405,6 +431,7 @@ class RecordBackendList extends RecordBackend {
         $destId = 0;
         $relationsReadable = []; // area_id => bool, for the context menu entry "Move"
         $previewEntries = [];    // context menu "Preview": key => language label ('' = one language)
+        $areaPaths = [];         // area_id => path above the area (global search, _areaColumn())
         for ($i = 0; $i < $this->db->num_rows; $i++) {
             $row = $this->cms->fetch();
             $this->db->pushResult();
@@ -463,6 +490,7 @@ class RecordBackendList extends RecordBackend {
                 $tableCols .= $this->backend->template('table_column_default', [
                     '{text}' => $value
                 ]);
+                $tableCols .= $this->_areaColumn((int)$row['area_id'], $areaPaths);
             }
             else {
                 // add one column per visible field

@@ -4,7 +4,7 @@
  * Layers are stacked content levels in <article>.
  * The current contents are mapped in the URL hash (paths separated by ~).
  * Methods:
- *     add, close, replace, clear, removeReferer, refresh, invalidate
+ *     add, addVia, close, replace, clear, removeReferer, refresh, invalidate
  *
  * Layers opened from the user interface (add() without skipHashUpdate,
  * addPost(), replace(), replacePost()) carry data-intent="1"; layers from the hash
@@ -206,6 +206,29 @@
                     if (!skipHashUpdate && cApp.a11y) cApp.a11y.focusLayer($newLayer);
                 }
             });
+        },
+
+        /**
+         * Inserts a layer that the NEXT add()/addPost() is opened on top of, without
+         * showing it - as when building the layers from the hash (loadSilent()).
+         * E.g. "Recently changed": the record list of the area lies below the
+         * info page, the breadcrumb reads "Contents > Projects > Info".
+         * The caller then opens the actual layer with add(path, true): the hash
+         * gets both paths in ONE history entry.
+         * @param {string} path  e.g. "Record/record_list.php?area_id=5"
+         */
+        addVia(path) {
+            path = path.replace(/^\/+/, '');
+            if (path === '') return;
+            const $lastLayer = $('.c9-layer:last');
+            if ($lastLayer.length) {
+                $lastLayer.attr('data-scroll', $('article').scrollTop());
+                if (cApp.a11y) cApp.a11y.rememberFocus($lastLayer);
+            }
+            this.loadSilent(path);
+            const paths = hashToPaths(location.hash);
+            paths.push(path);
+            hashWrite(paths.join('~'), false);
         },
 
         /**

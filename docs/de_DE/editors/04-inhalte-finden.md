@@ -23,6 +23,9 @@ mehreren Instanzen mit der Instanz davor), darunter die Felder, die auch in der
 Datensatzliste seines Bereichs erscheinen (das Hauptfeld fett), und den Zeitpunkt Ihres
 letzten Speicherns. Ein Klick öffnet die Detailansicht, ein Rechtsklick ein Kontextmenü
 mit ![edit](../_/edit.svg) „Bearbeiten“ (sofern Sie den Datensatz bearbeiten dürfen).
+Beides öffnet sich über der ***Datensatzliste seines Bereichs***, als kämen Sie aus dem
+Bereichsbaum: Die Navigationsleiste zeigt dann etwa „Inhalte › Projekte › Info“, und
+ein Schritt zurück führt in die Liste des Bereichs.
 
 Die Liste ist persönlich: Änderungen anderer Benutzer erscheinen hier nicht. Ebenso
 wenig Datensätze, die über Import oder Stapelverarbeitung geändert wurden.
@@ -282,6 +285,10 @@ Die Schaltfläche „Suche“ auf der Startseite des Moduls durchsucht mehrere I
 auf einmal. Die Maske zeigt nur Felder, die in allen Bereichen durchsuchbar sind.
 Hilfreich ist v. a. das Volltext-Feld, in dem Inhalte aus allen Textfeldern eines Datensatzes
 gespeichert sind (außer verschlüsselten Werten und Passwörtern).
+
+Die Ergebnisliste zeigt neben dem Hauptfeld die Spalte ***„Inhaltsbereich“***: oben klein
+der Pfad (bei mehreren Instanzen die Instanz, dann die Ordner), darunter der Bereich. Ein
+Klick auf den Spaltenkopf sortiert nach dem Namen des Bereichs.
 
 Über ***„Weitere Felder“*** (siehe [oben](#weitere-felder)) fügen Sie hier
 Eigenschaften hinzu, die alle Datensätze haben:

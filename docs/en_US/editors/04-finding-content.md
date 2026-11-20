@@ -20,7 +20,9 @@ the ***path of its area*** in small letters at the top (folder : … : area, wit
 instances preceded by the instance), below it the fields that also appear in the record list
 of its area (the main field in bold) and the time of your last save. Clicking opens the detail
 view, a right click a context menu with ![edit](../_/edit.svg) “Edit” (if you may edit the
-record).
+record). Both open on top of the ***record list of its area***, as if you came from the area
+tree: the navigation bar then shows, for example, “Contents › Projects › Info”, and one step
+back leads to the list of the area.
 
 The list is personal: changes made by other users do not appear here. Nor do records that
 were changed through an import or batch processing. Records in the trash and records to
@@ -266,6 +268,10 @@ The “Search” button on the start page of the module searches several content
 The form shows only fields that can be searched in all areas. The most useful is the full-text
 field, which stores the contents of all text fields of a record (except encrypted values and
 passwords).
+
+Next to the main field, the result list shows the column ***“Content area”***: the path in
+small letters at the top (with several instances the instance, then the folders), the area
+below it. Clicking the column header sorts by the name of the area.
 
 Via ***“More fields”*** (see [above](#more-fields)) you can add properties here that all records
 have:

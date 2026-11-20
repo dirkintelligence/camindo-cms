@@ -182,6 +182,10 @@ relations should be deleted.
 In a dropdown, the records of a target area with a tree structure appear in the order of the
 tree and indented by their depth.
 
+A new field of type “n:1” first appears as a ***“Dropdown (single select)”***; for target areas
+with many records, switch the display type to “Lookup field (with search function)”. The automatically created
+counter-field is always a lookup field.
+
 A relation “n:1” is not merely a restriction to one record: templates can sort and filter
 very quickly by fields of the linked record. Choose this relation type where only one target
 makes sense in terms of content, for example a category for the article.

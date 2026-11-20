@@ -114,7 +114,7 @@ class Backend {
         'timestampl' => ['text'],
         'datetime'   => ['text', 'select', 'radio'],
         'time'       => ['text', 'select', 'radio'],
-        'relation1'   => ['lookup', 'select'],
+        'relation1'  => ['select', 'lookup'],   // new field: select list (counter field stays 'lookup')
         'relation'   => ['lookup', 'select', 'multiselect'],
         'pointer1'    => ['lookup', 'select'],
         'pointer'    => ['lookup', 'select', 'multiselect'],
@@ -1572,10 +1572,14 @@ class Backend {
      * instance (only if there are several, InstanceCache::hasMultipleInstances())
      * : folder : … : area - labels resolved (snippets), as plain text.
      *
+     * With $withArea = false only the part ABOVE the area (instance and folders,
+     * possibly '') - the global search shows the area label below it separately.
+     *
      * @param int[] $areaIds
+     * @param bool  $withArea  false: without the label of the area itself
      * @return array  area_id => "Demo : Shop : Products"
      */
-    public function areaPaths(array $areaIds): array
+    public function areaPaths(array $areaIds, bool $withArea = true): array
     {
         $areaIds = array_values(array_unique(array_filter($areaIds)));
         if (empty($areaIds)) return [];
@@ -1618,7 +1622,7 @@ class Backend {
             foreach ((array)json_decode((string)$area['parent_ids'], true) as $parentId) {
                 if (isset($labels[(int)$parentId])) $parts[] = $labels[(int)$parentId];
             }
-            $parts[] = $this->cms->textOrSnippet((string)$area['label']);
+            if ($withArea) $parts[] = $this->cms->textOrSnippet((string)$area['label']);
             $paths[$areaId] = $this->cms->_strip_tags(implode($separator, $parts));
         }
         return $paths;

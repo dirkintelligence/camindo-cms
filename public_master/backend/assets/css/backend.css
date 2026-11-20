@@ -1559,6 +1559,10 @@ table.c9-card-rows > tbody > tr > td {
     font-size: 0.7rem;
     line-height: 1.2;
 }
+/* ... in the column "Content area" of the global search: 2px larger */
+.c9-area-path-list {
+    font-size: calc(0.7rem + 2px);
+}
 
 /* Long words without spaces (URLs, paths) wrap anywhere, also inside flex items */
 .c9-break-anywhere {

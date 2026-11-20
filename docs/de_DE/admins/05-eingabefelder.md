@@ -182,6 +182,10 @@ camindo CMS, ob diese Verknüpfungen gelöscht werden sollen.
 Im Dropdown erscheinen die Datensätze eines Zielbereichs mit Baumstruktur in der
 Reihenfolge des Baumes und nach ihrer Tiefe eingerückt.
 
+Ein neues Feld vom Typ „n:1“ erscheint zunächst als ***„Dropdown (einfache Auswahl)“***; bei
+Zielbereichen mit vielen Datensätzen stellen Sie den Darstellungstyp auf „Lookupfeld (mit Suchfunktion)“ um.
+Das automatisch angelegte Gegenfeld ist immer ein Lookupfeld.
+
 Eine Verknüpfung „n:1“ ist nicht nur eine Beschränkung auf einen Datensatz: Templates
 können nach Feldern des verknüpften Datensatzes besonders schnell sortieren und
 filtern. Wählen Sie diesen Verknüpfungs-Typ dort, wo inhaltlich nur ein Ziel sinnvoll ist,

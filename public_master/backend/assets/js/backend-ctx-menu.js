@@ -2,7 +2,9 @@
  * cApp.ctxMenu – Context menu logic
  * Left click and right click on .c9-ctx-row
  *
- * Row click opens data-path of the table as a layer ("#" = data-id of the row). Instead
+ * Row click opens data-path of the table as a layer ("#" = data-id of the row). A row with
+ * data-layer-via="…" first gets this layer below it (cApp.layers.addVia()) - also for the
+ * entries of its context menu, e.g. the area list below a record of "Recently changed". Instead
  * of a layer, data-event on the table (row click) or on a menu entry triggers a jQuery
  * event on document with the id - for actions of a module script, e.g.
  * data-event="c9:ai-open" -> $(document).on('c9:ai-open', (e, id) => …).
@@ -59,8 +61,14 @@
                 const path   = $table.data('path');
                 const id     = $tr.data('id');
                 const event  = $table.data('event');
+                const via    = $tr.attr('data-layer-via');
 
                 if (event) $(document).trigger(String(event), [id]);
+                else if (via) {
+                    // layer below first, both in one history entry
+                    cApp.layers.addVia(via);
+                    cApp.layers.add(path.replace('#', id), true);
+                }
                 // in the preview of a lookup field: slides in like its record list
                 else cApp.layers.add(path.replace('#', id), false, false, $table.closest('.c9-lookup-field').length > 0);
             });
@@ -87,6 +95,7 @@
 
                 const $menu = $(this).closest('.container').find('.c9-ctx-menu');
                 $menu.data('current-id', $(this).data('id'));
+                $menu.data('current-via', $(this).attr('data-layer-via') || '');
 
                 // Entries that do not apply to THIS row (data-ctx-hide="copy,delete"
                 // on the row, data-ctx="..." on the entry) - e.g. missing permissions
@@ -163,13 +172,15 @@
                 }
 
                 const url = action.replace('#', dataId);
+                const via = target ? '' : String($menu.data('current-via') || '');
+                if (via) cApp.layers.addVia(via);
                 if (target) {
                     $(target).cLoadContent(post
                         ? { url: url, params: new FormData(), method: 'POST' }
                         : url);
                 }
                 else if (post) cApp.layers.addPost(url, new FormData());
-                else cApp.layers.add(url);
+                else cApp.layers.add(url, via !== '');
 
                 $menu.fadeOut(100);
             });
