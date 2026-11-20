@@ -42,8 +42,31 @@ class Magick extends MediaProcessor {
      * Engine (details.engine): the program "magick" (paths.magick) or the PHP extension
      * Imagick. With Imagick the same arguments are translated into method calls
      * (ImagickCommand); SVG and PDF are not processed, the camindo policy does not reach
-     * the extension. Conversions run directly, also where the command line would start a
-     * background process.
+     * the extension.
+     *
+     * WORKER PROCESS
+     * --------------------
+     * Imagick works inside a PHP process. A call that hangs (huge or manipulated image)
+     * could not be stopped there: ImageMagick's own time limit counts from the first image
+     * of the process, and PHP's max_execution_time is 0 on the command line (tool
+     * "Regenerate thumbnails", imports, triggers). Every conversion with Imagick therefore runs
+     * in a PHP process of its own (cron/imagick_convert.php, job file
+     * {paths.tmp_dir}/imagick-job-{token}.json):
+     *   - in the foreground Execute ends it after TIMEOUT_CONVERT seconds,
+     *   - in the background (details.background_process, or forced) it is registered in
+     *     `bgproc` like the program; it writes its progress in the format of "-monitor"
+     *     to stderr = the progress file, TriggerMagick follows it and intervenes on timeout,
+     *   - inside it ImageMagick's time limit applies as well (-limit time).
+     * Only without paths.php does the conversion run in the calling process, without a time
+     * limit and always in the foreground (the info page of the converter points this out).
+     *
+     * BACKGROUND PROCESS
+     * --------------------
+     * details.background_process: the thumbnail is created in the background - for both
+     * engines. This only applies to requests via the web server: a process on the command
+     * line (background run of a tool or import, API on the CLI) already runs in the
+     * background and converts directly, otherwise it would start one process per file at once.
+     * $forceBgproc (source itself is being created in the background) always applies.
      */
     public const ENGINE_CLI     = 'cli';
     public const ENGINE_IMAGICK = 'imagick';
@@ -66,6 +89,9 @@ class Magick extends MediaProcessor {
     /** Prefix and extension of the temporary progress file */
     public const PROGRESS_PREFIX    = 'magick-';
     public const PROGRESS_EXTENSION = '.progress';
+
+    /** Prefix of the job files of the Imagick worker process (cron/imagick_convert.php) */
+    public const JOB_PREFIX = 'imagick-job-';
 
     /**
      * Mapping file extension -> MIME type of the target format.
@@ -271,6 +297,14 @@ class Magick extends MediaProcessor {
                 ],
                 'default' => self::ENGINE_CLI,
                 'max' => 10
+            ],
+            'details.background_process' => [
+                'type'  => 'bit',
+                'label' => '#proc.magick.field_background_process',
+                'note' => '#proc.magick.note_background_process',
+                'tooltip' => '#proc.magick.tooltip_field_background_process',
+                'display_type' => 'switch',
+                'default' => 0
             ],
             'details.width' => [
                 'type'  => 'integer',
@@ -606,15 +640,49 @@ class Magick extends MediaProcessor {
         $destCoder = self::CODER_BY_EXTENSION[$ext] ?? '';
         $destArg = $this->fileArgument($destCoder, $destFile, false);
 
-        // Imagick: translate the same arguments, always in the foreground (there is no
-        // program whose progress a background process could follow)
+        // In the background? (see class comment BACKGROUND PROCESS)
+        $background = $forceBgproc || (!empty($details['background_process']) && PHP_SAPI !== 'cli');
+
+        // Imagick: translate the same arguments - in a worker process of its own
+        // (see class comment WORKER PROCESS)
         if ($imagick) {
+            $job = [
+                'src_coder'   => $srcCoder,
+                'src_file'    => $srcFile,
+                'first_frame' => !$claimed['frames'],
+                'before'      => $params1,
+                'after'       => [...$args, ...$params2],
+                'dest_coder'  => $destCoder,
+                'dest_file'   => $destFile,
+            ];
+            if ($background) {
+                $token = $this->crypt->randomKey(16);
+                $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
+                if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
+                    return $fileData + ['errors' => 'proc.magick.error_tmp_dir'];
+                }
+                $command = $this->workerCommand($job + ['monitor' => true], $token, $jobFile);
+                // without a worker (paths.php) only in the foreground
+                if ($command !== null) {
+                    $error = '';
+                    $started = $this->startBackgroundProcess(
+                        $command, $token, ['timeout' => (string)self::TIMEOUT_CONVERT, 'dest' => $destPath],
+                        stderrFile: $tmpDir . DIRECTORY_SEPARATOR . self::PROGRESS_PREFIX . $token . self::PROGRESS_EXTENSION,
+                        error: $error
+                    );
+                    if ($started === null) {
+                        @unlink((string)$jobFile);
+                        return $fileData + ['errors' => 'proc.magick.error_background_start', 'error_details' => $error];
+                    }
+                    return $this->backgroundResult($fileData, $srcData, $ext, $srcW, $srcH, $started);
+                }
+            }
             $error = '';
-            $ok = (new ImagickCommand())->convert($srcCoder, $srcFile, !$claimed['frames'], $params1,
-                [...$args, ...$params2], $destCoder, $destFile, MagickPolicy::resources(), $error);
-            if (!$ok) {
-                if (is_file($destFile)) @unlink($destFile);
-                return $fileData + ['errors' => 'error_file_conversion', 'error_details' => $error];
+            if (!$this->imagickConvert($job, $error, $timedOut)) {
+                return $fileData + [
+                    'errors' => $timedOut ? 'proc.magick.error_timeout' : 'error_file_conversion',
+                    'error_details' => $error,
+                ];
             }
             return $this->resultData($magick, $destFile, $destCoder, $ext, $srcData, $srcW, $srcH, true);
         }
@@ -629,14 +697,18 @@ class Magick extends MediaProcessor {
 
         // Progress file for the background process.
         $progressArgs = [];
-        if ($forceBgproc) {
+        if ($background) {
             // Token is passed on into the background process!
             $token = $this->crypt->randomKey(16);
             $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
             if ($tmpDir === '' || !is_dir($tmpDir) || !is_writable($tmpDir)) {
                 return $fileData + ['errors' => 'proc.magick.error_tmp_dir'];
             }
+            // The token also goes into the command line (as a harmless define): BackgroundProcess
+            // recognizes its process by it (Execute::processStates()) - otherwise a
+            // reused PID or the missing token would make it count as ended right away
             $progressArgs = [
+                '-define', 'camindo:job=' . $token,
                 '-monitor'
             ];
             $progressFile = $tmpDir . DIRECTORY_SEPARATOR . self::PROGRESS_PREFIX . $token . self::PROGRESS_EXTENSION;
@@ -652,7 +724,7 @@ class Magick extends MediaProcessor {
             [$destArg]
         );
 
-        if ($forceBgproc) {
+        if ($background) {
             // Token is passed on into the background process!
             // magick writes its progress (-monitor) to stderr.
             // 'timeout' : time limit in seconds, after which TriggerMagick intervenes
@@ -673,25 +745,7 @@ class Magick extends MediaProcessor {
                     'error_details' => $error,
                 ];
             }
-            return array_merge($fileData, [
-                'width' => 0,
-                'height' => 0,
-                'size' => 0,
-                // set mime_type neutrally: the thumbnail should in the backend for now
-                // only shown with a placeholder symbol
-                'mime_type'  => 'image/unknown',
-                'filename'   => $srcData['filename'] ?? 'file',
-                'extension'  => $ext,
-                'data' => '{}',
-                // Info on the source file
-                'source_width'  => $srcW,
-                'source_height' => $srcH,
-                // 'data' => '{}' could be a JSON string with further info (flat associative array)
-                // Info on the background process
-                'token'      => (string)$started['token'],
-                'bgproc_id'  => (int)$started['id'],
-                'pid'        => (int)$started['pid']
-            ]);
+            return $this->backgroundResult($fileData, $srcData, $ext, $srcW, $srcH, $started);
         }
         else {
             $exitCode = $this->execute->execute($command, $stdout, $stderr, self::TIMEOUT_CONVERT);
@@ -712,6 +766,122 @@ class Magick extends MediaProcessor {
         }
 
         return $this->resultData($magick, $destFile, $destCoder, $ext, $srcData, $srcW, $srcH, false);
+    }
+
+    /**
+     * Return value of convert() for a file that a background process is still creating:
+     * dimensions and size 0, the token - TriggerMagick adds the final values.
+     */
+    protected function backgroundResult(array $fileData, array $srcData, string $ext, int $srcW, int $srcH, array $started): array
+    {
+        return array_merge($fileData, [
+            'width' => 0,
+            'height' => 0,
+            'size' => 0,
+            // MIME type of the target format already now: TriggerMedia::finalize() keeps it
+            // (and decides the watermark by it); the backend recognizes the unfinished file
+            // by the token
+            'mime_type'  => self::MIME_TYPES[$ext] ?? '',
+            'filename'   => $srcData['filename'] ?? 'file',
+            'extension'  => $ext,
+            'data' => '{}',
+            // Info on the source file
+            'source_width'  => $srcW,
+            'source_height' => $srcH,
+            // Info on the background process
+            'token'      => (string)$started['token'],
+            'bgproc_id'  => (int)$started['id'],
+            'pid'        => (int)$started['pid']
+        ]);
+    }
+
+    /**
+     * Command line of the Imagick worker process and its job file (see class comment
+     * WORKER PROCESS). The token is part of the file name and therefore of the command line.
+     *
+     * @param array   $job      'src_coder', 'src_file', 'first_frame', 'before', 'after',
+     *                          'dest_coder', 'dest_file', optionally 'monitor' => true
+     * @param ?string $jobFile  path of the job file written
+     * @return array|null       command, null without paths.php or a writable paths.tmp_dir
+     */
+    protected function workerCommand(array $job, string $token, ?string &$jobFile = null): ?array
+    {
+        $jobFile = null;
+        if (!$this->workerAvailable()) return null;
+        $tmpDir = (string)$this->config->get('paths.tmp_dir');
+        $file = $tmpDir . DIRECTORY_SEPARATOR . self::JOB_PREFIX
+            . preg_replace('/[^A-Za-z0-9_-]/', '', $token) . '.json';
+        $job['limits'] = MagickPolicy::resources();
+        $job['timeout'] = self::TIMEOUT_CONVERT;
+        $json = json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) return null;
+        $old = umask(0077);
+        $written = file_put_contents($file, $json, LOCK_EX);
+        umask($old);
+        if ($written === false) return null;
+        $jobFile = $file;
+        return [
+            (string)$this->config->get('paths.php'),
+            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cron' . DIRECTORY_SEPARATOR . 'imagick_convert.php',
+            '--job=' . $file,
+        ];
+    }
+
+    /**
+     * Can conversions with Imagick run in a worker process of their own?
+     * Needs the PHP command line (paths.php) and a writable paths.tmp_dir.
+     */
+    public function workerAvailable(): bool
+    {
+        $php = (string)($this->config->get('paths.php') ?? '');
+        $tmpDir = (string)($this->config->get('paths.tmp_dir') ?? '');
+        return $php !== '' && is_executable($php) && $tmpDir !== '' && is_dir($tmpDir) && is_writable($tmpDir);
+    }
+
+    /**
+     * One conversion with Imagick in the foreground - in the worker process with time limit,
+     * without paths.php in this process (see class comment WORKER PROCESS).
+     *
+     * @param array   $job       see workerCommand()
+     * @param ?string $error     message of ImageMagick / of the worker
+     * @param ?bool   $timedOut  true: aborted after TIMEOUT_CONVERT seconds
+     */
+    protected function imagickConvert(array $job, ?string &$error = null, ?bool &$timedOut = null): bool
+    {
+        $error = '';
+        $timedOut = false;
+        $destFile = (string)$job['dest_file'];
+        $command = $this->workerCommand($job, $this->crypt->randomKey(16), $jobFile);
+        if ($command === null) {
+            $ok = (new ImagickCommand())->convert((string)$job['src_coder'], (string)$job['src_file'],
+                (bool)$job['first_frame'], (array)$job['before'], (array)$job['after'],
+                (string)$job['dest_coder'], $destFile, MagickPolicy::resources(), $error);
+        }
+        else {
+            $exitCode = $this->execute->execute($command, $stdout, $stderr, self::TIMEOUT_CONVERT);
+            // the worker removes the job file itself - unless it never got that far
+            if (is_file((string)$jobFile)) @unlink((string)$jobFile);
+            clearstatcache(true, $destFile);
+            $timedOut = ($exitCode === Execute::EXEC_TIMEOUT);
+            $ok = $exitCode === 0 && is_file($destFile) && filesize($destFile) > 0;
+            if (!$ok) {
+                $error = $timedOut ? 'timeout' : self::workerError((string)$stderr);
+            }
+        }
+        if (!$ok && is_file($destFile)) @unlink($destFile);
+        return $ok;
+    }
+
+    /**
+     * Message of the worker process from its error output: the last line "error: ...",
+     * otherwise the last non-empty line that is not a progress line.
+     */
+    public static function workerError(string $stderr): string
+    {
+        if (preg_match_all('/^error: (.+)$/m', $stderr, $matches)) return trim((string)end($matches[1]));
+        $lines = array_filter(array_map('trim', preg_split('/\R/', $stderr) ?: []),
+            fn(string $line): bool => $line !== '' && !preg_match('/%\s+complete$/i', $line));
+        return (string)(end($lines) ?: '');
     }
 
     /**
@@ -1343,8 +1513,10 @@ class Magick extends MediaProcessor {
     {
         $error = '';
         if ($this->fallbackImagick()) {
-            return (new ImagickCommand())->convert($srcCoder, $srcFile, true, [], $args, $destCoder, $destFile,
-                MagickPolicy::resources(), $error);
+            return $this->imagickConvert([
+                'src_coder' => $srcCoder, 'src_file' => $srcFile, 'first_frame' => true,
+                'before' => [], 'after' => $args, 'dest_coder' => $destCoder, 'dest_file' => $destFile,
+            ], $error);
         }
         $srcArg = $this->fileArgument($srcCoder, $srcFile);
         $destArg = $this->fileArgument($destCoder, $destFile, false);
@@ -1384,12 +1556,10 @@ class Magick extends MediaProcessor {
             ];
         }
 
-        // magick/convert must be available
-        $magick = $this->config->get('paths.magick') ?? '';
-        if ($magick === '') {
-            return ['error' => 'proc.magick.error_binary_missing'];
-        }
-        if (!is_executable($magick)) {
+        // magick/convert must be available - or the extension Imagick (engine 'imagick'
+        // without a program)
+        $magick = (string)($this->config->get('paths.magick') ?? '');
+        if (!$this->cliAvailable() && !ImagickCommand::available()) {
             return ['error' => 'proc.magick.error_binary_missing'];
         }
 
@@ -1397,7 +1567,7 @@ class Magick extends MediaProcessor {
         // The converter created the file itself, so its extension specifies the
         // format - the coder is enforced anyway (no sniffing).
         $extension = strtolower((string)pathinfo($srcFile, PATHINFO_EXTENSION));
-        $srcInfo = $this->identify($magick, $srcFile, self::CODER_BY_EXTENSION[$extension] ?? '');
+        $srcInfo = $this->identify($magick, $srcFile, self::CODER_BY_EXTENSION[$extension] ?? '', $this->fallbackImagick());
         if ($srcInfo === null || $srcInfo['width'] <= 0 || $srcInfo['height'] <= 0) {
             return [
                 'error' => 'proc.magick.error_file_dimensions'

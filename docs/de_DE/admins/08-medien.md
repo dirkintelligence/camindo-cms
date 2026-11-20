@@ -65,7 +65,11 @@ Mit der Imagick-Library gilt:
   andere Option lehnt camindo CMS beim Speichern ab und nennt sie.
 - SVG und PDF verarbeitet der Konverter nicht; dafür ist der nächste Konverter des
   Thumbnail-Felds zuständig.
-- Die Umwandlung läuft immer sofort, nicht im Hintergrund.
+- Jede Umwandlung läuft in einem eigenen PHP-Prozess und wird nach spätestens zwei
+  Minuten abgebrochen – eine defekte oder manipulierte Datei blockiert so weder das
+  Speichern noch einen Hintergrundlauf. Dafür muss `paths.php` auf das PHP der
+  Kommandozeile zeigen. Fehlt der Eintrag, wandelt der Konverter im laufenden Prozess um,
+  ohne Zeitlimit und nie im Hintergrund; die Detailansicht des Konverters weist darauf hin.
 - Die eigene Sicherheits-Policy von camindo CMS erreicht die Erweiterung nicht. Der
   Konverter erzwingt deshalb selbst das Dateiformat und setzt die Grenzen für Speicher
   und Bildgröße; die Policy des Servers gilt weiterhin.
@@ -73,7 +77,15 @@ Mit der Imagick-Library gilt:
 Die Bildbearbeitung auf der Info-Seite eines Datensatzes, die Drehung beim Hochladen und
 das Wasserzeichen in WebP- und AVIF-Dateien nutzen das Kommandozeilen-Werkzeug. Ist unter
 `paths.magick` kein Programm eingetragen, arbeiten sie mit der PHP-Erweiterung `imagick`,
-sofern sie geladen ist.
+sofern sie geladen ist – ebenfalls in einem eigenen Prozess mit Zeitlimit.
+
+***Hintergrundprozess bei ImageMagick:*** Mit dem Schalter „Im Hintergrund umwandeln“
+(Einstellung „Hintergrundprozess“) wartet das Speichern eines Datensatzes nicht auf diese
+Version. Das lohnt sich für sehr große Bilder. Bis die Datei fertig ist, zeigt das Backend
+ein Platzhalterbild; den Fortschritt sehen Sie in der Prozessübersicht. Der Schalter gilt
+für beide Arten der Ausführung und setzt den [Cronjob](./12-betrieb.md#cronjobs) voraus.
+Läufe, die selbst schon im Hintergrund arbeiten – „Thumbnails neu erzeugen“, ein Import im
+Hintergrund –, wandeln direkt um und starten nicht für jede Datei einen eigenen Prozess.
 
 ***Größe bei ImageMagick und der GD Bibliothek:*** Neben „Zielbreite“ und
 „Zielhöhe“ legen vier Einstellungen fest, wie das Bild auf diese Größe kommt:
@@ -170,9 +182,10 @@ video                  Upload-Feld
 ```
 
 Die Versionen entstehen beim Speichern des Datensatzes, einmal – nicht bei jedem
-Zwischenspeichern. Bilder werden sofort umgewandelt; Videos und andere aufwändige
-Umwandlungen laufen als Hintergrundprozess (dafür muss der [Cronjob](./12-betrieb.md#cronjobs)
-laufen). Bis dahin zeigt das Backend ein Platzhalterbild.
+Zwischenspeichern. Bilder werden sofort umgewandelt, außer der Konverter arbeitet im
+Hintergrund; Videos und andere aufwändige Umwandlungen laufen als Hintergrundprozess (dafür
+muss der [Cronjob](./12-betrieb.md#cronjobs) laufen). Bis dahin zeigt das Backend ein
+Platzhalterbild.
 
 > Das Platzhalterbild bleibt auch nach Abschluss des Hintergrundprozesses in der Ansicht
 > stehen – die Ansicht wird erst durch Klick auf die Schaltfläche „Aktualisieren“ erneuert.

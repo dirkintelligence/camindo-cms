@@ -454,7 +454,7 @@ Die Datei enthält Zugangsdaten: Rechte `0600`, niemals in eine Versionsverwaltu
 | `admin.max_include_depth` | `20` | maximale Verschachtelungstiefe von Templates (`CMS:INCLUDE`, `CMS:SELECT`) |
 | `admin.trash_retention_days` | `7` | Aufbewahrungsfrist im Papierkorb |
 | `admin.mass_delete_threshold` | `200` | ab dieser Anzahl laufen Massenlöschung und Stapelverarbeitung zwingend im Hintergrund (im Backend nicht abwählbar; über die API mit `background: no` übergehbar); `0` = Schwelle aus |
-| `admin.import_background_threshold` | `200` | ab dieser Anzahl Datensätze läuft ein Import im Hintergrund |
+| `admin.import_background_threshold` | `200` | ab dieser Anzahl Datensätze (beim Medien-Import: Dateien) läuft ein Import im Hintergrund |
 | `admin.export_background_threshold` | `1000` | ab dieser Anzahl Datensätze läuft ein Export im Hintergrund |
 | `admin.export_retention_hours` | `24` | Verweildauer nicht abgeholter Exportdateien |
 | `admin.tmp_retention_hours` | `24` | Aufbewahrung temporärer Dateien in `var/tmp` |
@@ -739,7 +739,8 @@ auf drei Ebenen, ohne dass Sie etwas einrichten müssen:
 Arbeitet ein Konverter mit der ***Imagick-Library*** (Einstellung „Ausführung“), liest die
 PHP-Erweiterung die Policy von camindo CMS nicht. Der Konverter erzwingt dann selbst das
 Dateiformat, setzt die Grenzen für Speicher und Bildgröße, lässt nur übersetzbare Parameter
-zu und verarbeitet weder SVG noch PDF. Die Laufzeit begrenzt `max_execution_time` von PHP.
+zu und verarbeitet weder SVG noch PDF. Jede Umwandlung läuft in einem eigenen PHP-Prozess,
+der nach spätestens zwei Minuten beendet wird; dafür muss `paths.php` gesetzt sein.
 
 SVG und PDF geben Sie mit `security.magick_allow` frei (siehe
 [Medien](./08-medien.md#konverter-einrichten)). Die Detailansicht eines Konverters zeigt

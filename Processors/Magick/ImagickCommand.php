@@ -26,9 +26,11 @@
  * Execute::unsafeParameter()), and the processor does not process SVG and PDF with this
  * engine at all.
  *
- * The time limit is not set: ImageMagick measures it from the first image of the PHP
- * process, a long-running web server process would exceed it with every call. PHP's
- * max_execution_time takes its place.
+ * The time limit is only set in a process of its own (constructor argument $timeLimit,
+ * cron/imagick_convert.php): ImageMagick measures it from the first image of the PHP
+ * process, a long-running web server or background process would exceed it with every
+ * call. Magick therefore runs each conversion in that worker process, which the caller ends
+ * after Magick::TIMEOUT_CONVERT seconds (Execute) - see "WORKER PROCESS" in Magick.
  *
  * @see developer docs, chapter 14 (Security: web)
  */
@@ -169,6 +171,31 @@ class ImagickCommand
 
     /** State while a command runs (settings of the command line) */
     protected array $state = [];
+
+    /** Progress callback fn(int $percent): void, see monitor() */
+    protected $monitor = null;
+
+    /** Last percentage passed to the progress callback */
+    protected int $lastPercent = -1;
+
+    /**
+     * @param bool $timeLimit  true: also set the time limit ('time' of the limits, -limit time) -
+     *                         only in a process that runs exactly one conversion (see class comment)
+     */
+    public function __construct(protected bool $timeLimit = false)
+    {
+    }
+
+    /**
+     * Report the progress while reading, processing and writing, like "-monitor" of the
+     * command line: the callback gets the percentage of the current operation (0-99, every
+     * operation starts again at 0); 100 is left to the caller after a successful write.
+     */
+    public function monitor(?callable $callback): static
+    {
+        $this->monitor = $callback;
+        return $this;
+    }
 
     /** Is the extension loaded? */
     public static function available(): bool
@@ -350,6 +377,17 @@ class ImagickCommand
             $this->setLimits($limits);
 
             $image = new \Imagick();
+            if ($this->monitor !== null) {
+                $this->lastPercent = -1;
+                $image->setProgressMonitor(function ($offset, $span): bool {
+                    $percent = $span > 1 ? min(99, (int)floor($offset * 100 / ($span - 1))) : 0;
+                    if ($percent !== $this->lastPercent) {
+                        $this->lastPercent = $percent;
+                        ($this->monitor)($percent);
+                    }
+                    return true;
+                });
+            }
             // Settings before the source apply when reading; operators there are carried
             // out after reading (like "magick convert" does with them)
             $pending = [];
@@ -469,8 +507,15 @@ class ImagickCommand
                 $this->state['defines'][$key] = $val;
                 break;
             case 'limit':
-                // own values may only lower the upper limits; time, thread and throttle are ignored
+                // own values may only lower the upper limits; thread and throttle are ignored,
+                // time only counts in a process of its own (see class comment)
                 $name = strtolower($value);
+                if ($name === 'time' && $this->timeLimit) {
+                    $wanted = (int)$step['args'][1];
+                    $max = (int)($limits['time'] ?? 0);
+                    if ($wanted > 0) $this->setTime($max > 0 ? min($wanted, $max) : $wanted);
+                    break;
+                }
                 if (!isset(self::RESOURCES[$name])) break;
                 $wanted = self::size((string)$step['args'][1]);
                 $max = self::size((string)($limits[$name] ?? ''));
@@ -826,12 +871,21 @@ class ImagickCommand
         return $number * $base ** $power;
     }
 
-    /** Set the upper limits (values of the policy); the time limit is left out (see above) */
+    /** Set the upper limits (values of the policy); the time limit only with $timeLimit (see above) */
     protected function setLimits(array $limits): void
     {
         foreach (self::RESOURCES as $name => $constant) {
             $value = self::size((string)($limits[$name] ?? ''));
             if ($value !== null) $this->setLimit($name, $value);
+        }
+        if ($this->timeLimit && (int)($limits['time'] ?? 0) > 0) $this->setTime((int)$limits['time']);
+    }
+
+    /** Time limit in seconds (RESOURCETYPE_TIME, from ImageMagick 6.8.0) */
+    protected function setTime(int $seconds): void
+    {
+        if (defined(\Imagick::class . '::RESOURCETYPE_TIME')) {
+            \Imagick::setResourceLimit(\Imagick::RESOURCETYPE_TIME, $seconds);
         }
     }
 

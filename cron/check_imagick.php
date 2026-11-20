@@ -261,6 +261,69 @@ $check('fallback: autoOrient pixels upright', [$after->getImageWidth(), $after->
 $after->clear();
 $check('fallback: autoOrient again (nothing to do)', $fallback->autoOrient("{$mediaDir}/{$dir}/orient.jpg", 'image/jpeg', 'jpg'), false);
 
+// Worker process and background
+// ====================
+// Each conversion with Imagick runs in cron/imagick_convert.php (Magick, WORKER PROCESS)
+if (!$magick->workerAvailable()) {
+    echo "note: paths.php or paths.tmp_dir missing - worker process not checked\n";
+}
+else {
+    $spy = new class(
+        $config, $app->get(\Camindo\Core\Cms::class), $app->get(\Camindo\Core\Crypt::class),
+        $app->get(\Camindo\Core\Execute::class), $app->get(\Camindo\Core\BackgroundProcess::class),
+        $app->get(\Camindo\Core\Processors\Magick\MagickPolicy::class)
+    ) extends Magick {
+        public array $calls = [];
+        protected function workerCommand(array $job, string $token, ?string &$jobFile = null): ?array
+        {
+            $command = parent::workerCommand($job, $token, $jobFile);
+            $this->calls[] = $command;
+            return $command;
+        }
+        public function runJob(array $job, ?string &$error = null): bool { return $this->imagickConvert($job, $error); }
+    };
+    $tmpDir = rtrim((string)$config->get('paths.tmp_dir'), '/');
+    $jobsBefore = count(glob("{$tmpDir}/" . Magick::JOB_PREFIX . '*') ?: []);
+    $data = $spy->convert("{$dir}/photo.jpg", $sources['photo'][1], "{$dir}/worker.jpg", ['engine' => 'imagick', 'width' => 100], false);
+    $check('worker: convert() runs in the worker', count($spy->calls) === 1 && $spy->calls[0] !== null, true);
+    $check('worker: result (shown 800x1200 -> 100x150)', [(int)($data['width'] ?? 0), (int)($data['height'] ?? 0)], [100, 150]);
+    $check('worker: no job file left', count(glob("{$tmpDir}/" . Magick::JOB_PREFIX . '*') ?: []), $jobsBefore);
+
+    // background_process is ignored on the command line (PHP_SAPI cli): converts directly
+    $data = $spy->convert("{$dir}/photo.jpg", $sources['photo'][1], "{$dir}/worker2.jpg",
+        ['engine' => 'imagick', 'width' => 100, 'background_process' => 1], false);
+    $check('worker: background_process on the CLI converts directly', [empty($data['token']), (int)($data['width'] ?? 0)], [true, 100]);
+
+    // Error of the worker: message, no target file
+    $error = '';
+    $ok = $spy->runJob(['src_coder' => 'jpeg', 'src_file' => "{$mediaDir}/{$dir}/missing.jpg", 'first_frame' => true,
+        'before' => [], 'after' => ['-resize', '10x10'], 'dest_coder' => 'jpeg', 'dest_file' => "{$mediaDir}/{$dir}/missing_out.jpg"], $error);
+    $check('worker: error is reported', [$ok, $error !== '', is_file("{$mediaDir}/{$dir}/missing_out.jpg")], [false, true, false]);
+
+    // Forced background process (as for a source created in the background): bgproc entry,
+    // progress file in the format of "magick -monitor", target file
+    $bgproc = $app->get(\Camindo\Core\BackgroundProcess::class);
+    $execute = $app->get(\Camindo\Core\Execute::class);
+    foreach ($cli ? ['imagick', 'cli'] : ['imagick'] as $engine) {
+        $dest = "{$dir}/bg_{$engine}.jpg";
+        $data = $magick->convert("{$dir}/photo.jpg", $sources['photo'][1], $dest, ['engine' => $engine, 'width' => 100], true);
+        $token = (string)($data['token'] ?? '');
+        $check("background {$engine}: started (token, size 0)", [$token !== '', (int)($data['size'] ?? -1)], [true, 0]);
+        if ($token === '') continue;
+        $row = $bgproc->getByToken($token);
+        $pid = (int)($row['pid'] ?? 0);
+        $check("background {$engine}: bgproc entry type magick", (string)($row['type'] ?? ''), 'magick');
+        for ($i = 0; $i < 300 && $execute->processState($pid, $token) === \Camindo\Core\Execute::STATE_RUNNING; $i++) usleep(100000);
+        $progressFile = "{$tmpDir}/" . Magick::PROGRESS_PREFIX . $token . Magick::PROGRESS_EXTENSION;
+        $progress = (string)@file_get_contents($progressFile);
+        $check("background {$engine}: progress file with \"% complete\"", preg_match('/\d+%\s+complete/i', $progress) === 1, true);
+        $check("background {$engine}: target file", is_file("{$mediaDir}/{$dest}") && filesize("{$mediaDir}/{$dest}") > 0, true);
+        $check("background {$engine}: rectifyParams()", (int)($magick->rectifyParams($dest)['width'] ?? 0), 100);
+        @unlink($progressFile);
+        $bgproc->abort($token);
+    }
+}
+
 // Clean up
 foreach (glob("{$mediaDir}/{$dir}/*") ?: [] as $file) @unlink($file);
 @rmdir("{$mediaDir}/{$dir}");

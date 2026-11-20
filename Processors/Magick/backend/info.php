@@ -31,6 +31,17 @@ if ($versionState['snippet'] !== '') {
 }
 $this->backend->infoStatic('#proc.magick.label_version', $versionHtml, ['monospace']);
 
+$this->backend->infoAdd($this->converter, 'details.background_process', ($data['details']['background_process'] ?? 0) ? 'yes' : 'no');
+
+// Imagick: each conversion in a worker process of its own with a time limit - without
+// paths.php in the calling process, without a time limit and never in the background
+if ($imagick || !$this->converter->getProcessor()->cliAvailable()) {
+    $workerOk = $this->converter->getProcessor()->workerAvailable();
+    $workerText = htmlspecialchars($this->cms->snippet($workerOk ? 'proc.magick.worker_ok' : 'proc.magick.worker_missing'));
+    $this->backend->infoStatic('#proc.magick.label_worker', $workerOk ? $workerText
+        : $this->backend->template('note_warning', ['{text}' => $workerText]));
+}
+
 // Imagick: the extension does not read the camindo policy, SVG and PDF are not processed
 if ($imagick) {
     $this->backend->infoStatic('#proc.magick.label_policy', $this->backend->template('note_warning', [

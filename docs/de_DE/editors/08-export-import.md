@@ -242,7 +242,10 @@ nur einem Schritt, etwa aus einem Ordner mit Produktfotos. Sie finden ihn im Men
    (`Filiale-Graz_2024.jpg` → „Filiale Graz 2024“). Vorgewählt sind das erste
    Upload-Feld und das Hauptfeld des Bereichs.
 3. ***Import.*** Aus jeder Datei entsteht ein neuer Datensatz. Das Importprotokoll listet
-   das Ergebnis je Datei.
+   das Ergebnis je Datei. Mit „Als Hintergrundprozess ausführen“ läuft der Import im
+   Hintergrund weiter, auch wenn Sie das Fenster schließen; das Protokoll kommt dann als
+   interne Nachricht. Ab 200 Dateien (Voreinstellung) läuft der Medien-Import immer im
+   Hintergrund.
 
 Nicht importierbar und ausgegraut sind ausführbare Dateien, aktive Inhalte (HTML, SVG,
 XML, JavaScript), leere Dateien und Dateien, deren Inhalt nicht zur Endung passt.

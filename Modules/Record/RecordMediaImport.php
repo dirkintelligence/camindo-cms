@@ -4,7 +4,7 @@
  * in the chosen upload field, on request its name as text in a second field.
  *
  * Independent of RecordImport (XML/CSV/DOCX): no modes (always INSERT), no
- * column mapping, no background process. The mask is
+ * column mapping. The mask is
  * RecordBackendMediaImport (record_media_import.php), reachable in the menu on the right of the
  * record list of an area, under "Import".
  *
@@ -23,6 +23,14 @@
  *     run()      for each file of the chosen types: tmpInit() -> importSave() with the
  *                file as 'importfile' (as with the CSV import) - input check,
  *                thumbnails, check-in as in the input mask
+ *
+ * BACKGROUND
+ * --------------------
+ * As with RecordImport: on request or from admin.import_background_threshold files of the
+ * chosen types, start() runs the same run() in Core/cron/media_import.php (job file in
+ * var/tmp, bgproc type 'mediaimport'); the protocol comes as an internal message
+ * (report()), the import directory is removed afterwards. Thumbnails are created directly
+ * in that process - a converter's "background process" only applies to web requests.
  *
  * The directory never holds files under their original name: path jumps
  * (zip slip), names in foreign encodings and extensions such as .php play no role
@@ -54,18 +62,27 @@
 namespace Camindo\Core\Modules\Record;
 
 use Camindo\Core\Backend;
+use Camindo\Core\BackgroundProcess;
 use Camindo\Core\Cms;
 use Camindo\Core\Config;
 use Camindo\Core\Crypt;
 use Camindo\Core\Database;
 use Camindo\Core\InstanceCache;
 use Camindo\Core\MediaAccess;
+use Camindo\Core\Session;
 use Camindo\Core\System;
+use Camindo\Core\Modules\Messaging\Message;
 
 class RecordMediaImport {
 
     /** Prefix of the import directories in var/tmp */
     public const DIR_PREFIX = 'mediaimport-';
+
+    /** Type identifier of the bgproc entry */
+    public const BGPROC_TYPE = 'mediaimport';
+
+    /** Prefix of the job files in var/tmp */
+    public const JOB_PREFIX = 'mediaimport-job-';
 
     /** Verzeichnisliste im Importverzeichnis */
     private const MANIFEST = 'manifest.json';
@@ -93,6 +110,9 @@ class RecordMediaImport {
         private Record $record,
         private Backend $backend,
         private \Camindo\Core\AuditLog $auditLog,
+        private Session $session,
+        private BackgroundProcess $bgproc,
+        private Message $message,
     )
     {
     }
@@ -403,11 +423,12 @@ class RecordMediaImport {
      *     'types'      => [MIME type, …],
      *     'file_field' => name of the upload field,
      *     'name_field' => name of the text field for the file name ('' = none) ]
+     * @param callable|null $progress  fn(int $done, int $total) - progress (background)
      * @return array  as RecordImport::run(): 'total', 'done', 'failed', 'skipped',
      *                'inserted', 'items' => [['kind', 'id', 'label', 'status', 'messages'], …],
      *                'error' (only if nothing ran at all)
      */
-    public function run(array $job): array
+    public function run(array $job, ?callable $progress = null): array
     {
         $this->auditLog->setContext('import');
         $result = ['total' => 0, 'done' => 0, 'failed' => 0, 'skipped' => 0, 'inserted' => 0, 'updated' => 0, 'replaced' => 0, 'items' => []];
@@ -437,8 +458,12 @@ class RecordMediaImport {
         $previousId = $this->_lastRootRecord($areaId, $schema);
 
         @set_time_limit(0);
+        $total = $this->countSelected($files, $types);
+        $handled = 0;
         foreach ($files as $file) {
-            if (!empty($file['ignored']) || (string)$file['reason'] !== '' || !in_array((string)$file['mime'], $types, true)) continue;
+            if (!$this->_selected($file, $types)) continue;
+            if ($progress !== null && $handled > 0 && $handled % 5 === 0) $progress($handled, $total);
+            $handled++;
             $this->cms->errorsReset();
             $path = (string)$file['path'];
             $text = $this->filenameText($path);
@@ -496,10 +521,147 @@ class RecordMediaImport {
             $this->_addItem($result, $item);
         }
         $this->cms->errorsReset();
+        if ($progress !== null) $progress($handled, $total);
         if (empty($result['items'])) {
             $result['error'] = $this->cms->snippet('record.error_media_import_nothing');
         }
         return $result;
+    }
+
+    /** Is the file importable and of one of the chosen types? */
+    private function _selected(array $file, array $types): bool
+    {
+        return empty($file['ignored']) && (string)($file['reason'] ?? '') === ''
+            && in_array((string)($file['mime'] ?? ''), $types, true);
+    }
+
+    /**
+     * Number of files that run() would handle - for the background threshold and the progress.
+     */
+    public function countSelected(array $files, array $types): int
+    {
+        $types = array_map('strval', $types);
+        return count(array_filter($files, fn(array $file): bool => $this->_selected($file, $types)));
+    }
+
+    // ====================
+    // Background
+
+    /**
+     * From this number of files the import runs in the background (admin.import_background_threshold,
+     * the same value as for RecordImport; 0 = never forced).
+     */
+    public function backgroundThreshold(): int
+    {
+        return (int)($this->config->get('admin.import_background_threshold') ?? 200);
+    }
+
+    public function needsBackground(int $count): bool
+    {
+        $threshold = $this->backgroundThreshold();
+        return $threshold > 0 && $count >= $threshold;
+    }
+
+    /**
+     * Start run() as a background process (Core/cron/media_import.php).
+     *
+     * @param array $job  as run()
+     * @return array|null details of the bgproc entry, null on error (text in $error)
+     */
+    public function start(array $job, ?string &$error = null): ?array
+    {
+        $error = '';
+        $phpExec = (string)$this->config->get('paths.php');
+        if ($phpExec === '' || !is_executable($phpExec)) {
+            $error = "Error: 'php' is not executable (paths.php)";
+            $this->system->log('import-errors', $error);
+            return null;
+        }
+        $token = $this->crypt->randomKey(16);
+        $jobFile = (string)$this->config->get('paths.tmp_dir') . '/' . self::JOB_PREFIX . $token . '.json';
+        $job['token'] = $token;
+        $job['admin_id'] = (int)$this->session->get('admin_id');
+        if (file_put_contents($jobFile, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)) === false) {
+            $error = "Error: could not write job file {$jobFile}";
+            $this->system->log('import-errors', $error);
+            return null;
+        }
+        $command = [
+            $phpExec,
+            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cron' . DIRECTORY_SEPARATOR . 'media_import.php',
+            '--job=' . $jobFile,
+            '--token=' . $token,
+        ];
+        $result = $this->bgproc->start($command, self::BGPROC_TYPE, $token, null, null, $error);
+        if ($result === null) {
+            @unlink($jobFile);
+            $this->system->log('import-errors', "media import start failed: {$error}");
+        }
+        return $result;
+    }
+
+    /**
+     * Read and remove a job file - only one of this class from paths.tmp_dir.
+     */
+    public function loadJob(string $jobFile): ?array
+    {
+        $tmpDir = realpath((string)$this->config->get('paths.tmp_dir'));
+        $real = realpath($jobFile);
+        if ($tmpDir === false || $real === false || dirname($real) !== $tmpDir
+            || !str_starts_with(basename($real), self::JOB_PREFIX)) return null;
+        $job = json_decode((string)file_get_contents($real), true);
+        @unlink($real);
+        return is_array($job) ? $job : null;
+    }
+
+    /**
+     * Result as an internal message to the triggering admin: summary as text, the
+     * protocol (HTML) in the HTML part.
+     *
+     * @return string  subject
+     */
+    public function report(array $job, array $result): string
+    {
+        $adminId = (int)($job['admin_id'] ?? 0);
+        $this->db->pushResult();
+        $this->db->query("SELECT `label` FROM `area` WHERE `area_id` = ?", 'i', [(int)($job['area_id'] ?? 0)]);
+        $areaLabel = $this->cms->_strip_tags($this->cms->textOrSnippet((string)($this->db->fetchNum()[0] ?? '')));
+        $this->db->popResult();
+        $subject = str_replace('{area}', $areaLabel, $this->cms->snippet('record.media_import_report_subject'));
+        if ($adminId < 1) return $subject;
+        $body = $this->summaryText($result);
+        if (!empty($result['error'])) $body .= "\n" . (string)$result['error'];
+        $this->message->sendSystem($adminId, $subject, $body, $this->protocolHtml($result));
+        return $subject;
+    }
+
+    /**
+     * Protocol as an HTML table with colors - for the result page and the message.
+     */
+    public function protocolHtml(array $result): string
+    {
+        $classes = ['inserted' => 'success', 'failed' => 'danger', 'skipped' => 'secondary'];
+        $rows = '';
+        $tplRow = $this->backend->template('record.import_protocol_row');
+        foreach ($result['items'] ?? [] as $item) {
+            $status = (string)$item['status'];
+            $id = (int)$item['id'];
+            $record = $id > 0 ? $this->backend->teaser('record', $id, linked: true, icon: false) : '';
+            if ($record === '') $record = htmlspecialchars((string)$item['label']);
+            else $record .= ' ' . $this->backend->template('small-muted', ['{text}' => $this->backend->escape((string)$item['label'])]);
+            $rows .= strtr($tplRow, [
+                '{class}' => $classes[$status] ?? 'secondary',
+                '{kind}' => htmlspecialchars($this->cms->snippet('record.import_kind_record')),
+                '{record}' => $record,
+                '{status}' => htmlspecialchars($this->cms->snippet('record.import_status_' . $status)),
+                '{messages}' => htmlspecialchars(implode(' | ', (array)$item['messages'])),
+            ]) . "\n";
+        }
+        return $this->backend->template('record.import_protocol', [
+            '{class}' => ((int)($result['failed'] ?? 0) > 0 || !empty($result['error'])) ? 'warning' : 'success',
+            '{summary}' => htmlspecialchars($this->summaryText($result) . (!empty($result['error']) ? ' ' . $result['error'] : '')),
+            '{rows}' => $rows,
+        ]);
     }
 
     /**

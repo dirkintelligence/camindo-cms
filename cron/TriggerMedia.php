@@ -84,6 +84,15 @@ abstract class TriggerMedia {
     /** How many bytes are read from the end of the progress file */
     protected const TAIL_BYTES = 8192;
 
+    /**
+     * true: the end is the end of the process, not a line of the progress file. For tools
+     * whose progress restarts at 0 for every operation and reaches 100 % several times
+     * ("magick -monitor"): a "100% complete" while the process is still running only ends
+     * one step. A process that has ended counts as finished unless readProgress() reports
+     * an 'error'; finalize() then checks the file itself (rectifyParams()).
+     */
+    protected const FINISH_ON_EXIT = false;
+
     public function __construct(
         protected Config $config,
         protected Database $db,
@@ -105,7 +114,8 @@ abstract class TriggerMedia {
      * @param string $file      path to the progress file
      * @param array  $parts     decoded `bgproc`.`message` (e.g. 'frames', 'dur')
      * @param int    $previous  last saved progress, fallback value
-     * @return array|null       ['percent' => int (0-100), 'finished' => bool] or null,
+     * @return array|null       ['percent' => int (0-100), 'finished' => bool, optionally
+     *                          'error' => string (see FINISH_ON_EXIT)] or null,
      *                          if the file is missing or contains nothing usable yet
      */
     abstract protected function readProgress(string $file, array $parts, int $previous): ?array;
@@ -172,6 +182,22 @@ abstract class TriggerMedia {
                 $finished = (bool)($state['finished'] ?? false);
                 // While the process runs, never report 100: that is reserved for the end
                 $percent  = max(0, min(99, (int)($state['percent'] ?? $progress)));
+
+                if (static::FINISH_ON_EXIT) {
+                    if ($status === Execute::STATE_RUNNING) {
+                        $finished = false;
+                    }
+                    elseif ($status === Execute::STATE_FINISHED) {
+                        if (!empty($state['error'])) {
+                            echo "error: " . $state['error'] . "\n";
+                            $this->fail($token, 'error_file_conversion', $percent);
+                            @unlink($progressFile);
+                            echo "failed: $token\n";
+                            continue;
+                        }
+                        $finished = true;
+                    }
+                }
 
                 if (!$finished) {
                     $this->trackRunning($token, $pid, $percent, $status, $parts, $row, $progressFile, $now);

@@ -196,6 +196,9 @@ Requirements: the area has an upload field, and your user group has the permissi
    that takes the file, and optionally a field that receives the ***file name as text*** (without extension). Minus signs and underscores
    become spaces (`Filiale-Graz_2024.jpg` → “Filiale Graz 2024”). The first upload field and the main field of the area are preselected.
 3. ***Import.*** Each file creates a new record. The import log lists the result for each file.
+   With “Run as background process” the import continues in the background, even if you close the
+   window; the log then arrives as an internal message. From 200 files (default setting) the media
+   import always runs in the background.
 
 Not importable and grayed out are executable files, active content (HTML, SVG, XML, JavaScript), empty files and files whose content does not
 match their extension. Hidden files (name begins with a dot) and system files such as `Thumbs.db`, `desktop.ini` or the folder `__MACOSX` are

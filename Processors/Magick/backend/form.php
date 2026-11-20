@@ -27,6 +27,14 @@ $details = (array)($this->data['details'] ?? []);
 // engine: command line tool (default) or PHP extension Imagick
 $this->backend->formField($this->converter, ['name' => 'details.engine', 'value' => \Camindo\Core\Processors\Magick\Magick::engine($details), 'id' => $this->id]);
 
+// background_process: create the thumbnail in the background (requests via the web server)
+$this->backend->formField($this->converter, [
+    'name' => 'details.background_process',
+    'value' => $details['background_process'] ?? '',
+    'id' => $this->id,
+    'options' => [1 => $this->cms->snippet('proc.magick.label_background_process')]
+]);
+
 // width
 $this->backend->formField($this->converter, ['name' => 'details.width', 'value' => $details['width'] ?? '', 'id' => $this->id]);
 

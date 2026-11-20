@@ -62,14 +62,27 @@ With the Imagick library:
   camindo CMS rejects any other option when saving and names it.
 - The converter does not process SVG and PDF; the next converter of the thumbnail field
   takes over.
-- The conversion always runs immediately, not in the background.
+- Every conversion runs in a separate PHP process and is aborted after two minutes at the
+  latest – a broken or manipulated file blocks neither saving nor a background run. For
+  this, `paths.php` must point to the command line PHP. Without that entry, the converter
+  converts in the running process, without a time limit and never in the background; the
+  detail view of the converter points this out.
 - The own security policy of camindo CMS does not reach the extension. The converter
   therefore enforces the file format itself and sets the limits for memory and image
   size; the server's policy still applies.
 
 Image editing on the info page of a record, the rotation on upload and the watermark in
 WebP and AVIF files use the command line tool. If no program is entered under
-`paths.magick`, they work with the PHP extension `imagick`, provided it is loaded.
+`paths.magick`, they work with the PHP extension `imagick`, provided it is loaded – also
+in a separate process with a time limit.
+
+***Background process with ImageMagick:*** With the switch “Convert in the background”
+(setting “Background process”), saving a record does not wait for this version. This pays
+off for very large images. Until the file is ready, the back end shows a placeholder image;
+you can follow the progress in the process overview. The switch applies to both engines and
+requires the [cron job](./12-operation.md#cron-jobs). Runs that already work in the
+background – “Regenerate thumbnails”, an import in the background – convert directly and do
+not start a separate process for each file.
 
 ***Size with ImageMagick and the GD library:*** In addition to “Target width” and
 “Target height”, four settings determine how the image is brought to this size:
@@ -161,7 +174,7 @@ video                  upload field
 ```
 
 The versions are created when the record is saved, once – not with every interim save.
-Images are converted immediately; videos and other complex conversions run as a background process
+Images are converted immediately unless the converter works in the background; videos and other complex conversions run as a background process
 (for this, the [cron job](./12-operation.md#cron-jobs) must be running). Until then, the back end
 shows a placeholder image.
 

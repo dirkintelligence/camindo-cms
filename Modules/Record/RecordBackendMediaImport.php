@@ -22,7 +22,9 @@
  *               A change of the upload field shows the mask anew - which types the
  *               field accepts depends on its settings
  *     run       import (always INSERT), protocol; the list below reloads
- *               as soon as it is visible again (cApp.layers.invalidate())
+ *               as soon as it is visible again (cApp.layers.invalidate()) - or, on
+ *               request or from admin.import_background_threshold files, in the
+ *               background (RecordMediaImport::start(), protocol as internal message)
  *     cancel    remove the import directory, close the layer
  *
  * @see Camindo\Core\Modules\Record\RecordMediaImport  the work
@@ -290,6 +292,18 @@ class RecordBackendMediaImport extends RecordBackend {
         }
 
         $importable = count($analysis['groups']);
+        // background: switch, or fixed from the threshold (number of importable files)
+        $fileCount = array_sum(array_column($analysis['groups'], 'count'));
+        if ($this->import->needsBackground($fileCount)) {
+            $background = $this->backend->template('record.batch_option_background_fixed', [
+                '{threshold}' => $this->import->backgroundThreshold(),
+            ]);
+        }
+        else {
+            $background = $this->backend->template('record.import_option_background', [
+                '{checked}' => !empty($_REQUEST['background']) ? ' checked' : '',
+            ]);
+        }
         echo '<form action="Record/record_media_import.php" method="post">';
         $this->backend->formInit('record.record_media_import_form', [
             '{summary}' => htmlspecialchars(str_replace(
@@ -301,6 +315,7 @@ class RecordBackendMediaImport extends RecordBackend {
             '{ignored}' => $ignored,
             '{file_options}' => $fileOptions,
             '{name_options}' => $nameOptions,
+            '{background}' => $background,
         ]);
         $this->backend->formHidden('function', 'run');
         $this->backend->formHidden('area_id', $this->areaId);
@@ -354,37 +369,28 @@ class RecordBackendMediaImport extends RecordBackend {
             'file_field' => $fileField,
             'name_field' => (string)($_REQUEST['name_field'] ?? ''),
         ];
+
+        // Background: on request or from the threshold (files of the chosen types)
+        $selected = $this->import->countSelected((array)$this->import->files($this->dir), $types);
+        if (!empty($_REQUEST['background']) || $this->import->needsBackground($selected)) {
+            $error = '';
+            if ($this->import->start($job, $error) === null) {
+                $this->cms->error($this->cms->snippet('record.error_batch_start') . ' ' . $error);
+                $this->errors();
+                $this->_importAnalyze();
+                return;
+            }
+            $this->backend->balloon('success', $this->cms->snippet('record.message_import_started'));
+            // the list below changes while the import runs: reload when it is shown again
+            $this->backend->script('cApp.layers.invalidate(); cApp.layers.close();');
+            return;
+        }
+
         $result = $this->import->run($job);
         $this->import->removeDir($this->dir);
         // the list below has changed: reload when it is shown again
         $this->backend->script('cApp.layers.invalidate();');
-        echo $this->_protocolHtml($result);
+        echo $this->import->protocolHtml($result);
         echo $this->backend->template('record.form_import_result_close');
-    }
-
-    private function _protocolHtml(array $result): string
-    {
-        $classes = ['inserted' => 'success', 'failed' => 'danger', 'skipped' => 'secondary'];
-        $rows = '';
-        $tplRow = $this->backend->template('record.import_protocol_row');
-        foreach ($result['items'] as $item) {
-            $status = (string)$item['status'];
-            $id = (int)$item['id'];
-            $record = $id > 0 ? $this->backend->teaser('record', $id, linked: true, icon: false) : '';
-            if ($record === '') $record = htmlspecialchars((string)$item['label']);
-            else $record .= ' ' . $this->backend->template('small-muted', ['{text}' => $this->backend->escape((string)$item['label'])]);
-            $rows .= strtr($tplRow, [
-                '{class}' => $classes[$status] ?? 'secondary',
-                '{kind}' => htmlspecialchars($this->cms->snippet('record.import_kind_record')),
-                '{record}' => $record,
-                '{status}' => htmlspecialchars($this->cms->snippet('record.import_status_' . $status)),
-                '{messages}' => htmlspecialchars(implode(' | ', (array)$item['messages'])),
-            ]) . "\n";
-        }
-        return $this->backend->template('record.import_protocol', [
-            '{class}' => ((int)$result['failed'] > 0 || !empty($result['error'])) ? 'warning' : 'success',
-            '{summary}' => htmlspecialchars($this->import->summaryText($result) . (!empty($result['error']) ? ' ' . $result['error'] : '')),
-            '{rows}' => $rows,
-        ]);
     }
 }
