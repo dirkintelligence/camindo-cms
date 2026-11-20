@@ -292,8 +292,9 @@ class Execute {
                 if (!$status['running']) {
                     // The exit code must be taken here; after the process has
                     // been collected, proc_close() no longer returns it
-                    // reliably.
-                    $exitCode = (int) $status['exitcode'];
+                    // reliably. Ended by our SIGTERM: that is a timeout, not a
+                    // failure (a signaled process reports exitcode -1).
+                    $exitCode = $terminated ? self::EXEC_TIMEOUT : (int) $status['exitcode'];
                     break;
                 }
                 if (microtime(true) >= $deadline) {
