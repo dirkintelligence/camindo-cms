@@ -38,6 +38,16 @@ class Magick extends MediaProcessor {
      */
     public const MIN_VERSION = '7.1.1';
 
+    /**
+     * Engine (details.engine): the program "magick" (paths.magick) or the PHP extension
+     * Imagick. With Imagick the same arguments are translated into method calls
+     * (ImagickCommand); SVG and PDF are not processed, the camindo policy does not reach
+     * the extension. Conversions run directly, also where the command line would start a
+     * background process.
+     */
+    public const ENGINE_CLI     = 'cli';
+    public const ENGINE_IMAGICK = 'imagick';
+
     /** Adjustment to the target format (details.crop) */
     public const FIT     = 0;   // fit entirely
     public const CROP    = 1;   // fill and crop (^ + -extent)
@@ -250,6 +260,18 @@ class Magick extends MediaProcessor {
 
         // Additional input fields for the converter
         $this->schema = [
+            'details.engine' => [
+                'type'  => 'chars',
+                'label' => '#proc.magick.field_engine',
+                'tooltip' => '#proc.magick.tooltip_field_engine',
+                'display_type' => 'radio',
+                'options' => [
+                    self::ENGINE_CLI     => '#proc.magick.option_engine_cli',
+                    self::ENGINE_IMAGICK => '#proc.magick.option_engine_imagick',
+                ],
+                'default' => self::ENGINE_CLI,
+                'max' => 10
+            ],
             'details.width' => [
                 'type'  => 'integer',
                 'label' => '#proc.magick.field_width',
@@ -390,7 +412,7 @@ class Magick extends MediaProcessor {
     public function hookOnSave(array &$fields, array &$data, array &$previousData): void
     {
         // Selection fields: only the values from the schema (also via the API)
-        foreach (['crop', 'resize_when', 'unit'] as $key) {
+        foreach (['engine', 'crop', 'resize_when', 'unit'] as $key) {
             if (!isset($data['details'][$key]) || $data['details'][$key] === '') continue;
             $allowed = array_map('strval', array_keys($this->schema['details.' . $key]['options']));
             if (!in_array((string)$data['details'][$key], $allowed, true)) {
@@ -416,6 +438,22 @@ class Magick extends MediaProcessor {
             if ($bad !== null) {
                 throw new \Exception(strtr($this->cms->snippet('error_parameter_unsafe'), ['{token}' => htmlspecialchars($bad)]));
             }
+        }
+
+        // Imagick: the extension must be loaded, and every own parameter must be translatable
+        // (ImagickCommand::OPTIONS) - an option it does not know would otherwise only fail
+        // during the conversion
+        if (self::engine($data['details']) === self::ENGINE_IMAGICK) {
+            if (!ImagickCommand::available()) {
+                throw new \Exception($this->cms->snippet('proc.magick.error_imagick_missing'));
+            }
+            foreach (['parameters1', 'parameters2'] as $key) {
+                $bad = ImagickCommand::unsupported($this->execute->tokenizeParameters($data['details'][$key]));
+                if ($bad !== null) {
+                    throw new \Exception(strtr($this->cms->snippet('proc.magick.error_imagick_parameter'), ['{token}' => htmlspecialchars($bad)]));
+                }
+            }
+            return;
         }
 
         // Is there an ImageMagick running under paths.magick at all? Otherwise the converter
@@ -479,14 +517,14 @@ class Magick extends MediaProcessor {
             'extension' => '',
         ];
 
-        // ImageMagick (version 7, command "magick") must be available.
-        // If the configured value contains no path separator, it is treated as a
-        // command in PATH and not checked any further.
-        $magick = $this->config->get('paths.magick') ?? '';
-        if ($magick === '') {
-            return $fileData + ['errors' => 'proc.magick.error_binary_missing'];
+        // ImageMagick (version 7, command "magick") must be available - or, with the engine
+        // Imagick, the PHP extension.
+        $imagick = self::engine($details) === self::ENGINE_IMAGICK;
+        $magick = (string)($this->config->get('paths.magick') ?? '');
+        if ($imagick) {
+            if (!ImagickCommand::available()) return $fileData + ['errors' => 'proc.magick.error_imagick_missing'];
         }
-        if (!is_executable($magick)) {
+        elseif ($magick === '' || !is_executable($magick)) {
             return $fileData + ['errors' => 'proc.magick.error_binary_missing'];
         }
 
@@ -497,7 +535,8 @@ class Magick extends MediaProcessor {
 
         // Activate our own policy.xml. If it cannot be written, ImageMagick
         // does not run - without the policy the blocks and limits are missing.
-        if (!$this->policy->apply()) {
+        // (Imagick: the extension does not read it, ImagickCommand sets the limits itself.)
+        if (!$imagick && !$this->policy->apply()) {
             return $fileData + ['errors' => 'proc.magick.error_policy_file'];
         }
 
@@ -513,11 +552,13 @@ class Magick extends MediaProcessor {
         }
         // SVG/PDF only with security.magick_allow - as source as well as target. Blocked
         // counts as "not supported": writeThumbnails() takes the next converter.
+        // Imagick processes neither of them: without the policy, an SVG could pull in
+        // further files and pseudo coders, a PDF would run Ghostscript.
         foreach ([$srcCoder, self::CODER_BY_EXTENSION[$ext] ?? ''] as $coder) {
             $format = MagickPolicy::formatOfCoder($coder);
-            if ($format !== '' && !$this->policy->isAllowed($format)) {
+            if ($format !== '' && ($imagick || !$this->policy->isAllowed($format))) {
                 return $fileData + [
-                    'errors' => 'proc.magick.error_format_blocked',
+                    'errors' => $imagick ? 'proc.magick.error_format_imagick' : 'proc.magick.error_format_blocked',
                     'unsupported' => true,
                 ];
             }
@@ -534,6 +575,9 @@ class Magick extends MediaProcessor {
         if ($this->execute->unsafeParameter(array_merge($params1, $params2), 'magick') !== null) {
             return $fileData + ['errors' => 'error_parameter_unsafe'];
         }
+        if ($imagick && ($bad = ImagickCommand::unsupported(array_merge($params1, $params2))) !== null) {
+            return $fileData + ['errors' => 'proc.magick.error_imagick_parameter', 'error_details' => $bad];
+        }
         $claimed = $this->claimedGroups(array_merge($params1, $params2));
 
         // Source: by default only process the first single image
@@ -543,7 +587,7 @@ class Magick extends MediaProcessor {
         $srcArg = $this->fileArgument($srcCoder, $srcFile, !$claimed['frames']);
 
         // Determine dimensions of the source file
-        $srcInfo = $this->identify($magick, $srcFile, $srcCoder);
+        $srcInfo = $this->identify($magick, $srcFile, $srcCoder, $imagick);
         if ($srcInfo === null) {
             // (no readable image format: writeThumbnails() tries the next converter)
             return $fileData + ['errors' => 'proc.magick.error_file_dimensions', 'unsupported' => true];
@@ -561,6 +605,19 @@ class Magick extends MediaProcessor {
         // misinterpreted (e.g. ".jpg" with PNG content).
         $destCoder = self::CODER_BY_EXTENSION[$ext] ?? '';
         $destArg = $this->fileArgument($destCoder, $destFile, false);
+
+        // Imagick: translate the same arguments, always in the foreground (there is no
+        // program whose progress a background process could follow)
+        if ($imagick) {
+            $error = '';
+            $ok = (new ImagickCommand())->convert($srcCoder, $srcFile, !$claimed['frames'], $params1,
+                [...$args, ...$params2], $destCoder, $destFile, MagickPolicy::resources(), $error);
+            if (!$ok) {
+                if (is_file($destFile)) @unlink($destFile);
+                return $fileData + ['errors' => 'error_file_conversion', 'error_details' => $error];
+            }
+            return $this->resultData($magick, $destFile, $destCoder, $ext, $srcData, $srcW, $srcH, true);
+        }
 
         $magickExec = basename($magick);
         $magickPath = dirname($magick);
@@ -654,10 +711,20 @@ class Magick extends MediaProcessor {
             ];
         }
 
+        return $this->resultData($magick, $destFile, $destCoder, $ext, $srcData, $srcW, $srcH, false);
+    }
+
+    /**
+     * Data of a finished target file (return value of convert()).
+     */
+    protected function resultData(string $magick, string $destFile, string $destCoder, string $ext,
+        array $srcData, int $srcW, int $srcH, bool $imagick): array
+    {
         // Read the actual dimensions of the target file.
         // They are not calculated, because the free parameters can change
         // the result arbitrarily.
-        $destInfo = $this->identify($magick, $destFile, $destCoder);
+        $destInfo = $this->identify($magick, $destFile, $destCoder, $imagick);
+        clearstatcache(true, $destFile);
 
         /**
          * The following return structure is the same for all media converters.
@@ -961,11 +1028,13 @@ class Magick extends MediaProcessor {
      * @param string $magick  path to the program
      * @param string $file    absolute path to the file, WITHOUT coder prefix and "[0]"
      * @param string $coder   enforced coder (see coderFor()); empty = no prefix
+     * @param bool $imagick   true: read with the PHP extension Imagick (engine 'imagick')
      * @return array|null ['width'=>int, 'height'=>int, 'orientation'=>string, 'quality'=>int,
      *                    'mime_type'=>string] or null on error (width/height as stored, NOT aligned)
      */
-    protected function identify(string $magick, string $file, string $coder = ''): ?array
+    protected function identify(string $magick, string $file, string $coder = '', bool $imagick = false): ?array
     {
+        if ($imagick) return (new ImagickCommand())->identify($file, $coder, MagickPolicy::resources());
         if (!$this->policy->apply()) return null;
 
         $magickExec = basename($magick);
@@ -1014,11 +1083,31 @@ class Magick extends MediaProcessor {
     /** EXIF orientations that need no turning */
     protected const ORIENTATION_NONE = ['', 'Undefined', 'TopLeft'];
 
-    /** Is an ImageMagick configured and executable (paths.magick)? */
+    /**
+     * Can the image editing work - with the program under paths.magick or, without it,
+     * with the PHP extension Imagick (fallback, see fallbackImagick())?
+     */
     public function available(): bool
+    {
+        return $this->cliAvailable() || ImagickCommand::available();
+    }
+
+    /** Is an ImageMagick program configured and executable (paths.magick)? */
+    public function cliAvailable(): bool
     {
         $magick = (string)($this->config->get('paths.magick') ?? '');
         return $magick !== '' && is_executable($magick);
+    }
+
+    /**
+     * Image editing, rotation on upload and watermark have no converter whose engine
+     * could be chosen: they use the program, and the extension Imagick only if no
+     * program is configured. The same rules apply as for the engine 'imagick'
+     * (ImagickCommand: limits, enforced coder; EDITABLE_CODERS contain no SVG/PDF).
+     */
+    protected function fallbackImagick(): bool
+    {
+        return !$this->cliAvailable() && ImagickCommand::available();
     }
 
     /**
@@ -1054,7 +1143,7 @@ class Magick extends MediaProcessor {
         $magick = (string)($this->config->get('paths.magick') ?? '');
         $coder = $this->coderFor($mime, $extension);
         if (!$this->available() || $coder === '' || !is_file($file)) return null;
-        $info = $this->identify($magick, $file, $coder);
+        $info = $this->identify($magick, $file, $coder, $this->fallbackImagick());
         if ($info === null || $info['width'] < 1 || $info['height'] < 1) return null;
         if (in_array($info['orientation'], self::ORIENTATION_ROTATED, true)) {
             [$info['width'], $info['height']] = [$info['height'], $info['width']];
@@ -1086,7 +1175,7 @@ class Magick extends MediaProcessor {
         if (in_array($coder, ['jpeg', 'webp'], true) && $info['quality'] > 0) {
             array_push($args, '-quality', (string)min(100, $info['quality']));
         }
-        if (!$this->runMagick($this->fileArgument($coder, $file), $args, $this->fileArgument($coder, $tmpFile, false))) {
+        if (!$this->runMagick($coder, $file, $args, $coder, $tmpFile)) {
             @unlink($tmpFile);
             return false;
         }
@@ -1162,12 +1251,12 @@ class Magick extends MediaProcessor {
         if ($quality > 0 && in_array($destCoder, ['jpeg', 'webp', 'avif'], true)) {
             array_push($args, '-quality', (string)min(100, $quality));
         }
-        if (!$this->runMagick($this->fileArgument($srcCoder, $srcFile), $args, $this->fileArgument($destCoder, $destFile, false), $error)) {
+        if (!$this->runMagick($srcCoder, $srcFile, $args, $destCoder, $destFile, $error)) {
             @unlink($destFile);
             return null;
         }
         clearstatcache(true, $destFile);
-        $result = $this->identify((string)$this->config->get('paths.magick'), $destFile, $destCoder);
+        $result = $this->identify((string)$this->config->get('paths.magick'), $destFile, $destCoder, $this->fallbackImagick());
         return [
             'width'  => (int)($result['width'] ?? 0),
             'height' => (int)($result['height'] ?? 0),
@@ -1246,11 +1335,19 @@ class Magick extends MediaProcessor {
     }
 
     /**
-     * One ImageMagick call: limits, source, arguments, target - with the policy.
+     * One ImageMagick call: limits, source (first single image), arguments, target -
+     * with the policy, or with the extension Imagick if no program is configured.
      */
-    protected function runMagick(string $srcArg, array $args, string $destArg, ?string &$error = null): bool
+    protected function runMagick(string $srcCoder, string $srcFile, array $args, string $destCoder, string $destFile,
+        ?string &$error = null): bool
     {
         $error = '';
+        if ($this->fallbackImagick()) {
+            return (new ImagickCommand())->convert($srcCoder, $srcFile, true, [], $args, $destCoder, $destFile,
+                MagickPolicy::resources(), $error);
+        }
+        $srcArg = $this->fileArgument($srcCoder, $srcFile);
+        $destArg = $this->fileArgument($destCoder, $destFile, false);
         $magick = (string)($this->config->get('paths.magick') ?? '');
         if ($magick === '' || !is_executable($magick) || !$this->policy->apply()) {
             $error = 'magick';
@@ -1259,8 +1356,8 @@ class Magick extends MediaProcessor {
         $call = basename($magick) === 'magick' ? [$magick, 'convert'] : [$magick];
         $exitCode = $this->execute->execute([...$call, ...$this->limitArguments(), $srcArg, ...$args, $destArg],
             $stdout, $stderr, self::TIMEOUT_CONVERT);
-        $file = preg_replace('/^[a-z0-9]+:/', '', $destArg);
-        if ($exitCode !== 0 || !is_file($file) || filesize($file) === 0) {
+        clearstatcache(true, $destFile);
+        if ($exitCode !== 0 || !is_file($destFile) || filesize($destFile) === 0) {
             $error = trim((string)$stderr);
             return false;
         }
@@ -1358,6 +1455,12 @@ class Magick extends MediaProcessor {
         return ['ok' => $ok, 'error' => $ok ? '' : (string)strtok(trim((string)$stderr), "\n")];
     }
 
+    /** Engine of a converter (details.engine), ENGINE_CLI if missing or unknown */
+    public static function engine(array $details): string
+    {
+        return ($details['engine'] ?? '') === self::ENGINE_IMAGICK ? self::ENGINE_IMAGICK : self::ENGINE_CLI;
+    }
+
     /** The policy of the processor (info page) */
     public function policy(): MagickPolicy
     {
@@ -1370,8 +1473,9 @@ class Magick extends MediaProcessor {
      * @return string|null e.g. "7.1.1-39", null if no
      *                     working ImageMagick is installed under paths.magick
      */
-    public function getVersion(): ?string
+    public function getVersion(string $engine = self::ENGINE_CLI): ?string
     {
+        if ($engine === self::ENGINE_IMAGICK) return ImagickCommand::version();
         $magick = (string)($this->config->get('paths.magick') ?? '');
         if ($magick === '' || !is_executable($magick)) return null;
 
@@ -1390,14 +1494,17 @@ class Magick extends MediaProcessor {
      * the -dSAFER bypasses in Ghostscript and the fuzzing findings in the binary formats
      * were only closed in the newer releases (developer docs, chapter 14 (Security: web)).
      *
+     * @param string $engine  ENGINE_CLI: the program under paths.magick, ENGINE_IMAGICK: the
+     *                        library the PHP extension is built with
      * @return array ['version' => ?string, 'outdated' => bool, 'snippet' => string]
      *               'snippet' is the snippet id of the warning, '' if everything is in order
      */
-    public function versionState(): array
+    public function versionState(string $engine = self::ENGINE_CLI): array
     {
-        $version = $this->getVersion();
+        $version = $this->getVersion($engine);
         if ($version === null) {
-            return ['version' => null, 'outdated' => true, 'snippet' => 'proc.magick.error_binary_missing'];
+            return ['version' => null, 'outdated' => true, 'snippet' => $engine === self::ENGINE_IMAGICK
+                ? 'proc.magick.error_imagick_missing' : 'proc.magick.error_binary_missing'];
         }
         if (version_compare($version, self::MIN_VERSION, '<')) {
             return ['version' => $version, 'outdated' => true, 'snippet' => 'proc.magick.warning_version_old'];

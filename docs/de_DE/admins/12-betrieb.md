@@ -736,6 +736,11 @@ auf drei Ebenen, ohne dass Sie etwas einrichten müssen:
   der Upload abgelehnt.
 - ***Zeitlimits:*** Jede Umwandlung wird nach spätestens zwei Minuten abgebrochen.
 
+Arbeitet ein Konverter mit der ***Imagick-Library*** (Einstellung „Ausführung“), liest die
+PHP-Erweiterung die Policy von camindo CMS nicht. Der Konverter erzwingt dann selbst das
+Dateiformat, setzt die Grenzen für Speicher und Bildgröße, lässt nur übersetzbare Parameter
+zu und verarbeitet weder SVG noch PDF. Die Laufzeit begrenzt `max_execution_time` von PHP.
+
 SVG und PDF geben Sie mit `security.magick_allow` frei (siehe
 [Medien](./08-medien.md#konverter-einrichten)). Die Detailansicht eines Konverters zeigt
 die installierte ImageMagick-Version, ob sie veraltet ist, und ob SVG und PDF

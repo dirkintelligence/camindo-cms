@@ -18,7 +18,7 @@ Mit dem Core werden ausgeliefert:
 | Prozessor | Aufgabe | Voraussetzung |
 |---|---|---|
 | GD Bibliothek | Bilder skalieren, zuschneiden, umwandeln – Basisfunktionen ohne Zusatzsoftware | PHP-Erweiterung `gd` |
-| ImageMagick | Bilder in sehr vielen Formaten (auch HEIC, TIFF, PSD), Expertenmodus mit eigenen Parametern, auch im Hintergrund | ImageMagick auf dem Server |
+| ImageMagick | Bilder in sehr vielen Formaten (auch HEIC, TIFF, PSD), Expertenmodus mit eigenen Parametern, auch im Hintergrund | ImageMagick auf dem Server oder PHP-Erweiterung `imagick` |
 | FFmpeg (Video) | Videos umwandeln, skalieren, komprimieren | ffmpeg |
 | FFmpeg (Audio) | Audiodateien umwandeln, Lautheit angleichen, Ausschnitte | ffmpeg |
 | FFmpeg (Vorschaubild) | Standbild aus einem Video | ffmpeg |
@@ -47,6 +47,32 @@ GD Bibliothek liest, in JPEG-Bilder von höchstens 200 px Breite und 300 px Höh
 Parameter angeben. Gesperrt sind Pfade, URLs und Optionen, die weitere Dateien schreiben oder
 lesen (etwa `-write` oder `-i`); camindo CMS speichert den Konverter dann nicht und nennt den
 beanstandeten Parameter.
+
+***Ausführung bei ImageMagick:*** Die Einstellung „Ausführung“ legt fest, womit der Konverter
+arbeitet:
+
+| Auswahl | Wirkung |
+|---|---|
+| Kommandozeilen-Werkzeug | Standard. Der Konverter ruft das Programm unter `paths.magick` auf. |
+| Imagick-Library | Der Konverter arbeitet mit der PHP-Erweiterung `imagick`, ein ImageMagick-Programm auf dem Server ist nicht nötig. Er übersetzt die Formularwerte und die eigenen Parameter in Aufrufe der Erweiterung. |
+
+Mit der Imagick-Library gilt:
+
+- Eigene Parameter müssen übersetzbar sein. Übersetzt werden die gängigen Optionen, etwa
+  `-strip`, `-colorspace`, `-resize`, `-crop`, `-extent`, `-gravity`, `-sharpen`,
+  `-unsharp`, `-quality`, `-interlace`, `-define jpeg:…`, `-coalesce` und `-layers`. Eine
+  andere Option lehnt camindo CMS beim Speichern ab und nennt sie.
+- SVG und PDF verarbeitet der Konverter nicht; dafür ist der nächste Konverter des
+  Thumbnail-Felds zuständig.
+- Die Umwandlung läuft immer sofort, nicht im Hintergrund.
+- Die eigene Sicherheits-Policy von camindo CMS erreicht die Erweiterung nicht. Der
+  Konverter erzwingt deshalb selbst das Dateiformat und setzt die Grenzen für Speicher
+  und Bildgröße; die Policy des Servers gilt weiterhin.
+
+Die Bildbearbeitung auf der Info-Seite eines Datensatzes, die Drehung beim Hochladen und
+das Wasserzeichen in WebP- und AVIF-Dateien nutzen das Kommandozeilen-Werkzeug. Ist unter
+`paths.magick` kein Programm eingetragen, arbeiten sie mit der PHP-Erweiterung `imagick`,
+sofern sie geladen ist.
 
 ***Größe bei ImageMagick und der GD Bibliothek:*** Neben „Zielbreite“ und
 „Zielhöhe“ legen vier Einstellungen fest, wie das Bild auf diese Größe kommt:

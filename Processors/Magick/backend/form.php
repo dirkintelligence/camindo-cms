@@ -24,6 +24,9 @@ $this->backend->formReplace('{processor_note}', $this->backend->template('alert_
 ]));
 
 $details = (array)($this->data['details'] ?? []);
+// engine: command line tool (default) or PHP extension Imagick
+$this->backend->formField($this->converter, ['name' => 'details.engine', 'value' => \Camindo\Core\Processors\Magick\Magick::engine($details), 'id' => $this->id]);
+
 // width
 $this->backend->formField($this->converter, ['name' => 'details.width', 'value' => $details['width'] ?? '', 'id' => $this->id]);
 

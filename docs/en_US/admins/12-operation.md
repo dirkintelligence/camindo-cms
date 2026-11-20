@@ -526,6 +526,8 @@ Image files are a popular attack route: a manipulated file exploits a vulnerabil
 - ***Format from the content:*** ImageMagick reads each file only with the format that camindo CMS recognized when uploading. If the extension and content do not match, the upload is rejected.
 - ***Time limits:*** Each conversion is aborted after two minutes at most.
 
+If a converter works with the ***Imagick library*** (setting “Engine”), the PHP extension does not read the camindo CMS policy. The converter then enforces the file format itself, sets the limits for memory and image size, only accepts translatable parameters and processes neither SVG nor PDF. The runtime is limited by PHP's `max_execution_time`.
+
 You release SVG and PDF with `security.magick_allow` (see [media](./08-media.md#setting-up-converters)). The detail view of a converter shows the installed ImageMagick version, whether it is outdated, and whether SVG and PDF actually work.
 
 ***If you operate the server yourself***, you can further isolate ImageMagick:

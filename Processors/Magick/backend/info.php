@@ -12,7 +12,11 @@
 // Installed ImageMagick: outdated versions are unpatched against the known
 // gaps in the delegates and binary formats - therefore mark them visibly here.
 // Siehe developer_docs/18-imagemagick.md
-$versionState = $this->converter->getProcessor()->versionState();
+$engine = \Camindo\Core\Processors\Magick\Magick::engine((array)($data['details'] ?? []));
+$imagick = $engine === \Camindo\Core\Processors\Magick\Magick::ENGINE_IMAGICK;
+$this->backend->infoStatic('#proc.magick.field_engine', htmlspecialchars($this->cms->snippet(
+    $imagick ? 'proc.magick.option_engine_imagick' : 'proc.magick.option_engine_cli')));
+$versionState = $this->converter->getProcessor()->versionState($engine);
 $versionHtml = htmlspecialchars(
     $versionState['version'] ?? $this->cms->snippet('proc.magick.label_version_unknown')
 );
@@ -27,41 +31,49 @@ if ($versionState['snippet'] !== '') {
 }
 $this->backend->infoStatic('#proc.magick.label_version', $versionHtml, ['monospace']);
 
-// Own security policy (MagickPolicy): what security.magick_allow releases, and for
-// SVG/PDF in the media types of this converter, whether they really run - blocked, from
-// the server's policy prevents (e.g. PDF under Debian) or is in order.
-// Siehe developer_docs/18-imagemagick.md, 2.2.2
-$processor = $this->converter->getProcessor();
-$allowed = $processor->policy()->allowed();
-$policyHtml = htmlspecialchars(str_replace('{value}',
-    $allowed ? strtoupper(implode(', ', $allowed)) : $this->cms->snippet('proc.magick.policy_none'),
-    $this->cms->snippet('proc.magick.policy_summary')));
-// The file is created on the first call - here too, so that the display is correct and a
-// non-writable var/config/ is noticed before the first conversion fails
-if (!$processor->policy()->apply()) {
-    $policyHtml .= '<br>' . $this->backend->template('note_warning', [
-        '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.error_policy_file'))
-    ]);
+// Imagick: the extension does not read the camindo policy, SVG and PDF are not processed
+if ($imagick) {
+    $this->backend->infoStatic('#proc.magick.label_policy', $this->backend->template('note_warning', [
+        '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.policy_imagick'))
+    ]));
 }
-foreach (\Camindo\Core\Processors\Magick\MagickPolicy::FORMAT_MIME as $format => $mime) {
-    if (!\Camindo\Core\Processors\Magick\MagickPolicy::mediaTypesCover(
-        $mime, $format, (string)($data['media_types_incl'] ?? ''), (string)($data['media_types_excl'] ?? ''))) continue;
-    $label = strtoupper($format);
-    if (!in_array($format, $allowed, true)) {
-        $text = str_replace('{value}', $label, $this->cms->snippet('proc.magick.policy_blocked'));
-        $tpl = 'note_warning';
+else {
+    // Own security policy (MagickPolicy): what security.magick_allow releases, and for
+    // SVG/PDF in the media types of this converter, whether they really run - blocked, from
+    // the server's policy prevents (e.g. PDF under Debian) or is in order.
+    // Siehe developer_docs/18-imagemagick.md, 2.2.2
+    $processor = $this->converter->getProcessor();
+    $allowed = $processor->policy()->allowed();
+    $policyHtml = htmlspecialchars(str_replace('{value}',
+        $allowed ? strtoupper(implode(', ', $allowed)) : $this->cms->snippet('proc.magick.policy_none'),
+        $this->cms->snippet('proc.magick.policy_summary')));
+    // The file is created on the first call - here too, so that the display is correct and a
+    // non-writable var/config/ is noticed before the first conversion fails
+    if (!$processor->policy()->apply()) {
+        $policyHtml .= '<br>' . $this->backend->template('note_warning', [
+            '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.error_policy_file'))
+        ]);
     }
-    else {
-        $probe = $processor->probeFormat($format);
-        $text = $probe['ok']
-            ? str_replace('{value}', $label, $this->cms->snippet('proc.magick.policy_ok'))
-            : str_replace(['{value}', '{error}'], [$label, $probe['error']], $this->cms->snippet('proc.magick.policy_failed'));
-        $tpl = $probe['ok'] ? '' : 'note_warning';
+    foreach (\Camindo\Core\Processors\Magick\MagickPolicy::FORMAT_MIME as $format => $mime) {
+        if (!\Camindo\Core\Processors\Magick\MagickPolicy::mediaTypesCover(
+            $mime, $format, (string)($data['media_types_incl'] ?? ''), (string)($data['media_types_excl'] ?? ''))) continue;
+        $label = strtoupper($format);
+        if (!in_array($format, $allowed, true)) {
+            $text = str_replace('{value}', $label, $this->cms->snippet('proc.magick.policy_blocked'));
+            $tpl = 'note_warning';
+        }
+        else {
+            $probe = $processor->probeFormat($format);
+            $text = $probe['ok']
+                ? str_replace('{value}', $label, $this->cms->snippet('proc.magick.policy_ok'))
+                : str_replace(['{value}', '{error}'], [$label, $probe['error']], $this->cms->snippet('proc.magick.policy_failed'));
+            $tpl = $probe['ok'] ? '' : 'note_warning';
+        }
+        $policyHtml .= '<br>' . ($tpl === '' ? htmlspecialchars($text)
+            : $this->backend->template($tpl, ['{text}' => htmlspecialchars($text)]));
     }
-    $policyHtml .= '<br>' . ($tpl === '' ? htmlspecialchars($text)
-        : $this->backend->template($tpl, ['{text}' => htmlspecialchars($text)]));
+    $this->backend->infoStatic('#proc.magick.label_policy', $policyHtml);
 }
-$this->backend->infoStatic('#proc.magick.label_policy', $policyHtml);
 
 $this->backend->infoAdd($this->converter, 'details.width', $data['details']['width'] ?? 0);
 $this->backend->infoAdd($this->converter, 'details.height', $data['details']['height'] ?? 0);

@@ -104,6 +104,15 @@ class MagickPolicy
         return array_values(array_intersect(self::ALLOWABLE, $values));
     }
 
+    /**
+     * Upper limits of the policy (name => value, e.g. 'memory' => '256MiB'). The engine
+     * Imagick sets them itself (ImagickCommand), since the policy does not reach it.
+     */
+    public static function resources(): array
+    {
+        return self::RESOURCES;
+    }
+
     public function isAllowed(string $format): bool
     {
         return in_array($format, $this->allowed(), true);

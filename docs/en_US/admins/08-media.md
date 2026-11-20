@@ -17,7 +17,7 @@ The following processors are delivered with the core:
 | Processor | Task | Requirement |
 |---|---|---|
 | GD library | scale, crop, convert images – basic functions without additional software | PHP extension `gd` |
-| ImageMagick | images in very many formats (also HEIC, TIFF, PSD), expert mode with your own parameters, also in the background | ImageMagick on the server |
+| ImageMagick | images in very many formats (also HEIC, TIFF, PSD), expert mode with your own parameters, also in the background | ImageMagick on the server or PHP extension `imagick` |
 | FFmpeg (video) | convert, scale, compress videos | ffmpeg |
 | FFmpeg (audio) | convert audio files, align loudness, excerpts | ffmpeg |
 | FFmpeg (preview image) | still image from a video | ffmpeg |
@@ -44,6 +44,31 @@ GD library reads into JPEG images of at most 200 px width and 300 px height.
 ***Own parameters (expert mode):*** With ImageMagick and FFmpeg you can add parameters of
 your own. Paths, URLs and options that write or read further files (such as `-write` or `-i`)
 are blocked; camindo CMS then does not save the converter and names the rejected parameter.
+
+***Engine with ImageMagick:*** The setting “Engine” determines what the converter works
+with:
+
+| Option | Effect |
+|---|---|
+| Command line tool | Default. The converter calls the program under `paths.magick`. |
+| Imagick library | The converter works with the PHP extension `imagick`; no ImageMagick program is needed on the server. It translates the form values and your own parameters into calls of the extension. |
+
+With the Imagick library:
+
+- Your own parameters must be translatable. The common options are translated, such as
+  `-strip`, `-colorspace`, `-resize`, `-crop`, `-extent`, `-gravity`, `-sharpen`,
+  `-unsharp`, `-quality`, `-interlace`, `-define jpeg:…`, `-coalesce` and `-layers`.
+  camindo CMS rejects any other option when saving and names it.
+- The converter does not process SVG and PDF; the next converter of the thumbnail field
+  takes over.
+- The conversion always runs immediately, not in the background.
+- The own security policy of camindo CMS does not reach the extension. The converter
+  therefore enforces the file format itself and sets the limits for memory and image
+  size; the server's policy still applies.
+
+Image editing on the info page of a record, the rotation on upload and the watermark in
+WebP and AVIF files use the command line tool. If no program is entered under
+`paths.magick`, they work with the PHP extension `imagick`, provided it is loaded.
 
 ***Size with ImageMagick and the GD library:*** In addition to “Target width” and
 “Target height”, four settings determine how the image is brought to this size:
