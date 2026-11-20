@@ -184,6 +184,10 @@ class Record extends Dataset {
      * result "-2024" to be a number and the fallback rule would fail.
      * Page::resolveRequest() distinguishes id and slug by the same rule.
      *
+     * Multilingual slug field: the primary language as above; a further language gets
+     * its own slug only from an own translation of the title in that language,
+     * otherwise its row carries the slug of the primary language as fallback.
+     *
      * A slug once set is NOT updated when the title changes later -
      * a moving slug would invalidate every link already shared. Anyone who wants to change it
      * empties the field and lets it be filled again.
@@ -288,12 +292,15 @@ class Record extends Dataset {
             if ($slug !== '') $slug = $this->cms->textToUri($slug);
 
             if ($slug === '') {
-                // A further language without slug remains empty: then the fallback
-                // from the primary language applies (saveVirtualFields())
-                if ($isMultilingual && (int)$languageId !== $primaryId) continue;
-
                 $source = ($sourceName !== '') ? ($data[$sourceName] ?? '') : '';
-                if (is_array($source)) {
+                if ($isMultilingual && (int)$languageId !== $primaryId) {
+                    // A further language gets its own slug only from an own translation
+                    // of the title in the same language - otherwise it remains empty and
+                    // the fallback from the primary language applies (saveVirtualFields())
+                    $source = is_array($source) ? ($source[$languageId] ?? '') : '';
+                    if (is_array($source) || trim((string)$source) === '') continue;
+                }
+                elseif (is_array($source)) {
                     // multilingual default field: value of the same language, otherwise primary language
                     $source = $source[$languageId] ?? $source[$primaryId] ?? (reset($source) ?: '');
                     if (is_array($source)) $source = '';
@@ -394,6 +401,398 @@ class Record extends Dataset {
             return false;
         }
         return true;
+    }
+
+    /**
+     * New slug field (Field::hookOnSaved()): give every record of the area whose
+     * slug is still empty a slug from the default field of the area - the same rule
+     * as hookOnSave() for a single record (Cms::textToUri(), no pure digits).
+     *
+     * Languages: a multilingual slug field gets one slug per language from the
+     * title in the same language. First the primary language (its slug also goes
+     * into the fallback rows, `empty` = 1, of the further languages), then every
+     * further language in which the title has its own translation (`empty` = 0) -
+     * without one, the further language keeps the fallback. A single-language slug
+     * field gets the slug of the title in the primary language.
+     *
+     * Each slug is checked with slugPathOk() before it is written. The records are
+     * processed in the order of their record_id - the older record keeps the slug,
+     * a later one with the same path stays empty (resp. keeps the fallback) and
+     * lands in the returned list. Not touched: records in the trash, working copies
+     * (their working state is in `record_cache`), records without usable title.
+     * An encrypted default field is not used as source (the slug would make its
+     * content public).
+     *
+     * @param int $areaId       area of the field
+     * @param int $slugFieldId  field_id of the slug field
+     * @return array  ['written' => int, 'source' => bool (default field present),
+     *                 'conflicts' => [['record_id', 'language_id', 'title', 'slug', 'message'], …]]
+     */
+    public function fillSlugs(int $areaId, int $slugFieldId): array
+    {
+        $result = ['written' => 0, 'source' => false, 'conflicts' => []];
+        if ($areaId < 1 || $slugFieldId < 1) return $result;
+        $this->cms->clearFieldCaches();
+
+        // slug field and default field of the area
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `f`.`field_id`, `f`.`type`, `f`.`multilingual`, `f`.`label`, `f`.`deleted`, `f`.`area_id`"
+                . " FROM `field` `f` WHERE `f`.`field_id` = ?"
+                . " UNION ALL SELECT `f`.`field_id`, `f`.`type`, `f`.`multilingual`, `f`.`label`, `f`.`deleted`, `f`.`area_id`"
+                . " FROM `area` `a` JOIN `field` `f` ON `f`.`field_id` = `a`.`default_field_id` WHERE `a`.`area_id` = ?",
+                'ii', [$slugFieldId, $areaId]
+            );
+            $rows = $this->db->fetchAll();
+        }
+        finally {
+            $this->db->popResult();
+        }
+        $slugField = null;
+        $sourceField = null;
+        foreach ($rows as $row) {
+            if ((int)$row['field_id'] === $slugFieldId && $slugField === null) $slugField = $row;
+            else $sourceField = $row;
+        }
+        $slugType = (string)($slugField['type'] ?? '');
+        $slugSuffix = $this->cms->dataSuffix[$slugType] ?? '';
+        if ($slugField === null || !in_array($slugType, ['chars', 'text'], true) || $slugSuffix === '') return $result;
+        $sourceType = (string)($sourceField['type'] ?? '');
+        $sourceSuffix = $this->cms->dataSuffix[$sourceType] ?? '';
+        if ($sourceField === null || (int)$sourceField['deleted'] === 1 || (int)$sourceField['area_id'] !== $areaId
+            || !in_array($sourceType, ['chars', 'text'], true) || $sourceSuffix === '') {
+            return $result;
+        }
+        $result['source'] = true;
+
+        $langCtx = $this->languageContext($areaId);
+        $primaryId = (int)($langCtx['primary_id'] ?? 0);
+        $instanceId = (int)($langCtx['instance_id'] ?? 0);
+        $isMultilingual = !empty($slugField['multilingual']) && $this->cms->hasEmptyFlag($slugType);
+        $sourceMultilingual = !empty($sourceField['multilingual']) && $this->cms->hasEmptyFlag($sourceType);
+        $label = (string)$slugField['label'];
+
+        // slug rows still to fill and the title in the same language:
+        // primary language: slug ''; further languages (multilingual slug only):
+        // slug is a fallback (`empty` = 1) and the title has an own translation
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `r`.`record_id`, `s`.`language_id`, `t`.`data` FROM `record` `r`"
+                . " JOIN `data_{$slugSuffix}` `s` ON `s`.`record_id` = `r`.`record_id` AND `s`.`field_id` = ?"
+                . " JOIN `data_{$sourceSuffix}` `t` ON `t`.`record_id` = `r`.`record_id` AND `t`.`field_id` = ?"
+                . " AND `t`.`language_id` = `s`.`language_id`"
+                . " WHERE `r`.`area_id` = ? AND `r`.`tmp` = 0 AND `r`.`deleted` = 0"
+                . " AND ((`s`.`language_id` = ? AND `s`.`data` = '')"
+                . ($isMultilingual && $sourceMultilingual ? " OR (`s`.`language_id` <> ? AND `s`.`empty` = 1 AND `t`.`empty` = 0)" : '')
+                . ") ORDER BY (`s`.`language_id` <> ?) ASC, `r`.`record_id` ASC, `s`.`language_id` ASC",
+                $isMultilingual && $sourceMultilingual ? 'iiiiii' : 'iiiii',
+                $isMultilingual && $sourceMultilingual
+                    ? [$slugFieldId, (int)$sourceField['field_id'], $areaId, $primaryId, $primaryId, $primaryId]
+                    : [$slugFieldId, (int)$sourceField['field_id'], $areaId, $primaryId, $primaryId]
+            );
+            $rows = $this->db->fetchAll();
+        }
+        finally {
+            $this->db->popResult();
+        }
+
+        $colDef = ['type' => $slugType];
+        $savedErrors = [$this->cms->errors, $this->cms->hasErrors];
+        try {
+            foreach ($rows as $row) {
+                $recordId = (int)$row['record_id'];
+                $languageId = (int)$row['language_id'];
+                $isPrimary = ($languageId === $primaryId);
+                $title = trim((string)$row['data']);
+                if ($title === '') continue;
+                $slug = $this->cms->textToUri($title);
+                if ($slug === '') continue;
+                if (preg_match('/^\d+$/', $slug)) $slug = '-' . $slug;
+
+                // the primary slug also lands in the fallback rows - checked in all languages
+                $checkLanguage = ($isMultilingual && !$isPrimary) ? $languageId : null;
+                $this->cms->errors = [];
+                if (!$this->slugPathOk($slug, $colDef, 'slug', $label, $recordId, $areaId, $checkLanguage, $instanceId)) {
+                    $error = end($this->cms->errors);
+                    $result['conflicts'][] = [
+                        'record_id'   => $recordId,
+                        'language_id' => $isMultilingual ? $languageId : 0,
+                        'title'       => $title,
+                        'slug'        => $slug,
+                        'message'     => (string)($error['text'] ?? ''),
+                    ];
+                    continue;
+                }
+                if (!$isMultilingual) {
+                    $this->db->query(
+                        "UPDATE `data_{$slugSuffix}` SET `data` = ? WHERE `record_id` = ? AND `field_id` = ? AND `data` = ''",
+                        'sii', [$slug, $recordId, $slugFieldId]
+                    );
+                }
+                elseif ($isPrimary) {
+                    $this->db->query(
+                        "UPDATE `data_{$slugSuffix}` SET `data` = ? WHERE `record_id` = ? AND `field_id` = ?"
+                        . " AND (`language_id` = ? OR `empty` = 1)",
+                        'siii', [$slug, $recordId, $slugFieldId, $primaryId]
+                    );
+                }
+                else {
+                    $this->db->query(
+                        "UPDATE `data_{$slugSuffix}` SET `data` = ?, `empty` = 0 WHERE `record_id` = ? AND `field_id` = ? AND `language_id` = ?",
+                        'siii', [$slug, $recordId, $slugFieldId, $languageId]
+                    );
+                }
+                $result['written']++;
+            }
+        }
+        finally {
+            [$this->cms->errors, $this->cms->hasErrors] = $savedErrors;
+        }
+
+        if ($result['written'] > 0) {
+            $this->db->pushResult();
+            try {
+                $this->container->get(\Camindo\Core\RecordCache::class)->clear(0, [$areaId]);
+            }
+            finally {
+                $this->db->popResult();
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Records that a restore() of $recordId brings back: the record and the
+     * descendants of the same deletion operation (same changed_at, see
+     * Dataset::restore()). Without side effects - unlike collectIds(), which moves
+     * children up for $withChilds = false.
+     *
+     * @return int[]  record_ids, parents first; [] if the record is not in the trash
+     */
+    public function restoreIds(int $recordId): array
+    {
+        $this->db->pushResult();
+        try {
+            $this->db->query(
+                "SELECT `record_id`, `area_id`, `lft`, `rgt`, `deleted`, `tmp` FROM `record` WHERE `record_id` = ?",
+                'i', [$recordId]
+            );
+            $data = $this->db->fetch();
+        }
+        finally {
+            $this->db->popResult();
+        }
+        if (!$data || empty($data['deleted']) || !empty($data['tmp'])) return [];
+        if (!$this->isTreeArea((int)$data['area_id'])) return [$recordId];
+        $previous = $this->restoreTimestamp;
+        $this->restoreTimestamp = $this->rawChangedAt($recordId);
+        try {
+            return $this->subtreeIds($data, 'restore') ?: [$recordId];
+        }
+        finally {
+            $this->restoreTimestamp = $previous;
+        }
+    }
+
+    /**
+     * Conflicts that restoring the records $recordIds (from the trash) would cause:
+     * values of fields with the flag 'unique' / 'unique_in_area' and the slug
+     * (URL path, slugPathOk()) that a live record has taken in the meantime - the
+     * uniqueness check of save() only sees live records, so a value of a record in
+     * the trash is free for others. Also checked: duplicates among the records of
+     * the same restore operation itself.
+     *
+     * Per value as when saving: multilingual fields per language (own values only,
+     * fallbacks do not count - except for the slug, whose fallback row is the
+     * address of the language), single-language fields once. Encrypted
+     * fields are compared via their plain text (uniqueVirtualOk() hashes it).
+     * Cms::errors stays untouched.
+     *
+     * @param int[] $recordIds  records in the trash (restoreIds(), Area::hookOnRestore())
+     * @return array  [['record_id', 'area_id', 'title', 'name', 'error_name',
+     *                  'label', 'error_label', 'language_id', 'value', 'message'], …]
+     */
+    public function restoreConflicts(array $recordIds): array
+    {
+        $conflicts = [];
+        $seen = [];   // values of the operation itself: key => record_id
+        $lower = fn(string $text): string => mb_strtolower($text, 'UTF-8');
+        $cache = $this->container->get(InstanceCache::class);
+        $savedErrors = [$this->cms->errors, $this->cms->hasErrors];
+        try {
+            foreach ($recordIds as $recordId) {
+                $recordId = (int)$recordId;
+                $this->db->pushResult();
+                try {
+                    $this->db->query("SELECT `area_id`, `instance_id` FROM `record` WHERE `record_id` = ?", 'i', [$recordId]);
+                    $row = $this->db->fetch();
+                }
+                finally {
+                    $this->db->popResult();
+                }
+                if (!$row) continue;
+                $areaId = (int)$row['area_id'];
+                $instanceId = (int)$row['instance_id'] ?: $cache->areaInstanceId($areaId);
+                $langCtx = $this->languageContext($areaId);
+                $primaryId = (int)($langCtx['primary_id'] ?? 0);
+                $title = null;
+
+                foreach ($this->virtualSchema($areaId, false) as $name => $colDef) {
+                    $flags = (array)($colDef['flags'] ?? []);
+                    $isSlug = ($name === 'slug');
+                    $inArea = in_array('unique_in_area', $flags, true) && !in_array('unique', $flags, true);
+                    if (!$isSlug && !in_array('unique', $flags, true) && !$inArea) continue;
+                    $type = (string)($colDef['type'] ?? '');
+                    $suffix = $this->cms->dataSuffix[$type] ?? '';
+                    $fieldId = (int)($colDef['field_id'] ?? 0);
+                    if ($suffix === '' || $fieldId < 1 || in_array($type, $this->cms->relationTypes, true)
+                        || in_array($type, ['file', 'password', 'fulltext'], true)) continue;
+                    $isMultilingual = !empty($colDef['multilingual']) && $this->cms->hasEmptyFlag($type);
+
+                    $this->db->pushResult();
+                    try {
+                        $this->db->query(
+                            "SELECT `language_id`, `data`" . ($this->cms->hasEmptyFlag($type) ? ', `empty`' : ', 0 AS `empty`')
+                            . " FROM `data_{$suffix}` WHERE `record_id` = ? AND `field_id` = ?"
+                            . " ORDER BY (`language_id` <> ?) ASC, `language_id` ASC",
+                            'iii', [$recordId, $fieldId, $primaryId]
+                        );
+                        $rows = $this->db->fetchAll();
+                    }
+                    finally {
+                        $this->db->popResult();
+                    }
+                    foreach ($rows as $valueRow) {
+                        $languageId = (int)$valueRow['language_id'];
+                        // fallback rows do not count - except for the slug: the address
+                        // /{lang}/{slug} of a further language resolves via its row
+                        if ($isMultilingual && !$isSlug && !empty($valueRow['empty'])) continue;
+                        $value = (string)($valueRow['data'] ?? '');
+                        if ($type === 'encrypted') $value = $this->crypt->decrypt($value, '', true);
+                        if (trim($value) === '') continue;
+                        // language of the check: per language for multilingual fields
+                        $checkLanguage = $isMultilingual ? $languageId : null;
+                        $errorName = $isMultilingual ? $name . '.' . $languageId : $name;
+                        $label = (string)($colDef['label'] ?? $name);
+
+                        $this->cms->errors = [];
+                        $key = $name . '|' . ($checkLanguage ?? '*') . '|' . ($inArea ? $areaId : 'i' . $instanceId)
+                            . ($isSlug ? '|' . $lower($cache->slugPrefix($areaId, $checkLanguage ?? $primaryId)) : '')
+                            . '|' . $lower($value);
+                        if (isset($seen[$key])) {
+                            $this->createFieldError('error_unique_value', $errorName, $label);
+                            $ok = false;
+                        }
+                        elseif ($isSlug) {
+                            $ok = $this->slugPathOk($value, $colDef, $errorName, $label, $recordId, $areaId, $checkLanguage, $instanceId);
+                        }
+                        else {
+                            $ok = $this->uniqueVirtualOk($name, $colDef, $type, $value, $inArea, $recordId, $areaId, $checkLanguage, $instanceId);
+                            if (!$ok) $this->createFieldError('error_unique_value', $errorName, $label);
+                        }
+                        $seen[$key] = $recordId;
+                        if (!$ok) {
+                            $error = end($this->cms->errors);
+                            $title ??= $this->restoreTitle($recordId, $areaId);
+                            $conflicts[] = [
+                                'record_id'   => $recordId,
+                                'area_id'     => $areaId,
+                                'title'       => $title,
+                                'name'        => $name,
+                                'error_name'  => $errorName,
+                                'label'       => $this->cms->textOrSnippet($label),
+                                // as Dataset::validateFieldValue() names it ("Slug | de_DE")
+                                'error_label' => $this->cms->textOrSnippet($label) . ($isMultilingual
+                                    ? ' | ' . (string)($langCtx['codes'][$languageId] ?? $languageId) : ''),
+                                'language_id' => $isMultilingual ? $languageId : 0,
+                                'value'       => $type === 'encrypted' ? '' : $value,
+                                'message'     => (string)($error['text'] ?? ''),
+                            ];
+                        }
+                        // single-language field: the same value in every language row
+                        if (!$isMultilingual) break;
+                    }
+                }
+            }
+        }
+        finally {
+            [$this->cms->errors, $this->cms->hasErrors] = $savedErrors;
+        }
+        return $conflicts;
+    }
+
+    /**
+     * Title of a record for messages: the default field in the primary language
+     * (plain text, without encrypted fields), otherwise ''.
+     */
+    private function restoreTitle(int $recordId, int $areaId): string
+    {
+        foreach ($this->virtualSchema($areaId, false) as $colDef) {
+            if ((int)($colDef['default_field'] ?? 0) !== 1) continue;
+            $type = (string)($colDef['type'] ?? '');
+            if (!in_array($type, ['chars', 'text'], true)) return '';
+            $suffix = $this->cms->dataSuffix[$type];
+            $primaryId = (int)($this->languageContext($areaId)['primary_id'] ?? 0);
+            $this->db->pushResult();
+            try {
+                $this->db->query(
+                    "SELECT `data` FROM `data_{$suffix}` WHERE `record_id` = ? AND `field_id` = ?"
+                    . " ORDER BY (`language_id` <> ?) ASC LIMIT 1",
+                    'iii', [$recordId, (int)$colDef['field_id'], $primaryId]
+                );
+                $row = $this->db->fetchNum();
+            }
+            finally {
+                $this->db->popResult();
+            }
+            return trim(strip_tags((string)($row[0] ?? '')));
+        }
+        return '';
+    }
+
+    /**
+     * Restore a single record in the trash together with the inputs of its working
+     * copy - the save of the input mask that RecordBackendEdit opens instead of the
+     * restore when restoreConflicts() finds something (module Trash). In ONE
+     * transaction: Record::save() of the working copy (validation like every save,
+     * also the uniqueness - the record itself is excluded), then restore() of the
+     * original - with changed_at set back to its deletion operation beforehand (save()
+     * stamps it, restore() finds the record and its firmly linked contents by it).
+     * If saving fails, nothing is restored and no file is moved.
+     *
+     * @param int   $tmpId   working copy of the record in the trash (checkOutDeleted())
+     * @param array $fields  as save()
+     * @param array $data    as save()
+     * @return int|null      record_id, null on errors (Cms::errors)
+     */
+    public function saveAndRestore(int $tmpId, array $fields, array &$data): ?int
+    {
+        $prodData = $this->getProdData($tmpId);
+        $originId = (int)($prodData[0] ?? 0);
+        if ($originId < 1) {
+            $this->cms->error($this->cms->snippet('error_tmp_record_access_denied'));
+            return null;
+        }
+        $timestamp = $this->rawChangedAt($originId);
+        $this->db->beginTransaction();
+        try {
+            $newId = $this->save($fields, $data);
+            if (!$newId) throw new \Exception('#' . $this->cms->errorMsgLast());
+            // save() has stamped the original - back to the time of its deletion
+            // operation, by which restore() finds it and its firmly linked contents
+            $this->db->query("UPDATE `record` SET `changed_at` = ? WHERE `record_id` = ?", 'si', [$timestamp, $originId]);
+            if (!$this->restore($originId, true)) throw new \Exception('#' . $this->cms->errorMsgLast());
+            $this->db->commit();
+            return (int)$newId;
+        }
+        catch (\Exception $e) {
+            $msg = $e->getMessage();
+            if (!str_starts_with($msg, '#')) $this->cms->error($msg);
+            $this->db->rollback();
+            return null;
+        }
     }
 
     /**

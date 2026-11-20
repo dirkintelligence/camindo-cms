@@ -24,6 +24,10 @@
  *             group does not see)
  *     move    write + delete in the source area, link fields as with
  *             copy; the target area is checked by MoveTrait::movePrepare()
+ *     restore a record in the trash (the only action for such a record):
+ *             delete right (restoring = delete right, Dataset::restoreOneCore())
+ *             and write right - the input mask restores it when saving
+ *             (module Trash, conflicts on restore: Record::restoreConflicts())
  *
  * THE OWN OPEN MASK (ownOpenCopy())
  * --------------------
@@ -55,7 +59,7 @@ use Camindo\Core\Modules\Privacy\PrivacyJobs;
 
 class RecordService
 {
-    public const ACTIONS = ['read', 'edit', 'delete', 'copy', 'move'];
+    public const ACTIONS = ['read', 'edit', 'delete', 'copy', 'move', 'restore'];
 
     public function __construct(
         private Config $config,
@@ -82,7 +86,7 @@ class RecordService
      * (see class comment).
      *
      * @param int    $id      record_id
-     * @param string $action  read | edit | delete | copy | move
+     * @param string $action  read | edit | delete | copy | move | restore
      * @return array|null     record (Record::load()), null on errors (Cms::errors)
      */
     public function loadForAction(int $id, string $action): ?array
@@ -91,7 +95,8 @@ class RecordService
             throw new \InvalidArgumentException("invalid action \"{$action}\"");
         }
         if (!$data = $this->record->load($id)) return null;
-        if (!empty($data['tmp']) || !empty($data['deleted'])) {
+        // restore: only a record in the trash, otherwise only live records
+        if (!empty($data['tmp']) || !empty($data['deleted']) !== ($action === 'restore')) {
             $this->cms->error($this->cms->snippet('record.error_record_not_productive'));
             return null;
         }
@@ -110,6 +115,7 @@ class RecordService
             'delete' => $access->areaDelete($areaId, $ownerId),
             'copy'   => $access->areaCreate($areaId),
             'move'   => $access->areaWrite($areaId, $ownerId) && $access->areaDelete($areaId, $ownerId),
+            'restore' => $access->areaDelete($areaId, $ownerId) && $access->areaWrite($areaId, $ownerId),
         };
         if (!$allowed) {
             // write right yes, but status not settable: name the reason
@@ -337,13 +343,17 @@ class RecordService
      *                           to the working copy (record_id, tmp, origin_id)
      * @param bool  $copy        copy instead of edit
      * @param bool  $dependents  also check out embedded contents (input mask)
+     * @param bool  $fromTrash   the record is in the trash (loadForAction('restore')):
+     *                           saving restores it (checkIn(..., restore: true));
+     *                           embedded contents stay with it in the trash
      * @return int|null          id of the working copy, null on errors (Cms::errors)
      */
-    public function checkOut(array &$data, bool $copy = false, bool $dependents = true): ?int
+    public function checkOut(array &$data, bool $copy = false, bool $dependents = true, bool $fromTrash = false): ?int
     {
         $sourceId = (int)$data['record_id'];
         $areaId = (int)$data['area_id'];
-        if (!$tmpId = $this->record->checkOut($data, $copy)) {
+        if ($fromTrash) $dependents = false;
+        if (!$tmpId = $this->record->checkOut($data, $copy, $fromTrash)) {
             if (!$this->cms->hasErrors) $this->cms->error('RecordService::checkOut(): check-out failed.');
             return null;
         }
@@ -396,9 +406,11 @@ class RecordService
      * @param string[] $stored     fields whose values are in database format
      *                             (Record::importSave() - API, copy without mask)
      * @param string[] $prehashed  password fields whose value is the hash
+     * @param bool     $restore    the original is in the trash (checkOut(fromTrash: true)):
+     *                             save and restore it (Record::saveAndRestore())
      * @return int|null            record_id of the productive record, null on errors
      */
-    public function checkIn(int $tmpId, array $fields, array $data, array $stored = [], array $prehashed = []): ?int
+    public function checkIn(int $tmpId, array $fields, array $data, array $stored = [], array $prehashed = [], bool $restore = false): ?int
     {
         // If the copy no longer belongs to the session admin - someone has lifted the lock -
         // save() reports this with the matching text
@@ -412,12 +424,14 @@ class RecordService
         $newId = null;
         $this->db->beginTransaction();
         try {
-            if ($hasLinks && !$this->record->checkInDependents($tmpId, $originId)) {
+            if (!$restore && $hasLinks && !$this->record->checkInDependents($tmpId, $originId)) {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }
-            $newId = ($stored || $prehashed)
+            $newId = $restore
+                ? $this->record->saveAndRestore($tmpId, $fields, $data)
+                : (($stored || $prehashed)
                 ? $this->record->importSave($fields, $data, $stored, $prehashed)
-                : $this->record->save($fields, $data);
+                : $this->record->save($fields, $data));
             if (!$newId) {
                 throw new \Exception('#' . $this->cms->errorMsgLast());
             }

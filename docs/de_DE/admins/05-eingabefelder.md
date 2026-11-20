@@ -343,7 +343,16 @@ Veröffentlichungs- und Ablaufdatum unbegrenzt sichtbar.
 
 Im selben Abschnitt der Auswahl finden Sie ***Slug***. Es ist kein Metafeld im engeren Sinn,
 sondern legt ein Feld „Kurzer Text“ mit dem Namen `slug` an – die Webadresse des
-Datensatzes (siehe [Besondere Feldnamen](#besondere-feldnamen)).
+Datensatzes (siehe [Besondere Feldnamen](#besondere-feldnamen)). Die Maske ist vorbelegt:
+Bezeichnung „Slug“ und ***mehrsprachig*** eingeschaltet, damit jede Sprache ihre eigene Adresse
+bekommt.
+
+Beim Speichern des neuen Feldes erhalten ***alle vorhandenen Datensätze*** des Bereichs einen
+Slug aus dem Hauptfeld – je Sprache aus dem Titel in derselben Sprache; wo der Titel nicht
+übersetzt ist, gilt der Slug der Hauptsprache. Ist eine Adresse schon vergeben, behält sie der
+ältere Datensatz; beim jüngeren bleibt der Slug leer (die Adresse läuft dann über die ID). Alle
+diese Datensätze zeigt camindo CMS nach dem Speichern gesammelt in einer Liste – tragen Sie
+dort fehlende Slugs bei Bedarf von Hand ein.
 
 Verwendet der Bereich ein Metafeld oder den Slug bereits – auch mit einem Feld im
 Papierkorb –, ist die Karte in der Auswahl ausgegraut und lässt sich nicht anklicken. Den
@@ -355,7 +364,7 @@ wieder her oder löschen Sie es endgültig.
 
 | Name | Wirkung |
 |---|---|
-| `slug` | Ein Feld „Kurzer Text“ mit diesem Namen liefert die ***Webadresse*** des Datensatzes (`/betriebsfeier-2026` statt `/1758`). Bleibt es leer, füllt camindo CMS es beim Speichern aus dem Hauptfeld. Ein einmal gesetzter Slug ändert sich nicht mit dem Titel – bereits geteilte Links bleiben gültig. Er darf Schrägstriche enthalten (`produkte/schuhe`) und kann mehrsprachig sein. Eindeutig sein muss die Adresse samt [Slug-Prefix](./04-struktur.md#slug-prefix) des Bereichs – in Bereichen mit verschiedenen Präfixen darf derselbe Slug vorkommen |
+| `slug` | Ein Feld „Kurzer Text“ mit diesem Namen liefert die ***Webadresse*** des Datensatzes (`/betriebsfeier-2026` statt `/1758`). Bleibt es leer, füllt camindo CMS es beim Speichern aus dem Hauptfeld – eine weitere Sprache aus dem übersetzten Titel, sonst gilt dort der Slug der Hauptsprache. Ein einmal gesetzter Slug ändert sich nicht mit dem Titel – bereits geteilte Links bleiben gültig. Er darf Schrägstriche enthalten (`produkte/schuhe`) und kann mehrsprachig sein. Eindeutig sein muss die Adresse samt [Slug-Präfix](./04-struktur.md#slug-präfix) des Bereichs – in Bereichen mit verschiedenen Präfixen darf derselbe Slug vorkommen |
 
 ## Typ ändern
 

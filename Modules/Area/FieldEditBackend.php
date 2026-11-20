@@ -226,6 +226,29 @@ class FieldEditBackend extends FieldBackend {
                 $this->field->removeRelationsOutside($this->id);
             }
             $this->backend->balloon('success', $this->cms->snippet('area.message_field_saved'));
+            // New slug field: show the records without slug (conflicts) collected,
+            // the layer stays open until the editor closes it
+            $fill = $this->field->slugFill;
+            if ($fill !== null && (!empty($fill['conflicts']) || empty($fill['source']))) {
+                $items = '';
+                $languages = $this->instanceCache->languages((int)($this->instanceCache->areaInstanceId($this->areaId)));
+                foreach ($fill['conflicts'] as $c) {
+                    $code = (string)($languages[(int)($c['language_id'] ?? 0)]['code'] ?? '');
+                    $items .= '<li>' . htmlspecialchars((string)$c['title']) . ' (' . (int)$c['record_id']
+                        . ($code !== '' ? ', ' . htmlspecialchars($code) : '') . '): '
+                        . htmlspecialchars((string)$c['slug']) . ' – ' . $c['message'] . '</li>';
+                }
+                $text = empty($fill['source'])
+                    ? $this->cms->snippet('area.warning_slug_no_source')
+                    : strtr($this->cms->snippet('area.warning_slug_conflicts'), ['{count}' => count($fill['conflicts'])])
+                        . $this->backend->template('ul', ['{items}' => $items]);
+                echo $this->backend->template('alert_warning', ['{text}' => $text]);
+                $this->backend->buttonBarReset();
+                $this->backend->buttonAdd('button_close', "cApp.layers.invalidate(); cApp.layers.close()");
+                echo $this->backend->buttonBar();
+                $this->function = 'skip_form';
+                return;
+            }
             $this->backend->script("
                 cApp.layers.invalidate();
                 cApp.layers.close();

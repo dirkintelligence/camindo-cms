@@ -147,9 +147,12 @@ trait TemporaryTrait
      * @param array &$data  from the preceding Dataset::load()
      * @param bool $copy    true: a copy with origin_id = 0 is created
      *                        the original record is not locked
+     * @param bool $fromTrash true: the original is in the trash (`deleted` = 1) - the
+     *                        input mask restores it when saving (Record::saveAndRestore(),
+     *                        module Trash); cancelling leaves it there
      * @return int|null     `{tableName}_id` of the working copy, or null on error
      */
-    public function checkOut(array &$data, $copy = false): ?int
+    public function checkOut(array &$data, $copy = false, bool $fromTrash = false): ?int
     {
         $tableName = $this->tableName;
         $idField   = $tableName . '_id';
@@ -161,7 +164,7 @@ trait TemporaryTrait
             return null;
         }
 
-        if ((int)$data['tmp'] !== 0 || (int)$data['deleted'] > 0) {
+        if ((int)$data['tmp'] !== 0 || ((int)$data['deleted'] > 0) !== ($fromTrash && !$copy)) {
             $this->cms->error('makeTemporary() - Error: dataset is not productive.');
             return null;
         }

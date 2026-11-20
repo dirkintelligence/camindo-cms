@@ -194,6 +194,10 @@ class Field extends Dataset {
     // trash: the records go along and keep their status (hookOnSoftDelete(), status_id)
     public bool $areaCascade = false;
 
+    // Result of the last save that created a slug field (or renamed a field to
+    // `slug`): Record::fillSlugs() - written, source, conflicts. null otherwise.
+    public ?array $slugFill = null;
+
     // Types that can be converted into each other (convert()): within and
     // between the two groups. Including relation <-> relation1 and pointer <-> pointer1,
     // relation <-> pointer with the same cardinality (pointer -> relation only with
@@ -671,6 +675,13 @@ class Field extends Dataset {
         if ($name === 'offline_at') {
             // Expiration date: mostly empty, not worth a list column
             $data['visibility_list'] = 0;
+        }
+        if ($name === 'slug' && trim((string)($data['label'] ?? '')) === '') {
+            // Slug (card in the section "Meta fields"): label as on the card
+            $data['label'] = '#area.label_field_meta_slug';
+            // one address per language (Record::hookOnSave(), fillSlugs()) -
+            // the switch stays changeable while creating
+            $data['multilingual'] = 1;
         }
         // Date field: preselect the calendar (not for meta fields)
         if (!isset($this->cms->schema[$name])) {
@@ -1383,6 +1394,21 @@ class Field extends Dataset {
         // --------------------
         if ($isNew) {
             $this->fillExistingRecords($fieldId, $fieldnameId, $areaId, $data);
+        }
+
+        // New field `slug`: slugs for the existing records from the default field
+        // --------------------
+        // Conflicts (same URL path) leave the slug empty; the list goes to the
+        // caller via $slugFill (FieldEditBackend shows it)
+        $this->slugFill = null;
+        if ($name === 'slug' && ($isNew || $nameChanged)) {
+            $this->db->pushResult();
+            try {
+                $this->slugFill = $this->recordDataset()->fillSlugs($areaId, $fieldId);
+            }
+            finally {
+                $this->db->popResult();
+            }
         }
 
         // type change

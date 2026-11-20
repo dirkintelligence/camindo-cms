@@ -476,6 +476,18 @@ ihm zusammen gelöscht wurden. Ein Unterdatensatz, den Sie schon **vorher** einz
 gelöscht hatten, bleibt im Papierkorb; er erscheint in der Liste, sobald sein
 übergeordneter Datensatz wiederhergestellt ist.
 
+***Inzwischen vergebene Werte.*** Solange ein Datensatz im Papierkorb liegt, kann ein
+anderer Datensatz seine Werte übernehmen, die eindeutig sein müssen – etwa den Slug (die
+Webadresse) oder einen Anmeldenamen. camindo CMS prüft das vor dem Wiederherstellen:
+
+- Bei einem ***einzelnen Datensatz*** öffnet sich statt der Wiederherstellung seine
+  Eingabemaske. Sie zeigt die betroffenen Felder mit Fehlermeldung wie beim Speichern.
+  Ändern Sie die Werte und speichern Sie – erst dann ist der Datensatz wiederhergestellt.
+  „Abbrechen“ lässt ihn im Papierkorb.
+- Bei einem ***Zweig*** (oder einem gelöschten Bereich) wird nichts wiederhergestellt. Eine
+  Liste nennt jeden Konflikt mit Datensatz, Feld, Sprache und Wert. Ändern Sie die Werte der
+  Datensätze, die sie inzwischen tragen, und stellen Sie dann erneut wieder her.
+
 Nicht in Ihrem Papierkorb erscheinen:
 
 - Datensätze aus einem Inhaltsbereich, der selbst gelöscht wurde; den stellt nur ein

@@ -44,6 +44,19 @@
  * from admin.mass_delete_threshold as a background process (MassDeletion). The
  * group permissions are checked by Dataset::restoreOneCore() per record (delete permission).
  *
+ * CONFLICTS ON RESTORING
+ * --------------------
+ * The uniqueness check of saving only sees live records - a value of a record in
+ * the trash (slug, unique fields such as a sign-in name) can therefore be taken by
+ * another record in the meantime. Before anything is restored, restore()
+ * checks all records of the operation (Record::restoreConflicts()):
+ *     a single record   'edit' - the caller opens its input mask instead
+ *                       (RecordService::checkOut(fromTrash: true)); it shows the
+ *                       messages like a failed save, saving restores the record
+ *                       (Record::saveAndRestore()), cancelling leaves it in the trash
+ *     several records   'conflicts' - a branch or an area: nothing is restored until
+ *                       the conflicts are removed; the list is in $conflicts
+ *
  * @see Camindo\Core\Modules\Trash\TrashBackend  list, widget
  * @see Camindo\Core\Dataset                     delete() / restore()
  * @see Camindo\Core\Modules\Area\Area           hookOnSoftDelete() / hookOnRestore()
@@ -66,6 +79,9 @@ class Trash {
 
     /** At most this many entries per list */
     public const MAX_ENTRIES = 200;
+
+    // Conflicts of the last restore() ('edit' / 'conflicts'), Record::restoreConflicts()
+    public array $conflicts = [];
 
     public function __construct(
         private Backend $backend,
@@ -334,10 +350,26 @@ class Trash {
      * @param string $table  'record' | 'area' | 'field'
      * @return string        'restored' | 'background' | 'failed' (message in Cms::errors)
      *                       | 'denied' (not in the list of the administrator)
+     *                       | 'edit' (single record with conflicts: open its input mask)
+     *                       | 'conflicts' (several records: refused, see $conflicts)
+     *                       - for 'edit' and 'conflicts' the messages are also in Cms::errors
      */
     public function restore(string $table, int $id): string
     {
+        $this->conflicts = [];
         if (!$this->restorable($table, $id)) return 'denied';
+
+        // values taken in the meantime (see class comment)
+        if ($table !== 'field') {
+            $recordIds = ($table === 'record') ? $this->record->restoreIds($id) : $this->areaRecordIds($id);
+            $this->conflicts = $this->record->restoreConflicts($recordIds);
+            if (!empty($this->conflicts)) {
+                foreach ($this->conflicts as $conflict) {
+                    $this->cms->error($this->conflictText($conflict));
+                }
+                return ($table === 'record' && count($recordIds) === 1) ? 'edit' : 'conflicts';
+            }
+        }
 
         // Input field: with its counter and thumbnail fields - never many rows
         if ($table === 'field') {
@@ -357,6 +389,50 @@ class Trash {
 
         $dataset = ($table === 'area') ? $this->area : $this->record;
         return $dataset->restore($id, true) ? 'restored' : 'failed';
+    }
+
+    /**
+     * Records that restoring the area $areaId brings back: those of the areas of the
+     * same deletion operation (the area and its subareas, same changed_at - see
+     * Area::hookOnRestore()) with exactly this changed_at.
+     *
+     * @return int[]
+     */
+    private function areaRecordIds(int $areaId): array
+    {
+        $this->db->query("SELECT `changed_at` FROM `area` WHERE `area_id` = ? AND `deleted` = 1", 'i', [$areaId]);
+        $timestamp = (string)($this->db->fetchNum()[0] ?? '');
+        if ($timestamp === '') return [];
+        $this->db->query(
+            "SELECT `r`.`record_id` FROM `record` `r` JOIN `area` `a` ON `a`.`area_id` = `r`.`area_id`"
+            . " WHERE `a`.`deleted` = 1 AND `a`.`changed_at` = ? AND `r`.`deleted` = 1 AND `r`.`tmp` = 0"
+            . " AND `r`.`changed_at` = ? ORDER BY `r`.`record_id`",
+            'ss', [$timestamp, $timestamp]
+        );
+        return array_map('intval', $this->db->fetchAll());
+    }
+
+    /**
+     * One conflict as text (HTML): "Title (id) - field [language]: "value" - message".
+     */
+    public function conflictText(array $conflict): string
+    {
+        $title = (string)($conflict['title'] ?? '');
+        $record = ($title !== '' ? htmlspecialchars($title) . ' ' : '') . '(' . (int)$conflict['record_id'] . ')';
+        $field = htmlspecialchars((string)$conflict['label']);
+        $languageId = (int)($conflict['language_id'] ?? 0);
+        if ($languageId > 0) {
+            $this->db->query("SELECT `code` FROM `language` WHERE `language_id` = ?", 'i', [$languageId]);
+            $code = (string)($this->db->fetchNum()[0] ?? '');
+            if ($code !== '') $field .= ' [' . htmlspecialchars($code) . ']';
+        }
+        $value = (string)($conflict['value'] ?? '');
+        return strtr($this->cms->snippet('trash.error_restore_conflict'), [
+            '{record}'  => $record,
+            '{field}'   => $field,
+            '{value}'   => htmlspecialchars($value),
+            '{message}' => (string)$conflict['message'],
+        ]);
     }
 
     // ====================

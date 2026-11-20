@@ -118,6 +118,15 @@ class RecordBackendEdit extends RecordBackend {
     private string $lockAlert = '';
 
     /**
+     * restore=1: the record is in the trash and could not be restored because values
+     * of it are taken in the meantime (module Trash, Record::restoreConflicts()). The
+     * mask edits a working copy of it (RecordService::checkOut(fromTrash: true)) and shows
+     * the conflicts like a failed save; saving restores it
+     * (Record::saveAndRestore()), cancelling leaves it in the trash.
+     */
+    private bool $restore = false;
+
+    /**
      * Create / copy / change / delete (backend/record_edit.php).
      *
      * State machine via $_REQUEST['function'] as in the other modules
@@ -151,7 +160,8 @@ class RecordBackendEdit extends RecordBackend {
         if ($this->function == '') $this->function = 'edit';
         $this->data = (array)($_REQUEST['data'] ?? []);
         $this->embedData = (array)($_REQUEST['embed'] ?? []);
-        
+        $this->restore = !empty($_REQUEST['restore']) && in_array($this->function, ['edit', 'save'], true);
+
         $this->_resolveParams();
 
         // Saving: only the fields of the mask (RecordService::saveFields()) plus the
@@ -201,6 +211,16 @@ class RecordBackendEdit extends RecordBackend {
         // locked by another user (_editLoad())
         if ($this->function === 'locked') {
             echo $this->lockAlert;
+        }
+
+        // from the trash with conflicts: note + the messages at their fields
+        if ($this->restore && in_array($this->function, ['edit', 'save'], true)) {
+            echo $this->backend->template('alert_warning', [
+                '{text}' => htmlspecialchars($this->cms->snippet('record.note_restore_conflicts')),
+            ]);
+            if ($this->function === 'edit') {
+                $this->errors();
+            }
         }
 
         if (!empty($this->areaId)) {
@@ -396,6 +416,7 @@ class RecordBackendEdit extends RecordBackend {
         $this->backend->formHidden('area_id', $this->areaId);
         $this->backend->formHidden('id', $this->id);
         $this->backend->formHidden('shown', implode(',', $shown));
+        if ($this->restore) $this->backend->formHidden('restore', '1');
         // tabs: the displayed one (tab) and the target of a tab switch
         // (tab_target, set by cApp.ui.recordTab() before submitting)
         if ($useTabs) {
@@ -1840,10 +1861,11 @@ class RecordBackendEdit extends RecordBackend {
         // change/delete according to the group of the owner, copy = create in the area -
         // and only if all link fields have readable target areas
         // (RecordService::loadForAction())
-        $action = match ($this->function) {
-            'delete' => 'delete',
-            'copy'   => 'copy',
-            default  => 'edit',
+        $action = match (true) {
+            $this->function === 'delete' => 'delete',
+            $this->function === 'copy'   => 'copy',
+            $this->restore               => 'restore',
+            default                      => 'edit',
         };
         if (!$this->data = $this->service->loadForAction($this->id, $action)) {
             // Fehlermeldung steckt in Cms::errors
@@ -1890,12 +1912,21 @@ class RecordBackendEdit extends RecordBackend {
         // Firmly linked contents of embedded 'link' fields are checked out
         // along (not when deleting); if that fails, the working copy is
         // discarded again and $this->id still points to the original.
-        $tmpId = $this->service->checkOut($this->data, $this->function === 'copy', dependents: $this->function !== 'delete');
+        $originId = (int)$this->data['record_id'];
+        $tmpId = $this->service->checkOut($this->data, $this->function === 'copy', dependents: $this->function !== 'delete', fromTrash: $this->restore);
         if (!$tmpId) {
             $this->function = 'skip';
             return;
         }
         $this->id = $tmpId;
+
+        // from the trash: the conflicts as field errors (edit() shows them, the
+        // fields are marked like after a failed save)
+        if ($this->restore) {
+            foreach ($this->record->restoreConflicts([$originId]) as $conflict) {
+                $this->cms->error($conflict['message'], $conflict['error_name'], $conflict['error_label']);
+            }
+        }
     }
 
 
@@ -1978,10 +2009,10 @@ class RecordBackendEdit extends RecordBackend {
         }
         // check-in including the contents in one transaction (RecordService::checkIn()).
         // copy: on errors the mask shows the input, not the storage format
-        $newId = $this->service->checkIn($this->id, $fields, $this->data);
+        $newId = $this->service->checkIn($this->id, $fields, $this->data, restore: $this->restore);
         if ($newId) {
             // balloon message
-            $msg = $this->cms->snippet('message_record_saved');
+            $msg = $this->cms->snippet($this->restore ? 'trash.message_record_restored' : 'message_record_saved');
             $this->backend->balloon('success', $msg);
 
             // debug function (suspend the redirect to see direct debug output)

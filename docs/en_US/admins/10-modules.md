@@ -239,7 +239,7 @@ The ***files*** of a component are always fetched and removed by Composer on the
 
 Every user has the module “Trash”, regardless of their user group; it appears as a button on the start page and as a widget that shows the number of entries. How editors work with it is described in the [manual for editors](../editors/05-editing-records.md#trash).
 
-Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; hard-linked content, the records and input fields of a deleted area, the counter field of a relation and the file versions of an upload field do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash.
+Each entry stands for ***one deletion operation***: if a record is deleted together with its sub-records, only the topmost appears; hard-linked content, the records and input fields of a deleted area, the counter field of a relation and the file versions of an upload field do not appear individually at all. “Restore” always brings back everything that was deleted in the same operation – recognized by the identical deletion time. What was already deleted in an operation of its own before remains in the trash. If other records have taken over unique values in the meantime (slug, fields with unique values), an operation with several records – branch or area – is refused until the conflicts are removed; for a single record its input form opens (see the [user manual](../editors/05-editing-records.md#trash)).
 
 | Who | Sees |
 |---|---|

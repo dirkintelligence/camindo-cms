@@ -407,7 +407,11 @@ Inhalte, die Datensätze und Eingabefelder eines gelöschten Bereichs, das Gegen
 Verknüpfung und die Dateiversionen eines Upload-Feldes erscheinen gar nicht einzeln.
 „Wiederherstellen“ holt immer alles zurück, was im selben Vorgang gelöscht wurde –
 erkannt am identischen Löschzeitpunkt. Was vorher schon in einem eigenen Vorgang
-gelöscht worden war, bleibt im Papierkorb.
+gelöscht worden war, bleibt im Papierkorb. Haben andere Datensätze inzwischen eindeutige
+Werte übernommen (Slug, Felder mit einmaligen Werten), wird ein Vorgang mit mehreren Datensätzen
+– Zweig oder Bereich – verweigert, bis die Konflikte beseitigt sind; bei einem einzelnen
+Datensatz öffnet sich seine Eingabemaske (siehe
+[Handbuch für Anwender](../editors/05-datensaetze-bearbeiten.md#papierkorb)).
 
 | Wer | sieht |
 |---|---|

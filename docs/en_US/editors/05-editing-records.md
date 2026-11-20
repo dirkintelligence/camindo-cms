@@ -424,6 +424,17 @@ of the branch appears in the list. When restoring, all subordinate records that 
 well. A subordinate record that you had **already** deleted individually beforehand stays in the trash; it appears in the list
 as soon as its parent record has been restored.
 
+***Values taken in the meantime.*** While a record is in the trash, another record can take
+over values of it that must be unique – such as the slug (the web address) or a sign-in name.
+camindo CMS checks this before restoring:
+
+- For a ***single record***, its input form opens instead of the restore. It shows the affected
+  fields with an error message as when saving. Change the values and save – only then is the
+  record restored. “Cancel” leaves it in the trash.
+- For a ***branch*** (or a deleted area), nothing is restored. A list names each conflict with
+  record, field, language and value. Change the values of the records that now hold them, then
+  restore again.
+
 Not shown in your trash:
 
 - records from a content area that was itself deleted; only a superuser can restore that, and with it its records

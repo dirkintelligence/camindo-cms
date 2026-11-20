@@ -680,7 +680,10 @@ class RecordApi
         $this->cms->errorsReset();
         $status = $this->container->get(Trash::class)->restore('record', $recordId);
         if ($status === 'denied') throw new ApiException(ApiException::NOT_FOUND, $this->cms->snippet('error_record_not_found'));
-        if ($status === 'failed') throw $this->context->exceptionFromCms(ApiException::VALIDATION);
+        // values taken in the meantime (slug, unique fields): refused, the
+        // conflicts are in the messages - change the records that hold them, or
+        // restore in the input mask (module Trash)
+        if (in_array($status, ['failed', 'edit', 'conflicts'], true)) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
         return ['record_id' => $recordId, 'status' => $status];
     }
 

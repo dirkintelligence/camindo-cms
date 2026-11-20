@@ -157,6 +157,23 @@ class TrashBackend {
             case 'background':
                 $this->backend->balloon('info', $this->cms->snippet('message_background_started'));
                 break;
+            case 'edit':
+                // single record with values taken in the meantime: its input mask
+                // instead (messages there like a failed save), saving restores it
+                $this->backend->balloon('warning', $this->cms->snippet('trash.message_restore_edit'));
+                $this->backend->script("cApp.layers.add('Record/record_edit.php?function=edit&restore=1&id={$id}');");
+                break;
+            case 'conflicts':
+                // branch / area: refused until the conflicts are removed
+                $items = '';
+                foreach ($this->trash->conflicts as $conflict) {
+                    $items .= '<li>' . $this->trash->conflictText($conflict) . '</li>';
+                }
+                echo $this->backend->template('alert_danger', [
+                    '{text}' => htmlspecialchars($this->cms->snippet('trash.error_restore_conflicts'))
+                        . $this->backend->template('ul', ['{items}' => $items]),
+                ]);
+                break;
             case 'denied':
                 echo $this->backend->template('alert_danger', [
                     '{text}' => htmlspecialchars($this->cms->snippet('trash.error_not_restorable')),

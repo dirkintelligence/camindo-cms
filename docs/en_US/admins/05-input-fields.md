@@ -335,7 +335,14 @@ and expiry date, they are visible without limit.
 
 The same section of the selection also offers ***Slug***. It is not a meta field in the strict
 sense but creates a field “Short text” named `slug` – the web address of the record (see
-[Special field names](#special-field-names)).
+[Special field names](#special-field-names)). The form is preset: label “Slug” and
+***multilingual*** switched on, so that every language gets its own address.
+
+When the new field is saved, ***all existing records*** of the area get a slug from the main
+field – per language from the title in the same language; where the title is not translated,
+the slug of the primary language applies. If an address is already taken, the older record keeps
+it; the slug of the newer one stays empty (the address then uses the ID). camindo CMS lists all
+these records together after saving – enter missing slugs by hand there if needed.
 
 If the area already uses a meta field or the slug – also with a field in the trash – its card
 in the selection is grayed out and cannot be clicked. The card names the reason:
@@ -346,7 +353,7 @@ restore the field in the trash or delete it permanently.
 
 | Name | Effect |
 |---|---|
-| `slug` | A field “Short text” with this name provides the ***web address*** of the record (`/summer-party-2026` instead of `/1758`). If it remains empty, camindo CMS fills it from the main field when saving. A slug, once set, does not change with the title – links already shared remain valid. It may contain slashes (`products/shoes`) and can be multilingual. The address including the [slug prefix](./04-structure.md#slug-prefix) of the area must be unique – in areas with different prefixes, the same slug may occur |
+| `slug` | A field “Short text” with this name provides the ***web address*** of the record (`/summer-party-2026` instead of `/1758`). If it remains empty, camindo CMS fills it from the main field when saving – a further language from the translated title, otherwise the slug of the primary language applies there. A slug, once set, does not change with the title – links already shared remain valid. It may contain slashes (`products/shoes`) and can be multilingual. The address including the [slug prefix](./04-structure.md#slug-prefix) of the area must be unique – in areas with different prefixes, the same slug may occur |
 
 ## Changing the type
 
