@@ -132,8 +132,16 @@ class WatermarkBackend {
                 $row('watermark.label_number', htmlspecialchars((string)($result['id'] ?? '')));
             }
             $orientation = (string)($result['orientation'] ?? 'none');
-            if ($orientation !== 'none') {
+            $rotation = (float)($result['rotation_deg'] ?? 0);
+            if ($rotation != 0) {
+                // free angle (found via the sync pattern), clockwise positive
+                $row('watermark.label_orientation', htmlspecialchars(number_format(abs($rotation), 1)) . '° – {#watermark.orientation_free_' . ($rotation > 0 ? 'cw' : 'ccw') . '}');
+            }
+            elseif ($orientation !== 'none') {
                 $row('watermark.label_orientation', '{#' . (self::ORIENTATIONS[$orientation] ?? 'watermark.orientation_none') . '}');
+            }
+            if (!empty($result['synced'])) {
+                $row('watermark.label_synced', '{#watermark.synced}');
             }
             if (!empty($result['corrected_bits'])) {
                 $row('watermark.label_corrected', (string)(int)$result['corrected_bits']);

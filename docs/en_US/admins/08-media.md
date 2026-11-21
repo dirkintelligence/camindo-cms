@@ -238,9 +238,12 @@ watermark with the next upload.
 Good to know:
 
 - Formats: JPEG and PNG, WebP only with ImageMagick. GIF, SVG and other formats stay unchanged.
-- ***Cropping*** destroys the watermark. Therefore switch it on in the thumbnail field if the
-  thumbnail shows a different section (for example a square preview image from a wide format) –
-  then it is embedded again after cropping.
+- ***Cropping***, rotating and pasting into a collage: a narrow border, a slight rotation or a
+  large share of a collage leave the code readable – a synchronization pattern in the image
+  shows the check where the original frame was. If a larger part of the image is missing, the
+  code can no longer be read reliably. Therefore also switch the watermark on in the thumbnail
+  field if the thumbnail shows a clearly different section (for example a square preview image
+  from a wide format) – then it is embedded again after cropping.
 - Below about 300 px width or 200 px on the short side, the code can no longer be read reliably.
   The watermark is not worth it for very small preview images.
 - It cannot be seen on photos. On graphics and screenshots with large areas of one color, slight

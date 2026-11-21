@@ -463,7 +463,8 @@ klicken Sie auf „Prüfen“. Das Bild wird nur für die Prüfung gelesen und n
 |---|---|
 | Code | der eingebettete Code, z. B. `GS-NRD` |
 | Instanz | die Instanz mit diesem Code. Instanzen, auf die Sie keinen Zugriff haben, erscheinen nur als Hinweis ohne Namen. „Keine Instanz verwendet diesen Code (mehr)“: Der Code wurde inzwischen geändert |
-| Ausrichtung | erscheint, wenn das Bild gedreht oder gespiegelt wurde – das Wasserzeichen wird trotzdem gefunden |
+| Ausrichtung | erscheint, wenn das Bild gedreht oder gespiegelt wurde – auch um einen beliebigen Winkel; das Wasserzeichen wird trotzdem gefunden |
+| Lage im Bild | erscheint, wenn das Bild zugeschnitten, gedreht oder in ein anderes Bild eingefügt wurde und der Code über das Synchronisationsmuster gelesen wurde |
 | Signalstärke | Maß für die Sicherheit des Ergebnisses: unmarkierte Bilder meist unter 3, markierte zwischen 5 und 10 |
 
 Jede camindo-Installation hat ihren eigenen ***Schlüssel***. Das Modul prüft nur mit dem

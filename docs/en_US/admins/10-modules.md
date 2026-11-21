@@ -270,7 +270,8 @@ Under “Image”, choose a file – JPEG, PNG, WebP or GIF, at most 30 MB – a
 |---|---|
 | Code | the embedded code, e.g. `GS-NRD` |
 | Instance | the instance with this code. Instances you have no access to only appear as a note without their name. “No instance uses this code (any more)”: the code has been changed in the meantime |
-| Orientation | appears if the image was turned or mirrored – the watermark is found anyway |
+| Orientation | appears if the image was turned or mirrored – also by any angle; the watermark is found anyway |
+| Position | appears if the image was cropped, rotated or pasted into another image and the code was read via the synchronization pattern |
 | Signal strength | a measure of how reliable the result is: unmarked images usually below 3, marked ones between 5 and 10 |
 
 Every camindo installation has its own ***key***. The module only checks with the key of this installation; it does not find watermarks of other installations. If the watermark program is not set up or the key is missing, the page shows a note instead of the form.

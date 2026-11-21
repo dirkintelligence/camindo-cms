@@ -250,9 +250,13 @@ Gut zu wissen:
 
 - Formate: JPEG und PNG, WebP nur mit ImageMagick. GIF, SVG und andere Formate bleiben
   unverändert.
-- ***Zuschneiden*** zerstört das Wasserzeichen. Schalten Sie es deshalb im Thumbnail-Feld
-  ein, wenn das Thumbnail einen anderen Ausschnitt zeigt (etwa ein quadratisches Vorschaubild
-  aus einem Breitformat) – dann wird es nach dem Zuschneiden neu eingebettet.
+- ***Zuschneiden***, Drehen und Einfügen in eine Collage: Ein schmaler Rand, eine leichte
+  Drehung oder ein großer Anteil an einer Collage lassen den Code lesbar – ein
+  Synchronisationsmuster im Bild zeigt der Prüfung, wo der ursprüngliche Bildrahmen lag. Fehlt
+  ein größerer Teil des Bildes, ist der Code nicht mehr sicher lesbar. Schalten Sie das
+  Wasserzeichen deshalb auch im Thumbnail-Feld ein, wenn das Thumbnail einen deutlich anderen
+  Ausschnitt zeigt (etwa ein quadratisches Vorschaubild aus einem Breitformat) – dann wird es
+  nach dem Zuschneiden neu eingebettet.
 - Unter etwa 300 px Breite bzw. 200 px auf der kurzen Seite ist der Code nicht mehr
   sicher lesbar. Für sehr kleine Vorschaubilder lohnt sich das Wasserzeichen nicht.
 - Auf Fotos ist es nicht zu sehen. Bei Grafiken und Screenshots mit großen einfarbigen
