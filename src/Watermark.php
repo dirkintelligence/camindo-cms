@@ -1,10 +1,13 @@
 <?php
 /**
- * Invisible watermark in images (external program camindo-watermark).
+ * Invisible watermark in images (external program image-watermark,
+ * https://github.com/andreasmayercode/image-watermark).
  *
- * The program hides a code of one to six characters (A-Z and "-") in the frequency domain
- * of an image. The code survives scaling, JPEG compression, turning by 90°
- * and mirroring - not cropping. Every instance can have its own code
+ * The program hides a 32-bit number in the frequency domain of an image, in the
+ * namespace "camindo-watermark" (flag -namespace). camindo packs a code of one to six
+ * characters (A-Z, 0-9 and "-") into that number (codeToId()/idToCode(); codes of
+ * camindo-watermark 1.0 stay readable). The code survives scaling, JPEG compression,
+ * turning by 90° and mirroring - not cropping. Every instance can have its own code
  * (instance.details.watermark_code); upload and thumbnail fields with the
  * switch details.watermark mark their images with it:
  *
@@ -47,6 +50,10 @@ class Watermark {
     public const DEFAULT_QUALITY_WEBP = 80;
 
     protected const TIMEOUT = 180;
+
+    /** Namespace of the watermark (part of the key derivation): never change it -
+        images marked with it stay readable only with it */
+    public const NAMESPACE = 'camindo-watermark';
 
     /** codeForField() per field id within one request */
     private array $fieldCodes = [];
@@ -124,18 +131,82 @@ class Watermark {
         return true;
     }
 
-    /** Longest code: 28^6 combinations fit into the 32 bits of the program, 28^7 not */
+    /** Characters of a code; each is a digit 1-37 in base 38, 0 = end of the code */
+    public const CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-';
+
+    /** Longest code: 38^6 = 3 010 936 384 values fit into the 32 bits of the
+        program (2^32 = 4 294 967 296), 38^7 not */
     public const CODE_MAX_LENGTH = 6;
 
+    protected const CODE_BASE = 38;
+
+    /** Codes of camindo-watermark 1.0 (until camindo 9.1.10): A-Z and "-" in base 28.
+        Their numbers are below 28^6 = 481 890 304; the numbers of the current codes
+        start there (CODE_OFFSET + base-38 value, at most 3 492 826 687 < 2^32), so both
+        stay apart and images marked before keep their code. */
+    protected const LEGACY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-';
+    protected const LEGACY_BASE = 28;
+    protected const CODE_OFFSET = 481890304;
+
     /**
-     * Normalize a code: 1-6 characters A-Z and "-", lower case is converted,
+     * Normalize a code: 1-6 characters A-Z, 0-9 and "-", lower case is converted,
      * surrounding blanks are dropped. null = invalid.
      */
     public static function normalizeCode(string $code): ?string
     {
         $code = strtoupper(trim($code));
-        if (!preg_match('/^[A-Z-]{1,' . self::CODE_MAX_LENGTH . '}$/', $code)) return null;
+        if (!preg_match('/^[A-Z0-9-]{1,' . self::CODE_MAX_LENGTH . '}$/', $code)) return null;
         return $code;
+    }
+
+    /**
+     * Pack a code into the 32-bit number of the program: CODE_OFFSET plus
+     * CODE_MAX_LENGTH digits in base 38, left-aligned, 0 after the last character
+     * (end of the code). "A" = CODE_OFFSET + 1·38^5 …  null = invalid code.
+     */
+    public static function codeToId(string $code): ?int
+    {
+        $code = self::normalizeCode($code);
+        if ($code === null) return null;
+        $value = 0;
+        for ($i = 0; $i < self::CODE_MAX_LENGTH; $i++) {
+            $digit = $i < strlen($code) ? strpos(self::CODE_ALPHABET, $code[$i]) + 1 : 0;
+            $value = $value * self::CODE_BASE + $digit;
+        }
+        return self::CODE_OFFSET + $value;
+    }
+
+    /**
+     * The code of a number read from an image: from CODE_OFFSET on a current code,
+     * below it a code of camindo-watermark 1.0. null = the number is no valid code
+     * (no character, too large, or a character after the end).
+     */
+    public static function idToCode(int $id): ?string
+    {
+        if ($id < 0 || $id >= self::CODE_OFFSET + self::CODE_BASE ** self::CODE_MAX_LENGTH) return null;
+        if ($id < self::CODE_OFFSET) return self::unpackCode($id, self::LEGACY_ALPHABET, self::LEGACY_BASE);
+        return self::unpackCode($id - self::CODE_OFFSET, self::CODE_ALPHABET, self::CODE_BASE);
+    }
+
+    /** CODE_MAX_LENGTH digits of $value in $base -> code (digit d = $alphabet[d - 1]) */
+    private static function unpackCode(int $value, string $alphabet, int $base): ?string
+    {
+        $digits = [];
+        for ($i = 0; $i < self::CODE_MAX_LENGTH; $i++) {
+            array_unshift($digits, $value % $base);
+            $value = intdiv($value, $base);
+        }
+        $code = '';
+        $ended = false;
+        foreach ($digits as $digit) {
+            if ($digit === 0) {
+                $ended = true;
+                continue;
+            }
+            if ($ended) return null;
+            $code .= $alphabet[$digit - 1];
+        }
+        return $code === '' ? null : $code;
     }
 
     /**
@@ -219,7 +290,7 @@ class Watermark {
      * @param string $file       absolute path
      * @param string $mime       MIME type of the file
      * @param string $extension  its extension
-     * @param string $code       normalized code (normalizeCode())
+     * @param string $code       code (normalizeCode())
      * @param int    $quality    JPEG/WebP quality of the result, 0 = that of the file
      *                           (ImageMagick) or DEFAULT_QUALITY(_WEBP)
      * @param ?string $error     reason on failure
@@ -231,6 +302,11 @@ class Watermark {
     {
         $error = '';
         $extension = strtolower($extension);
+        $id = self::codeToId($code);
+        if ($id === null) {
+            $error = 'invalid code';
+            return null;
+        }
         if (!$this->available($problem)) {
             $error = 'not available (' . $problem . ')';
             return null;
@@ -257,8 +333,8 @@ class Watermark {
         $random = $this->crypt->randomKey(8);
         $tmpOut = $dir . '/.wm-' . $random . '.' . ($viaMagick ? 'png' : $extension);
         $result = $this->run([
-            $this->binary(), 'embed', '-json', '-key-file', $this->keyFile(),
-            '-code', $code, '-quality', (string)$quality, '-in', $file, '-out', $tmpOut,
+            $this->binary(), 'embed', '-json', '-key-file', $this->keyFile(), '-namespace', self::NAMESPACE,
+            '-id', (string)$id, '-quality', (string)$quality, '-in', $file, '-out', $tmpOut,
         ], $error);
         if ($result === null || empty($result['ok'])) {
             @unlink($tmpOut);
@@ -296,7 +372,8 @@ class Watermark {
      * Check a file for a watermark.
      *
      * @return array|null  JSON of the program ('status' found|present_unreadable|none,
-     *                     'code', 'id', 'confidence', 'width', 'height' …) plus
+     *                     'id', 'confidence', 'width', 'height' …) plus 'code'
+     *                     (idToCode(), only if the number is a valid code) and
      *                     'instances' (instancesForCode()); null = error
      */
     public function detect(string $file, ?string &$error = null): ?array
@@ -306,11 +383,17 @@ class Watermark {
             $error = 'not available (' . $problem . ')';
             return null;
         }
-        $result = $this->run([$this->binary(), 'detect', '-json', '-key-file', $this->keyFile(), '-in', $file], $error, [0, 1]);
+        $result = $this->run([
+            $this->binary(), 'detect', '-json', '-key-file', $this->keyFile(), '-namespace', self::NAMESPACE, '-in', $file,
+        ], $error, [0, 1]);
         if ($result === null) return null;
         if (($result['status'] ?? '') === 'error') {
             $error = (string)($result['error'] ?? 'error');
             return null;
+        }
+        unset($result['code']);
+        if (isset($result['id']) && ($code = self::idToCode((int)$result['id'])) !== null) {
+            $result['code'] = $code;
         }
         $result['instances'] = isset($result['code']) ? $this->instancesForCode((string)$result['code']) : [];
         return $result;

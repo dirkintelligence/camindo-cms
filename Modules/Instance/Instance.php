@@ -236,7 +236,7 @@ class Instance extends Dataset {
                 'max'   => 2000,
             ],
             // Code of the invisible watermark (Camindo\Core\Watermark): 1-6 characters
-            // A-Z and "-", unique among the instances; '' = no watermark
+            // A-Z, 0-9 and "-", unique among the instances; '' = no watermark
             'details.watermark_code' => [
                 'type'  => 'chars',
                 'label' => '#instance.field_watermark_code',
