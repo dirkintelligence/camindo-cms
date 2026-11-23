@@ -695,8 +695,9 @@ class Config {
                 */
                 'composer' => 'composer',
                 /*
-                    camindo-watermark executable (absolute path) - invisible watermark
-                    in images (Camindo\Core\Watermark). '' = function off
+                    image-watermark executable (absolute path, version 1.0.0 or later,
+                    https://github.com/andreasmayercode/image-watermark) - invisible
+                    watermark in images (Camindo\Core\Watermark). '' = function off
                 */
                 'watermark' => '',
                 /*

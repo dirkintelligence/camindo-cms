@@ -160,12 +160,12 @@ mirroring. So you can check later which website an image comes from.
 
 How to set it up:
 
-1. The system administrator installs the program `camindo-watermark` on the server, enters its
-   path as `paths.watermark` in the configuration and creates the secret key with
+1. The system administrator installs the program `image-watermark` (version 1.0.0 or later)
+   on the server, enters its path as `paths.watermark` in the configuration and creates the secret key with
    `php Core/cron/camindo.php watermark key` (see [chapter 12](./12-operation.md)).
 2. In the module “Instances”, every instance gets its own ***code*** under ***Watermark***,
-   e.g. `GS-NRD` – one to six characters from the letters A–Z and the hyphen. Lower case is
-   converted to upper case.
+   e.g. `GS-NRD` – one to six characters from the letters A–Z, the digits 0–9 and the
+   hyphen. Lower case is converted to upper case.
 3. In the upload and thumbnail fields whose images should carry the watermark, switch on
    ***Embed invisible watermark***.
 
@@ -193,8 +193,11 @@ instance –, in the back end with the module “Watermark” ([chapter 10](./10
 the checking website that comes with the program.
 
 The program, the checking website and the installation instructions are available at
-[github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)
-(downloads under “Releases”).
+[github.com/andreasmayercode/image-watermark](https://github.com/andreasmayercode/image-watermark)
+(downloads under “Releases”). camindo calls it with `-namespace camindo-watermark` and converts
+the code into the stored number itself. The program’s checking website therefore needs
+`SetEnv IMAGE_WM_NAMESPACE camindo-watermark` and shows the number instead of the code; the
+module “Watermark” and `watermark detect` show the code.
 
 ## Storage and delivery
 

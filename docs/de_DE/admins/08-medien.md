@@ -170,12 +170,12 @@ Drehen um 90° und Spiegeln. So lässt sich später prüfen, von welcher Website
 
 So richten Sie es ein:
 
-1. Der Systemadministrator installiert das Programm `camindo-watermark` auf dem Server,
-   trägt den Pfad als `paths.watermark` in die Konfiguration ein und erzeugt den geheimen
+1. Der Systemadministrator installiert das Programm `image-watermark` (ab Version 1.0.0) auf
+   dem Server, trägt den Pfad als `paths.watermark` in die Konfiguration ein und erzeugt den geheimen
    Schlüssel mit `php Core/cron/camindo.php watermark key` (siehe [Kapitel 12](./12-betrieb.md)).
 2. Im Modul „Instanzen“ erhält jede Instanz unter ***Wasserzeichen*** einen eigenen ***Code***,
-   z. B. `GS-NRD` – ein bis sechs Zeichen aus den Buchstaben A–Z und dem Bindestrich.
-   Kleinbuchstaben werden in Großbuchstaben umgewandelt.
+   z. B. `GS-NRD` – ein bis sechs Zeichen aus den Buchstaben A–Z, den Ziffern 0–9 und dem
+   Bindestrich. Kleinbuchstaben werden in Großbuchstaben umgewandelt.
 3. In den Upload- und Thumbnail-Feldern, deren Bilder das Wasserzeichen tragen sollen,
    schalten Sie ***Unsichtbares Wasserzeichen einbetten*** ein.
 
@@ -205,8 +205,11 @@ Instanz –, im Backend mit dem Modul „Wasserzeichen“ ([Kapitel 10](./10-mod
 der Prüf-Website, die zum Programm gehört.
 
 Das Programm, die Prüf-Website und die Anleitung zur Installation gibt es unter
-[github.com/dirkintelligence/camindo-watermark](https://github.com/dirkintelligence/camindo-watermark)
-(Downloads unter „Releases“).
+[github.com/andreasmayercode/image-watermark](https://github.com/andreasmayercode/image-watermark)
+(Downloads unter „Releases“). camindo ruft es mit `-namespace camindo-watermark` auf und
+rechnet den Code selbst in die gespeicherte Zahl um. Die Prüf-Website des Programms braucht
+deshalb `SetEnv IMAGE_WM_NAMESPACE camindo-watermark` und zeigt statt des Codes die Zahl;
+den Code nennen das Modul „Wasserzeichen“ und `watermark detect`.
 
 ## Ablage und Auslieferung
 

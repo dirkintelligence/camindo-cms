@@ -52,7 +52,7 @@ Auswahlen des Backends ***immer an letzter Stelle*** – unabhängig von ihrer P
 | Nachgeladene Scripts erlauben | Scripts, die ein erlaubtes Script nachlädt (Tag-Manager, Widgets), laufen ebenfalls |
 | Formularziele beschränken / Weitere Formularziele | Formulare dürfen nur an die eigene Website und die genannten Adressen gehen (z. B. den Zahlungsanbieter) |
 | ***Wasserzeichen*** | |
-| Code | 1 bis 6 Zeichen aus A–Z und Bindestrich, z. B. `GS-NRD`: Bilder in Feldern mit eingeschaltetem Wasserzeichen tragen diesen Code unsichtbar. Jede Instanz braucht einen eigenen Code (siehe [Kapitel 8](./08-medien.md#unsichtbares-wasserzeichen)) |
+| Code | 1 bis 6 Zeichen aus A–Z, 0–9 und Bindestrich, z. B. `GS-NRD`: Bilder in Feldern mit eingeschaltetem Wasserzeichen tragen diesen Code unsichtbar. Jede Instanz braucht einen eigenen Code (siehe [Kapitel 8](./08-medien.md#unsichtbares-wasserzeichen)) |
 
 Die Startseite lässt sich erst nach dem ersten Speichern wählen – vorher hat die
 Instanz noch keine Inhalte.
