@@ -2506,8 +2506,8 @@ class RecordBackendEdit extends RecordBackend {
      *
      * Each row shows the default field of the target record - or, if the field
      * carries details.lookup_detailed, the detailed version
-     * (RecordBackend::detailedText()): all list fields of the target area one below the other,
-     * the default field in bold, plus the output of the list template of the area.
+     * (RecordBackend::detailedText()): the fields of the target area with visibility_lookup
+     * one below the other, the default field in bold, plus the output of the list template of the area.
      */
     protected function _lookupPreviewCreate(int $srcField, int $srcId): ?string {
         if ($srcField < 1 || $srcId < 1) {
@@ -2587,7 +2587,7 @@ class RecordBackendEdit extends RecordBackend {
             $id = (int)$data['record_id'];
             $areaId = (int)$data['area_id'];
             if ($detailed) {
-                $label = $this->detailedText($data);
+                $label = $this->detailedText($data, 'lookup');
             }
             else {
                 $defaultField = $this->backend->getDefaultField($areaId);

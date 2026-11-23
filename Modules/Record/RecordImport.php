@@ -236,7 +236,7 @@ class RecordImport {
     private const IDEOGRAPHIC_LANGUAGES = ['zh', 'ja'];
 
     /** columns of `field` that the structure import takes over (without keys) */
-    private const FIELD_COLUMNS = ['type', 'name', 'label', 'display_type', 'note', 'tooltip', 'height', 'min', 'min_op', 'max', 'max_op', 'pattern', 'prefix', 'suffix', 'position', 'custom_order', 'flags', 'default', 'visibility_input', 'visibility_search', 'visibility_list', 'default_field', 'meta', 'multilingual', 'details'];
+    private const FIELD_COLUMNS = ['type', 'name', 'label', 'display_type', 'note', 'tooltip', 'height', 'min', 'min_op', 'max', 'max_op', 'pattern', 'prefix', 'suffix', 'position', 'custom_order', 'flags', 'default', 'visibility_input', 'visibility_search', 'visibility_list', 'visibility_lookup', 'default_field', 'meta', 'multilingual', 'details'];
 
     /** target schema of the running import per area */
     private array $schemaMemo = [];
@@ -3071,6 +3071,8 @@ class RecordImport {
         foreach (['custom_order', 'visibility_input', 'visibility_search', 'visibility_list', 'default_field', 'meta', 'multilingual'] as $bit) {
             $data[$bit] = (int)($field[$bit] ?? 0);
         }
+        // exports before 9.2.0 have no visibility_lookup: the detailed lookup preview showed the list fields
+        $data['visibility_lookup'] = (int)($field['visibility_lookup'] ?? $field['visibility_list'] ?? 0);
         if ($type === 'file' && (int)($field['parent_field_id'] ?? 0) > 0) {
             $data['parent_field_id'] = $this->_mapId('field', (int)$field['parent_field_id']);
         }
@@ -3126,7 +3128,7 @@ class RecordImport {
                 $counter = $allFields[$fileCounterId];
                 $counterRow = $this->field->load($counterId);
                 if ($counterRow) {
-                    foreach (['name', 'label', 'display_type', 'note', 'tooltip', 'min', 'min_op', 'max', 'max_op', 'position', 'custom_order', 'visibility_input', 'visibility_search', 'visibility_list'] as $col) {
+                    foreach (['name', 'label', 'display_type', 'note', 'tooltip', 'min', 'min_op', 'max', 'max_op', 'position', 'custom_order', 'visibility_input', 'visibility_search', 'visibility_list', 'visibility_lookup'] as $col) {
                         if (array_key_exists($col, $counter)) $counterRow[$col] = $counter[$col];
                     }
                     $counterInstanceId = $this->instanceCache->areaInstanceId((int)$counterRow['area_id']);

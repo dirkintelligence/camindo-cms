@@ -60,9 +60,9 @@
  * listValue() - status as a symbol, template_id/parent_id/position as plain text, everything
  * else via Backend::backendValue(). Besides RecordBackendList (and the
  * API, RecordApi::search()) this is also used by detailedText(),
- * which shows the same fields one below the other - in the detailed lookup preview
- * (RecordBackendEdit) and in the list of the last changed records
- * (RecordBackendFolderList).
+ * which shows the fields one below the other - in the list of the last changed records
+ * (RecordBackendFolderList) the same, in the detailed lookup preview (RecordBackendEdit)
+ * those with field.visibility_lookup.
  *
  * In addition, a frontend template can be chosen per area (`area`.`list_template_id`),
  * which RecordPresenter::listTemplateHtml() runs for each record (Page::renderRecord()) - as
@@ -788,8 +788,9 @@ abstract class RecordBackend {
 
     /**
      * Detailed display of a record - in the lookup preview
-     * (details.lookup_detailed, RecordBackendEdit) and in the list of the last
-     * changed records (RecordBackendFolderList): the list fields of its area one below the other (RecordPresenter::listFields() /
+     * (details.lookup_detailed, RecordBackendEdit: the fields with visibility_lookup) and in the
+     * list of the last changed records (RecordBackendFolderList: the fields with visibility_list),
+     * one below the other (RecordPresenter::listFields() /
      * listValue(), the same as in the record list, shortened), the default field
      * in bold, preceded by the symbols of the status column (status, publication window);
      * empty fields are left out; then the output of the list template of the area, if one is
@@ -802,9 +803,10 @@ abstract class RecordBackend {
      *
      * The caller brackets with pushResult()/popResult() (see listValue()).
      *
-     * @param array $data  record (Record::fetch())
+     * @param array  $data        record (Record::fetch())
+     * @param string $visibility  'lookup' | 'list' (RecordPresenter::listFields())
      */
-    protected function detailedText(array $data): string
+    protected function detailedText(array $data, string $visibility = 'list'): string
     {
         static $schemas = [];
         $areaId = (int)($data['area_id'] ?? 0);
@@ -816,7 +818,7 @@ abstract class RecordBackend {
         $items = [];
         $statusHtml = '';
         $defaultIndex = null;
-        foreach ($this->presenter->listFields($schemaVirtual) as $name) {
+        foreach ($this->presenter->listFields($schemaVirtual, $visibility) as $name) {
             $value = $this->presenter->listValue($name, $data, $schemaVirtual);
             if ($name === 'status_id') {
                 // status / publication window: in front of the default field, not a line of its own

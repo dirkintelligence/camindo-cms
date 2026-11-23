@@ -64,7 +64,9 @@ class RecordPresenter
     }
 
     /**
-     * Fields of an area that appear in the record list (visibility_list = 1).
+     * Fields of an area that appear in the record list (visibility_list = 1) or - with
+     * $visibility = 'lookup' - in the detailed lookup preview (visibility_lookup = 1; the
+     * default field always, also if its column was never set).
      * The status column (status_id) comes first as soon as the area has one of the
      * input fields status_id, online_at, offline_at (statusSources()) - regardless of
      * visibility_list; without a status field its meta definition is added to the schema.
@@ -72,14 +74,18 @@ class RecordPresenter
      * this purpose.
      *
      * @param array &$schemaVirtual  Schema of the area (Record::virtualSchema())
+     * @param string $visibility     'list' | 'lookup'
      * @return string[]              Field names in list order
      */
-    public function listFields(array &$schemaVirtual): array
+    public function listFields(array &$schemaVirtual, string $visibility = 'list'): array
     {
+        $column = $visibility === 'lookup' ? 'visibility_lookup' : 'visibility_list';
         $fields = [];
         foreach ($schemaVirtual as $name => $colDef) {
             if ($name === 'status_id') continue;
-            if ((int)($colDef['visibility_list'] ?? 0) !== 1) continue;
+            if ((int)($colDef[$column] ?? 0) !== 1
+                && !($visibility === 'lookup' && (int)($colDef['default_field'] ?? 0) === 1)
+            ) continue;
             $fields[] = $name;
         }
         if (in_array(true, $this->statusSources($schemaVirtual), true)) {

@@ -195,6 +195,7 @@ class AreaApi
                     'list'   => (int)($colDef['visibility_list'] ?? 0) === 1,
                     'input'  => (int)($colDef['visibility_input'] ?? 0) === 1,
                     'search' => (int)($colDef['visibility_search'] ?? 0) === 1,
+                    'lookup' => (int)($colDef['visibility_lookup'] ?? 0) === 1,
                 ],
                 'default_field' => (int)($colDef['default_field'] ?? 0) === 1,
                 'note'          => $this->plain((string)($colDef['note'] ?? '')) ?: null,

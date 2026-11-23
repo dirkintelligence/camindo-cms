@@ -4,7 +4,7 @@ namespace Camindo\Core\Modules\Area;
 class FieldAjaxBackend extends FieldBackend {
 
     /**
-     * Ajax: toggle one of the three visibilities.
+     * Ajax: toggle one of the four visibilities.
      *
      * It does not answer with a page, but with exactly the checkbox that was clicked -
      * the JavaScript replaces the clicked element with it. In the onclick of the
@@ -14,7 +14,7 @@ class FieldAjaxBackend extends FieldBackend {
      * $name is checked against $visibilityFields before it becomes a column name -
      * without this allowlist a request value would end up in the field name of save().
      *
-     * Request: id, name (input|search|list), value (0|1) - via POST, the method
+     * Request: id, name (input|search|list|lookup), value (0|1) - via POST, the method
      * writes (developer docs, chapter 14 (Security: web)).
      */
     public function updateVisibility():void

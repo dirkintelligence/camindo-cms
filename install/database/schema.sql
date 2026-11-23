@@ -1,4 +1,4 @@
--- camindo 9.1.10 - Struktur. Generiert von `camindo.php schema export`.
+-- camindo 9.2.0 - Struktur. Generiert von `camindo.php schema export`.
 
 /*M!999999\- enable the sandbox mode */ 
 
@@ -676,6 +676,7 @@ CREATE TABLE `field` (
   `visibility_input` bit(1) NOT NULL DEFAULT b'0',
   `visibility_search` bit(1) NOT NULL DEFAULT b'0',
   `visibility_list` bit(1) NOT NULL DEFAULT b'0',
+  `visibility_lookup` bit(1) NOT NULL DEFAULT b'0',
   `default_field` bit(1) NOT NULL DEFAULT b'0',
   `meta` bit(1) NOT NULL DEFAULT b'0',
   `multilingual` bit(1) NOT NULL DEFAULT b'0',

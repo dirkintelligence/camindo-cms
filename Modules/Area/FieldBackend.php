@@ -44,11 +44,12 @@
  *
  * VISIBILITY AS A PSEUDO FIELD
  * --------------------
- * In the database these are three bit columns (visibility_input / _search / _list). In the
- * form it is ONE checkbox group named 'visibility'. _visibilitySerialize() makes
- * the list from the three columns, _visibilityUnserialize() turns it back into three
- * values when saving. The special case 'fulltext' has only the search visibility and bypasses the
- * Umwandlung ganz.
+ * In the database these are four bit columns (visibility_input / _search / _list / _lookup).
+ * In the form it is ONE checkbox group named 'visibility'. _visibilitySerialize() makes
+ * the list from the four columns, _visibilityUnserialize() turns it back into four
+ * values when saving. 'lookup' = fields of the detailed lookup preview
+ * (RecordBackend::detailedText()); the default field always has it. The special case
+ * 'fulltext' has only the search visibility and bypasses the conversion entirely.
  *
  * @see Camindo\Core\Modules\Area\Field       Dataset/model of the table `field`
  * @see Camindo\Core\Modules\Area\AreaBackend Backend of the associated area
@@ -72,10 +73,10 @@ abstract class FieldBackend {
     protected ?array $areaData = [];
     protected string $function = '';
 
-    // The three visibilities; in the form a checkbox group, in the table three
-    // bit columns visibility_{input|search|list}. Also serves as an allowlist in
+    // The four visibilities; in the form a checkbox group, in the table four
+    // bit columns visibility_{input|search|list|lookup}. Also serves as an allowlist in
     // updateVisibility().
-    protected array $visibilityFields = ['input', 'search', 'list'];
+    protected array $visibilityFields = ['input', 'search', 'list', 'lookup'];
 
     // Links per deselected target area (area_id => count) - filled by
     // _editSave(), shown by _editConfirmLinksForm()

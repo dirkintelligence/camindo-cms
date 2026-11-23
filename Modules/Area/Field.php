@@ -465,6 +465,15 @@ class Field extends Dataset {
                 'tooltip' => '#area.table_col_list_note',
                 'default' => 1
             ],
+            // fields of the detailed lookup preview (details.lookup_detailed of a
+            // relation/pointer field pointing here); the default field always appears
+            'visibility_lookup' => [
+                'type'  => 'bit',
+                'display_type' => 'switch',
+                'label' => '#area.field_field_visibility_lookup',
+                'tooltip' => '#area.table_col_lookup_note',
+                'default' => 1
+            ],
             'default_field' => [
                 'type'  => 'bit',
                 'display_type' => 'switch',
@@ -662,19 +671,23 @@ class Field extends Dataset {
         if ($displayType == 'textarea') {
             // Mehrzeiliges Eingabefeld
             $data['visibility_list'] = 0;
+            $data['visibility_lookup'] = 0;
         }
         if ($displayType == 'embed') {
             // Eingebettete Inhalte
             $data['visibility_list'] = 0;
+            $data['visibility_lookup'] = 0;
         }
         if (in_array($name,['position','parent_id','indent'], true)) {
             // Sorting, parent record, indentation
             // is visualized in the list anyway
             $data['visibility_list'] = 0;
+            $data['visibility_lookup'] = 0;
         }
         if ($name === 'offline_at') {
             // Expiration date: mostly empty, not worth a list column
             $data['visibility_list'] = 0;
+            $data['visibility_lookup'] = 0;
         }
         if ($name === 'slug' && trim((string)($data['label'] ?? '')) === '') {
             // Slug (card in the section "Meta fields"): label as on the card
@@ -1048,8 +1061,10 @@ class Field extends Dataset {
         ) {
             if (!empty($isDefaultField)) {
                 // neuer Status: true
-                // The default field is always visible in the record list
+                // The default field is always visible in the record list and
+                // in the detailed lookup preview
                 $data['visibility_list'] = 1;
+                $data['visibility_lookup'] = 1;
 
                 // No other field of the area may remain the default field
                 $this->db->query("UPDATE `field` SET `default_field` = 0 WHERE `area_id` = ?", 'i', [$areaId]);

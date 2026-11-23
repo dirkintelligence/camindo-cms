@@ -137,7 +137,7 @@ class FieldInfoBackend extends FieldBackend {
         $this->backend->infoAdd($this->field, 'suffix', $data['suffix'] ?? '', ['ifnotempty']);
 
         // visibility
-        foreach (['input', 'search', 'list'] as $vType) {
+        foreach (['input', 'search', 'list', 'lookup'] as $vType) {
             $this->backend->infoAdd($this->field, 'visibility_' . $vType, $data['visibility_' . $vType] ? $yes : $no, ['html']);
         }
 

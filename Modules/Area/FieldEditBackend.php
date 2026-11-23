@@ -190,11 +190,12 @@ class FieldEditBackend extends FieldBackend {
     private function _editSave(): void
     {
         if ($this->data['type'] != 'fulltext') {
-            // Visibility comes from the pseudo form - back into 3 fields
+            // Visibility comes from the pseudo form - back into 4 fields
             list (
                 $this->data['visibility_input'],
                 $this->data['visibility_search'],
-                $this->data['visibility_list']
+                $this->data['visibility_list'],
+                $this->data['visibility_lookup']
             ) = $this->_visibilityUnserialize($this->data);
         }
 
@@ -1200,7 +1201,7 @@ class FieldEditBackend extends FieldBackend {
     }
 
     /**
-     * Which of the three visibilities are available for selection at all.
+     * Which of the four visibilities are available for selection at all.
      *
      * A thumbnail is created from another field and is never entered; only
      * its visibility in the record list remains.
@@ -1210,14 +1211,16 @@ class FieldEditBackend extends FieldBackend {
     private function _visibilityOptions(string $displayType) {
         if ($displayType == 'thumbnail') {
             $options = [
-                'list' => $this->cms->snippet('area.field_field_visibility_list')
+                'list' => $this->cms->snippet('area.field_field_visibility_list'),
+                'lookup' => $this->cms->snippet('area.field_field_visibility_lookup')
             ];
         }
         else {
             $options = [
                 'input' => $this->cms->snippet('area.field_field_visibility_input'),
                 'search' => $this->cms->snippet('area.field_field_visibility_search'),
-                'list' => $this->cms->snippet('area.field_field_visibility_list')
+                'list' => $this->cms->snippet('area.field_field_visibility_list'),
+                'lookup' => $this->cms->snippet('area.field_field_visibility_lookup')
             ];
         }
         return $options;
@@ -1228,6 +1231,7 @@ class FieldEditBackend extends FieldBackend {
         if (!empty($data['visibility_input']))  $dataVisibility[] = 'input';
         if (!empty($data['visibility_search'])) $dataVisibility[] = 'search';
         if (!empty($data['visibility_list']))   $dataVisibility[] = 'list';
+        if (!empty($data['visibility_lookup'])) $dataVisibility[] = 'lookup';
         return $dataVisibility;
     }
 
@@ -1236,7 +1240,8 @@ class FieldEditBackend extends FieldBackend {
         return [
             (int)in_array('input', $dataVisibility, true),
             (int)in_array('search', $dataVisibility, true),
-            (int)in_array('list', $dataVisibility, true)
+            (int)in_array('list', $dataVisibility, true),
+            (int)in_array('lookup', $dataVisibility, true)
         ];
     }
 

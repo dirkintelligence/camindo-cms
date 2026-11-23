@@ -2,7 +2,7 @@
 
 You maintain the input fields of a content area in the module “Structure”. Select an area
 and switch to the tab “Input fields”. The list shows each field with its name, label, type,
-and three switches for the ***visibility***. The visibility can be switched directly in the
+and four switches for the ***visibility***. The visibility can be switched directly in the
 list:
 
 | Switch | The field appears … |
@@ -10,6 +10,7 @@ list:
 | Input | in the input mask |
 | Search | in the search form |
 | List | as a column of the record list |
+| Lookup | in the detailed preview of lookup fields of other areas that point to this area (setting ***Detailed list***); the main field always appears there |
 
 The order of the fields in the list is also their order in the mask.
 “New” creates a field. Clicking a field opens its detail view with “Edit”, “Copy”, “Delete”
@@ -63,7 +64,7 @@ The following list of input options varies depending on the field type:
 | Tooltip | appears when hovering over the label |
 | Prefix, suffix | appear to the left or right of the input field, e.g. “€” or “cm” |
 | Width, height | size of the input field |
-| Visibility | setting whether the field appears in the input mask, search form, and record list. |
+| Visibility | setting whether the field appears in the input mask, search form, record list, and lookup preview. |
 | Main field | the field represents the record in lists and relations (one per area) |
 | Multilingual | see [below](#multilingual-fields) |
 
@@ -173,7 +174,7 @@ Relation, password, and meta field are always single-language.
 | Related content areas | target areas of a unidirectional pointer or of hard-linked content – also several |
 | Counter-field | For bidirectional relations, camindo CMS automatically creates the counter-field in the target area: if an article is linked with a tag, the tag knows the article |
 | Manual sorting | the editorial team determines the order of the linked records (for example the images of a gallery) |
-| Detailed list | in the lookup field, the preview of the linked records shows all fields that are also visible in the record list of the area instead of only the main field, but here one below the other |
+| Detailed list | in the lookup field, the preview of the linked records shows, instead of only the main field, all fields one below the other that are marked under “Lookup” in the input field list of the target area |
 
 Target areas must belong to the same instance or to an instance that may read this one.
 If you deselect a target area in which relations still exist, camindo CMS asks whether these

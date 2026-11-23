@@ -2,7 +2,7 @@
 
 Die Eingabefelder eines Inhaltsbereichs pflegen Sie im Modul „Struktur“. Wählen Sie einen
 Bereich aus und wechseln Sie in den Reiter „Eingabefelder“. Die Liste zeigt jedes Feld mit
-Name, Label, Typ und drei Schaltern für die ***Sichtbarkeit***. Die Sichtbarkeit lässt sich direkt
+Name, Label, Typ und vier Schaltern für die ***Sichtbarkeit***. Die Sichtbarkeit lässt sich direkt
 in der Liste umschalten:
 
 | Schalter | Das Feld erscheint … |
@@ -10,6 +10,7 @@ in der Liste umschalten:
 | Eingabe | in der Eingabemaske |
 | Suche | in der Suchmaske |
 | Liste | als Spalte der Datensatzliste |
+| Lookup | in der ausführlichen Vorschau von Lookup-Feldern anderer Bereiche, die auf diesen Bereich verweisen (Einstellung ***Ausführliche Liste***); das Hauptfeld erscheint dort immer |
 
 Die Reihenfolge der Felder in der Liste ist auch ihre Reihenfolge in der Maske.
 „Neu“ legt ein Feld an. Klick auf ein Feld öffnet seine Detailansicht mit
@@ -63,7 +64,7 @@ Die folgende Liste der Eingabefelder variiert je nach Feldtyp:
 | Tooltip | erscheint beim Zeigen auf das Label |
 | Präfix, Suffix | erscheinen links bzw. rechts vom Eingabefeld, z. B. „€“ oder „cm“ |
 | Breite, Höhe | Größe des Eingabefelds |
-| Sichtbarkeit | Einstellung, ob das Feld in der Eingabemaske, Suchmaske und Datensatzliste erscheint. |
+| Sichtbarkeit | Einstellung, ob das Feld in der Eingabemaske, Suchmaske, Datensatzliste und Lookup-Vorschau erscheint. |
 | Hauptfeld | Das Feld vertritt den Datensatz in Listen und Verknüpfungen (eines je Bereich) |
 | Mehrsprachig | siehe [unten](#mehrsprachige-felder) |
 
@@ -173,7 +174,7 @@ Verknüpfung, Passwort und Metafeld sind immer einsprachig.
 | Verknüpfte Inhaltsbereiche | Zielbereiche eines unidirektionalen Verweises oder fest verknüpfter Inhalte – auch mehrere |
 | Gegenfeld | Bei beidseitigen Verknüpfungen legt camindo CMS im Zielbereich automatisch das Gegenfeld an: Wird ein Artikel mit einem Schlagwort verknüpft, kennt das Schlagwort den Artikel |
 | Manuelle Sortierung | Die Redaktion bestimmt die Reihenfolge der verknüpften Datensätze (etwa die Bilder einer Galerie) |
-| Ausführliche Liste | Im Lookup-Feld zeigt die Vorschau der verknüpften Datensätze statt nur des Hauptfeldes alle Felder, die auch in der Datensatzliste des Bereichs sichtbar sind, hier allerdings untereinander |
+| Ausführliche Liste | Im Lookup-Feld zeigt die Vorschau der verknüpften Datensätze statt nur des Hauptfeldes untereinander alle Felder, die in der Eingabefeld-Liste des Zielbereichs unter „Lookup“ markiert sind |
 
 Zielbereiche müssen zur selben Instanz gehören oder zu einer Instanz, die diese lesen
 darf. Wählen Sie einen Zielbereich ab, in dem noch Verknüpfungen bestehen, fragt

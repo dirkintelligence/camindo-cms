@@ -34,14 +34,14 @@ class FieldApi extends DatasetApi
     protected const FIELDS = [
         'area_id', 'type', 'name', 'label', 'display_type', 'note', 'tooltip', 'height', 'prefix', 'suffix', 'pattern',
         'min', 'min_op', 'max', 'max_op', 'position', 'default', 'flags', 'multilingual', 'default_field',
-        'visibility_input', 'visibility_search', 'visibility_list', 'rel_area_id', 'rel_area_ids', 'custom_order',
+        'visibility_input', 'visibility_search', 'visibility_list', 'visibility_lookup', 'rel_area_id', 'rel_area_ids', 'custom_order',
         'parent_field_id', 'converter_ids', 'details',
     ];
     /** Change: without area and type; multilingual only via field.convert */
     protected const WRITABLE = [
         'name', 'label', 'display_type', 'note', 'tooltip', 'height', 'prefix', 'suffix', 'pattern',
         'min', 'min_op', 'max', 'max_op', 'position', 'default', 'flags', 'default_field',
-        'visibility_input', 'visibility_search', 'visibility_list', 'rel_area_id', 'rel_area_ids', 'custom_order',
+        'visibility_input', 'visibility_search', 'visibility_list', 'visibility_lookup', 'rel_area_id', 'rel_area_ids', 'custom_order',
         'parent_field_id', 'converter_ids', 'details',
     ];
     protected const CREATE_ONLY = ['multilingual'];

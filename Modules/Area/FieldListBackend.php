@@ -7,7 +7,7 @@ class FieldListBackend extends FieldBackend {
      * Feldliste eines Inhaltsbereichs (backend/field_list.php).
      *
      * Sorted by `position` - this is also the order in the input form
-     * of the record. The three visibility columns are clickable and go via
+     * of the record. The four visibility columns are clickable and go via
      * updateVisibility() back via Ajax, without reloading the page.
      *
      * Request: area_id
@@ -101,8 +101,8 @@ class FieldListBackend extends FieldBackend {
                 foreach ($this->visibilityFields as $key) {
                     if ($type == 'fulltext') {
                         // Full-text search field: no visibility in the list and input mask
-                        if ($key === 'list') {
-                            $tableRow = str_replace('{visibility_list}','',$tableRow);
+                        if ($key === 'list' || $key === 'lookup') {
+                            $tableRow = str_replace('{visibility_' . $key . '}','',$tableRow);
                             continue;
                         }
                         else if ($key === 'input') {
@@ -110,12 +110,12 @@ class FieldListBackend extends FieldBackend {
                             continue;
                         }
                     }
-                    if ($key === 'list' && $isDefaultField) {
-                        // Default field: always visible in the list
+                    if (($key === 'list' || $key === 'lookup') && $isDefaultField) {
+                        // Default field: always visible in the list and the detailed lookup preview
                         $formCheck = strtr($tplCheckBoxDisabled, [
                             "{checked}" => ' checked'
                         ]);
-                        $tableRow = str_replace('{visibility_list}', $formCheck, $tableRow);
+                        $tableRow = str_replace('{visibility_' . $key . '}', $formCheck, $tableRow);
                     }
                     elseif ($displayType === 'thumbnail'
                         && in_array($key, ['input','search'], true)
