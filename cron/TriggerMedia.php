@@ -63,6 +63,7 @@ use Camindo\Core\Execute;
 use Camindo\Core\BackgroundProcess;
 use Camindo\Core\MediaProcessor;
 use Camindo\Core\ProcessorFactory;
+use Camindo\Core\System;
 use Camindo\Core\Watermark;
 use Camindo\Core\Modules\Record\Record;
 
@@ -102,6 +103,7 @@ abstract class TriggerMedia {
         protected ProcessorFactory $factory,
         protected Cms $cms,
         protected Watermark $watermark,
+        protected System $system,
     )
     {
     }
@@ -324,13 +326,18 @@ abstract class TriggerMedia {
             && ($code = $this->watermark->codeForField($fieldId)) !== null
             && $this->watermark->supports($mime, $extension)
         ) {
+            // if marking fails, the file is kept unmarked - like writeThumbnails()
             $marked = $this->watermark->apply($this->config->get('paths.media_dir') . '/' . $srcPath, $mime, $extension, $code, 0, $error);
             if ($marked === null) {
-                error_log('Watermark (field ' . $fieldId . ', record ' . $recordId . '): ' . $error);
-                $this->fail($token, 'error_watermark');
-                return;
+                $this->system->log('error', 'Watermark (field ' . $fieldId . ', record ' . $recordId . '): ' . $error);
             }
-            $srcInfo['size'] = $marked['size'];
+            else {
+                if (empty($marked['verified'])) {
+                    $this->system->log('error', 'Watermark (field ' . $fieldId . ', record ' . $recordId . '): too weak to be read back'
+                        . ' (confidence ' . round((float)$marked['confidence'], 1) . ')');
+                }
+                $srcInfo['size'] = $marked['size'];
+            }
         }
 
         // Enter file parameters in table `data_fil`.

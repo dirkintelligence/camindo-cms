@@ -59,6 +59,9 @@ class RecordBackendImageEdit extends RecordBackend {
     /** Temporary previews older than this are removed when a layer opens */
     protected const PREVIEW_MAX_AGE = 86400;
 
+    /** Snippet of a watermark problem while saving (_saveEdit()), '' = none */
+    private string $watermarkWarning = '';
+
     // ====================
     // Info page
 
@@ -304,7 +307,15 @@ class RecordBackendImageEdit extends RecordBackend {
                     return;
                 }
                 $this->_releaseLock($lockId, $target['id']);
-                echo json_encode(['ok' => true, 'message' => $this->cms->snippet('record.message_image_saved')]);
+                // files kept without (or with a too weak) watermark: saving went on
+                $warnings = [];
+                if ($this->watermarkWarning !== '') {
+                    $warnings[] = str_replace('{label}', htmlspecialchars($this->cms->textOrSnippet((string)($target['colDef']['label'] ?? ''))), $this->cms->snippet($this->watermarkWarning));
+                }
+                foreach ($this->record->watermarkWarnings() as $warning) {
+                    $warnings[] = str_replace('{label}', htmlspecialchars($this->cms->textOrSnippet((string)$warning['label'])), $this->cms->snippet($warning['snippet']));
+                }
+                echo json_encode(['ok' => true, 'message' => $this->cms->snippet('record.message_image_saved'), 'warnings' => array_values(array_unique($warnings))]);
                 return;
         }
         echo json_encode(['ok' => false, 'error' => 'unknown function']);
@@ -611,13 +622,14 @@ class RecordBackendImageEdit extends RecordBackend {
                 return false;
             }
             $fileData['edit'] = $edit;
-            // the section destroys an invisible watermark: mark the result again
-            if ($this->record->applyWatermark($fieldId, $tmpFile, $target['mime'], $extension,
-                    (int)($info['quality'] ?? 0), $error) === null) {
-                @unlink($tmpFile);
-                $this->cms->error($this->cms->snippet('error_watermark'));
-                $this->system->log('error', 'Watermark (image editing, field ' . $fieldId . '): ' . $error);
-                return false;
+            // the section destroys an invisible watermark: mark the result again. If that
+            // fails, the edited image is kept unmarked (error log + warning)
+            $marked = $this->record->applyWatermark($fieldId, $tmpFile, $target['mime'], $extension,
+                (int)($info['quality'] ?? 0), $error);
+            if ($marked === null || ($marked !== [] && empty($marked['verified']))) {
+                $this->system->log('error', 'Watermark (image editing, field ' . $fieldId . '): '
+                    . ($marked === null ? $error : 'too weak to be read back (confidence ' . round((float)($marked['confidence'] ?? 0), 1) . ')'));
+                $this->watermarkWarning = $marked === null ? 'warning_watermark' : 'warning_watermark_weak';
             }
         }
         @chmod($tmpFile, (int)($this->config->get('permissions.file') ?? 0664));

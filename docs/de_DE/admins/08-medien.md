@@ -261,9 +261,12 @@ Gut zu wissen:
   sicher lesbar. Für sehr kleine Vorschaubilder lohnt sich das Wasserzeichen nicht.
 - Auf Fotos ist es nicht zu sehen. Bei Grafiken und Screenshots mit großen einfarbigen
   Flächen können an Text und Kanten leichte Schlieren entstehen.
-- Ist das Programm eingerichtet, aber nicht nutzbar (Programm oder Schlüssel fehlt), lässt
-  sich ein Bild in einem Feld mit Wasserzeichen nicht speichern. Die Instanz-Maske weist
-  darauf hin.
+- Lässt sich das Wasserzeichen nicht einbetten – das Bild ist kleiner als 64 × 64 px oder
+  beschädigt, Programm oder Schlüssel fehlen –, wird das Bild trotzdem gespeichert, nur ohne
+  Wasserzeichen. Hat ein Bild zu wenig Struktur (große einfarbige Flächen), ist das
+  Wasserzeichen womöglich nicht sicher lesbar. In beiden Fällen erscheint beim Speichern
+  eine ***Warnung*** mit dem Namen des Felds, die Ursache steht im Fehlerprotokoll (Modul
+  „Logdateien“). Fehlen Programm oder Schlüssel, weist auch die Instanz-Maske darauf hin.
 
 Prüfen lässt sich ein Bild auf der Kommandozeile mit
 `php Core/cron/camindo.php watermark detect bild.jpg` – die Ausgabe nennt den Code und die

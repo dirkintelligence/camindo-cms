@@ -73,7 +73,13 @@ class WatermarkBackend {
         if (($_REQUEST['function'] ?? '') === 'check' && $this->backend->requirePost()) {
             echo $this->_check($watermark);
         }
-        echo $this->backend->template('watermark.check_form');
+        echo $this->backend->template('watermark.check_form', [
+            '{label}' => $this->backend->template('input_label_tt', [
+                '{id}'      => 'c9-watermark-image',
+                '{label}'   => '{#watermark.label_image}',
+                '{tooltip}' => '{#watermark.note_image}',
+            ]),
+        ]);
         echo $this->backend->template('container_footer');
     }
 

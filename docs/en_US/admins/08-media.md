@@ -248,8 +248,12 @@ Good to know:
   The watermark is not worth it for very small preview images.
 - It cannot be seen on photos. On graphics and screenshots with large areas of one color, slight
   smudges can appear at text and edges.
-- If the program is configured but not usable (program or key missing), an image in a field with a
-  watermark cannot be saved. The instance form points this out.
+- If the watermark cannot be embedded – the image is smaller than 64 × 64 px or broken, the
+  program or key is missing –, the image is saved anyway, just without a watermark. If an image
+  has too little texture (large areas of one color), the watermark may not be readable reliably.
+  In both cases a ***warning*** with the name of the field appears when saving, and the cause is
+  in the error log (module “Log files”). If the program or key is missing, the instance form
+  points this out as well.
 
 You can check an image on the command line with
 `php Core/cron/camindo.php watermark detect image.jpg` – the output names the code and the

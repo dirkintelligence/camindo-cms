@@ -421,6 +421,7 @@
             }
             post(ed, 'save', edit).done(function (response) {
                 if (response.message) cApp.system.balloon('success', response.message);
+                (response.warnings || []).forEach((msg) => cApp.system.balloon('warning', msg));
                 cApp.layers.invalidate();
                 cApp.layers.close();
             });

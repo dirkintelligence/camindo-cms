@@ -45,6 +45,7 @@ trait VirtualFieldsTrait {
     protected array $fulltextSourceTypes = ['text', 'chars', 'json', 'file'];   // file: the file name
     protected array $processedParentFieldIds = [];
     protected array $processedUploadFields = [];
+    protected array $watermarkWarnings = [];       // watermarkFile() -> watermarkWarnings()
     protected array $recordCache = [];
     // Upload fields [name, language_id] whose thumbnails are only generated AFTER the
     // files have been moved to the live id (see saveVirtualFields() /
@@ -1193,8 +1194,10 @@ trait VirtualFieldsTrait {
      * Mark a stored file with the invisible watermark, if its field asks for it
      * (details.watermark) and the instance of the area has a code
      * (Camindo\Core\Watermark). Formats the watermark cannot handle (GIF, SVG …)
-     * stay unmarked, as do all files while paths.watermark is empty. If the program
-     * is configured but marking fails, saving fails.
+     * stay unmarked, as do all files while paths.watermark is empty. If marking fails
+     * (image too small, broken, program error) or the mark is too weak to be read back
+     * (too little texture), saving goes on: the file stays as it is, the problem goes
+     * to the error log and to watermarkWarnings() for a message in the mask.
      *
      * @param int    $fieldId    field of the file
      * @param string $relPath    path from paths.media_dir
@@ -1209,11 +1212,27 @@ trait VirtualFieldsTrait {
     {
         $result = $this->applyWatermark($fieldId, $this->config->get('paths.media_dir') . '/' . $relPath, $mime, $extension, $quality, $error);
         if ($result === null) {
-            $this->system->log('error', 'Watermark (field ' . $fieldId . '): ' . $error);
-            $this->createFieldError('error_watermark', $name, $label);
-            throw new \Exception('#' . $this->cms->errorMsgLast());
+            $this->system->log('error', 'Watermark (field ' . $fieldId . ', ' . basename($relPath) . '): ' . $error);
+            $this->watermarkWarnings[$name] = ['snippet' => 'warning_watermark', 'label' => $label];
+            return null;
+        }
+        if ($result !== [] && empty($result['verified'])) {
+            $this->system->log('error', 'Watermark (field ' . $fieldId . ', ' . basename($relPath) . '): too weak to be read back'
+                . ' (confidence ' . round((float)($result['confidence'] ?? 0), 1) . ')');
+            $this->watermarkWarnings[$name] ??= ['snippet' => 'warning_watermark_weak', 'label' => $label];
         }
         return $result['size'] ?? null;
+    }
+
+    /**
+     * Fields whose file could not be marked (watermarkFile()) since the last call -
+     * the list is emptied. Each entry: 'snippet' (message with {label}), 'label'.
+     */
+    public function watermarkWarnings(): array
+    {
+        $warnings = array_values($this->watermarkWarnings);
+        $this->watermarkWarnings = [];
+        return $warnings;
     }
 
     /**

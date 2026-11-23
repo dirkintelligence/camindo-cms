@@ -1389,11 +1389,25 @@ class RecordBackendEdit extends RecordBackend {
         // pass a copy: save() converts $data by reference into the storage format
         // (currency in cents, date ISO ...) - the mask afterwards still shows the input
         $data = $this->data;
-        if ($this->record->save($fields, $data, stayTemporary: true) && $embedOk) {
+        $saved = $this->record->save($fields, $data, stayTemporary: true);
+        $this->_watermarkWarnings();
+        if ($saved && $embedOk) {
             // show the mask with the target tab (see _editCurrentTab())
             return;
         }
         $this->function = 'errors';
+    }
+
+    /**
+     * Files saved without (or with a too weak) invisible watermark: one warning
+     * balloon per field (Record::watermarkWarnings()) - saving itself goes on.
+     */
+    private function _watermarkWarnings(): void
+    {
+        foreach ($this->record->watermarkWarnings() as $warning) {
+            $this->backend->balloon('warning', str_replace('{label}',
+                htmlspecialchars($this->cms->textOrSnippet((string)$warning['label'])), $this->cms->snippet($warning['snippet'])));
+        }
     }
 
     /**
@@ -2014,6 +2028,7 @@ class RecordBackendEdit extends RecordBackend {
             // balloon message
             $msg = $this->cms->snippet($this->restore ? 'trash.message_record_restored' : 'message_record_saved');
             $this->backend->balloon('success', $msg);
+            $this->_watermarkWarnings();
 
             // debug function (suspend the redirect to see direct debug output)
             if (
