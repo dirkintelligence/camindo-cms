@@ -35,7 +35,9 @@ class WatermarkCommand extends Command {
         }
         $keyFile = $watermark->keyFile();
         $this->out('key file: ' . $keyFile . ' (' . (is_readable($keyFile) ? 'present' : 'MISSING - camindo.php watermark key') . ')');
-        $this->out('ready:    ' . ($watermark->available() ? 'yes' : 'no'));
+        $ready = $watermark->available($problem);
+        $this->out('ready:    ' . ($ready ? 'yes' : 'no' . ($problem === 'outdated'
+            ? ' - the program does not know -namespace, install image-watermark 1.0.0 or later' : '')));
 
         $db = $this->get(Database::class);
         $db->query('SELECT `instance_id`, `label`, `details` FROM `instance` ORDER BY `position`, `instance_id`');

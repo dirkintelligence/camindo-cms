@@ -78,10 +78,14 @@ class Watermark {
         return (string)($this->config->get('paths.watermark_key_file') ?? '');
     }
 
+    /** supportsNamespace() per program path within one request */
+    private array $namespaceSupport = [];
+
     /**
-     * Is the function ready? Program executable, key file readable.
+     * Is the function ready? Program executable and recent enough (flag -namespace),
+     * key file readable.
      *
-     * @param ?string $problem  'binary' | 'key' if not
+     * @param ?string $problem  'binary' | 'outdated' | 'key' if not
      */
     public function available(?string &$problem = null): bool
     {
@@ -89,6 +93,10 @@ class Watermark {
         $binary = $this->binary();
         if ($binary === '' || !is_file($binary) || !is_executable($binary)) {
             $problem = 'binary';
+            return false;
+        }
+        if (!$this->supportsNamespace($binary)) {
+            $problem = 'outdated';
             return false;
         }
         $key = $this->keyFile();
@@ -397,6 +405,20 @@ class Watermark {
         }
         $result['instances'] = isset($result['code']) ? $this->instancesForCode((string)$result['code']) : [];
         return $result;
+    }
+
+    /**
+     * Does the program know the flag -namespace (image-watermark 1.0.0 or later)?
+     * The former camindo-watermark also reports version 1.0.0 but lacks the flag -
+     * every embed would fail. Checked via the help text, once per request.
+     */
+    protected function supportsNamespace(string $binary): bool
+    {
+        if (!isset($this->namespaceSupport[$binary])) {
+            $exit = $this->execute->execute([$binary, 'help'], $stdout, $stderr, 10);
+            $this->namespaceSupport[$binary] = $exit === 0 && str_contains((string)$stdout . (string)$stderr, '-namespace');
+        }
+        return $this->namespaceSupport[$binary];
     }
 
     /** Version of the program, null = not executable */
