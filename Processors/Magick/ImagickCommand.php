@@ -215,6 +215,16 @@ class ImagickCommand
     }
 
     /**
+     * Does the library round the sides of an area geometry (@)? ImageMagick 7 does,
+     * ImageMagick 6 truncates them. Without a known version: like ImageMagick 7.
+     */
+    public static function roundsArea(): bool
+    {
+        static $rounds = null;
+        return $rounds ??= (int)(self::version() ?? '7') >= 7;
+    }
+
+    /**
      * Split an argument list into steps and check every value.
      *
      * @param array $tokens  arguments as on the command line (without source and target)
@@ -767,21 +777,25 @@ class ImagickCommand
      * fit (default), fill (^), exact (!), percent (%), area (@), only shrink (>),
      * only enlarge (<).
      *
+     * @param ?bool $roundArea  area (@): true rounds the sides (ImageMagick 7), false truncates
+     *                          them (ImageMagick 6); null = as the library of the extension does
      * @return array|null [width, height], null: leave the size unchanged
      */
-    public static function resizeSize(int $w0, int $h0, ?array $g): ?array
+    public static function resizeSize(int $w0, int $h0, ?array $g, ?bool $roundArea = null): ?array
     {
         if ($g === null || $w0 < 1 || $h0 < 1) return null;
         $f = $g['flags'];
         $gw = $g['w'];
         $gh = $g['h'];
         if (str_contains($f, '@')) {
-            // ImageMagick truncates here instead of rounding
+            // ImageMagick 6 truncates the sides, ImageMagick 7 rounds them
+            // (800x1200 with 40000@: 163x244 or 163x245)
+            $roundArea ??= self::roundsArea();
             $area = (float)($gw ?? 0);
             if ($area <= 0) return null;
             $scale = sqrt($area / ($w0 * $h0));
-            $nw = max(1, (int)($w0 * $scale));
-            $nh = max(1, (int)($h0 * $scale));
+            $nw = max(1, (int)($roundArea ? floor($w0 * $scale + 0.5) : $w0 * $scale));
+            $nh = max(1, (int)($roundArea ? floor($h0 * $scale + 0.5) : $h0 * $scale));
             if (str_contains($f, '>') && $scale >= 1) return null;
             if (str_contains($f, '<') && $scale <= 1) return null;
             return [$nw, $nh];

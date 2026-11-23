@@ -83,7 +83,6 @@ foreach ([
     [1200, 800, '50%', [600, 400]],
     [1200, 800, '50x25%', [600, 200]],
     [1200, 800, '240000@', [600, 400]],
-    [1200, 800, '40000@', [244, 163]],
     [1200, 800, '4000000@>', null],
     [1200, 800, '2000x2000>', null],
     [1200, 800, '300x300>', [300, 200]],
@@ -91,6 +90,19 @@ foreach ([
     [200, 100, '400x400<', [400, 200]],
 ] as [$w, $h, $g, $expected]) {
     $check("resizeSize({$w}x{$h}, {$g})", $size($w, $h, $g), $expected);
+}
+// Area (@): ImageMagick 6 truncates the sides, ImageMagick 7 rounds them (values measured with both)
+foreach ([
+    [800, 1200, '40000@', [163, 244], [163, 245]],
+    [1200, 800, '40000@', [244, 163], [245, 163]],
+    [1000, 1000, '1000@', [31, 31], [32, 32]],
+    [1920, 1080, '1000@', [42, 23], [42, 24]],
+    [333, 777, '240000@', [320, 748], [321, 748]],
+    [101, 997, '12345@', [35, 349], [35, 349]],
+] as [$w, $h, $g, $im6, $im7]) {
+    $geometry = ImagickCommand::geometry($g);
+    $check("resizeSize({$w}x{$h}, {$g}) IM6", ImagickCommand::resizeSize($w, $h, $geometry, false), $im6);
+    $check("resizeSize({$w}x{$h}, {$g}) IM7", ImagickCommand::resizeSize($w, $h, $geometry, true), $im7);
 }
 
 // Conversion with both engines
