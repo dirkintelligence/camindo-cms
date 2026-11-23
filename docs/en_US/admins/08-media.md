@@ -129,6 +129,9 @@ about this.
 > ],
 > ```
 >
+> As long as SVG or PDF is not allowed, the input mask of a Magick converter says so below the
+> media types. For images of PDF pages, the processor Poppler is the safer choice.
+>
 > ImageMagick reads PDF via Ghostscript, which has repeatedly been a gateway for attacks via
 > manipulated files – release it only if you need it. Whether a format really works is shown in the
 > detail view of the converter under “Security policy”: the policy of the server can also block it.

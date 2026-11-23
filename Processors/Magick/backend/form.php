@@ -16,12 +16,19 @@ $prefix = strtolower($this->processorName);
 $tplProcessorForm = $this->backend->template("proc.{$prefix}.edit_form");
 $this->backend->formReplace('{processor_fields}', $tplProcessorForm);
 
-// Note below the media types: ImageMagick does not read SVG and PDF itself,
-// but via librsvg or Ghostscript - therefore they are not preset.
-// Siehe developer_docs/18-imagemagick.md
-$this->backend->formReplace('{processor_note}', $this->backend->template('alert_warning', [
-    '{text}' => htmlspecialchars($this->cms->snippet('proc.magick.note_media_types'))
-]));
+// Note below the media types, only for what security.magick_allow does not release:
+// ImageMagick reads SVG and PDF via librsvg or Ghostscript (MagickPolicy) - PDF pages
+// are better rendered by the processor Poppler.
+$processor = $this->converter->getProcessor();
+$blocked = $processor instanceof \Camindo\Core\Processors\Magick\Magick
+    ? array_values(array_diff(\Camindo\Core\Processors\Magick\MagickPolicy::ALLOWABLE, $processor->policy()->allowed()))
+    : \Camindo\Core\Processors\Magick\MagickPolicy::ALLOWABLE;
+if ($blocked) {
+    $note = count($blocked) === count(\Camindo\Core\Processors\Magick\MagickPolicy::ALLOWABLE)
+        ? $this->cms->snippet('proc.magick.note_media_types')
+        : str_replace('{value}', strtoupper(implode(', ', $blocked)), $this->cms->snippet('proc.magick.note_media_type_blocked'));
+    $this->backend->formReplace('{processor_note}', $this->backend->template('alert_warning', ['{text}' => htmlspecialchars($note)]));
+}
 
 $details = (array)($this->data['details'] ?? []);
 // engine: command line tool (default) or PHP extension Imagick

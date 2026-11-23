@@ -134,6 +134,9 @@ Felder keine Versionen mehr – die Rückfrage warnt davor.
 > ],
 > ```
 >
+> Solange SVG oder PDF nicht freigegeben sind, nennt die Eingabemaske eines Magick-Konverters das
+> unter den Medientypen. Für Bilder von PDF-Seiten ist der Prozessor Poppler die sicherere Wahl.
+>
 > PDF liest ImageMagick über Ghostscript, das wiederholt Einfallstor für Angriffe über
 > präparierte Dateien war – geben Sie es nur frei, wenn Sie es brauchen. Ob ein Format
 > wirklich läuft, zeigt die Detailansicht des Konverters unter „Sicherheits-Policy“:
