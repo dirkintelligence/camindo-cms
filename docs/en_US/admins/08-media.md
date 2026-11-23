@@ -197,7 +197,8 @@ The program, the checking website and the installation instructions are availabl
 (downloads under “Releases”). camindo calls it with `-namespace camindo-watermark` and converts
 the code into the stored number itself. The program’s checking website therefore needs
 `SetEnv IMAGE_WM_NAMESPACE camindo-watermark` and shows the number instead of the code; the
-module “Watermark” and `watermark detect` show the code.
+module “Watermark” and `watermark detect` show the code. Images marked with the former
+program `camindo-watermark` keep their code.
 
 ## Storage and delivery
 

@@ -209,7 +209,8 @@ Das Programm, die Prüf-Website und die Anleitung zur Installation gibt es unter
 (Downloads unter „Releases“). camindo ruft es mit `-namespace camindo-watermark` auf und
 rechnet den Code selbst in die gespeicherte Zahl um. Die Prüf-Website des Programms braucht
 deshalb `SetEnv IMAGE_WM_NAMESPACE camindo-watermark` und zeigt statt des Codes die Zahl;
-den Code nennen das Modul „Wasserzeichen“ und `watermark detect`.
+den Code nennen das Modul „Wasserzeichen“ und `watermark detect`. Bilder, die noch mit dem
+früheren Programm `camindo-watermark` markiert wurden, behalten ihren Code.
 
 ## Ablage und Auslieferung
 

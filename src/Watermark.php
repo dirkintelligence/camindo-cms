@@ -5,8 +5,9 @@
  *
  * The program hides a 32-bit number in the frequency domain of an image, in the
  * namespace "camindo-watermark" (flag -namespace). camindo packs a code of one to six
- * characters (A-Z, 0-9 and "-") into that number (codeToId()/idToCode()). The code survives scaling, JPEG compression, turning by 90°
- * and mirroring - not cropping. Every instance can have its own code
+ * characters (A-Z, 0-9 and "-") into that number (codeToId()/idToCode(); codes of
+ * camindo-watermark 1.0 stay readable). The code survives scaling, JPEG compression,
+ * turning by 90° and mirroring - not cropping. Every instance can have its own code
  * (instance.details.watermark_code); upload and thumbnail fields with the
  * switch details.watermark mark their images with it:
  *
@@ -139,6 +140,14 @@ class Watermark {
 
     protected const CODE_BASE = 38;
 
+    /** Codes of camindo-watermark 1.0 (until camindo 9.1.10): A-Z and "-" in base 28.
+        Their numbers are below 28^6 = 481 890 304; the numbers of the current codes
+        start there (CODE_OFFSET + base-38 value, at most 3 492 826 687 < 2^32), so both
+        stay apart and images marked before keep their code. */
+    protected const LEGACY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-';
+    protected const LEGACY_BASE = 28;
+    protected const CODE_OFFSET = 481890304;
+
     /**
      * Normalize a code: 1-6 characters A-Z, 0-9 and "-", lower case is converted,
      * surrounding blanks are dropped. null = invalid.
@@ -151,33 +160,41 @@ class Watermark {
     }
 
     /**
-     * Pack a code into the 32-bit number of the program: CODE_MAX_LENGTH digits in
-     * base 38, left-aligned, 0 after the last character (end of the code).
-     * "A" = 1·38^5, "AB" = 1·38^5 + 2·38^4 …  null = invalid code.
+     * Pack a code into the 32-bit number of the program: CODE_OFFSET plus
+     * CODE_MAX_LENGTH digits in base 38, left-aligned, 0 after the last character
+     * (end of the code). "A" = CODE_OFFSET + 1·38^5 …  null = invalid code.
      */
     public static function codeToId(string $code): ?int
     {
         $code = self::normalizeCode($code);
         if ($code === null) return null;
-        $id = 0;
+        $value = 0;
         for ($i = 0; $i < self::CODE_MAX_LENGTH; $i++) {
             $digit = $i < strlen($code) ? strpos(self::CODE_ALPHABET, $code[$i]) + 1 : 0;
-            $id = $id * self::CODE_BASE + $digit;
+            $value = $value * self::CODE_BASE + $digit;
         }
-        return $id;
+        return self::CODE_OFFSET + $value;
     }
 
     /**
-     * The code of a number read from an image; null = the number is no valid code
-     * (0, too large, or a character after the end).
+     * The code of a number read from an image: from CODE_OFFSET on a current code,
+     * below it a code of camindo-watermark 1.0. null = the number is no valid code
+     * (no character, too large, or a character after the end).
      */
     public static function idToCode(int $id): ?string
     {
-        if ($id <= 0 || $id >= self::CODE_BASE ** self::CODE_MAX_LENGTH) return null;
+        if ($id < 0 || $id >= self::CODE_OFFSET + self::CODE_BASE ** self::CODE_MAX_LENGTH) return null;
+        if ($id < self::CODE_OFFSET) return self::unpackCode($id, self::LEGACY_ALPHABET, self::LEGACY_BASE);
+        return self::unpackCode($id - self::CODE_OFFSET, self::CODE_ALPHABET, self::CODE_BASE);
+    }
+
+    /** CODE_MAX_LENGTH digits of $value in $base -> code (digit d = $alphabet[d - 1]) */
+    private static function unpackCode(int $value, string $alphabet, int $base): ?string
+    {
         $digits = [];
         for ($i = 0; $i < self::CODE_MAX_LENGTH; $i++) {
-            array_unshift($digits, $id % self::CODE_BASE);
-            $id = intdiv($id, self::CODE_BASE);
+            array_unshift($digits, $value % $base);
+            $value = intdiv($value, $base);
         }
         $code = '';
         $ended = false;
@@ -187,9 +204,9 @@ class Watermark {
                 continue;
             }
             if ($ended) return null;
-            $code .= self::CODE_ALPHABET[$digit - 1];
+            $code .= $alphabet[$digit - 1];
         }
-        return $code;
+        return $code === '' ? null : $code;
     }
 
     /**
