@@ -857,16 +857,22 @@ class RecordApi
      *
      * @param int    $areaId  area
      * @param string $type    csv | docx
+     * @param string $mode    docx: translate (multilingual fields) | proofread (all text fields)
      * @return array  list of key (for fields of record.export), label, type, multilingual, checked (preselection), sub (subfields: key, label, checked)
      */
     #[ApiMethod('record.export_fields', '#record.api_export_fields')]
-    public function exportFields(int $areaId, string $type = 'csv'): array
+    public function exportFields(int $areaId, string $type = 'csv', string $mode = 'translate'): array
     {
         $this->context->require();
         $this->readableArea($areaId);
         if (!in_array($type, ['csv', 'docx'], true)) throw new ApiException(ApiException::INVALID_PARAM, 'type must be csv or docx');
         $export = $this->container->get(RecordExport::class);
-        $entries = $type === 'csv' ? $export->csvFields($areaId) : $export->docxFields($areaId);
+        if (!in_array($mode, RecordExport::DOCX_MODES, true)) throw new ApiException(ApiException::INVALID_PARAM, 'mode must be translate or proofread');
+        $entries = match (true) {
+            $type === 'csv' => $export->csvFields($areaId),
+            $mode === 'proofread' => $export->proofreadFields($areaId),
+            default => $export->docxFields($areaId),
+        };
         $list = [];
         foreach ($entries as $key => $entry) {
             $sub = [];
@@ -878,9 +884,9 @@ class RecordApi
                 'key'          => (string)$key,
                 'label'        => $this->context->plain($this->cms->textOrSnippet((string)($entry['label'] ?? $key))),
                 'type'         => (string)($entry['type'] ?? ''),
-                'multilingual' => !empty($entry['multilingual']),
-                // DOCX: in the mask all fields are preselected
-                'checked'      => $type === 'docx' || !empty($entry['checked']),
+                'multilingual' => $type === 'docx' ? $this->cms->isMultilingualField($entry) : !empty($entry['multilingual']),
+                // DOCX translation: in the mask all fields are preselected
+                'checked'      => ($type === 'docx' && $mode !== 'proofread') || !empty($entry['checked']),
                 'sub'          => $sub,
             ];
         }
@@ -898,9 +904,11 @@ class RecordApi
      * @param array  $filterop    operators for filter
      * @param array  $filtermode  OR | AND per field
      * @param array  $fields      csv/docx: field keys from record.export_fields (empty = preselection)
-     * @param array  $languages   csv: language codes (empty = language of the backend); docx: [from, to]
+     * @param array  $languages   csv: language codes (empty = language of the backend); docx translate: [from, to];
+     *                            docx proofread: the languages whose texts are exported (empty = all)
      * @param array  $options     csv: header, bom (bool), separator, enclosure, eol ('\r\n' | '\n'); xml: files (bool);
-     *                            docx: split (bool, one record per file)
+     *                            docx: mode (translate | proofread), split (bool, one record per file), thumbnail (name of a
+     *                            thumbnail field whose image identifies each record; empty = none)
      * @param string $background  auto (from admin.export_background_threshold) | yes | no
      * @return array  zip, path, size, records, files, valid_until - or background (token, pid)
      */
@@ -934,11 +942,13 @@ class RecordApi
             $languageIds[] = $languageId;
         }
         if ($type === 'csv' && !$languageIds) $languageIds = [array_key_first($this->contentLanguages($instanceId, ''))];
-        if ($type === 'docx' && count($languageIds) !== 2) throw new ApiException(ApiException::INVALID_PARAM, 'docx needs languages [from, to]');
+        $docxMode = (string)($options['mode'] ?? 'translate');
+        if ($type === 'docx' && $docxMode === 'proofread' && !$languageIds) $languageIds = array_keys($this->contentLanguages($instanceId, 'all'));
+        elseif ($type === 'docx' && count($languageIds) !== 2) throw new ApiException(ApiException::INVALID_PARAM, 'docx needs languages [from, to]');
 
         // fields: without specification the preselection of the mask
         if ($type !== 'xml' && !$fields) {
-            foreach ($this->exportFields($areaId, $type) as $entry) {
+            foreach ($this->exportFields($areaId, $type, $type === 'docx' ? $docxMode : 'translate') as $entry) {
                 if ($entry['checked']) $fields[] = $entry['key'];
                 foreach ($entry['sub'] as $sub) if ($sub['checked']) $fields[] = $sub['key'];
             }
@@ -957,6 +967,8 @@ class RecordApi
             'from'      => (int)($languageIds[0] ?? 0),
             'to'        => (int)($languageIds[1] ?? 0),
             'split'     => !empty($options['split']),
+            'thumbnail' => (string)($options['thumbnail'] ?? ''),
+            'mode'      => $docxMode,
         ]);
         if ($job === null) throw $this->context->exceptionFromCms(ApiException::VALIDATION);
 

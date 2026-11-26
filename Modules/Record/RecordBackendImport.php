@@ -26,7 +26,7 @@
  *     analyze   check the chosen file and show the settings -
  *               depending on the type (XML: origin, areas; CSV: column mapping, the
  *               CSV settings read the file anew; DOCX: translation
- *               options), plus mode, insertion position of new records (area
+ *               options resp. the languages of a proofreading file), plus mode, insertion position of new records (area
  *               with tree or manual sorting: parent and predecessor, the
  *               last existing one preselected - see RecordImport, INSERTION POSITION), scope
  *               (CSV only: rows), force writing, background (from
@@ -941,12 +941,12 @@ class RecordBackendImport extends RecordBackend {
     }
 
     /**
-     * DOCX: check, target language, options.
+     * DOCX: check, target language (translation) resp. languages (proofreading), options.
      */
     private function _analyzeDocx(string $path): void
     {
         $analysis = $this->import->analyzeDocx($path, $this->areaId);
-        if ($analysis['ok'] && !$this->backend->access()->languageWrite((int)$analysis['language_id'])) {
+        if ($analysis['ok'] && !$this->_docxLanguagesWritable($analysis)) {
             $analysis['ok'] = false;
             $analysis['errors'][] = $this->cms->snippet('record.error_import_language_denied');
         }
@@ -957,6 +957,27 @@ class RecordBackendImport extends RecordBackend {
         }
         $instanceId = (int)($this->areaData['instance_id'] ?? 0);
         $languages = $this->instanceCache->languages($instanceId);
+        if ($analysis['mode'] === 'proofread') {
+            // proofreading: every text back into its source - no language options
+            $labels = [];
+            foreach ($analysis['language_ids'] as $languageId) {
+                $labels[] = (string)($languages[$languageId]['label'] ?? '') . ' (' . (string)($languages[$languageId]['code'] ?? $languageId) . ')';
+            }
+            echo '<form action="Record/record_import.php" method="post" data-layer="new">';
+            $this->backend->formInit('record.record_import_form_docx_proofread', [
+                '{info}' => $this->_fileInfoHtml()
+                    . $this->_infoRow($this->cms->snippet('record.label_import_records'), htmlspecialchars($this->cms->snippet('record.x_records', ['count' => (int)$analysis['records']])))
+                    . $this->_infoRow($this->cms->snippet('record.label_export_docx_mode'), htmlspecialchars($this->cms->snippet('record.label_export_docx_mode_proofread')))
+                    . ($labels ? $this->_infoRow($this->cms->snippet('record.label_export_languages'), htmlspecialchars(implode(', ', $labels))) : '')
+                    . $this->_infoRow($this->cms->snippet('record.label_export_fields'), htmlspecialchars(implode(', ', $analysis['fields']))),
+                '{options}' => $this->_optionsHtml((int)$analysis['records'], 0),
+            ]);
+            $this->_analysisHidden();
+            $this->backend->formHidden('mode', 'update');
+            echo $this->backend->form('record.form_import_run', ['{list_query}' => $this->_cancelQuery()]);
+            echo '</form>';
+            return;
+        }
         $languageId = (int)$analysis['language_id'];
         $language = $languages[$languageId] ?? [];
         $languageLabel = (string)($language['label'] ?? '') . ' (' . (string)($language['code'] ?? $languageId) . ')';
@@ -983,6 +1004,20 @@ class RecordBackendImport extends RecordBackend {
         $this->backend->formHidden('mode', 'update');
         echo $this->backend->form('record.form_import_run', ['{list_query}' => $this->_cancelQuery()]);
         echo '</form>';
+    }
+
+    /**
+     * May the user write all languages the DOCX file writes (translation: the
+     * target language, proofreading: the languages of the texts)?
+     */
+    private function _docxLanguagesWritable(array $analysis): bool
+    {
+        $languageIds = (array)($analysis['language_ids'] ?? []);
+        if (($analysis['mode'] ?? 'translate') !== 'proofread' && empty($languageIds)) return false;
+        foreach ($languageIds as $languageId) {
+            if (!$this->backend->access()->languageWrite((int)$languageId)) return false;
+        }
+        return true;
     }
 
     // ====================
@@ -1089,7 +1124,7 @@ class RecordBackendImport extends RecordBackend {
                 'rtl' => in_array((string)($docx['rtl'] ?? ''), ['unicode', 'html', 'none'], true) ? (string)$docx['rtl'] : 'unicode',
             ];
             $docxAnalysis = $this->import->analyzeDocx($path, $this->areaId);
-            if (!$this->backend->access()->languageWrite((int)($docxAnalysis['language_id'] ?? 0))) {
+            if (!$this->_docxLanguagesWritable($docxAnalysis)) {
                 $this->cms->error($this->cms->snippet('record.error_import_language_denied'));
                 $this->errors();
                 return null;

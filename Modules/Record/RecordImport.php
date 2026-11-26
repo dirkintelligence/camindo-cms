@@ -35,7 +35,9 @@
  *                 area_id (0 = all)
  *     csv         csv: ['separator', 'enclosure', 'eol', 'stored' => bool]
  *     mapping     csv: column index => target key (see csvTargets())
- *     docx        docx: ['punct' => bool, 'space' => bool, 'rtl' => 'unicode'|'html'|'none']
+ *     docx        docx: ['punct' => bool, 'space' => bool, 'rtl' => 'unicode'|'html'|'none'] -
+ *                 translation only; a proofreading file (RecordExport::_exportDocx()) carries
+ *                 the field and language per text and takes the texts as they are
  *     global      xml (global): true
  *     folder_id   xml (global): target level - folder under which new areas arise
  *     instance_id xml (global): instance of new areas (0 = from the file resp. target level)
@@ -132,7 +134,7 @@
  *           Thumbnails are created anew. Without columns for the link field it remains as
  *           it is - with replace its contents are removed.
  *     docx  lines "field={link}.{field} | record_id={id}": only the named
- *           contents are translated (partial).
+ *           contents are translated resp. proofread (partial).
  *
  * The XML imports further link link fields in the second pass via the
  * assigned ids (the contents are there as separate records in the file).
@@ -876,14 +878,18 @@ class RecordImport {
     }
 
     /**
-     * DOCX: read tables, count records, check the target language.
+     * DOCX: read tables, count records, check the target language (translation)
+     * resp. the languages of the texts (proofreading).
      *
-     * @return array ['ok', 'errors', 'records' => int, 'language_id' => int,
+     * @return array ['ok', 'errors', 'records' => int, 'mode' => translate | proofread,
+     *                'language_id' => int (translation: target language),
+     *                'language_ids' => int[] (languages written: translation the target
+     *                language, proofreading those of the texts),
      *                'source_language_id' => int, 'fields' => string[]]
      */
     public function analyzeDocx(string $path, int $areaId): array
     {
-        $result = ['ok' => false, 'errors' => [], 'warnings' => [], 'records' => 0, 'language_id' => 0, 'source_language_id' => 0, 'fields' => []];
+        $result = ['ok' => false, 'errors' => [], 'warnings' => [], 'records' => 0, 'mode' => 'translate', 'language_id' => 0, 'language_ids' => [], 'source_language_id' => 0, 'fields' => []];
         $records = $this->_docxRecords($path, $error);
         if ($records === null) {
             $result['errors'][] = $error !== '' ? $error : $this->cms->snippet('record.error_import_not_docx');
@@ -894,25 +900,67 @@ class RecordImport {
             return $result;
         }
         $result['records'] = count($records);
+        $modes = array_unique(array_column($records, 'mode'));
+        if (count($modes) !== 1) {
+            $result['errors'][] = $this->cms->snippet('record.error_import_docx_modes');
+            return $result;
+        }
+        $proofread = $modes[0] === 'proofread';
+        $result['mode'] = $proofread ? 'proofread' : 'translate';
         $languageIds = [];
         $fields = [];
         foreach ($records as $entry) {
-            $languageIds[(int)$entry['language_id']] = true;
+            if (!$proofread) $languageIds[(int)$entry['language_id']] = true;
             $result['source_language_id'] = (int)$entry['source_language_id'];
-            foreach (array_keys($entry['fields']) as $name) $fields[$name] = true;
+            foreach ($entry['fields'] as $name => $text) {
+                $fields[$name] = true;
+                if ($proofread) foreach (array_keys($text) as $languageId) $languageIds[(int)$languageId] = true;
+            }
             foreach ((array)($entry['links'] ?? []) as $linkName => $dests) {
                 foreach ($dests as $subs) {
-                    foreach (array_keys($subs) as $sub) $fields["$linkName.$sub"] = true;
+                    foreach ($subs as $sub => $text) {
+                        $fields["$linkName.$sub"] = true;
+                        if ($proofread) foreach (array_keys($text) as $languageId) $languageIds[(int)$languageId] = true;
+                    }
                 }
             }
         }
         $result['fields'] = array_keys($fields);
+        if ($proofread) {
+            // the languages of the texts (0 = single-language field)
+            unset($languageIds[0]);
+            $instanceId = (int)($this->_areaOf($areaId)['instance_id'] ?? 0);
+            $instanceLanguages = $this->instanceCache->languages($instanceId);
+            foreach (array_keys($languageIds) as $languageId) {
+                if (!isset($instanceLanguages[$languageId])) {
+                    $result['errors'][] = str_replace('{language_id}', (string)$languageId, $this->cms->snippet('record.error_import_docx_language'));
+                    return $result;
+                }
+            }
+            $result['language_ids'] = array_values(array_filter(array_map('intval', array_keys($instanceLanguages)), fn($id) => isset($languageIds[$id])));
+            $schema = $this->_schemaOf($areaId);
+            foreach ($result['fields'] as $name) {
+                $colDef = $schema[$name] ?? null;
+                if (str_contains($name, '.')) {
+                    [$linkName, $sub] = explode('.', $name, 2);
+                    $linkDef = $schema[$linkName] ?? null;
+                    $colDef = ($linkDef !== null && in_array((string)($linkDef['type'] ?? ''), $this->cms->dependentTypes, true))
+                        ? ($this->record->linkTargetFields($linkDef)[$sub] ?? null) : null;
+                }
+                if ($colDef === null || !RecordExport::isProofreadField($colDef)) {
+                    $result['warnings'][] = str_replace('{field}', $name, $this->cms->snippet('record.warning_import_docx_text_field'));
+                }
+            }
+            $result['ok'] = true;
+            return $result;
+        }
         if (count($languageIds) !== 1) {
             $result['errors'][] = $this->cms->snippet('record.error_import_docx_languages');
             return $result;
         }
         $languageId = (int)array_key_first($languageIds);
         $result['language_id'] = $languageId;
+        $result['language_ids'] = [$languageId];
         $instanceId = (int)($this->_areaOf($areaId)['instance_id'] ?? 0);
         if (!isset($this->instanceCache->languages($instanceId)[$languageId])) {
             $result['errors'][] = str_replace('{language_id}', (string)$languageId, $this->cms->snippet('record.error_import_docx_language'));
@@ -1029,7 +1077,14 @@ class RecordImport {
                 if (!empty($entry['error'])) {
                     throw new \RuntimeException((string)$entry['error']);
                 }
-                $item = $this->_importPrepare($entry, $job, $item);
+                if (!empty($entry['unchanged'])) {
+                    // DOCX proofreading: nothing corrected
+                    $item['status'] = 'skipped';
+                    $item['messages'][] = $this->cms->snippet('record.note_import_unchanged');
+                }
+                else {
+                    $item = $this->_importPrepare($entry, $job, $item);
+                }
             }
             catch (\Throwable $e) {
                 $message = $e->getMessage();
@@ -1277,6 +1332,11 @@ class RecordImport {
                 else {
                     $item['messages'][] = (string)$entry['error'];
                 }
+            }
+            elseif (!empty($entry['unchanged'])) {
+                // DOCX proofreading: nothing corrected
+                $item['status'] = 'skipped';
+                $item['messages'][] = $this->cms->snippet('record.note_import_unchanged');
             }
             else {
                 $areaId = (int)$entry['data']['area_id'];
@@ -3929,8 +3989,12 @@ class RecordImport {
 
     /**
      * Tables of the Word document (RecordExport::_exportDocx()) -> records.
+     * Translation: the head row names the target language, 'fields'/'links' carry
+     * the text. Proofreading (head row "record_id=.. | proofread", 'mode' =>
+     * 'proofread'): each field row names its language ("language_id=..", single-language
+     * fields none = 0), 'fields'/'links' carry [language_id => text].
      *
-     * @return array|null  [['record_id', 'language_id', 'source_language_id', 'fields' => [name => text],
+     * @return array|null  [['record_id', 'mode', 'language_id', 'source_language_id', 'fields' => [name => text],
      *                     'links' => [link => [record_id => [feld => text]]]], …]
      */
     private function _docxRecords(string $path, ?string &$error = null): ?array
@@ -3962,18 +4026,25 @@ class RecordImport {
                 $rows[] = implode("\n", $paragraphs);
             }
             if (empty($rows) || !preg_match('/record_id=(\d+)/', $rows[0], $m)) continue;
-            $record = ['record_id' => (int)$m[1], 'language_id' => 0, 'source_language_id' => 0, 'fields' => [], 'links' => []];
+            $record = ['record_id' => (int)$m[1], 'mode' => 'translate', 'language_id' => 0, 'source_language_id' => 0, 'fields' => [], 'links' => []];
+            $proofread = (bool)preg_match('/\|\s*proofread\b/', $rows[0]);
+            if ($proofread) $record['mode'] = 'proofread';
             if (preg_match('/(?<![a-z_])language_id=(\d+)/', $rows[0], $m)) $record['language_id'] = (int)$m[1];
             if (preg_match('/source_language_id=(\d+)/', $rows[0], $m)) $record['source_language_id'] = (int)$m[1];
             for ($i = 1; $i + 1 < count($rows); $i += 2) {
                 if (!preg_match('/^field=([a-z0-9_\-]+)(?:\.([a-z0-9_\-]+))?/', $rows[$i], $m)) { $i--; continue; }
+                $text = $rows[$i + 1];
+                if ($proofread) {
+                    $languageId = preg_match('/(?<![a-z_])language_id=(\d+)/', $rows[$i], $mm) ? (int)$mm[1] : 0;
+                    $text = [$languageId => $text];
+                }
                 if (!empty($m[2])) {
                     // field of an embedded content: "field={link}.{field} | record_id={id}"
                     $destId = preg_match('/record_id=(\d+)/', $rows[$i], $mm) ? (int)$mm[1] : 0;
-                    $record['links'][$m[1]][$destId][$m[2]] = $rows[$i + 1];
+                    $record['links'][$m[1]][$destId][$m[2]] = $proofread ? (array)($record['links'][$m[1]][$destId][$m[2]] ?? []) + $text : $text;
                     continue;
                 }
-                $record['fields'][$m[1]] = $rows[$i + 1];
+                $record['fields'][$m[1]] = $proofread ? (array)($record['fields'][$m[1]] ?? []) + $text : $text;
             }
             $records[] = $record;
         }
@@ -3990,7 +4061,8 @@ class RecordImport {
                     case 't': $text .= $child->textContent; break;
                     case 'tab': $text .= "\t"; break;
                     case 'br': case 'cr': $text .= "\n"; break;
-                    case 'delText': break;
+                    // deleted text and images (identification image of the export)
+                    case 'delText': case 'drawing': case 'pict': break;
                     default: $walker($child);
                 }
             }
@@ -4009,6 +4081,10 @@ class RecordImport {
         $options = (array)($job['docx'] ?? []);
         $records = $this->_docxRecords($path) ?? [];
         foreach ($records as $record) {
+            if ($record['mode'] === 'proofread') {
+                yield $this->_docxProofreadEntry($record, $areaId, $schema);
+                continue;
+            }
             $languageId = (int)$record['language_id'];
             $data = ['area_id' => $areaId, 'values' => [], 'stored' => [], 'prehashed' => [], 'relations' => [], 'files' => [], 'meta' => [], 'links' => []];
             foreach ($record['fields'] as $name => $text) {
@@ -4044,6 +4120,89 @@ class RecordImport {
                 'data' => $data,
             ];
         }
+    }
+
+    /**
+     * Entry of a proofread record: every text back into its source (field and
+     * language, single-language fields without language). Texts that did not change
+     * (line breaks normalized - Word knows no CR LF; an empty row of a language
+     * with fallback counts as unchanged) are left out, so that
+     * the import touches only corrected fields; a record without corrections is
+     * marked 'unchanged' (run() skips it). The DOCX options (East Asian, RTL)
+     * do not apply - the text is taken as it is.
+     */
+    private function _docxProofreadEntry(array $record, int $areaId, array $schema): array
+    {
+        $recordId = (int)$record['record_id'];
+        $data = ['area_id' => $areaId, 'values' => [], 'stored' => [], 'prehashed' => [], 'relations' => [], 'files' => [], 'meta' => [], 'links' => []];
+        foreach ($record['fields'] as $name => $texts) {
+            $colDef = $schema[$name] ?? null;
+            if ($colDef === null || !RecordExport::isProofreadField($colDef)) continue;
+            $value = $this->_docxProofreadValue($recordId, (string)$name, $colDef, (array)$texts, $this->_languagesOf($areaId)['language_ids']);
+            if ($value !== null) $data['values'][$name] = $value;
+        }
+        foreach ((array)($record['links'] ?? []) as $linkName => $dests) {
+            $colDef = $schema[$linkName] ?? null;
+            if ($colDef === null || !in_array((string)($colDef['type'] ?? ''), $this->cms->dependentTypes, true)) continue;
+            $targetAreaIds = $this->record->linkTargetAreaIds($colDef);
+            $entries = [];
+            foreach ($dests as $destId => $subs) {
+                $entry = ['id' => (int)$destId, 'area_id' => 0, 'values' => [], 'files' => [], 'stored' => [], 'prehashed' => []];
+                $destAreaId = $this->_recordAreaId((int)$destId);
+                if (!in_array($destAreaId, $targetAreaIds, true)) continue;
+                $destSchema = $this->_schemaOf($destAreaId);
+                foreach ($subs as $sub => $texts) {
+                    $targetDef = $destSchema[$sub] ?? null;
+                    if ($targetDef === null || !RecordExport::isProofreadField($targetDef)) continue;
+                    $value = $this->_docxProofreadValue((int)$destId, (string)$sub, $targetDef, (array)$texts, $this->_languagesOf($destAreaId)['language_ids']);
+                    if ($value !== null) $entry['values'][$sub] = $value;
+                }
+                if (!empty($entry['values'])) $entries[] = $entry;
+            }
+            if (!empty($entries)) $data['links'][$linkName] = ['entries' => $entries, 'partial' => true];
+        }
+        return [
+            'id' => $recordId,
+            'area_id' => $areaId,
+            'label' => '',
+            'data' => $data,
+            'unchanged' => empty($data['values']) && empty($data['links']),
+        ];
+    }
+
+    /**
+     * Value of a proofread field for the entry - [language_id => text] (multilingual,
+     * only languages of the instance) resp. the text (single-language); null if
+     * nothing changed.
+     *
+     * @param array $texts  language_id (0 = single-language) => text from the file
+     */
+    private function _docxProofreadValue(int $recordId, string $name, array $colDef, array $texts, array $languageIds): string|array|null
+    {
+        $normalize = fn($text) => str_replace(["\r\n", "\r"], "\n", (string)$text);
+        $current = function (int $languageId) use ($recordId, $name): ?string {
+            $cache = $this->cms->loadRecordCache($recordId, $languageId);
+            if ($cache === null || !array_key_exists($name, $cache)) return null;
+            // fallback (no text of its own): the export shows it empty - an empty
+            // row leaves it as it is
+            if (!empty(((array)$cache[$name])[2])) return '';
+            $value = ((array)$cache[$name])[1] ?? '';
+            return is_scalar($value) ? (string)$value : null;
+        };
+        if (!$this->cms->isMultilingualField($colDef)) {
+            $text = $texts[0] ?? reset($texts);
+            if ($text === false || empty($languageIds)) return null;
+            $old = $current($languageIds[0]);
+            return ($old !== null && $normalize($old) === $normalize($text)) ? null : (string)$text;
+        }
+        $value = [];
+        foreach ($texts as $languageId => $text) {
+            if (!in_array((int)$languageId, $languageIds, true)) continue;
+            $old = $current((int)$languageId);
+            if ($old !== null && $normalize($old) === $normalize($text)) continue;
+            $value[(int)$languageId] = (string)$text;
+        }
+        return $value ?: null;
     }
 
     /**

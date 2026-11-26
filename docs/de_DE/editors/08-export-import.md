@@ -12,7 +12,7 @@ Sie erreichen beide Funktionen in der Datensatzliste über das Menü
 | Format | Wofür | Nötige Gruppenrechte |
 |---|---|---|
 | ***CSV*** | Tabellen für Excel & Co.: Inhalte nachbearbeiten, auswerten, aus anderen Systemen übernehmen | Zusatzrecht „CSV-Export“ bzw. „CSV-Import“ |
-| ***DOCX*** | Word-Datei für Übersetzer | Zusatzrecht „DOCX-Export“ bzw. „DOCX-Import“ |
+| ***DOCX*** | Word-Datei für Übersetzer oder zum Korrekturlesen | Zusatzrecht „DOCX-Export (Übersetzung, Korrekturlesen)“ bzw. „DOCX-Import (Übersetzung, Korrekturlesen)“ |
 | ***XML*** | vollständige Sicherung eines Bereichs mit allen Feldern, Sprachen und Dateien | nur Superuser |
 
 ## Exportieren
@@ -67,7 +67,8 @@ wieder den Standardwert des Feldes.
 
 ### DOCX und XML
 
-Siehe [Übersetzen mit Word](#übersetzen-mit-word-docx) und
+Siehe [Übersetzen mit Word](#übersetzen-mit-word-docx),
+[Korrekturlesen mit Word](#korrekturlesen-mit-word-docx) und
 [Sicherung im XML-Format](#sicherung-im-xml-format).
 
 ## Inhalte in Excel nachbearbeiten
@@ -118,13 +119,17 @@ Hinweise:
 Der DOCX-Export bereitet die Inhalte eines Bereichs für eine Übersetzung auf – ein
 Übersetzer oder ein Übersetzungsbüro braucht dafür keinen Zugang zum CMS.
 
-1. ***Exportieren.*** Wählen Sie im Export den Reiter „DOCX“, die Quellsprache
-   („Übersetzung von“), die Zielsprache („Übersetzung nach“) und die mehrsprachigen
+1. ***Exportieren.*** Wählen Sie im Export den Reiter „DOCX“ und unter „Zweck“
+   „Übersetzung mehrsprachiger Felder“, dann die Quellsprache („Übersetzung von“), die Zielsprache („Übersetzung nach“) und die mehrsprachigen
    Felder, die übersetzt werden sollen. Unter „Dateien“ legen Sie fest, ob
    „Alle Datensätze in einer Datei“ landen oder „Ein Datensatz je Datei“ – etwa
    um die Arbeit auf mehrere Übersetzer zu verteilen. Die Einzeldateien heißen nach
    Record-ID und Bezeichnung des Datensatzes (`4367-sofa-natur.docx`) und liegen
-   zusammen in der Zip-Datei.
+   zusammen in der Zip-Datei. Hat der Bereich Thumbnail-Felder, können Sie unter
+   „Bild zur Identifikation“ eines davon wählen: Sein ***Bild*** steht dann je
+   Datensatz in der grauen Kopfzeile der Tabelle – so erkennt der Übersetzer den
+   Datensatz, etwa wenn die Texte ein Bild beschreiben. Beim Import spielt das Bild
+   keine Rolle.
 2. ***Übersetzen.*** Die Word-Datei enthält je Datensatz eine Tabelle. Die **grau
    hinterlegten Zeilen** enthalten die Zuordnung für den Re-Import und dürfen nicht
    geändert werden. Die ***weißen Zeilen*** enthalten den Text der Quellsprache; der
@@ -145,6 +150,31 @@ Für ostasiatische Zielsprachen kann der Import Satzzeichen und Leerzeichen in i
 ideografischen Formen umwandeln. Abschnitte in arabischer oder hebräischer Schrift
 innerhalb eines Textes lassen sich für die richtige Darstellung markieren
 (Right-to-Left).
+
+## Korrekturlesen mit Word (DOCX)
+
+Mit dem Zweck „Korrekturlesen“ legt der DOCX-Export die Texte eines Bereichs zum
+***Korrekturlesen*** vor – etwa wenn ein Kunde die Texte seiner Website prüfen möchte,
+bevor er das CMS kennt. Anders als bei der Übersetzung erscheinen ***alle Textfelder***,
+einsprachige wie mehrsprachige, in den Sprachen Ihrer Wahl.
+
+1. ***Exportieren.*** Wählen Sie im Export den Reiter „DOCX“ und unter „Zweck“
+   „Korrekturlesen“. Wählen Sie die ***Sprachen*** und die ***Felder***. Zur Auswahl stehen
+   ein- und mehrzeilige Textfelder; Kennungen wie die URL (Slug) und eindeutige Felder
+   sind nicht vorausgewählt. Mehrsprachige Felder erscheinen in jeder gewählten Sprache.
+   Hat eine Sprache keinen eigenen Text, bleibt ihre Zeile leer und kann ausgefüllt
+   werden; bleibt sie leer, gilt weiter der Text der Hauptsprache. Einsprachige Felder
+   erscheinen einmal. „Dateien“ und „Bild zur
+   Identifikation“ wirken wie bei der Übersetzung.
+2. ***Korrigieren.*** Die Word-Datei enthält je Datensatz eine Tabelle. Die **grau
+   hinterlegten Zeilen** nennen Feld und Sprache und dürfen nicht geändert werden. In
+   den ***weißen Zeilen*** wird direkt korrigiert.
+3. ***Importieren.*** Importieren Sie die korrigierte Datei im selben Inhaltsbereich wie
+   gewohnt – camindo CMS erkennt die Korrekturdatei selbst. Jeder Text geht in sein Feld
+   und seine Sprache zurück. Geschrieben werden nur ***geänderte*** Texte; Datensätze ohne
+   Korrektur werden mit dem Vermerk „unverändert“ übergangen.
+
+Eingebettete Inhalte werden wie bei der Übersetzung mit dem Datensatz korrigiert.
 
 ## Sicherung im XML-Format
 
@@ -220,7 +250,7 @@ Inhalten als Einheit: Beide werden gemeinsam gespeichert. Schlägt ein Inhalt fe
   Dateien kommen aus der Zip-Datei, Vorschaubilder entstehen neu. Nennt die Datei zu
   einem Feld keine Spalte, bleiben die Inhalte unverändert – im Modus REPLACE
   werden sie entfernt.
-* ***DOCX:*** Die übersetzten Felder der eingebetteten Inhalte werden übernommen.
+* ***DOCX:*** Die übersetzten bzw. korrigierten Felder der eingebetteten Inhalte werden übernommen.
   Angelegt oder entfernt wird nichts.
 
 Enthält ein Text bei mehreren Inhalten selbst die Zeichenfolge ` | ` oder passt die

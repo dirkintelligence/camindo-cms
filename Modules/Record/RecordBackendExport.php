@@ -96,7 +96,7 @@ class RecordBackendExport extends RecordBackend {
      *
      * Request: area_id, filter/filterop/filtermode (from the list) or query (when
      *          running), list_query, type (xml|csv|docx), function ('' | run),
-     *          scope, files, data[csv][...], languages[], fields[], data[docx][from|to|split]
+     *          scope, files, data[csv][...], languages[], fields[], data[docx][mode|from|to|split|thumbnail]
      */
     public function export(): void
     {
@@ -297,10 +297,10 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * Languages of the instance as checkboxes; the primary language or the
-     * selection of the request is preselected.
+     * Languages of the instance as checkboxes; the primary language (all with
+     * $allChecked) or the selection of the request is preselected.
      */
-    private function _languageCheckboxes(): string
+    private function _languageCheckboxes(bool $allChecked = false): string
     {
         $instanceId = (int)($this->areaData['instance_id'] ?? 0);
         // only readable languages of the user group
@@ -310,7 +310,7 @@ class RecordBackendExport extends RecordBackend {
         $requested = isset($_REQUEST['languages']) ? $this->system->sanitizeIds((array)$_REQUEST['languages']) : null;
         $html = '';
         foreach ($languages as $languageId => $language) {
-            $checked = ($requested === null) ? ((int)$languageId === $primaryId) : in_array((int)$languageId, $requested, true);
+            $checked = ($requested === null) ? ($allChecked || (int)$languageId === $primaryId) : in_array((int)$languageId, $requested, true);
             $html .= $this->backend->template('record.export_checkbox', [
                 '{name}' => 'languages[]',
                 '{value}' => (string)$languageId,
@@ -429,10 +429,59 @@ class RecordBackendExport extends RecordBackend {
     }
 
     /**
-     * docx: source and target language, multilingual fields.
+     * docx: mode translate (source and target language, multilingual fields) or
+     * proofread (languages, all text fields); switching the mode reloads the mask.
      */
     private function _exportFormDocx(): void
     {
+        $docx = (array)($_REQUEST['data']['docx'] ?? []);
+        $mode = (string)($docx['mode'] ?? 'translate');
+        if (!in_array($mode, RecordExport::DOCX_MODES, true)) $mode = 'translate';
+        $modeHtml = '<fieldset class="mb-4 mt-4"><legend class="fs-6 fw-bold">' . htmlspecialchars($this->cms->snippet('record.label_export_docx_mode')) . '</legend>';
+        foreach (RecordExport::DOCX_MODES as $option) {
+            $id = 'c9-export-docx-mode-' . $option;
+            $reload = "cApp.layers.replace('Record/record_export.php?{$this->listQuery}&type=docx&data[docx][mode]={$option}');";
+            $modeHtml .= '<div class="form-check"><input class="form-check-input" type="radio" name="data[docx][mode]" value="' . $option . '" id="' . $id . '"'
+                . ($option === $mode ? ' checked' : $this->backend->on('change', $reload)) . '>'
+                . '<label class="form-check-label" for="' . $id . '">' . htmlspecialchars($this->cms->snippet('record.label_export_docx_mode_' . $option)) . '</label></div>';
+        }
+        $modeHtml .= '</fieldset>';
+        $split = !empty($docx['split']);
+        $thumbnailOptions = ['' => '#record.option_export_docx_no_thumbnail'];
+        foreach ($this->export->docxThumbnailFields($this->areaId) as $name => $colDef) {
+            $thumbnailOptions[(string)$name] = (string)($colDef['label'] ?? $name);
+        }
+        $requested = isset($_REQUEST['fields']) ? array_map('strval', (array)$_REQUEST['fields']) : null;
+
+        if ($mode === 'proofread') {
+            $rows = '';
+            foreach ($this->export->proofreadFields($this->areaId) as $name => $colDef) {
+                $rows .= $this->_fieldRow(
+                    (string)$name,
+                    $requested === null ? !empty($colDef['checked']) : in_array((string)$name, $requested, true),
+                    (string)$name,
+                    htmlspecialchars($this->cms->textOrSnippet((string)($colDef['label'] ?? $name))),
+                    (string)($colDef['type'] ?? ''),
+                    ''
+                );
+            }
+            $fieldHtml = $rows === '' ? $this->backend->template('alert_warning', ['{text}' => '{#record.note_export_no_text_fields}']) : $this->_fieldTable($rows);
+            echo '<form action="Record/record_export.php" method="post">';
+            $this->backend->formInit('record.record_export_form_docx_proofread', [
+                '{scope}' => $this->_scopeHtml(),
+                '{mode}' => $modeHtml,
+                '{languages}' => $this->_languageCheckboxes(allChecked: true),
+                '{fields}' => $fieldHtml,
+                '{single_checked}' => $split ? '' : ' checked',
+                '{split_checked}' => $split ? ' checked' : '',
+            ]);
+            $this->_docxThumbnailField($thumbnailOptions, (string)($docx['thumbnail'] ?? ''));
+            $this->_exportHidden();
+            echo $this->backend->form('record.form_export_run', ['{options}' => $this->_exportOptions()]);
+            echo '</form>';
+            return;
+        }
+
         $instanceId = (int)($this->areaData['instance_id'] ?? 0);
         $languages = $this->record->readableLanguages($this->instanceCache->languages($instanceId));
         $languageIds = array_map('intval', array_keys($languages));
@@ -440,13 +489,10 @@ class RecordBackendExport extends RecordBackend {
         foreach ($languages as $languageId => $language) {
             $options[(string)$languageId] = (string)($language['label'] ?? '') . ' (' . (string)($language['code'] ?? '') . ')';
         }
-        $docx = (array)($_REQUEST['data']['docx'] ?? []);
         $from = isset($docx['from']) ? (int)$docx['from'] : ($languageIds[0] ?? 0);
         $to = isset($docx['to']) ? (int)$docx['to'] : ($languageIds[1] ?? $languageIds[0] ?? 0);
-        $split = !empty($docx['split']);
 
         $fields = $this->export->docxFields($this->areaId);
-        $requested = isset($_REQUEST['fields']) ? array_map('strval', (array)$_REQUEST['fields']) : null;
         $rows = '';
         foreach ($fields as $name => $colDef) {
             $rows .= $this->_fieldRow(
@@ -469,6 +515,7 @@ class RecordBackendExport extends RecordBackend {
         echo '<form action="Record/record_export.php" method="post">';
         $this->backend->formInit('record.record_export_form_docx', [
             '{scope}' => $this->_scopeHtml(),
+            '{mode}' => $modeHtml,
             '{fields}' => $fieldHtml,
             '{single_checked}' => $split ? '' : ' checked',
             '{split_checked}' => $split ? ' checked' : '',
@@ -482,9 +529,26 @@ class RecordBackendExport extends RecordBackend {
                 'options' => $options,
             ]);
         }
+        $this->_docxThumbnailField($thumbnailOptions, (string)($docx['thumbnail'] ?? ''));
         $this->_exportHidden();
         echo $this->backend->form('record.form_export_run', ['{options}' => $this->_exportOptions()]);
         echo '</form>';
+    }
+
+    /**
+     * DOCX: identification image per record (only if the area has thumbnail fields).
+     */
+    private function _docxThumbnailField(array $options, string $value): void
+    {
+        if (count($options) < 2) return;
+        $this->backend->formField($this->record, [
+            'name' => 'docx.thumbnail',
+            'value' => $value,
+            'id' => 0,
+            'colDef' => ['type' => 'text', 'display_type' => 'select', 'label' => '#record.label_export_docx_thumbnail',
+                'note' => '#record.note_export_docx_thumbnail'],
+            'options' => $options,
+        ]);
     }
 
     // ====================
@@ -651,6 +715,8 @@ class RecordBackendExport extends RecordBackend {
             'from'      => (int)($docx['from'] ?? 0),
             'to'        => (int)($docx['to'] ?? 0),
             'split'     => !empty($docx['split']),
+            'thumbnail' => (string)($docx['thumbnail'] ?? ''),
+            'mode'      => (string)($docx['mode'] ?? 'translate'),
         ]);
         if ($job === null) {
             $this->_exportRunError($this->cms->errorMsgLast());

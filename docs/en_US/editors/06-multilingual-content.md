@@ -82,7 +82,7 @@ Larger translations do not require translators to work in the CMS:
 
 - The ***DOCX export*** creates a Word file with all texts to be translated. The translator
   overwrites them in Word; the ***DOCX import*** transfers the translation back into the CMS.
-  For more, see the section [Translating with Word (DOCX)](./08-export-import.md#translating-with-word-docx).
+  For more, see the section [Translating with Word (DOCX)](./08-export-import.md#translating-with-word-docx). For ***proofreading*** all texts there is a purpose of its own, see [Proofreading with Word (DOCX)](./08-export-import.md#proofreading-with-word-docx).
 - The ***CSV export*** provides multilingual fields in one column per language, such as
   `titel.de_DE` and `titel.en_US`. This is handy for translating many records at once in a
   spreadsheet (see [chapter 8](./08-export-import.md#editing-content-in-excel)).

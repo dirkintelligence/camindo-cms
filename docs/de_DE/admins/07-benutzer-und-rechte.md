@@ -103,7 +103,7 @@ Welche Module die Benutzergruppe öffnen darf. Einige Module haben darunter eing
 |---|---|
 | Benutzer | „Benutzerdetails lesen: eigene und untergeordnete Benutzergruppen“ · „Benutzerdetails lesen: andere Benutzergruppen“ · „Benutzer anlegen: eigene und untergeordnete Benutzergruppen (mit Startpasswort)“ · „Benutzer ändern und sperren: eigene und untergeordnete Benutzergruppen (ohne Passwort)“ – siehe [Untergeordnete Benutzergruppen](#untergeordnete-benutzergruppen) |
 | Datenschutz | „Lösch-Policies anlegen und ändern“ (nur für zugängliche Instanzen) · „Personenbezogene Daten exportieren“ (Profile aus lesbaren Bereichen, Benutzer aus sichtbaren Benutzergruppen) · „Vorlagen der Datenauskunft pflegen“ (zugängliche Instanzen) · „Gelöschte Benutzer anonymisieren“ (zugängliche Benutzergruppen) – siehe [Kapitel 15](./15-datenschutz.md) |
-| Inhalte | „CSV-Import“, „Medien-Import (Zip-Datei)“, „CSV-Export“, „DOCX-Import (Übersetzung)“, „DOCX-Export (Übersetzung)“, „Stapelverarbeitung“ |
+| Inhalte | „CSV-Import“, „Medien-Import (Zip-Datei)“, „CSV-Export“, „DOCX-Import (Übersetzung, Korrekturlesen)“, „DOCX-Export (Übersetzung, Korrekturlesen)“, „Stapelverarbeitung“ |
 | Werkzeuge | je ein Recht für die Reiter „Server“, „Datenbank“, „Daten“, „Entwickler“ und „Papierkorb eines Users“ („Papierkorb eines Website-Users endgültig leeren“) |
 
 Immer Superusern vorbehalten sind: die Verwaltung der Benutzergruppen, die Bereichsrechte, der

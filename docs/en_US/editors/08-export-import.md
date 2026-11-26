@@ -11,7 +11,7 @@ You reach both functions from the record list via the menu ![more_vert](../_/mor
 | Format | Purpose | Required group permissions |
 |---|---|---|
 | ***CSV*** | Tables for Excel & Co.: edit content, analyze it, take it over from other systems | additional permission “CSV export” or “CSV import” |
-| ***DOCX*** | Word file for translators | additional permission “DOCX export (translation)” or “DOCX import (translation)” |
+| ***DOCX*** | Word file for translators or for proofreading | additional permission “DOCX export (translation, proofreading)” or “DOCX import (translation, proofreading)” |
 | ***XML*** | complete backup of an area with all fields, languages and files | superusers only |
 
 ## Exporting
@@ -59,7 +59,7 @@ an empty cell sets the default value of the field again.
 
 ### DOCX and XML
 
-See [Translating with Word (DOCX)](#translating-with-word-docx) and
+See [Translating with Word (DOCX)](#translating-with-word-docx), [Proofreading with Word (DOCX)](#proofreading-with-word-docx) and
 [Backup in XML format](#backup-in-xml-format).
 
 ## Editing content in Excel
@@ -99,11 +99,13 @@ Notes:
 The DOCX export prepares the content of an area for translation – a translator or translation agency needs no
 access to the CMS for this.
 
-1. ***Export.*** In the export, choose the tab “DOCX”, the source language (“Translate from”), the target language
+1. ***Export.*** In the export, choose the tab “DOCX” and, under “Purpose”, “Translation of multilingual fields”, then the source language (“Translate from”), the target language
    (“Translate to”) and the multilingual fields to be translated. Under “Files”, decide whether “All records in one
    file” or “One record per file” – for example to distribute the work among several translators. The individual files
    are named after the record ID and the designation of the record (`4367-sofa-natur.docx`) and are all contained in
-   the zip file.
+   the zip file. If the area has thumbnail fields, you can choose one of them under “Identification image”: its
+   ***image*** then appears in the gray header row of each record's table – so the translator recognizes the record,
+   for example if the texts describe an image. The import ignores the image.
 2. ***Translate.*** The Word file contains one table per record. The ***gray rows*** contain the mapping for the re-import
    and must not be changed. The ***white rows*** contain the text of the source language; the translator overwrites it
    with the translation. Fields that are already translated are marked “already translated”.
@@ -117,6 +119,26 @@ the area of each content item decides.
 
 For East Asian target languages, the import can convert punctuation and spaces into their ideographic forms. Passages
 in Arabic or Hebrew script within a text can be marked for correct display (right to left).
+
+## Proofreading with Word (DOCX)
+
+With the purpose “Proofreading”, the DOCX export presents the texts of an area for ***proofreading*** – for example if a
+customer wants to check the texts of their website before getting to know the CMS. Unlike translation, ***all text
+fields*** appear, single-language and multilingual alike, in the languages of your choice.
+
+1. ***Export.*** In the export, choose the tab “DOCX” and, under “Purpose”, “Proofreading”. Choose the ***languages*** and
+   the ***fields***. Single- and multi-line text fields are offered; identifiers such as the URL (slug) and unique fields
+   are not preselected. Multilingual fields appear in every chosen language. If a language has no text of its own,
+   its row stays empty and can be filled in; if it stays empty, the text of the main language continues to apply.
+   Single-language fields appear once. “Files” and
+   “Identification image” work as for translation.
+2. ***Correct.*** The Word file contains one table per record. The ***gray rows*** name field and language and must not be
+   changed. Corrections are made directly in the ***white rows***.
+3. ***Import.*** Import the corrected file into the same content area as usual – camindo CMS recognizes the proofreading
+   file by itself. Every text goes back into its field and language. Only ***changed*** texts are written; records without
+   corrections are skipped with the note “unchanged”.
+
+Embedded content is proofread along with the record, as for translation.
 
 ## Backup in XML format
 
@@ -180,7 +202,7 @@ fails (for example because of a missing required field), the record is not chang
   via its order) and changed; additional values create new content (`record_id` = `0`); missing content is removed; the order is
   adopted. Files come from the zip file, preview images are generated anew. If the file names no column for a field, the content
   remains unchanged – in mode REPLACE it is removed.
-* ***DOCX:*** the translated fields of the embedded content are adopted. Nothing is created or removed.
+* ***DOCX:*** the translated or corrected fields of the embedded content are adopted. Nothing is created or removed.
 
 If a text itself contains the character sequence ` | ` for several content items, or the number of values does not match, the record
 is skipped with a message.

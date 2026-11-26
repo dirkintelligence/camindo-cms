@@ -98,7 +98,7 @@ parts, indented below them – without an additional right, the part remains blo
 |---|---|
 | Users | “Read user details: own and subordinate user groups” · “Read user details: other user groups” · “Create users: own and subordinate user groups (with initial password)” · “Change and lock users: own and subordinate user groups (without password)” – see [Subordinate user groups](#subordinate-user-groups) |
 | Privacy | “Create and change deletion policies” (only for accessible instances) · “Export personal data” (profiles from readable areas, users from visible user groups) · “Maintain templates of the personal data report” (accessible instances) · “Anonymize deleted users” (accessible user groups) – see [chapter 15](./15-privacy.md) |
-| Content | “CSV import”, “Media import (ZIP file)”, “CSV export”, “DOCX import (translation)”, “DOCX export (translation)”, “Batch processing” |
+| Content | “CSV import”, “Media import (ZIP file)”, “CSV export”, “DOCX import (translation, proofreading)”, “DOCX export (translation, proofreading)”, “Batch processing” |
 | Tools | one right each for the tabs “Server”, “Database”, “Data”, “Developer” and “Trash of a user” (“Permanently empty the trash of a website user”) |
 
 Reserved exclusively for superusers are: the management of user groups, the area rights, the

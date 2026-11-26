@@ -92,7 +92,7 @@ Für größere Übersetzungen müssen Übersetzer nicht im CMS arbeiten:
 
 - Der ***DOCX-Export*** erzeugt eine Word-Datei mit allen zu übersetzenden Texten. Der
   Übersetzer überschreibt sie in Word, der ***DOCX-Import*** spielt die Übersetzung
-  zurück ins CMS. Mehr dazu finden Sie im Abschnitt [Übersetzen mit Word](./08-export-import.md#übersetzen-mit-word-docx).
+  zurück ins CMS. Mehr dazu finden Sie im Abschnitt [Übersetzen mit Word](./08-export-import.md#übersetzen-mit-word-docx). Zum ***Korrekturlesen*** aller Texte gibt es einen eigenen Zweck, siehe [Korrekturlesen mit Word](./08-export-import.md#korrekturlesen-mit-word-docx).
 - Der ***CSV-Export*** liefert mehrsprachige Felder in einer Spalte je Sprache, etwa
   `titel.de_DE` und `titel.en_US`. Das ist praktisch, um Übersetzungen in einer
   Tabellenkalkulation für viele Datensätze gleichzeitig durchzuführen

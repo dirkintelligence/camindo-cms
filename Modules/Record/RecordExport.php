@@ -19,8 +19,13 @@
  *                 'enclosure' => '"', 'eol' => "\r\n"]
  *     languages   csv: language_ids of the instance that are exported
  *     fields      csv: keys of the checked columns (see csvFields()),
- *                 docx: names of the checked multilingual fields
- *     from / to   docx: source and target language (language_id)
+ *                 docx: names of the checked fields (docxFields() resp. proofreadFields())
+ *     mode        docx: 'translate' (default) | 'proofread' (DOCX_MODES)
+ *     from / to   docx translate: source and target language (language_id)
+ *     languages   docx proofread: language_ids whose texts are exported
+ *     split       docx: one file per record
+ *     thumbnail   docx: name of a thumbnail field (docxThumbnailFields()) whose image
+ *                 identifies the record in the document; '' = none
  *     token       background: token of the bgproc entry (start())
  *     admin_id    background: triggering admin (recipient of the message)
  *
@@ -67,11 +72,13 @@
  *           as hash, date/time values as stored (UTC), the placeholders "no date" /
  *           "no end" (Cms::isDatePlaceholder()) as an empty cell. Multi-value cells
  *           (links) separated by " | ".
- *     docx  for translation: one table per record, gray rows carry the metadata for the
+ *     docx  for translation or proofreading (_exportDocx()): one table per record, gray rows carry the metadata for the
  *           re-import (record_id, language_id, field), the white rows the content of the
  *           source language to be overwritten. All records in export.docx or (split) one file
  *           "{record_id}-{default field}.docx" per record - e.g. to distribute them to several
- *           translators; the re-import takes each file on its own.
+ *           translators; the re-import takes each file on its own. Optionally with the
+ *           image of a thumbnail field per record (identification only, the import
+ *           ignores it).
  *
  * EMBEDDED CONTENTS (fields of type link)
  * --------------------
@@ -108,6 +115,9 @@ use Camindo\Core\Modules\Template\Template;
 class RecordExport {
 
     public const TYPES = ['xml', 'csv', 'docx'];
+
+    /** DOCX: translation of the multilingual fields / proofreading of all text fields */
+    public const DOCX_MODES = ['translate', 'proofread'];
 
     /** Type identifier of the background process (table `bgproc`) */
     public const BGPROC_TYPE = 'export';
@@ -158,6 +168,13 @@ class RecordExport {
     /** Custom snippets of the labels: instance_id => [key => true] (_xmlArea() collects, _xmlSnippets() writes) */
     private array $snippetRefs = [];
 
+    /** Images of the DOCX file being built: source path => [rid, part, bytes] (_docxImage() collects, _docxWrite() packs) */
+    private array $docxImages = [];
+
+    /** Box of the identification image in the DOCX export (EMU: 1 cm = 360000) */
+    private const DOCX_IMAGE_MAX_WIDTH = 2160000;
+    private const DOCX_IMAGE_MAX_HEIGHT = 1620000;
+
     public function __construct(
         private Config $config,
         private Database $db,
@@ -190,9 +207,12 @@ class RecordExport {
      * @param int[]  $ids      record_ids (productive), in export order
      * @param array  $options  xml: files (bool); csv: header, bom (bool), separator,
      *                         enclosure, eol (text, '\r\n' …), languages (language_ids),
-     *                         fields (field keys from csvFields()); docx: from, to
-     *                         (language_id), fields (docxFields()), split (bool:
-     *                         one record per file)
+     *                         fields (field keys from csvFields()); docx: mode
+     *                         (translate | proofread), from, to (language_id, translate),
+     *                         languages (language_ids, proofread), fields (docxFields()
+     *                         resp. proofreadFields()), split (bool:
+     *                         one record per file), thumbnail (field name from
+     *                         docxThumbnailFields(), '' = no image)
      * @return array|null      job for run()/start(), null on errors (Cms::errors)
      */
     public function job(string $type, int $areaId, array $ids, array $options = []): ?array
@@ -223,12 +243,40 @@ class RecordExport {
             $job['fields'] = array_values(array_filter(array_map('strval', (array)($options['fields'] ?? []))));
         }
         else {
-            $job['from'] = (int)($options['from'] ?? 0);
-            $job['to'] = (int)($options['to'] ?? 0);
+            // translate (multilingual fields, source -> target language) or
+            // proofread (all text fields in the chosen languages)
+            $job['mode'] = (string)($options['mode'] ?? 'translate');
+            if (!in_array($job['mode'], self::DOCX_MODES, true)) {
+                $this->cms->error($this->cms->snippet('error_param_invalid'), 'mode');
+                return null;
+            }
             // one record per file instead of all records in one
             $job['split'] = !empty($options['split']);
-            if (!$this->access->languageRead($job['from']) || !$this->access->languageRead($job['to'])) {
-                $this->cms->error($this->cms->snippet('error_access_denied'));
+            if ($job['mode'] === 'proofread') {
+                // only readable languages - a manipulated form does not count
+                $areaData = $this->_areaOf($areaId) ?? [];
+                $readable = $this->record->readableLanguages($this->instanceCache->languages((int)($areaData['instance_id'] ?? 0)));
+                $job['languages'] = array_values(array_filter(
+                    $this->system->sanitizeIds((array)($options['languages'] ?? [])),
+                    fn($id) => isset($readable[$id])
+                ));
+                if (empty($job['languages'])) {
+                    $this->cms->error($this->cms->snippet('record.error_export_no_languages'));
+                    return null;
+                }
+            }
+            else {
+                $job['from'] = (int)($options['from'] ?? 0);
+                $job['to'] = (int)($options['to'] ?? 0);
+                if (!$this->access->languageRead($job['from']) || !$this->access->languageRead($job['to'])) {
+                    $this->cms->error($this->cms->snippet('error_access_denied'));
+                    return null;
+                }
+            }
+            // optional thumbnail field: its image identifies the record in the document
+            $job['thumbnail'] = (string)($options['thumbnail'] ?? '');
+            if ($job['thumbnail'] !== '' && !isset($this->docxThumbnailFields($areaId)[$job['thumbnail']])) {
+                $this->cms->error($this->cms->snippet('error_param_invalid'), 'thumbnail');
                 return null;
             }
             $job['fields'] = array_values(array_filter(array_map('strval', (array)($options['fields'] ?? []))));
@@ -417,6 +465,78 @@ class RecordExport {
                     . ' › ' . $this->cms->textOrSnippet((string)($targetDef['label'] ?? $sub));
                 $fields["$name.$sub"] = $targetDef;
             }
+        }
+        return $fields;
+    }
+
+    /**
+     * Text fields of an area for proofreading (DOCX, mode proofread): fields of
+     * type text and chars shown as single- or multi-line text box (no selection lists,
+     * e-mail, phone), single-language and multilingual - plus those of the
+     * embedded contents (fields of type link) as "{link}.{field}" like docxFields().
+     * Identifiers (meta columns, the slug, fields with the flag "unique") are offered,
+     * but not preselected (see 'checked', _proofreadPreselected()).
+     *
+     * @return array  name => colDef (+ 'checked')
+     */
+    public function proofreadFields(int $areaId): array
+    {
+        $fields = [];
+        $links = [];
+        foreach ($this->record->virtualSchema($areaId, false) as $name => $colDef) {
+            if (in_array((string)($colDef['type'] ?? ''), $this->cms->dependentTypes, true)) {
+                $links[$name] = $colDef;
+                continue;
+            }
+            if (!self::isProofreadField($colDef)) continue;
+            $colDef['checked'] = $this->_proofreadPreselected((string)$name, $colDef);
+            $fields[$name] = $colDef;
+        }
+        foreach ($links as $name => $colDef) {
+            foreach ($this->record->linkTargetFields($colDef) as $sub => $targetDef) {
+                if (!self::isProofreadField($targetDef)) continue;
+                $targetDef['link'] = $name;
+                $targetDef['sub'] = $sub;
+                $targetDef['label'] = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name))
+                    . ' › ' . $this->cms->textOrSnippet((string)($targetDef['label'] ?? $sub));
+                $targetDef['checked'] = $this->_proofreadPreselected((string)$sub, $targetDef);
+                $fields["$name.$sub"] = $targetDef;
+            }
+        }
+        return $fields;
+    }
+
+    /**
+     * Preselection of a text field for proofreading: not identifiers.
+     */
+    private function _proofreadPreselected(string $name, array $colDef): bool
+    {
+        if (!empty($colDef['meta']) || $name === 'slug') return false;
+        return !in_array('unique', array_map('strval', (array)($colDef['flags'] ?? [])), true);
+    }
+
+    /**
+     * Is the field a text to proofread? Type text or chars, displayed as text box.
+     */
+    public static function isProofreadField(array $colDef): bool
+    {
+        if (!in_array((string)($colDef['type'] ?? ''), ['text', 'chars'], true)) return false;
+        return in_array((string)($colDef['display_type'] ?? 'text'), ['', 'text', 'textarea'], true);
+    }
+
+    /**
+     * Thumbnail fields of an area that the DOCX export can embed as an
+     * identification image per record (only the area itself, not the embedded
+     * contents). The image is decoration: the re-import ignores it.
+     *
+     * @return array  name => colDef
+     */
+    public function docxThumbnailFields(int $areaId): array
+    {
+        $fields = [];
+        foreach ($this->record->virtualSchema($areaId, false) as $name => $colDef) {
+            if ((string)($colDef['type'] ?? '') !== 'file' || (string)($colDef['display_type'] ?? '') !== 'thumbnail') continue;
+            $fields[$name] = $colDef;
         }
         return $fields;
     }
@@ -1408,61 +1528,99 @@ class RecordExport {
     // DOCX
 
     /**
-     * Word document for translation: one table per record. Gray
-     * shaded rows carry the metadata ("record_id=.. | language_id=.."
-     * or "field=.."), white rows the content of the source language - one paragraph per line of the
-     * content. The note texts are always English (the document goes to
-     * translators, not to the editor).
+     * Word document: one table per record. Gray shaded rows carry the metadata
+     * ("record_id=.. | …" or "field=.. | …"), white rows the content - one paragraph
+     * per line of the content. Two modes ($job['mode']):
+     *
+     *     translate  the multilingual fields in the source language; the translator
+     *                overwrites them, the import writes the target language
+     *                (head row "record_id=.. | language_id={to} | source_language_id={from}").
+     *                The note texts are always English (the document goes to
+     *                translators, not to the editor).
+     *     proofread  all text fields (proofreadFields()) in the chosen languages -
+     *                each field row names its source ("field=.. | language_id=.."; single-language
+     *                fields without language_id), the import writes every text back
+     *                there (head row "record_id=.. | proofread"). Languages with
+     *                fallback (no text of their own) appear empty. The note texts in
+     *                the language of the editor (the document goes to the customer).
+     *
+     * Optionally ($job['thumbnail'], a field from docxThumbnailFields()) the first
+     * meta row carries the image of a thumbnail field below the metadata - so that
+     * the reader recognizes the record (e.g. if the texts describe the image).
+     * The re-import only reads the text of the row (RecordImport::_docxRecords()).
      *
      * The file is a minimal OOXML package ([Content_Types].xml, _rels/.rels,
-     * word/document.xml) - without a library; Word and LibreOffice open it.
+     * word/document.xml, with images word/media/* and word/_rels/document.xml.rels) -
+     * without a library; Word and LibreOffice open it.
      */
     private function _exportDocx(array $job): void
     {
         $areaId = (int)$job['area_id'];
         $instanceId = (int)($job['area']['instance_id'] ?? 0);
         $languages = $this->instanceCache->languages($instanceId);
-        $from = (int)($job['from'] ?? 0);
-        $to = (int)($job['to'] ?? 0);
-        if (!isset($languages[$from]) || !isset($languages[$to]) || $from === $to) {
-            throw new \RuntimeException($this->cms->snippet('record.error_export_languages'));
-        }
-        $fields = $this->docxFields($areaId);
+        $proofread = (string)($job['mode'] ?? 'translate') === 'proofread';
         $selected = array_map('strval', (array)($job['fields'] ?? []));
-        $fields = array_intersect_key($fields, array_flip($selected));
+        $areaLabel = $this->cms->textOrSnippet((string)($job['area']['label'] ?? ''));
+
+        if ($proofread) {
+            $wanted = array_map('intval', (array)($job['languages'] ?? []));
+            $languageIds = array_values(array_filter(array_map('intval', array_keys($languages)), fn($id) => in_array($id, $wanted, true)));
+            if (empty($languageIds)) {
+                throw new \RuntimeException($this->cms->snippet('record.error_export_no_languages'));
+            }
+            $fields = array_intersect_key($this->proofreadFields($areaId), array_flip($selected));
+            // file name, image: the first chosen language
+            $from = $languageIds[0];
+            $to = 0;
+            $head = $this->_docxParagraph(str_replace('{area}', $areaLabel, $this->cms->snippet('record.docx_title_proofread')), bold: true, size: 28);
+            $head .= $this->_docxParagraph($this->cms->snippet('record.docx_note_proofread'), size: 18, color: '666666');
+            $title = "camindo export: $areaLabel (proofreading)";
+        }
+        else {
+            $from = (int)($job['from'] ?? 0);
+            $to = (int)($job['to'] ?? 0);
+            if (!isset($languages[$from]) || !isset($languages[$to]) || $from === $to) {
+                throw new \RuntimeException($this->cms->snippet('record.error_export_languages'));
+            }
+            $languageIds = [$from];
+            $fields = array_intersect_key($this->docxFields($areaId), array_flip($selected));
+            $fromLabel = $this->_languageLabel($languages[$from]);
+            $toLabel = $this->_languageLabel($languages[$to]);
+            $head = $this->_docxParagraph(str_replace(
+                ['{area}', '{from}', '{to}'],
+                [$areaLabel, $fromLabel, $toLabel],
+                $this->cms->snippet('record.docx_title', [], Cms::FALLBACK_LANG)
+            ), bold: true, size: 28);
+            $head .= $this->_docxParagraph($this->cms->snippet('record.docx_note', [], Cms::FALLBACK_LANG), size: 18, color: '666666');
+            $title = "camindo export: $areaLabel ($fromLabel -> $toLabel)";
+        }
         if (empty($fields)) {
             throw new \RuntimeException($this->cms->snippet('record.error_export_no_fields'));
         }
-
-        $fromLabel = $this->_languageLabel($languages[$from]);
-        $toLabel = $this->_languageLabel($languages[$to]);
-        $areaLabel = $this->cms->textOrSnippet((string)($job['area']['label'] ?? ''));
-
-        $head = $this->_docxParagraph(str_replace(
-            ['{area}', '{from}', '{to}'],
-            [$areaLabel, $fromLabel, $toLabel],
-            $this->cms->snippet('record.docx_title', [], Cms::FALLBACK_LANG)
-        ), bold: true, size: 28);
-        $head .= $this->_docxParagraph($this->cms->snippet('record.docx_note', [], Cms::FALLBACK_LANG), size: 18, color: '666666');
         $head .= $this->_docxParagraph('');
-        $title = "camindo export: $areaLabel ($fromLabel -> $toLabel)";
         $split = !empty($job['split']);
+        $thumbnail = (string)($job['thumbnail'] ?? '');
+        $thumbnailFieldId = $thumbnail !== '' ? (int)($this->docxThumbnailFields($areaId)[$thumbnail]['field_id'] ?? 0) : 0;
+        $this->docxImages = [];
         // Dateiname je Datensatz: Default-Feld des Bereichs (Quellsprache)
         $defaultName = '';
         foreach ($this->_schemaOf($areaId) as $name => $colDef) {
             if ((int)($colDef['field_id'] ?? 0) > 0 && (int)$colDef['field_id'] === (int)($job['area']['default_field_id'] ?? 0)) $defaultName = (string)$name;
         }
+        $schema = $this->_schemaOf($areaId);
 
         $body = $head;
         foreach ($job['ids'] as $recordId) {
             $row = $this->_recordRow((int)$recordId);
             if (!$row) continue;
             $sourceCache = $this->_cacheOf((int)$recordId, $from, $row);
-            $targetCache = $this->_cacheOf((int)$recordId, $to, $row);
             $this->exportedRecords++;
-            $rows = '';
-            $meta = "record_id={$recordId} | language_id={$to} | source_language_id={$from} | " . $toLabel;
-            $rows .= $this->_docxRow([$meta], shaded: true, bold: true);
+            $meta = $proofread
+                ? "record_id={$recordId} | proofread"
+                : "record_id={$recordId} | language_id={$to} | source_language_id={$from} | " . $toLabel;
+            if ($split) $this->docxImages = [];
+            $image = $thumbnailFieldId > 0 ? $this->_docxThumbnail($row, $thumbnailFieldId, $from) : '';
+            $rows = $this->_docxRow([$meta], shaded: true, bold: true, extra: $image);
             $linkSubs = [];
             foreach ($fields as $name => $colDef) {
                 if (isset($colDef['link'])) {
@@ -1470,37 +1628,31 @@ class RecordExport {
                     continue;
                 }
                 $label = $this->cms->textOrSnippet((string)($colDef['label'] ?? $name));
-                $fieldMeta = "field={$name} | " . $label;
-                $targetEntry = (array)($targetCache[$name] ?? []);
-                if (isset($targetEntry[1]) && empty($targetEntry[2]) && (string)$targetEntry[1] !== '') {
-                    $fieldMeta .= ' | ' . $this->cms->snippet('record.docx_translated', [], Cms::FALLBACK_LANG);
-                }
-                $rows .= $this->_docxRow([$fieldMeta], shaded: true);
-                $value = $this->_scalarValue($name, $sourceCache, $row, (int)$recordId, $from);
-                $rows .= $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
+                $rows .= $proofread
+                    ? $this->_docxProofreadRows("field={$name}", $label, (string)$name, $colDef, $row, $languageIds, $languages)
+                    : $this->_docxTranslateRows("field={$name} | " . $label, (string)$name, $row, $from, $to);
             }
             // embedded contents (link): per content its fields, the meta row names
             // it ("field={link}.{field} | record_id={id}") - the import writes it
             // together with the record (RecordImport, EMBEDDED CONTENTS)
-            $schema = $this->_schemaOf($areaId);
             foreach ($linkSubs as $linkName => $subs) {
                 $number = 0;
                 foreach ($this->_linkDestRows((int)$recordId, (int)($schema[$linkName]['field_id'] ?? 0)) as $destRow) {
                     $number++;
                     $destId = (int)$destRow['record_id'];
                     $destSchema = $this->_schemaOf((int)$destRow['area_id']);
-                    $destSource = $this->_cacheOf($destId, $from, $destRow);
-                    $destTarget = $this->_cacheOf($destId, $to, $destRow);
                     foreach ($subs as $sub => $colDef) {
-                        if (!isset($destSchema[$sub]) || !$this->cms->isMultilingualField($destSchema[$sub])) continue;
-                        $fieldMeta = "field={$linkName}.{$sub} | record_id={$destId} | " . $colDef['label'] . ' #' . $number;
-                        $targetEntry = (array)($destTarget[$sub] ?? []);
-                        if (isset($targetEntry[1]) && empty($targetEntry[2]) && (string)$targetEntry[1] !== '') {
-                            $fieldMeta .= ' | ' . $this->cms->snippet('record.docx_translated', [], Cms::FALLBACK_LANG);
+                        if (!isset($destSchema[$sub])) continue;
+                        $label = $colDef['label'] . ' #' . $number;
+                        if ($proofread) {
+                            if (!self::isProofreadField($destSchema[$sub])) continue;
+                            // only the languages the instance of the content maintains
+                            $destLanguageIds = array_values(array_intersect($languageIds, $this->instanceCache->languageIds((int)$destRow['instance_id'])));
+                            $rows .= $this->_docxProofreadRows("field={$linkName}.{$sub} | record_id={$destId}", $label, (string)$sub, $destSchema[$sub], $destRow, $destLanguageIds, $languages);
+                            continue;
                         }
-                        $rows .= $this->_docxRow([$fieldMeta], shaded: true);
-                        $value = $this->_scalarValue($sub, $destSource, $destRow, $destId, $from);
-                        $rows .= $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
+                        if (!$this->cms->isMultilingualField($destSchema[$sub])) continue;
+                        $rows .= $this->_docxTranslateRows("field={$linkName}.{$sub} | record_id={$destId} | " . $label, (string)$sub, $destRow, $from, $to);
                     }
                 }
             }
@@ -1516,6 +1668,52 @@ class RecordExport {
     }
 
     /**
+     * Translation: meta row (marked "already translated" if the target language
+     * has its own text) and content of the source language.
+     */
+    private function _docxTranslateRows(string $fieldMeta, string $name, array $row, int $from, int $to): string
+    {
+        $recordId = (int)$row['record_id'];
+        $targetEntry = (array)($this->_cacheOf($recordId, $to, $row)[$name] ?? []);
+        if (isset($targetEntry[1]) && empty($targetEntry[2]) && (string)$targetEntry[1] !== '') {
+            $fieldMeta .= ' | ' . $this->cms->snippet('record.docx_translated', [], Cms::FALLBACK_LANG);
+        }
+        $value = $this->_scalarValue($name, $this->_cacheOf($recordId, $from, $row), $row, $recordId, $from);
+        return $this->_docxRow([$fieldMeta], shaded: true)
+            . $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
+    }
+
+    /**
+     * Proofreading: a single-language field once ("{key} | {label}"), a
+     * multilingual one in every chosen language ("{key} | language_id=.. | {label} |
+     * {language}") - a language without text of its own (fallback) with an empty
+     * row, so that it can be filled in; the import leaves an empty row as fallback
+     * (RecordImport::_docxProofreadValue()).
+     *
+     * @param string $key  "field={name}" or "field={link}.{field} | record_id={id}"
+     */
+    private function _docxProofreadRows(string $key, string $label, string $name, array $colDef, array $row, array $languageIds, array $languages): string
+    {
+        $recordId = (int)$row['record_id'];
+        if (empty($languageIds)) return '';
+        $rows = '';
+        if (!$this->cms->isMultilingualField($colDef)) {
+            $value = $this->_scalarValue($name, $this->_cacheOf($recordId, $languageIds[0], $row), $row, $recordId, $languageIds[0]);
+            return $this->_docxRow(["{$key} | {$label}"], shaded: true)
+                . $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
+        }
+        foreach ($languageIds as $languageId) {
+            $cache = $this->_cacheOf($recordId, $languageId, $row);
+            // fallback (no text of its own): empty instead of the text of the primary language
+            $value = !empty(((array)($cache[$name] ?? []))[2]) ? '' : $this->_scalarValue($name, $cache, $row, $recordId, $languageId);
+            $languageLabel = isset($languages[$languageId]) ? $this->_languageLabel($languages[$languageId]) : (string)$languageId;
+            $rows .= $this->_docxRow(["{$key} | language_id={$languageId} | {$label} | {$languageLabel}"], shaded: true)
+                . $this->_docxRow(preg_split('/\r\n|\r|\n/', $value) ?: [''], shaded: false);
+        }
+        return $rows;
+    }
+
+    /**
      * File name of a record in the export "one record per file":
      * "{record_id}-{label}.docx", the label shortened to letters, digits
      * and hyphens (at most 40 characters).
@@ -1528,20 +1726,104 @@ class RecordExport {
     }
 
     /**
+     * Paragraph with the thumbnail of a record in the source language (file of
+     * the language or its fallback, as in the frontend) - '' if the record has
+     * none or the file is missing/not an image.
+     */
+    private function _docxThumbnail(array $row, int $fieldId, int $languageId): string
+    {
+        $recordId = (int)$row['record_id'];
+        $fileRow = $this->_fileRow($recordId, $fieldId, $languageId);
+        if (!$fileRow || (string)($fileRow['extension'] ?? '') === '') return '';
+        $source = (string)$this->config->get('paths.media_dir') . '/'
+            . $this->cms->mediaPath($fieldId, $recordId, $this->cms->fileLanguageId($fileRow), (string)$fileRow['extension'], (int)($row['instance_id'] ?? 0));
+        $image = $this->_docxImage($source);
+        if ($image === null) return '';
+        [$rid, $width, $height] = $image;
+        $name = $this->_xmlEscape($this->_xmlText(basename(str_replace('\\', '/', (string)($fileRow['filename'] ?? '')))));
+        static $docPrId = 0;
+        $docPrId++;
+        return '<w:p><w:pPr><w:spacing w:before="80" w:after="40"/></w:pPr><w:r><w:drawing>'
+            . '<wp:inline distT="0" distB="0" distL="0" distR="0">'
+            . '<wp:extent cx="' . $width . '" cy="' . $height . '"/>'
+            . '<wp:docPr id="' . $docPrId . '" name="Thumbnail ' . $recordId . '" descr="' . $name . '"/>'
+            . '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+            . '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+            . '<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="' . $name . '"/><pic:cNvPicPr/></pic:nvPicPr>'
+            . '<pic:blipFill><a:blip r:embed="' . $rid . '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+            . '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $width . '" cy="' . $height . '"/></a:xfrm>'
+            . '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'
+            . '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+    }
+
+    /**
+     * Register an image for the DOCX file being built (each source file only
+     * once per file). JPEG, PNG and GIF go in unchanged; other formats GD can
+     * read (WebP, AVIF, BMP …) are converted to PNG. Size: at most the box
+     * DOCX_IMAGE_MAX_* at 96 dpi, never enlarged.
+     *
+     * @return array|null  [rid, width, height] (EMU) - null if not an image
+     */
+    private function _docxImage(string $source): ?array
+    {
+        if (isset($this->docxImages[$source])) return $this->docxImages[$source]['ref'];
+        if (!is_file($source)) return null;
+        $info = @getimagesize($source);
+        if (!$info || $info[0] < 1 || $info[1] < 1) return null;
+        $types = [IMAGETYPE_JPEG => 'jpeg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif'];
+        if (isset($types[$info[2]])) {
+            $extension = $types[$info[2]];
+            $bytes = file_get_contents($source);
+        }
+        else {
+            $bytes = file_get_contents($source);
+            $gd = ($bytes !== false && function_exists('imagecreatefromstring')) ? @imagecreatefromstring($bytes) : false;
+            if ($gd === false) return null;
+            ob_start();
+            imagepng($gd);
+            $bytes = ob_get_clean();
+            $extension = 'png';
+        }
+        if ($bytes === false || $bytes === '') return null;
+
+        // 96 dpi: 9525 EMU per pixel
+        $width = $info[0] * 9525;
+        $height = $info[1] * 9525;
+        $scale = min(1, self::DOCX_IMAGE_MAX_WIDTH / $width, self::DOCX_IMAGE_MAX_HEIGHT / $height);
+        $number = count($this->docxImages) + 1;
+        $ref = ['rIdImg' . $number, max(1, (int)round($width * $scale)), max(1, (int)round($height * $scale))];
+        $this->docxImages[$source] = ['ref' => $ref, 'part' => "media/image{$number}.{$extension}", 'extension' => $extension, 'bytes' => $bytes];
+        return $ref;
+    }
+
+    /**
      * Write a minimal OOXML package (see _exportDocx()).
      */
     private function _docxWrite(string $path, string $body, string $title): void
     {
         $document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            . '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            . '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+            . ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+            . ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+            . ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
             . '<w:body>' . $body
             . '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>'
             . '</w:body></w:document>';
 
+        $imageTypes = '';
+        $imageRels = '';
+        $seen = [];
+        foreach ($this->docxImages as $image) {
+            $imageTypes .= isset($seen[$image['extension']]) ? '' : '<Default Extension="' . $image['extension'] . '" ContentType="image/' . $image['extension'] . '"/>';
+            $seen[$image['extension']] = true;
+            $imageRels .= '<Relationship Id="' . $image['ref'][0] . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' . $image['part'] . '"/>';
+        }
         $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
             . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             . '<Default Extension="xml" ContentType="application/xml"/>'
+            . $imageTypes
             . '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
             . '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
             . '</Types>';
@@ -1569,6 +1851,13 @@ class RecordExport {
         $zip->addFromString('_rels/.rels', $rels);
         $zip->addFromString('docProps/core.xml', $core);
         $zip->addFromString('word/document.xml', $document);
+        if ($imageRels !== '') {
+            $zip->addFromString('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $imageRels . '</Relationships>');
+            foreach ($this->docxImages as $image) {
+                $zip->addFromString('word/' . $image['part'], $image['bytes']);
+            }
+        }
         $zip->close();
     }
 
@@ -1589,9 +1878,10 @@ class RecordExport {
     }
 
     /**
-     * Table row with one cell; one paragraph per entry in $lines.
+     * Table row with one cell; one paragraph per entry in $lines, then $extra
+     * (ready paragraphs, e.g. the thumbnail).
      */
-    private function _docxRow(array $lines, bool $shaded, bool $bold = false): string
+    private function _docxRow(array $lines, bool $shaded, bool $bold = false, string $extra = ''): string
     {
         $tcPr = '<w:tcPr><w:tcW w:w="9638" w:type="dxa"/>'
             . ($shaded ? '<w:shd w:val="clear" w:color="auto" w:fill="D9D9D9"/>' : '')
@@ -1601,7 +1891,7 @@ class RecordExport {
             $paragraphs .= $this->_docxParagraph((string)$line, bold: $bold, size: $shaded ? 16 : 0, color: $shaded ? '404040' : '');
         }
         if ($paragraphs === '') $paragraphs = '<w:p/>';
-        return '<w:tr><w:tc>' . $tcPr . $paragraphs . '</w:tc></w:tr>';
+        return '<w:tr><w:tc>' . $tcPr . $paragraphs . $extra . '</w:tc></w:tr>';
     }
 
     private function _docxTable(string $rows): string
